@@ -1,6 +1,7 @@
 
 
 The included MIT license is for three.js files in any of the folders.
+Notes about other licenses might be included in some three.js files.
 
 jQuery license can be seen here: https://jquery.org/license/
 
