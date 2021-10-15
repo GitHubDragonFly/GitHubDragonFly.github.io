@@ -8,7 +8,8 @@ OrbitControlsGizmo MIT license can be seen here: https://github.com/Fennec-hub/T
 
 Notes about modifications:
 
- - MMDLoader.js file has an additional @param {string} extension since its code could not extract the file extension from loaded blob
+ - MMDLoader.js file has an additional `@param {string} extension` since its code could not extract the file extension from loaded blob
+ - `ddsLoader` section was added to ColladaLoader.js and FBXLoader.js files to support DDS textures
  - OrbitControls.js file has `rotateLeft` and `rotateUp` exposed so the OrbitControlsGizmo could work properly
  - OrbitControlsGizmo file was converted to non-module
 
