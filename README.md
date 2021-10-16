@@ -15,7 +15,8 @@ Notes about three.js viewers:
  - access to all three.js examples can be achieved with the following URL format, mind the correct path after `models`:
  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/ferrari.glb`
  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/collada/abb_irb52_7_120.dae`
- - lots of URL examples available in [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) and [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repositories
+ - lots of URL examples available in the [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
+ - lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
  - some viewers might have some limitations when loading files locally from a hard drive
 
 This is all MIT licensed but please observe any other licenses that might be applicable to some files or content.
