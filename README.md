@@ -11,6 +11,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 
 Notes about three.js viewers:
  - they are functional `AS THEY ARE`
+ - intended for viewing a single 3D model
  - the best choice of loading 3D models is via the viewers `URL` option
  - access to all three.js examples can be achieved with the following URL format, mind the correct path after `models`:
  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/ferrari.glb`
