@@ -1184,8 +1184,21 @@
 				fullPath = DEFAULT_TOON_TEXTURES[ index ];
 
 			} else {
+				if (this.resourcePath.indexOf(',') > -1) {
+					let texture_set = false;
+					let blobs = this.resourcePath.split(',');
 
-				fullPath = this.resourcePath.startsWith('blob:') ? this.resourcePath : this.resourcePath + filePath;
+					blobs.forEach( ( blob_name, index ) => {
+						if (blob_name === filePath) {
+							fullPath = blobs[ index + 1 ];
+							texture_set = true;
+						}
+					});
+
+					if (!texture_set) fullPath = filePath;
+				} else {
+					fullPath = this.resourcePath + filePath;
+				}
 
 			}
 
