@@ -5,7 +5,7 @@ Initially designed to serve as a hub with links to repositories and [three.js](h
 
 Do understand that GitHub servers are providing correct access to files, so cloning or downloading this repository will not have the same functionality if run locally without some server.
 
-Repositories do contain projects in several different programming languages or a mix of: VB .Net, C#, python, JavaScript, jQuery, HTML/CSS, shell.
+Repositories do contain projects in several different programming languages or a mix of: Java, VB .Net, C#, python, JavaScript, jQuery, HTML/CSS, shell.
 
 There is a lot of information and descriptions, some intended for Industrial Automation and some for general/personal use.
 
