@@ -14,10 +14,10 @@ Notes about three.js viewers:
  - intended for viewing a single 3D model
  - the best choice of loading 3D models is via the viewers `URL` option
  - access to all three.js examples can be achieved with the following URL format, mind the correct path after `models`:
- - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/LittlestTokyo.glb`
- - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/collada/abb_irb52_7_120.dae`
- - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vrml/house.wrl`
- - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/fbx/cloth.fbx`
+   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/LittlestTokyo.glb`
+   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/collada/abb_irb52_7_120.dae`
+   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vrml/house.wrl`
+   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/fbx/cloth.fbx`
  - lots of URL examples available in the [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
  - lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
  - some viewers might have some limitations when loading files locally from a hard drive
