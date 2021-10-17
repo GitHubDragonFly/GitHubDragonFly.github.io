@@ -1162,7 +1162,6 @@
 		}
 
 		_loadTexture( filePath, textures, params, onProgress, onError ) {
-
 			params = params || {};
 			const scope = this;
 			let fullPath;
@@ -1186,7 +1185,7 @@
 
 			} else {
 
-				fullPath = this.resourcePath + filePath;
+				fullPath = this.resourcePath.startsWith('blob:') ? this.resourcePath : this.resourcePath + filePath;
 
 			}
 
