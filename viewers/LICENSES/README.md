@@ -1,7 +1,8 @@
 
 
-The included MIT license is for three.js files in any of the folders.
-Notes about other licenses might be included in some three.js files.
+The included MIT license is for three.js files in any of the folders.Notes about other licenses might be included in some three.js files.
+
+License for three.js extensions is in the `viewers/static/jsm/extensions` folder
 
 jQuery license can be seen here: https://jquery.org/license/
 
