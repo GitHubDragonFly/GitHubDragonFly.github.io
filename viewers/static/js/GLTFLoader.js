@@ -207,7 +207,7 @@
 			}
 
 			const parser = new GLTFParser( json, {
-				path: path || this.resourcePath || '',
+				path: this.resourcePath || path || '',
 				crossOrigin: this.crossOrigin,
 				requestHeader: this.requestHeader,
 				manager: this.manager,
@@ -2097,6 +2097,22 @@
 			const options = this.options;
 			return new Promise( function ( resolve, reject ) {
 
+				if (options.path.indexOf(',') > -1) {
+					let bin_set = false;
+					let blobs = options.path.split(',');
+	
+					blobs.forEach( ( blob_name, index ) => {
+						if (blob_name === bufferDef.uri) {
+							if (!bin_set) {
+								bufferDef.uri = blobs[ index + 1 ];
+								bin_set = true;
+							}
+						}
+					});
+
+					if (!bin_set && bufferDef.uri) options.path = '';
+				}
+	
 				loader.load( resolveURL( bufferDef.uri, options.path ), resolve, undefined, function () {
 
 					reject( new Error( 'THREE.GLTFLoader: Failed to load buffer "' + bufferDef.uri + '".' ) );
@@ -2263,6 +2279,26 @@
 			const textureDef = json.textures[ textureIndex ];
 			const source = json.images[ textureDef.source ];
 			let loader = this.textureLoader;
+
+			if (options.path.indexOf(',') > -1) {
+				let temp_name = '';
+				let texture_set = false;
+				let blobs = options.path.split(',');
+
+				if (source.uri.indexOf('/') > -1) temp_name = source.uri.substring(source.uri.lastIndexOf('/') + 1);
+
+				blobs.forEach( ( blob_name, index ) => {
+					if (blob_name === source.uri || blob_name === source.name || (temp_name !== '' && temp_name === blob_name)) {
+						if (!texture_set) {
+							if (!source.name) source.name = source.uri;
+							source.uri = blobs[ index + 1 ];
+							texture_set = true;
+						}
+					}
+				});
+
+				if (!texture_set && !options.path.includes('.bin')) options.path = '';
+			}
 
 			if ( source.uri ) {
 
