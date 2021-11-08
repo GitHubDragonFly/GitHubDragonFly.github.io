@@ -322,7 +322,7 @@
 				if ( params[ mapType ] ) return; // Keep the first encountered texture
 
 				const texParams = scope.getTextureParams( value, params );
-				const map = scope.loadTexture( resolveURL( scope.baseUrl, texParams.url ) );
+				const map = scope.loadTexture( resolveURL( scope.baseUrl, texParams.url ), null, materialName );
 				map.repeat.copy( texParams.scale );
 				map.offset.copy( texParams.offset );
 				map.wrapS = scope.wrap;
@@ -469,10 +469,24 @@
 
 		}
 
-		loadTexture( url, mapping, onLoad, onProgress, onError ) {
+		loadTexture( url, mapping, materialName, onLoad, onProgress, onError ) {
 
 			const manager = this.manager !== undefined ? this.manager : THREE.DefaultLoadingManager;
-			let loader = manager.getHandler( url );
+
+			let ext = '';
+			if (this.materialsInfo[ materialName ].ext) ext = this.materialsInfo[ materialName ].ext;
+
+			let loader;
+
+			if (ext !== '') {
+
+				loader = manager.getHandler( ext );
+
+			} else {
+
+				loader = manager.getHandler( url );
+
+			}
 
 			if ( loader === null ) {
 
@@ -483,6 +497,7 @@
 			if ( loader.setCrossOrigin ) loader.setCrossOrigin( this.crossOrigin );
 			const texture = loader.load( url, onLoad, onProgress, onError );
 			if ( mapping !== undefined ) texture.mapping = mapping;
+			if (ext === '.tga') { texture.generateMipmaps = true; texture.flipY = true; }
 			return texture;
 
 		}
