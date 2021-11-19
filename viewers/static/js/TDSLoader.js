@@ -10,6 +10,8 @@
  */
 
 	var localPath = '';
+	var urlPath = '';
+	const default_texture = new THREE.TextureLoader( this.manager ).load( 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAzSURBVBhXFYrJDQAxDAIHl5tG9pWOI8/aICGunO9qP0JRNZqwltgspltKdtmfihNMoc0PFNkQjHSfyTIAAAAASUVORK5CYII=' );
 
 	class TDSLoader extends THREE.Loader {
 
@@ -34,12 +36,13 @@
    */
 
 
-		load( url, localResourcePath, onLoad, onProgress, onError ) {
+		load( url, localResourcePath, urlResourcePath, onLoad, onProgress, onError ) {
 
 			const scope = this;
 			const path = this.path === '' ? THREE.LoaderUtils.extractUrlBase( url ) : this.path;
 			const loader = new THREE.FileLoader( this.manager );
 			if (localResourcePath !== '') localPath = localResourcePath;
+			if (urlResourcePath !== '') urlPath = urlResourcePath;
 			loader.setPath( this.path );
 			loader.setResponseType( 'arraybuffer' );
 			loader.setRequestHeader( this.requestHeader );
@@ -530,28 +533,33 @@
 			let next = this.nextChunk( data, chunk );
 			let texture = {};
 			let loader;
+			let type;
 			let ext;
 			let local_texture_blob;
-
-			if (localPath !== '') {
-				if (path.toLowerCase().endsWith('.dds') || path.toLowerCase().endsWith('.tga')) {
-					path.toLowerCase().endsWith('.dds') ? (ext = '.dds') : (ext = '.tga');
-					loader = this.manager.getHandler( ext );
-				} else {
-					loader = new THREE.TextureLoader( this.manager );
-				}
-			} else {
-				loader = new THREE.TextureLoader( this.manager );
-			}
-
-			loader.setPath( this.resourcePath || path ).setCrossOrigin( this.crossOrigin );
+			let url_texture;
 
 			while ( next !== 0 ) {
 
 				if ( next === MAT_MAPNAME ) {
 
 					const name = this.readString( data, 128 );
+					texture = default_texture;
 
+					if (name.toLowerCase().endsWith('.dds') || name.toLowerCase().endsWith('.tga')) {
+						name.toLowerCase().endsWith('.dds') ? (ext = '.dds') : (ext = '.tga');
+						loader = this.manager.getHandler( ext );
+					} else {
+						loader = new THREE.TextureLoader( this.manager );
+					}
+
+					if (localPath !== '') {
+						loader.setPath( this.resourcePath || path ).setCrossOrigin( this.crossOrigin );
+					} else if (urlPath !== '') {
+						loader.setCrossOrigin( this.crossOrigin );
+					} else {
+						loader.setPath( this.resourcePath || path ).setCrossOrigin( this.crossOrigin );
+					}
+		
 					if (localPath !== '') {
 						let blobs = localPath.split(',');
 						let temp_blob_name;
@@ -567,16 +575,28 @@
 							texture = loader.load( local_texture_blob );
 						} else {
 							console.error( 'Not found: ' + path + name );
-							texture = new THREE.TextureLoader( this.manager ).load( 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAzSURBVBhXFYrJDQAxDAIHl5tG9pWOI8/aICGunO9qP0JRNZqwltgspltKdtmfihNMoc0PFNkQjHSfyTIAAAAASUVORK5CYII=' );
+						}
+					} else if (urlPath !== '') {
+						let urls = urlPath.split(',');
+						let temp_url_name;
+
+						urls.forEach( ( url_name, index ) => {
+							if (url_name.length > 12) temp_url_name = url_name.substring(0, 12);
+							if (name.toUpperCase() === url_name.toUpperCase() || (temp_url_name && name.toUpperCase() === temp_url_name.toUpperCase())) {
+								url_texture = urls[ index + 1 ];
+							}
+						});
+
+						if (url_texture) {
+							texture = loader.load( url_texture );
+						} else {
+							console.error( 'Not found: ' + path + name );
 						}
 					} else {
 						texture = loader.load( name );
-						if (texture.image === undefined) {
-							texture = new THREE.TextureLoader( this.manager ).load( 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAzSURBVBhXFYrJDQAxDAIHl5tG9pWOI8/aICGunO9qP0JRNZqwltgspltKdtmfihNMoc0PFNkQjHSfyTIAAAAASUVORK5CYII=' );
-						}
 					}
 
-					if (path.toLowerCase().endsWith('.tga'))  { texture.generateMipmaps = true; texture.flipY = true; }
+					if (name.toLowerCase().endsWith('.tga')) { texture.generateMipmaps = true; texture.flipY = true; }
 
 					this.debugMessage( '      File: ' + path + name );
 
