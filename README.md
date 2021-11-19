@@ -25,6 +25,9 @@ Notes about three.js viewers:
  - access to all [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF examples, mind the correct path after `2.0`:
    - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Sponza/glTF/Sponza.gltf`
    - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf`
+ - access to some 3DS example files at [tutushubham](https://github.com/tutushubham/3D-Models---Military), mind the correct path after `master`:
+   - `https://raw.githubusercontent.com/tutushubham/3D-Models---Military/master/SWIM/SWIM/SWIM_L.3DS`
+   - `https://raw.githubusercontent.com/tutushubham/3D-Models---Military/master/M60/M60/M60_L.3DS`
  - more URL examples available in the [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
  - lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
  - some viewers might have some limitations when loading files locally from a hard drive
