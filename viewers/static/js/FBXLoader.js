@@ -320,19 +320,20 @@
 
 		parseTexture( textureNode, images ) {
 			let texture;
-			let local_texture_blob = {};
+			let local_texture_blob;
 
 			if (localPath !== '') {
 				let blobs = localPath.split(',');
 
 				blobs.forEach( ( blob_name, index ) => {
 					if (textureNode.FileName.toUpperCase().endsWith(blob_name.toUpperCase())) {
+						local_texture_blob = {};
 						local_texture_blob[ 'FileName' ] = blobs[ index + 1 ];
 						local_texture_blob[ 'ext' ] = blob_name.slice( - 3 ).toLowerCase();
 					}
 				});
-	
-				texture = this.loadTexture( local_texture_blob, images );
+
+				local_texture_blob ? texture = this.loadTexture( local_texture_blob, images ) : texture = this.loadTexture( textureNode, images );
 			} else {
 				texture = this.loadTexture( textureNode, images );
 			}
