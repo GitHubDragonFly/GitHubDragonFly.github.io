@@ -15,6 +15,7 @@ Notes about modifications, some of which are only added to work with these viewe
  - GLTFLoader.js file includes modification to set resource path for all locally loaded texture and bin blobs
  - MTLLoader.js file includes modification for local loading of DDS and TGA texture files in OBJ viewer
  - TDSLoader.js file includes modification for both local and URL loading of texture files in 3DS viewer
+ - FBXLoader.js file includes modification for both local and URL loading of texture files in FBX viewer
  - `ddsLoader` section was added to ColladaLoader.js and FBXLoader.js files to support DDS textures
  - OrbitControls.js file has `rotateLeft` and `rotateUp` exposed so the OrbitControlsGizmo could work properly
  - OrbitControlsGizmo file was converted to non-module
