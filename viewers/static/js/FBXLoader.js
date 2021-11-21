@@ -16,6 +16,8 @@
  *		https://code.blender.org/2013/08/fbx-binary-file-format-specification/
  */
 
+	let localPath;
+
 	let fbxTree;
 	let connections;
 	let sceneGraph;
@@ -28,11 +30,12 @@
 
 		}
 
-		load( url, onLoad, onProgress, onError ) {
+		load( url, localResourcePath, onLoad, onProgress, onError ) {
 
 			const scope = this;
 			const path = scope.path === '' ? THREE.LoaderUtils.extractUrlBase( url ) : scope.path;
 			const loader = new THREE.FileLoader( this.manager );
+			localPath = localResourcePath;
 			loader.setPath( scope.path );
 			loader.setResponseType( 'arraybuffer' );
 			loader.setRequestHeader( scope.requestHeader );
@@ -316,8 +319,24 @@
 
 
 		parseTexture( textureNode, images ) {
+			let texture;
+			let local_texture_blob = {};
 
-			const texture = this.loadTexture( textureNode, images );
+			if (localPath !== '') {
+				let blobs = localPath.split(',');
+
+				blobs.forEach( ( blob_name, index ) => {
+					if (textureNode.FileName.toUpperCase().endsWith(blob_name.toUpperCase())) {
+						local_texture_blob[ 'FileName' ] = blobs[ index + 1 ];
+						local_texture_blob[ 'ext' ] = blob_name.slice( - 3 ).toLowerCase();
+					}
+				});
+	
+				texture = this.loadTexture( local_texture_blob, images );
+			} else {
+				texture = this.loadTexture( textureNode, images );
+			}
+
 			texture.ID = textureNode.id;
 			texture.name = textureNode.attrName;
 			const wrapModeU = textureNode.WrapModeU;
@@ -346,22 +365,47 @@
 
 			let fileName;
 			const currentPath = this.textureLoader.path;
-			const children = connections.get( textureNode.id ).children;
 
-			if ( children !== undefined && children.length > 0 && images[ children[ 0 ].ID ] !== undefined ) {
+			if (textureNode.id) {
 
-				fileName = images[ children[ 0 ].ID ];
+				let children = connections.get( textureNode.id ).children;
 
-				if ( fileName.indexOf( 'blob:' ) === 0 || fileName.indexOf( 'data:' ) === 0 ) {
+				if ( children !== undefined && children.length > 0 && images[ children[ 0 ].ID ] !== undefined ) {
 
-					this.textureLoader.setPath( undefined );
+					fileName = images[ children[ 0 ].ID ];
 
+					if ( fileName.startsWith( 'blob:' ) || fileName.startsWith( 'data:' ) ) {
+
+						this.textureLoader.setPath( undefined );
+
+					}
+
+				}
+
+			} else {
+
+				fileName = textureNode.FileName;
+
+				if (fileName !== undefined) {
+
+					if ( fileName.startsWith( 'blob:' ) || fileName.startsWith( 'data:' ) ) {
+
+						this.textureLoader.setPath( undefined );
+	
+					}
+		
 				}
 
 			}
 
 			let texture;
-			const extension = textureNode.FileName.slice( - 3 ).toLowerCase();
+
+			if (!textureNode.ext && !textureNode.FileName) {
+				texture = new THREE.TextureLoader().load( 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAUAAAAFCAYAAACNbyblAAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAWSURBVBhXY/wPBAxogAlKowCKBBkYAJrrBAb3Gn8+AAAAAElFTkSuQmCC' );
+				return texture;
+			}
+
+			let extension = textureNode.ext || textureNode.FileName.slice( - 3 ).toLowerCase();
 
 			if ( extension === 'tga' ) {
 
