@@ -35,6 +35,6 @@ Notes about three.js viewers:
  - more URL examples available in the [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
  - lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
  - some viewers might have some limitations when loading files locally from a hard drive
- - GLTF/GLB exporter seems to have a limitation as reported [here](https://discourse.threejs.org/t/exporting-model-with-animations/6792) and also applicable to DAE
+ - GLTF/GLB exporter seems to have a limitation as reported [here](https://discourse.threejs.org/t/exporting-model-with-animations/6792) applicable to both DAE / FBX
 
 This is all MIT licensed but please observe any other licenses that might be applicable to some files or content.
