@@ -4,9 +4,11 @@ The included MIT license is for three.js files in any of the folders.Notes about
 
 License for three.js extensions is in the `viewers/static/jsm/extensions` folder
 
-jQuery license can be seen here: https://jquery.org/license/
+jQuery license can be seen [here](https://jquery.org/license/)
 
-OrbitControlsGizmo MIT license can be seen here: https://github.com/Fennec-hub/ThreeOrbitControlsGizmo/blob/master/LICENSE
+OrbitControlsGizmo MIT license can be seen [here](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo/blob/master/LICENSE)
+
+TIF/TIFF image file support provided by [geotiffjs](https://github.com/geotiffjs/geotiff.js) whose license can be seen [here](https://github.com/geotiffjs/geotiff.js/blob/master/LICENSE)
 
 Notes about modifications, some of which are only added to work with these viewers:
 
@@ -16,6 +18,7 @@ Notes about modifications, some of which are only added to work with these viewe
  - MTLLoader.js file includes modification for local loading of DDS and TGA texture files in OBJ viewer
  - TDSLoader.js file includes modification for both local and URL loading of texture files in 3DS viewer
  - FBXLoader.js file includes modification for both local and URL loading of texture files in FBX viewer
+ - PLYLoader.js file includes "vertex_index" to avoid console error related to non-existing "vertex_indices"
  - `ddsLoader` section was added to ColladaLoader.js and FBXLoader.js files to support DDS textures
  - OrbitControls.js file has `rotateLeft` and `rotateUp` exposed so the OrbitControlsGizmo could work properly
  - OrbitControlsGizmo file was converted to non-module
