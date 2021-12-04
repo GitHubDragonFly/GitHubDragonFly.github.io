@@ -36,6 +36,7 @@ Notes about three.js viewers:
    - `https://raw.githubusercontent.com/tutushubham/3D-Models---Military/master/M60/M60/M60_L.3DS`
  - more URL examples available in the [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
  - lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
+ - all files have to be in the same folder when loading files locally from a hard drive
  - some viewers might have some limitations when loading files locally from a hard drive
  - GLTF/GLB exporter seems to have a limitation as reported [here](https://discourse.threejs.org/t/exporting-model-with-animations/6792) applicable to both DAE / FBX (for FBX you could try using this [converter](https://github.com/facebookincubator/FBX2glTF) instead)
 
