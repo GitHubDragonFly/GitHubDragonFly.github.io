@@ -237,7 +237,7 @@
       var rot_x = 0, rot_y = 0, rot_z = 0;
       var initial_opacity, previous_gltf_scale = '1', bounding_box = new THREE.Box3();
       var selected_gltf_file, selected_bin_file, selected_draco_file;
-      var selected_url_file = '', url_displayed, url_loading;
+      var selected_url_file = '', selected_gltf_url_file, url_displayed, url_loading;
       var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif, texture_files_ktx2;
 
       // Manager from ThreeJs to track a loader and its status
@@ -853,145 +853,143 @@
       }
 
       function loadFile() {
-        if (selected_gltf_file) {
-          gltf_loader.load( URL.createObjectURL( selected_gltf_file ), async gltf => {
-            URL.revokeObjectURL( selected_gltf_file );
+        gltf_loader.load( URL.createObjectURL( selected_gltf_file ), async gltf => {
+          URL.revokeObjectURL( selected_gltf_file );
 
-            animations = gltf.animations;
+          animations = gltf.animations;
 
-            if (animations.length > 0) {
-              animation_mixer = new THREE.AnimationMixer( gltf.scene );
-              current_animation = 0;
-              animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; });
+          if (animations.length > 0) {
+            animation_mixer = new THREE.AnimationMixer( gltf.scene );
+            current_animation = 0;
+            animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; });
+          }
+
+          variants = gltf.userData.variants;
+
+          if (variants) {
+            for (let i = variants.length - 1; i > -1; i--) {
+              await gltf.functions.selectVariant(gltf.scene, variants[ i ]);
             }
 
-            variants = gltf.userData.variants;
+            variants_available = true;
+            current_variant = 0;
+            document.getElementById('btn_variants').disabled = false;
+            document.getElementById('btn_variants').innerHTML = 'V0';
+          }
 
-            if (variants) {
-              for (let i = variants.length - 1; i > -1; i--) {
-                await gltf.functions.selectVariant(gltf.scene, variants[ i ]);
+          let child_count = 1;
+
+          // Go through all children of the loaded object and search for a Mesh
+          gltf.scene.traverse( function( child ) {
+            // This will allow us to check if the child is an instance of the Mesh constructor
+          	if (child instanceof THREE.Mesh) {
+              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+
+              // Check for morph targets
+              if (child.material.morphTargets) {
+                Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
+                  extras.push( [ child.id, key, index ] );
+                });
               }
 
-              variants_available = true;
-              current_variant = 0;
-              document.getElementById('btn_variants').disabled = false;
-              document.getElementById('btn_variants').innerHTML = 'V0';
-            }
+              // Enable transparency for the Opacity control and enable shadows
+              child.material.transparent = true;
+              child.material.flatShading = false;
+              child.material.skinning = true;
+              child.castShadow = true;
+              child.receiveShadow = false;
 
-            let child_count = 1;
+              if (!gltf.parser.json.images) {
+                if (texture_files_ktx2.length > 0) {
+                  texture_files_ktx2.forEach( file => {
+                    ktx2_loader.load( URL.createObjectURL( file ) , function( texture ) {
+                      texture.encoding = THREE.sRGBEncoding;
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
+                      texture.magFilter = THREE.NearestFilter;
 
-            // Go through all children of the loaded object and search for a Mesh
-            gltf.scene.traverse( function( child ) {
-              // This will allow us to check if the child is an instance of the Mesh constructor
-          	  if (child instanceof THREE.Mesh) {
-                if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                      // Apply texture
+                      child.material.map = texture;
+                      child.material.needsUpdate = true;
+                    });
+                  });
+                } else if (texture_files_png.length > 0 || texture_files_jpg.length > 0 || texture_files_bmp.length > 0 || texture_files_gif.length > 0) {
+                  let files = (texture_files_png.length > 0) ? texture_files_png : ((texture_files_jpg.length > 0) ? texture_files_jpg : ((texture_files_bmp.length > 0) ? texture_files_bmp : texture_files_gif));
 
-                // Check for morph targets
-                if (child.material.morphTargets) {
-                  Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
-                    extras.push( [ child.id, key, index ] );
+                  files.forEach( file => {
+                    texture_loader.load( URL.createObjectURL( file ) , function( texture ) {
+                      texture.encoding = THREE.sRGBEncoding;
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
+                      texture.magFilter = THREE.NearestFilter;
+
+                      // Apply texture
+                      child.material.map = texture;
+                      child.material.needsUpdate = true;
+                    });
                   });
                 }
+              }
 
-                // Enable transparency for the Opacity control and enable shadows
-                child.material.transparent = true;
-                child.material.flatShading = false;
-                child.material.skinning = true;
-                child.castShadow = true;
-                child.receiveShadow = false;
+              if (child.material.side === THREE.DoubleSide) {
+                document.getElementById('btn_mtl_side').disabled = false;
+                document.getElementById('btn_mtl_side').innerHTML = 'DS';
+              } else if (child.material.side === THREE.FrontSide) {
+                document.getElementById('btn_mtl_side').disabled = false;
+                document.getElementById('btn_mtl_side').innerHTML = 'FS';
+              } else {
+                document.getElementById('btn_mtl_side').disabled = false;
+                document.getElementById('btn_mtl_side').innerHTML = 'BS';
+              }
 
-                if (!gltf.parser.json.images) {
-                  if (texture_files_ktx2.length > 0) {
-                    texture_files_ktx2.forEach( file => {
-                      ktx2_loader.load( URL.createObjectURL( file ) , function( texture ) {
-                        texture.encoding = THREE.sRGBEncoding;
-                        texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.magFilter = THREE.NearestFilter;
-
-                        // Apply texture
-                        child.material.map = texture;
-                        child.material.needsUpdate = true;
-                      });
-                    });
-                  } else if (texture_files_png.length > 0 || texture_files_jpg.length > 0 || texture_files_bmp.length > 0 || texture_files_gif.length > 0) {
-                    let files = (texture_files_png.length > 0) ? texture_files_png : ((texture_files_jpg.length > 0) ? texture_files_jpg : ((texture_files_bmp.length > 0) ? texture_files_bmp : texture_files_gif));
-
-                    files.forEach( file => {
-                      texture_loader.load( URL.createObjectURL( file ) , function( texture ) {
-                        texture.encoding = THREE.sRGBEncoding;
-                        texture.wrapS = THREE.RepeatWrapping;
-                        texture.wrapT = THREE.RepeatWrapping;
-                        texture.magFilter = THREE.NearestFilter;
-
-                        // Apply texture
-                        child.material.map = texture;
-                        child.material.needsUpdate = true;
-                      });
-                    });
-                  }
-                }
-
-                if (child.material.side === THREE.DoubleSide) {
-                  document.getElementById('btn_mtl_side').disabled = false;
-                  document.getElementById('btn_mtl_side').innerHTML = 'DS';
-                } else if (child.material.side === THREE.FrontSide) {
-                  document.getElementById('btn_mtl_side').disabled = false;
-                  document.getElementById('btn_mtl_side').innerHTML = 'FS';
-                } else {
-                  document.getElementById('btn_mtl_side').disabled = false;
-                  document.getElementById('btn_mtl_side').innerHTML = 'BS';
-                }
-
-                child.name = 'child_' + child_count;
-                initial_opacity[ child.name ] = child.material.opacity;
-                edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
-                child_count += 1;
-    		      }
-            });
-
-            gltf_obj = gltf.scene;
-            gltf_obj.name = 'local_model';
-
-            // Add gltf model to scene
-            scene.add( gltf_obj );
-            camera.lookAt( gltf_obj.position );
-
-            set_initial_scale();
-            resize();
-
-            if (animations.length > 0) {
-              animation_mixer.clipAction( animations[0] ).play();
-              document.getElementById('btn_animate').disabled = false;
-              document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
-              document.getElementById('btn_animate').innerHTML = 'A0';
-              animation_running = true;
-            }
-
-            if (extras.length > 0) {
-              document.getElementById('btn_extras').disabled = false;
-              current_extra = 0;
-            }
-          }, function ( xhr ) {
-            let today = new Date();
-            let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-            if (xhr.loaded == 0 && xhr.total == 0) {
-              console.log( '0% loaded - ' + time );
-            } else {
-              console.log( parseInt(( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-            }
-          }, function ( error ) {
-            console.log( 'Error loading GLTF!' );
-            console.log( error );
-            render_requested = false;
-            enable_disable( true );
-            if (gizmo) { gizmo.dispose(); }
-            document.getElementById('div_error').style.display = "block";
-
-            URL.revokeObjectURL( selected_gltf_file );
+              child.name = 'child_' + child_count;
+              initial_opacity[ child.name ] = child.material.opacity;
+              edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
+              child_count += 1;
+    		    }
           });
-        }
+
+          gltf_obj = gltf.scene;
+          gltf_obj.name = 'local_model';
+
+          // Add gltf model to scene
+          scene.add( gltf_obj );
+          camera.lookAt( gltf_obj.position );
+
+          set_initial_scale();
+          resize();
+
+          if (animations.length > 0) {
+            animation_mixer.clipAction( animations[0] ).play();
+            document.getElementById('btn_animate').disabled = false;
+            document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+            document.getElementById('btn_animate').innerHTML = 'A0';
+            animation_running = true;
+          }
+
+          if (extras.length > 0) {
+            document.getElementById('btn_extras').disabled = false;
+            current_extra = 0;
+          }
+        }, function ( xhr ) {
+          let today = new Date();
+          let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
+
+          if (xhr.loaded == 0 && xhr.total == 0) {
+            console.log( '0% loaded - ' + time );
+          } else {
+            console.log( parseInt(( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
+          }
+        }, function ( error ) {
+          console.log( 'Error loading GLTF!' );
+          console.log( error );
+          render_requested = false;
+          enable_disable( true );
+          if (gizmo) { gizmo.dispose(); }
+          document.getElementById('div_error').style.display = "block";
+
+          URL.revokeObjectURL( selected_gltf_file );
+        });
       }
 
       function loadDRACO() {
@@ -1103,7 +1101,32 @@
 
       function loadURLFile() {
         if (selected_url_file != '') {
-          if (selected_url_file.toUpperCase().endsWith('.DRC')) {
+          if (selected_url_file.indexOf(',') > -1) {
+            let urls = selected_url_file.split(',');
+
+            for (let i = 0; i < urls.length; i++) {
+              let url = urls[i].trim();
+
+              if (url.toUpperCase().endsWith('.GLTF') || url.toUpperCase().endsWith('.GLB') || url.toUpperCase().endsWith('.DRC')) {
+                selected_gltf_url_file = url;
+              } else if (url.endsWith('/')) {
+                gltf_loader.setResourcePath( url );
+              }
+            }
+          } else {
+            if (selected_url_file.toUpperCase().endsWith('.GLTF') || selected_url_file.toUpperCase().endsWith('.GLB') || selected_url_file.toUpperCase().endsWith('.DRC')) selected_gltf_url_file = selected_url_file;
+          }
+
+          if (!selected_gltf_url_file) {
+            console.log('Unsupported URL file!');
+            render_requested = false;
+            enable_disable( true );
+            if (gizmo) gizmo.dispose();
+            document.getElementById('div_error').style.display = "block";
+            return;
+          }
+
+          if (selected_gltf_url_file.toUpperCase().endsWith('.DRC')) {
             draco_loader.load( selected_url_file, function( geometry ) {
               if (!geometry.attributes.normal) geometry.computeVertexNormals();
 
@@ -1301,13 +1324,15 @@
       }
 
       function show_wireframe() {
-        // Go through all children of the loaded object and search for a Mesh
-        gltf_obj.traverse( function ( child ) {
-          // This allow us to check if the children is an instance of the Mesh constructor
-    	    if (child instanceof THREE.Mesh) {
-            child.material.wireframe = document.getElementById('wireframe').checked;
-    		  }
-    	  });
+        if (gltf_obj) {
+          // Go through all children of the loaded object and search for a Mesh
+          gltf_obj.traverse( function ( child ) {
+            // This allow us to check if the children is an instance of the Mesh constructor
+      	    if (child instanceof THREE.Mesh) {
+              child.material.wireframe = document.getElementById('wireframe').checked;
+      		  }
+      	  });
+        }
       }
 
       function show_shadow() {
