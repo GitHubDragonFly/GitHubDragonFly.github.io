@@ -27,6 +27,7 @@ Notes about three.js viewers:
    - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/stl/binary/colored.stl`
    - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3dm/Rhino_Logo.3dm`
    - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3mf/truck.3mf`
+   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/prwm/smooth-suzanne.le.prwm`
    - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02_dds.mtl, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.obj`
  - access to all [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF examples, mind the correct path after `2.0`:
    - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Sponza/glTF/Sponza.gltf`
