@@ -143,6 +143,7 @@
         <label style="margin: 2px 5px 2px 0;"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
         <button id="btn_edges" onclick="show_edges()" style="background-color: #d1cefc; vertical-align: middle; width: 20px; margin: 2px 3px 2px 0; padding: 0;" disabled>E</button>
         <button id="btn_flat" onclick="set_flat()" style="background-color: #d1cefc; vertical-align: middle; width: 20px; margin: 2px 5px 2px 0; padding: 0;" disabled>F</button>
+        <button id="btn_textures" onclick="set_texture()" style="background-color: #d1cefc; vertical-align: middle; width: 28px; margin: 2px 5px 2px 0; padding: 0;" disabled>T</button>
         <button id="btn_grid" onclick="show_grid()" style="background-color: #d1cefc; vertical-align: middle; width: 22px; margin: 2px 3px 2px 0; padding: 0;" disabled>#</button>
         <button id="btn_polar_grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; vertical-align: middle; width: 24px; margin: 2px 10px 2px 0; padding: 0;" disabled><p class="polar"></p></button>
         <button id="reset" onclick="reset_only()" style="vertical-align: middle; color: maroon; width: 40px; margin: 2px 3px 2px 0;" disabled>RST</button>
@@ -253,9 +254,8 @@
       var mouse_rotation, reset_rotation, events_initialized;
       var rot_x = 0, rot_y = 0, rot_z = 0;
       var previous_ply_scale = '1', bounding_box = new THREE.Box3();
-      var selected_ply_file, selected_stl_file, selected_url_file = '', url_displayed, url_loading;
-      var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif;
-      var texture_files_dds, texture_files_tga, loaded_texture;
+      var selected_ply_file, selected_stl_file, selected_url_file = '', selected_url_ply_file, selected_url_stl_file;
+      var textures, current_texture, url_tga_loaded, url_displayed, url_loading;
 
       // Manager from ThreeJs to track a loader and its status
       var manager = new THREE.LoadingManager();
@@ -611,19 +611,18 @@
 
         selected_ply_file = null;
         selected_stl_file = null;
-        texture_files_png = [];
-        texture_files_jpg = [];
-        texture_files_bmp = [];
-        texture_files_gif = [];
-        texture_files_dds = [];
-        texture_files_tga = [];
-        loaded_texture = null;
+        selected_url_ply_file = null;
+        selected_url_stl_file = null;
         edges = null;
         edges_visible = false;
         grid_visible = false;
         polar_grid_visible = false;
         render_requested = false;
+        textures = [];
+        url_tga_loaded = false;
+        current_texture = -1;
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_textures').disabled = true;
         document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_polar_grid').style.backgroundColor = '#d1cefc';
 
@@ -631,16 +630,17 @@
           // Loaded file
           var fi = document.getElementById('file_input');
 
-          // Include check for JPG/PNG/BMP/GIF, TGA and DDS (DirectDraw Surface container file format)
+          // Include check for JPG/PNG/BMP/GIF/SVG, TGA and DDS (DirectDraw Surface container file format)
           for (let i = 0; i < fi.files.length; i++) {
             if (fi.files[i].name.toUpperCase().endsWith('.PLY')) { selected_ply_file = fi.files[i]; }
             else if (fi.files[i].name.toUpperCase().endsWith('.STL')) { selected_stl_file = fi.files[i]; }
-            else if (fi.files[i].name.toUpperCase().endsWith('.PNG')) { texture_files_png.push( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.JPG')) { texture_files_jpg.push( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.BMP')) { texture_files_bmp.push( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.GIF')) { texture_files_gif.push( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.TGA')) { texture_files_tga.push( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.DDS')) { texture_files_dds.push( fi.files[i] ); }
+            else if (fi.files[i].name.toUpperCase().endsWith('.PNG')) { textures.push( fi.files[i] ); }
+            else if (fi.files[i].name.toUpperCase().endsWith('.JPG')) { textures.push( fi.files[i] ); }
+            else if (fi.files[i].name.toUpperCase().endsWith('.BMP')) { textures.push( fi.files[i] ); }
+            else if (fi.files[i].name.toUpperCase().endsWith('.GIF')) { textures.push( fi.files[i] ); }
+            else if (fi.files[i].name.toUpperCase().endsWith('.SVG')) { textures.push( fi.files[i] ); }
+            else if (fi.files[i].name.toUpperCase().endsWith('.TGA')) { textures.push( fi.files[i] ); }
+            else if (fi.files[i].name.toUpperCase().endsWith('.DDS')) { textures.push( fi.files[i] ); }
           };
 
           if (!selected_ply_file && !selected_stl_file) {
@@ -650,6 +650,8 @@
             document.getElementById('div_error').style.display = "block";
             return;
           }
+
+          if (textures.length > 0) document.getElementById('btn_textures').disabled = false;
 
           selected_url_file = '';
         } else {
@@ -758,6 +760,14 @@
 
         document.getElementById('axes').appendChild( gizmo.domElement );
 
+        material = new THREE.MeshPhongMaterial( {
+          side: THREE.DoubleSide,
+          fog: false,
+          shininess: 100,
+          opacity: 1,
+          transparent: true
+        });
+
         // Load the ply file
         loadFile();
 
@@ -790,7 +800,7 @@
             console.log( error );
             render_requested = false;
             enable_disable( true );
-            if (gizmo) { gizmo.dispose(); }
+            if (gizmo) gizmo.dispose();
             document.getElementById('div_loading').style.display = "none";
             document.getElementById('div_error').style.display = "block";
           });
@@ -817,7 +827,7 @@
             console.log( error );
             render_requested = false;
             enable_disable( true );
-            if (gizmo) { gizmo.dispose(); }
+            if (gizmo) gizmo.dispose();
             document.getElementById('div_loading').style.display = "none";
             document.getElementById('div_error').style.display = "block";
           });
@@ -829,61 +839,21 @@
       function addFileInScene( object ) {
         let smooth = object.clone();
 
-        if (texture_files_jpg.length > 0) {
-          loaded_texture = texture_loader.load( URL.createObjectURL( texture_files_jpg[0] ));
-          URL.revokeObjectURL( texture_files_jpg[0] );
-        } else if (texture_files_png.length > 0) {
-          loaded_texture = texture_loader.load( URL.createObjectURL( texture_files_png[0] ));
-          URL.revokeObjectURL( texture_files_png[0] );
-        } else if (texture_files_bmp.length > 0) {
-          loaded_texture = texture_loader.load( URL.createObjectURL( texture_files_bmp[0] ));
-          URL.revokeObjectURL( texture_files_bmp[0] );
-        } else if (texture_files_gif.length > 0) {
-          loaded_texture = texture_loader.load( URL.createObjectURL( texture_files_gif[0] ));
-          URL.revokeObjectURL( texture_files_gif[0] );
-        } else if (texture_files_tga.length > 0) {
-          loaded_texture = tga_loader.load( URL.createObjectURL( texture_files_tga[0] ));
-          URL.revokeObjectURL( texture_files_tga[0] );
-        } else if (texture_files_dds.length > 0) {
-          loaded_texture = dds_loader.load( URL.createObjectURL( texture_files_dds[0] ));
-          URL.revokeObjectURL( texture_files_dds[0] );
-        }
-
-        material = new THREE.MeshPhongMaterial( {
-          side: THREE.DoubleSide,
-          color: 0xFFFFFF,
-          shininess: 100,
-          opacity: 1,
-          transparent: true,
-          skinning: true,
-          vertexColors: THREE.VertexColors
-        });
-
-        if (loaded_texture) {
-          material.map = loaded_texture;
-
-          if (texture_files_tga.length > 0) {
-            material.map.generateMipmaps = true;
-            material.map.flipY = true;
-          }
-
-          material.needsUpdate = true;
-        }
-
         if (selected_ply_file) {
           URL.revokeObjectURL( selected_ply_file );
 
           smooth.mergeVertices();
           smooth.computeVertexNormals();
+
+          material.vertexColors = THREE.VertexColors;
         } else {
           URL.revokeObjectURL( selected_stl_file );
 
           smooth.deleteAttribute('normal');
-          smooth.deleteAttribute('uv');
           smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
           smooth.computeVertexNormals();
 
-          if (!object.hasColors) material.vertexColors = false;
+          if (object.hasColors) material.vertexColors = THREE.VertexColors;
 
           document.getElementById('directional_light_intensity').value = 0.75;
           set_directional_light_intensity();
@@ -907,68 +877,162 @@
 
       function loadURLFile() {
         if (selected_url_file != '') {
-          // Launch loading of the selected file, addURLFileInScene is the callback when it's ready
-          if (selected_url_file.toUpperCase().endsWith('.PLY')) {
-            document.getElementById('div_loading').style.display = "block";
+          if (selected_url_file.indexOf(',') > -1) {
+            let urls = selected_url_file.split(',');
 
-            ply_loader.load( selected_url_file, addURLFileInScene, function( xhr ) {
-              let today = new Date();
-              let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
+            for (let i = 0; i < urls.length; i++) {
+              let url = urls[i].trim();
 
-              if (xhr.loaded == 0 && xhr.total == 0) {
-                console.log( 'URL PLY 0% loaded - ' + time );
-                document.getElementById('div_loading').innerHTML = 'URL PLY 0% loaded - ' + time;
-              } else {
-                console.log( 'URL PLY ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
-                if (parseInt(( xhr.loaded / xhr.total * 100 )) >= 95) {
-                  document.getElementById('div_loading').innerHTML = 'Visualizing';
-                } else {
-                  document.getElementById('div_loading').innerHTML = 'URL PLY ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time;
-                }
+              if (url.toUpperCase().endsWith('.PNG') || url.toUpperCase().endsWith('.JPG') || url.toUpperCase().endsWith('.BMP') || url.toUpperCase().endsWith('.GIF') || url.toUpperCase().endsWith('.SVG')) {
+                document.getElementById('btn_textures').disabled = false;
+                texture_loader.load( url, function( texture ) { textures.push( texture ); });
+              } else if (url.toUpperCase().endsWith('.DDS')) {
+                document.getElementById('btn_textures').disabled = false;
+                dds_loader.load( url, function( texture ) { textures.push( texture ); });
+              } else if (url.toUpperCase().endsWith('.TGA')) {
+                document.getElementById('btn_textures').disabled = false;
+                tga_loader.load( url, function( texture ) {
+                  textures.push( texture );
+                  url_tga_loaded = true;
+                });
+              } else if (url.toUpperCase().endsWith('.PLY')) {
+                selected_url_ply_file = url;
+              } else if (url.toUpperCase().endsWith('.STL')) {
+                selected_url_stl_file = url;
               }
-            }, function ( error ) {
-              console.log( 'Error loading URL PLY!' );
-              console.log( error );
+            }
+
+            if (!selected_url_ply_file && !selected_url_stl_file) {
+              console.log('Unsupported URL file!');
               render_requested = false;
               enable_disable( true );
-              if (gizmo) { gizmo.dispose(); }
-              document.getElementById('div_loading').style.display = "none";
+              if (gizmo) gizmo.dispose();
               document.getElementById('div_error').style.display = "block";
-            });
-          } else if (selected_url_file.toUpperCase().endsWith('.STL')) {
-            document.getElementById('div_loading').style.display = "block";
+              return;
+            }
 
-            stl_loader.load( selected_url_file, addURLFileInScene, function( xhr ) {
-              let today = new Date();
-              let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
+            if (selected_url_ply_file) {
+              document.getElementById('div_loading').style.display = "block";
 
-              if (xhr.loaded == 0 && xhr.total == 0) {
-                console.log( 'URL STL 0% loaded - ' + time );
-                document.getElementById('div_loading').innerHTML = 'URL STL 0% loaded - ' + time;
-              } else {
-                console.log( 'URL STL ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
-                if (parseInt(( xhr.loaded / xhr.total * 100 )) >= 95) {
-                  document.getElementById('div_loading').innerHTML = 'Visualizing';
+              ply_loader.load( selected_url_ply_file, addURLFileInScene, function( xhr ) {
+                let today = new Date();
+                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
+
+                if (xhr.loaded == 0 && xhr.total == 0) {
+                  console.log( 'URL PLY 0% loaded - ' + time );
+                  document.getElementById('div_loading').innerHTML = 'URL PLY 0% loaded - ' + time;
                 } else {
-                  document.getElementById('div_loading').innerHTML = 'URL STL ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time;
+                  console.log( 'URL PLY ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
+                  if (parseInt(( xhr.loaded / xhr.total * 100 )) >= 95) {
+                    document.getElementById('div_loading').innerHTML = 'Visualizing';
+                  } else {
+                    document.getElementById('div_loading').innerHTML = 'URL PLY ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time;
+                  }
                 }
-              }
-            }, function ( error ) {
-              console.log( 'Error loading URL STL!' );
-              console.log( error );
-              render_requested = false;
-              enable_disable( true );
-              if (gizmo) { gizmo.dispose(); }
-              document.getElementById('div_loading').style.display = "none";
-              document.getElementById('div_error').style.display = "block";
-            });
+              }, function ( error ) {
+                console.log( 'Error loading URL PLY!' );
+                console.log( error );
+                render_requested = false;
+                enable_disable( true );
+                if (gizmo) { gizmo.dispose(); }
+                document.getElementById('div_loading').style.display = "none";
+                document.getElementById('div_error').style.display = "block";
+              });
+            } else {
+              document.getElementById('div_loading').style.display = "block";
+
+              stl_loader.load( selected_url_stl_file, addURLFileInScene, function( xhr ) {
+                let today = new Date();
+                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
+
+                if (xhr.loaded == 0 && xhr.total == 0) {
+                  console.log( 'URL STL 0% loaded - ' + time );
+                  document.getElementById('div_loading').innerHTML = 'URL STL 0% loaded - ' + time;
+                } else {
+                  console.log( 'URL STL ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
+                  if (parseInt(( xhr.loaded / xhr.total * 100 )) >= 95) {
+                    document.getElementById('div_loading').innerHTML = 'Visualizing';
+                  } else {
+                    document.getElementById('div_loading').innerHTML = 'URL STL ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time;
+                  }
+                }
+              }, function ( error ) {
+                console.log( 'Error loading URL STL!' );
+                console.log( error );
+                render_requested = false;
+                enable_disable( true );
+                if (gizmo) { gizmo.dispose(); }
+                document.getElementById('div_loading').style.display = "none";
+                document.getElementById('div_error').style.display = "block";
+              });
+            }
           } else {
-            console.log('Unsupported URL file!');
-            render_requested = false;
-            enable_disable( true );
-            if (gizmo) { gizmo.dispose(); }
-            document.getElementById('div_loading').style.display = "none";
-            document.getElementById('div_error').style.display = "block";
+            if (selected_url_file.toUpperCase().endsWith('.PLY')) {
+              document.getElementById('div_loading').style.display = "block";
+
+              selected_url_ply_file = selected_url_file;
+
+              ply_loader.load( selected_url_ply_file, addURLFileInScene, function( xhr ) {
+                let today = new Date();
+                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
+
+                if (xhr.loaded == 0 && xhr.total == 0) {
+                  console.log( 'URL PLY 0% loaded - ' + time );
+                  document.getElementById('div_loading').innerHTML = 'URL PLY 0% loaded - ' + time;
+                } else {
+                  console.log( 'URL PLY ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
+                  if (parseInt(( xhr.loaded / xhr.total * 100 )) >= 95) {
+                    document.getElementById('div_loading').innerHTML = 'Visualizing';
+                  } else {
+                    document.getElementById('div_loading').innerHTML = 'URL PLY ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time;
+                  }
+                }
+              }, function ( error ) {
+                console.log( 'Error loading URL PLY!' );
+                console.log( error );
+                render_requested = false;
+                enable_disable( true );
+                if (gizmo) { gizmo.dispose(); }
+                document.getElementById('div_loading').style.display = "none";
+                document.getElementById('div_error').style.display = "block";
+              });
+            } else if (selected_url_file.toUpperCase().endsWith('.STL')) {
+              document.getElementById('div_loading').style.display = "block";
+
+              selected_url_stl_file = selected_url_file;
+
+              stl_loader.load( selected_url_stl_file, addURLFileInScene, function( xhr ) {
+                let today = new Date();
+                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
+
+                if (xhr.loaded == 0 && xhr.total == 0) {
+                  console.log( 'URL STL 0% loaded - ' + time );
+                  document.getElementById('div_loading').innerHTML = 'URL STL 0% loaded - ' + time;
+                } else {
+                  console.log( 'URL STL ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
+                  if (parseInt(( xhr.loaded / xhr.total * 100 )) >= 95) {
+                    document.getElementById('div_loading').innerHTML = 'Visualizing';
+                  } else {
+                    document.getElementById('div_loading').innerHTML = 'URL STL ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time;
+                  }
+                }
+              }, function ( error ) {
+                console.log( 'Error loading URL STL!' );
+                console.log( error );
+                render_requested = false;
+                enable_disable( true );
+                if (gizmo) { gizmo.dispose(); }
+                document.getElementById('div_loading').style.display = "none";
+                document.getElementById('div_error').style.display = "block";
+              });
+            } else {
+              console.log('Unsupported URL file!');
+              render_requested = false;
+              enable_disable( true );
+              if (gizmo) { gizmo.dispose(); }
+              document.getElementById('div_loading').style.display = "none";
+              document.getElementById('div_error').style.display = "block";
+            }
           }
         }
       }
@@ -976,26 +1040,17 @@
       function addURLFileInScene( object ){
         let smooth = object.clone();
 
-        material = new THREE.MeshPhongMaterial( {
-          side: THREE.DoubleSide,
-          color: 0xFFFFFF,
-          shininess: 100,
-          opacity: 1,
-          transparent: true,
-          skinning: true,
-          vertexColors: THREE.VertexColors,
-        });
-
-        if (selected_url_file.toUpperCase().endsWith('.PLY')) {
+        if (selected_url_ply_file) {
           smooth.mergeVertices();
           smooth.computeVertexNormals();
+
+          material.vertexColors = THREE.VertexColors;
         } else {
           smooth.deleteAttribute('normal');
-          smooth.deleteAttribute('uv');
           smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
           smooth.computeVertexNormals();
 
-          if (!object.hasColors) material.vertexColors = false;
+          if (object.hasColors) material.vertexColors = THREE.VertexColors;
 
           document.getElementById('directional_light_intensity').value = 0.75;
           set_directional_light_intensity();
@@ -1106,6 +1161,89 @@
     	  });
       }
 
+      function set_texture() {
+        if (current_texture == textures.length - 1) {
+          document.getElementById('btn_textures').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_textures').innerHTML = 'T';
+          current_texture = -1;
+        } else {
+          current_texture += 1;
+          document.getElementById('btn_textures').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_textures').innerHTML = 'T' + current_texture;
+        }
+
+        mesh.traverse( function( child ) {
+          // This will allow us to check if the child is an instance of the Mesh constructor
+        	if (child instanceof THREE.Mesh) {
+            if (current_texture == -1) {
+              // Remove texture
+              child.material.map = null;
+              child.material.needsUpdate = true;
+            } else {
+              if (selected_url_ply_file || selected_url_stl_file) {
+                textures[ current_texture ].encoding = THREE.sRGBEncoding;
+                textures[ current_texture ].wrapS = THREE.RepeatWrapping;
+                textures[ current_texture ].wrapT = THREE.RepeatWrapping;
+                textures[ current_texture ].magFilter = THREE.NearestFilter;
+
+                // Apply texture
+                child.material.map = textures[ current_texture ];
+
+                if (url_tga_loaded) {
+                  child.material.map.generateMipmaps = true;
+                  child.material.map.flipY = true;
+                }
+
+                child.material.needsUpdate = true;
+              } else {
+                if (textures[ current_texture ].name.toUpperCase().endsWith('.DDS')) {
+                  dds_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                    URL.revokeObjectURL( textures[ current_texture ] );
+
+                    texture.encoding = THREE.sRGBEncoding;
+                    texture.wrapS = THREE.RepeatWrapping;
+                    texture.wrapT = THREE.RepeatWrapping;
+                    texture.magFilter = THREE.NearestFilter;
+
+                    // Apply texture
+                    child.material.map = texture;
+                    child.material.needsUpdate = true;
+                  });
+                } else if (textures[ current_texture ].name.toUpperCase().endsWith('.TGA')) {
+                  tga_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                    URL.revokeObjectURL( textures[ current_texture ] );
+
+                    texture.generateMipmaps = true;
+                    texture.encoding = THREE.sRGBEncoding;
+                    texture.wrapS = THREE.RepeatWrapping;
+                    texture.wrapT = THREE.RepeatWrapping;
+                    texture.magFilter = THREE.NearestFilter;
+
+                    // Apply texture
+                    child.material.map = texture;
+                    child.material.map.flipY = true;
+                    child.material.needsUpdate = true;
+                  });
+                } else {
+                  texture_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                    URL.revokeObjectURL( textures[ current_texture ] );
+
+                    texture.encoding = THREE.sRGBEncoding;
+                    texture.wrapS = THREE.RepeatWrapping;
+                    texture.wrapT = THREE.RepeatWrapping;
+                    texture.magFilter = THREE.NearestFilter;
+
+                    // Apply texture
+                    child.material.map = texture;
+                    child.material.needsUpdate = true;
+                  });
+                }
+              }
+            }
+          }
+        });
+      }
+
       function render() {
         if (render_requested) { requestAnimationFrame( render ); }
 
@@ -1185,10 +1323,13 @@
         document.getElementById('shadow').checked = false;
         document.getElementById('scale_10x').checked = false;
 
-        // Reset flat and edges related values
+        // Reset flat, edges and textures related values
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         edges_visible = false;
         document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
+        current_texture = -1;
+        document.getElementById('btn_textures').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_textures').innerHTML = 'T';
 
         reset_rotation = true;
 
@@ -1217,6 +1358,7 @@
           document.getElementById('div_error').style.display = "none";
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
+          document.getElementById('btn_textures').disabled = true;
           enable_disable( true );
         }
       }
