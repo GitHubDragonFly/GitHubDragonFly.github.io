@@ -14,6 +14,8 @@ Notes about three.js viewers:
  - intended for viewing a single 3D model
  - the best choice of loading 3D models is via the viewers `URL` option
  - multiple URLs are allowed and can be from mixed websites
+ - Buttons, where applicable: `E` - edges, `F` - flatShading, `K` - kinematics, `A` - animations, `X`- morphs, `V` - variants, `T` - textures, `P` - poses, `DS` - side, `#` - grid
+ - Light controls, where applicable: `DL` - directional, `SL` - spotlight, `HL` - hemisphere, `AL` - ambient, `XXi` - XX light intensity
  - FBX / OBJ / 3DS viewers allow setting texture path with URL just like in the following examples:
    - `https://raw.githubusercontent.com/antlafarge/ALLoader/master/examples/textures/, https://raw.githubusercontent.com/antlafarge/ALLoader/master/examples/fbx/crate.fbx`
    - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3ds/portalgun/textures/, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3ds/portalgun/portalgun.3ds`
