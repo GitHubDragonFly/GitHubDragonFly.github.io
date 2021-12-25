@@ -1,1 +1,25 @@
+Example models:
+
+- access to all [three.js](https://github.com/mrdoob/three.js/tree/master/examples) examples can be achieved with the following URL format, mind the correct path after `models`:
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/LittlestTokyo.glb`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/collada/abb_irb52_7_120.dae`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vrml/house.wrl`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/fbx/stanford-bunny.fbx`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pdb/diamond.pdb`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ply/binary/Lucy100k.ply`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/stl/binary/colored.stl`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3dm/Rhino_Logo.3dm`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3mf/truck.3mf`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vtk/liver.vtk`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pcd/binary/Zaghetto.pcd`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/prwm/smooth-suzanne.le.prwm`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ifc/rac_advanced_sample_project.ifc`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02_dds.mtl, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.obj`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_v2.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_camera.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/audios/wavefile_short.mp3`
+- access to all [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF examples, mind the correct path after `2.0`:
+  - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Sponza/glTF/Sponza.gltf`
+  - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf`
+- access to some 3DS example files at [tutushubham](https://github.com/tutushubham/3D-Models---Military), mind the correct path after `master`:
+  - `https://raw.githubusercontent.com/tutushubham/3D-Models---Military/master/SWIM/SWIM/SWIM_L.3DS`
+  - `https://raw.githubusercontent.com/tutushubham/3D-Models---Military/master/M60/M60/M60_L.3DS`
 
