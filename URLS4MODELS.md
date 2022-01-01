@@ -13,6 +13,7 @@ Example models:
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/stl/binary/colored.stl`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3dm/Rhino_Logo.3dm`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3mf/truck.3mf`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/amf/rook.amf`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vtk/liver.vtk`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pcd/binary/Zaghetto.pcd`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/prwm/smooth-suzanne.le.prwm`
