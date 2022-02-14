@@ -1435,7 +1435,6 @@ class VRMLLoader extends Loader {
 
 					case 'url':
 						let url = fieldValues[ 0 ];
-						if ( url ) texture = textureLoader.load( url );
 
 						if (url && local_ImageTextures) {
 							let image_set = false;
@@ -1451,6 +1450,7 @@ class VRMLLoader extends Loader {
 							});
 						}
 
+						if ( url ) texture = textureLoader.load( url );
 						break;
 
 					case 'repeatS':
