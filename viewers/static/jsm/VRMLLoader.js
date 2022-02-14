@@ -37,6 +37,8 @@ import {
 import chevrotain from '../libs/chevrotain.module.min.js';
 
 
+var local_ImageTextures;
+
 class VRMLLoader extends Loader {
 
 	constructor( manager ) {
@@ -53,9 +55,11 @@ class VRMLLoader extends Loader {
 
 	}
 
-	load( url, onLoad, onProgress, onError ) {
+	load( url, localImageTextures, onLoad, onProgress, onError ) {
 
 		const scope = this;
+
+		if (localImageTextures !== '') local_ImageTextures = localImageTextures;
 
 		const path = ( scope.path === '' ) ? LoaderUtils.extractUrlBase( url ) : scope.path;
 
@@ -1382,6 +1386,7 @@ class VRMLLoader extends Loader {
 						}
 
 						texture = new DataTexture( data, width, height, ( useAlpha === true ) ? RGBAFormat : RGBFormat );
+						texture.needsUpdate = true;
 						texture.__type = textureType; // needed for material modifications
 						break;
 
@@ -1429,8 +1434,23 @@ class VRMLLoader extends Loader {
 				switch ( fieldName ) {
 
 					case 'url':
-						const url = fieldValues[ 0 ];
+						let url = fieldValues[ 0 ];
 						if ( url ) texture = textureLoader.load( url );
+
+						if (url && local_ImageTextures) {
+							let image_set = false;
+							let blobs = local_ImageTextures.split(',');
+
+							blobs.forEach( ( blob_name, index ) => {
+								if (blob_name === url) {
+									if (!image_set) {
+										url = blobs[ index + 1 ];
+										image_set = true;
+									}
+								}
+							});
+						}
+
 						break;
 
 					case 'repeatS':
