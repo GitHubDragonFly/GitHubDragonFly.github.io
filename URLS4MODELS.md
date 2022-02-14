@@ -23,7 +23,10 @@ Example models:
 - access to all [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF examples, mind the correct path after `2.0`:
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Sponza/glTF/Sponza.gltf`
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf`
-- access to some 3DS example files at [tutushubham](https://github.com/tutushubham/3D-Models---Military), mind the correct path after `master`:
+- access to PCD example files at [Point Cloud Library (PCL)](https://github.com/PointCloudLibrary):
+  - `https://raw.githubusercontent.com/PointCloudLibrary/pcl/master/test/office1.pcd`
+  - `https://raw.githubusercontent.com/PointCloudLibrary/pcl/master/test/five_people.pcd`
+- access to 3DS example files at [tutushubham](https://github.com/tutushubham/3D-Models---Military), mind the correct path after `master`:
   - `https://raw.githubusercontent.com/tutushubham/3D-Models---Military/master/SWIM/SWIM/SWIM_L.3DS`
   - `https://raw.githubusercontent.com/tutushubham/3D-Models---Military/master/M60/M60/M60_L.3DS`
 - other examples:
