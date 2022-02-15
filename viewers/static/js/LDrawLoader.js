@@ -520,25 +520,102 @@
 
 		constructor( manager ) {
 
-			super( manager ); // This is a stack of 'parse scopes' with one level per subobject loaded file.
+			super( manager );
+			
+			// This is a stack of 'parse scopes' with one level per subobject loaded file.
 			// Each level contains a material lib and also other runtime variables passed between parent and child subobjects
 			// When searching for a material code, the stack is read from top of the stack to bottom
 			// Each material library is an object map keyed by colour codes.
+			this.parseScopesStack = null;
+			
+			// Array of THREE.Material
+			this.materials = [];
 
-			this.parseScopesStack = null; // Array of THREE.Material
-
-			this.materials = []; // Not using THREE.Cache here because it returns the previous HTML error response instead of calling onError()
+			// Not using THREE.Cache here because it returns the previous HTML error response instead of calling onError()
 			// This also allows to handle the embedded text files ("0 FILE" lines)
+			this.subobjectCache = {};
+			
+			// This object is a map from file names to paths. It agilizes the paths search. If it is not set then files will be searched by trial and error.
+			this.fileMap = null;
+			
+			// Add default main triangle and line edge materials (used in pieces that can be coloured with a main color - CODE 16 and 24)
+			this.setMaterials( [
+				this.parseColourMetaDirective( new LineParser( 'Black CODE 0 VALUE #05131D EDGE #595959' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Blue CODE 1 VALUE #0055BF EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Green CODE 2 VALUE #257A3E EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Dark_Turquoise CODE 3 VALUE #00838F EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Red CODE 4 VALUE #C91A09 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Dark_Pink CODE 5 VALUE #C870A0 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Brown CODE 6 VALUE #583927 EDGE #1E1E1E' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Light_Grey CODE 7 VALUE #9BA19D EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Dark_Grey CODE 8 VALUE #6D6E5C EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Light_Blue CODE 9 VALUE #B4D2E3 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Bright_Green CODE 10 VALUE #4B9F4A EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Light_Turquoise CODE 11 VALUE #55A5AF EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Salmon CODE 12 VALUE #F2705E EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Pink CODE 13 VALUE #FC97AC EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Yellow CODE 14 VALUE #F2CD37 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'White CODE 15 VALUE #FFFFFF EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Main_Colour CODE 16 VALUE #FF8080 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Light_Green CODE 17 VALUE #C2DAB8 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Light_Yellow CODE 18 VALUE #FBE696 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Tan CODE 19 VALUE #E4CD9E EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Light_Violet CODE 20 VALUE #C9CAE2 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Glow_In_Dark_Opaque CODE 21 VALUE #E0FFB0 EDGE #A4C374 ALPHA 240 LUMINANCE 15' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Purple CODE 22 VALUE #81007B EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Dark_Blue_Violet CODE 23 VALUE #2032B0 EDGE #1E1E1E' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Edge_Colour CODE 24 VALUE #A0A0A0 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Orange CODE 25 VALUE #FE8A18 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Magenta CODE 26 VALUE #923978 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Lime CODE 27 VALUE #BBE90B EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Dark_Tan CODE 28 VALUE #958A73 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Bright_Pink CODE 29 VALUE #E4ADC8 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Medium_Lavender CODE 30 VALUE #AC78BA EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Lavender CODE 31 VALUE #E1D5ED EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Black_IR_Lens CODE 32 VALUE #000000 EDGE #333333 ALPHA 210' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Dark_Blue CODE 33 VALUE #0020A0 EDGE #000064 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Green CODE 34 VALUE #237841 EDGE #1E6239 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Bright_Green CODE 35 VALUE #56E646 EDGE #9DA86B ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Red CODE 36 VALUE #C91A09 EDGE #880000 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Dark_Pink CODE 37 VALUE #DF6695 EDGE #A32A59 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Neon_Orange CODE 38 VALUE #FF800D EDGE #BD2400 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Very_Light_Blue CODE 39 VALUE #C1DFF0 EDGE #85A3B4 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Black CODE 40 VALUE #635F52 EDGE #171316 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Medium_Blue CODE 41 VALUE #559AB7 EDGE #196973 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Neon_Green CODE 42 VALUE #C0FF00 EDGE #84C300 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Light_Blue CODE 43 VALUE #AEE9EF EDGE #72B3B0 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Bright_Reddish_Lilac CODE 44 VALUE #96709F EDGE #5A3463 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Pink CODE 45 VALUE #FC97AC EDGE #A8718C ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Yellow CODE 46 VALUE #F5CD2F EDGE #8E7400 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Clear CODE 47 VALUE #FCFCFC EDGE #C3C3C3 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Trans_Orange CODE 57 VALUE #F08F1C EDGE #A45C28 ALPHA 128' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Chrome_Antique_Brass CODE 60 VALUE #645A4C EDGE #281E10 CHROME' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Chrome_Blue CODE 61 VALUE #6C96BF EDGE #202A68 CHROME' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Chrome_Green CODE 62 VALUE #3CB371 EDGE #007735 CHROME' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Chrome_Pink CODE 63 VALUE #AA4D8E EDGE #6E1152 CHROME' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Chrome_Black CODE 64 VALUE #1B2A34 EDGE #595959 CHROME' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Very_Light_Orange CODE 68 VALUE #F3CF9B EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Bright_Reddish_Lilac CODE 69 VALUE #CD6298 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Reddish_Brown CODE 70 VALUE #582A12 EDGE #595959' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Light_Bluish_Grey CODE 71 VALUE #A0A5A9 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Dark_Bluish_Grey CODE 72 VALUE #6C6E68 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Medium_Blue CODE 73 VALUE #5C9DD1 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Medium_Green CODE 74 VALUE #73DCA1 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Light_Pink CODE 77 VALUE #FECCCF EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Light_Flesh CODE 78 VALUE #F6D7B3 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Dark_Blue CODE 272 VALUE #0D325B EDGE #1E1E1E' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Pearl_Gold CODE 297 VALUE #CC9C2B EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Dark_Red CODE 320 VALUE #720E0F EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Dark_Orange CODE 484 VALUE #A95500 EDGE #333333' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Magnet CODE 493 VALUE #656761 EDGE #595959 METAL' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Electric_Contact_Alloy CODE 494 VALUE #D0D0D0 EDGE #333333 METAL' ) ),
+				this.parseColourMetaDirective( new LineParser( 'Electric_Contact_Copper CODE 495 VALUE #AE7A59 EDGE #333333 METAL' ) )
+			] );
 
-			this.subobjectCache = {}; // This object is a map from file names to paths. It agilizes the paths search. If it is not set then files will be searched by trial and error.
-
-			this.fileMap = null; // Add default main triangle and line edge materials (used in piecess that can be coloured with a main color)
-
-			this.setMaterials( [ this.parseColourMetaDirective( new LineParser( 'Main_Colour CODE 16 VALUE #FF8080 EDGE #333333' ) ), this.parseColourMetaDirective( new LineParser( 'Edge_Colour CODE 24 VALUE #A0A0A0 EDGE #333333' ) ) ] ); // If this flag is set to true, each subobject will be a Object.
 			// If not (the default), only one object which contains all the merged primitives will be created.
-
-			this.separateObjects = false; // If this flag is set to true the vertex normals will be smoothed.
-
+			this.separateObjects = false;
+			
+			// If this flag is set to true the vertex normals will be smoothed.
 			this.smoothNormals = true;
 
 		}
