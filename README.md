@@ -21,7 +21,7 @@ Notes about three.js viewers:
  - lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
  - all files have to be in the same folder when loading files locally from a hard drive
  - some viewers might have some limitations when loading files locally from a hard drive
- - LDRAW Viewer currently only supports MPD packed files (LDR and L3B support is possible but would require the whole LDraw parts library and modifications to the loader)
+ - LDRAW Viewer currently only supports MPD packed files as they are in the [three.js](https://github.com/mrdoob/three.js/tree/master/examples/models/ldraw/officialLibrary/models) repository (LDR and L3B support is possible but would require the whole LDraw parts library and modifications to the loader)
  - GLTF/GLB exporter seems to have a limitation, as reported [here](https://discourse.threejs.org/t/exporting-model-with-animations/6792), applicable to both DAE / FBX models which contain animation (for DAE you could try this [converter](https://github.com/KhronosGroup/COLLADA2GLTF) and for FBX you could try this [converter](https://github.com/facebookincubator/FBX2glTF) instead)
 
 This is all MIT licensed but please observe any other licenses that might be applicable to some files or content.
