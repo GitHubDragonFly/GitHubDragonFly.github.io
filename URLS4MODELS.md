@@ -16,6 +16,7 @@ Example models:
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/amf/rook.amf`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vtk/liver.vtk`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pcd/binary/Zaghetto.pcd`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/json/lightmap/lightmap.json`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/prwm/smooth-suzanne.le.prwm`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ifc/rac_advanced_sample_project.ifc`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02_dds.mtl, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.obj`
