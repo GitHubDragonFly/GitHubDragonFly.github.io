@@ -10,6 +10,8 @@ OrbitControlsGizmo MIT license can be seen [here](https://github.com/Fennec-hub/
 
 TIF/TIFF image file support provided by [geotiffjs](https://github.com/geotiffjs/geotiff.js) whose license can be seen [here](https://github.com/geotiffjs/geotiff.js/blob/master/LICENSE)
 
+[OCCT](https://github.com/kovacsv/occt-import-js) licenses are in the `viewers/static/occt-import-js/dist` folder
+
 Notes about modifications, some of which are only added to work with these viewers:
 
  - MMDLoader.js file has an additional `@param {string} extension` since its code could not extract the file extension from loaded blob
