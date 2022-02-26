@@ -3,7 +3,7 @@ Example models:
 - FBX / OBJ / 3DS viewers allow setting texture path with URL just like in the following examples:
   - `https://raw.githubusercontent.com/antlafarge/ALLoader/master/examples/textures/, https://raw.githubusercontent.com/antlafarge/ALLoader/master/examples/fbx/crate.fbx`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3ds/portalgun/textures/, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3ds/portalgun/portalgun.3ds`
-- access to all [three.js](https://github.com/mrdoob/three.js/tree/master/examples) examples can be achieved with the following URL format, mind the correct path after `models`:
+- access to [three.js](https://github.com/mrdoob/three.js/tree/master/examples) examples can be achieved with the following URL format, mind the correct path after `models`:
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/LittlestTokyo.glb`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/collada/abb_irb52_7_120.dae`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vrml/house.wrl`
@@ -21,7 +21,7 @@ Example models:
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ifc/rac_advanced_sample_project.ifc`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02_dds.mtl, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.obj`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_v2.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_camera.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/audios/wavefile_short.mp3`
-- access to all [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF examples, mind the correct path after `2.0`:
+- access to [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF examples, mind the correct path after `2.0`:
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Sponza/glTF/Sponza.gltf`
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf`
 - access to PCD example files at [Point Cloud Library (PCL)](https://github.com/PointCloudLibrary):
