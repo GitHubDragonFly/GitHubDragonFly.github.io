@@ -35,3 +35,4 @@ Example models:
   - `https://raw.githubusercontent.com/robertlong/GLTFExporterTextureSizes/master/BlendToFBX/Atrium.fbx`
   - `https://raw.githubusercontent.com/takahirox/mmd-viewer-js/master/model/default/meiko_sakine.pmd`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/three/scene.json`
+  - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/vrml/cow.wrl`
