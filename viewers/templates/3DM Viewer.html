@@ -4,13 +4,17 @@
     <meta content="utf-8" charset="utf-8" http-equiv="encoding">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
-    <script src="../static/build/three.js"></script>
+    <script src="../static/build/r135/three.js"></script>
     <script src="../static/js/3DMLoader.js"></script>
     <script src="../static/js/TGALoader.js"></script>
     <script src="../static/js/DDSLoader.js"></script>
     <script src="../static/js/dat.gui.min.js"></script>
     <script src="../static/js/OrbitControls.js"></script>
     <script src="../static/js/OrbitControlsGizmo.js"></script>
+    <script src="../static/js/exporters/PLYExporter.js"></script>
+    <script src="../static/js/exporters/STLExporter.js"></script>
+    <script src="../static/js/exporters/OBJExporter.js"></script>
+    <script src="../static/js/exporters/GLTFExporter.js"></script>
 
     <style>
       body,html{
@@ -28,7 +32,7 @@
         overflow: hidden;
       }
 
-      button {
+      button, select {
         border: 1px solid blue;
         -webkit-border-radius: 2px;
         border-radius: 2px;
@@ -148,8 +152,9 @@
         <label style="margin: 2px 5px 2px 0;"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
         <button id="btn_edges" onclick="show_edges()" style="background-color: #d1cefc; vertical-align: middle; width: 20px;" disabled>E</button>
         <button id="btn_flat" onclick="set_flat()" style="background-color: #d1cefc; vertical-align: middle; width: 20px;" disabled>F</button>
-        <button id="btn_grid" onclick="show_grid()" style="background-color: #d1cefc; vertical-align: middle; width: 22px;" disabled>#</button>
-        <button id="btn_polar_grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; vertical-align: middle; width: 24px;" disabled><p class="polar"></p></button>
+        <button id="btn_textures" onclick="set_texture()" style="background-color: #d1cefc; vertical-align: middle; min-width: 28px;" disabled>T</button>
+        <button id="reset" onclick="reset_only()" style="vertical-align: middle; color: maroon; width: 40px;" disabled>RST</button>
+        <button id="btn_full_screen" onclick="full_screen()" style="vertical-align: middle; width: 22px;"><p class="full_screen"></p></button>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" style="margin: 2px 2px 2px 5px;">URL:</label>
@@ -178,8 +183,16 @@
         <input type="color" id="ambient_light_color" name="ambient_light_color" onchange="set_ambient_light_color()" style="vertical-align: middle; background: none; padding: 0; width: 23px; margin: 0 3px 0 0;" disabled />
         <label for="back_color" style="margin: 2px 0 2px 0;">BG</label>
         <input type="color" id="back_color" name="back_color" onchange="set_back_color()" style="vertical-align: middle; background: none; padding: 0; width: 23px; margin: 0 5px 0 0;" disabled />
-        <button id="reset" onclick="reset_only()" style="vertical-align: middle; color: maroon; width: 40px;" disabled>RST</button>
-        <button id="btn_full_screen" onclick="full_screen()" style="vertical-align: middle; width: 22px;"><p class="full_screen"></p></button>
+        <button id="btn_grid" onclick="show_grid()" style="background-color: #d1cefc; vertical-align: middle; width: 22px;" disabled>#</button>
+        <button id="btn_polar_grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; vertical-align: middle; width: 24px;" disabled><p class="polar"></p></button>
+        <select name="export_names" id="export_names" style="vertical-align: middle; color: blue; background: none;" disabled>
+          <option value="" selected disabled>Export</option>
+          <option value="ply" onclick="export_ply()">PLY</option>
+          <option value="stl" onclick="export_stl()">STL</option>
+          <option value="obj" onclick="export_obj()">OBJ</option>
+          <option value="glb" onclick="export_glb()">GLB</option>
+          <option value="gltf" onclick="export_gltf()">GLTF</option>
+        </select>
       </div>
     </div><br />
 
@@ -251,8 +264,8 @@
       var mouse_rotation, reset_rotation, events_initialized, flatShading_enabled;
       var rot_x = 0, rot_y = 0, rot_z = 0;
       var initial_opacity, previous_rhino_scale = '1', bounding_box = new THREE.Box3();
-      var selected_rhino_file, selected_url_file = '', url_displayed, url_loading;
-      var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif, tex;
+      var selected_rhino_file, selected_url_file = '', selected_rhino_url_file;
+      var textures, current_texture, url_displayed, url_loading;
 
       THREE.Object3D.DefaultUp = new THREE.Vector3( 0, 0, 1 );
 
@@ -271,6 +284,191 @@
       const dds_loader = new THREE.DDSLoader( manager );
       manager.addHandler( /\.dds$/i, dds_loader );
 
+      const obj_exporter = new THREE.OBJExporter( manager );
+      const ply_exporter = new THREE.PLYExporter( manager );
+      const stl_exporter = new THREE.STLExporter( manager );
+      const gltf_exporter = new THREE.GLTFExporter( manager );
+
+      const link = document.createElement( 'a' );
+      link.style.display = 'none';
+      document.body.appendChild( link );
+
+      function export_obj() {
+        document.getElementById("export_names").selectedIndex = 0;
+
+        if (rhino_obj) {
+          let obj_mesh = rhino_obj.clone();
+          let filename;
+
+          obj_mesh.traverse( function( child ) {
+      	    if (child instanceof THREE.Mesh) {
+              if (child.material.opacity == 1) child.material.transparent = false;
+    		    }
+    	    });
+
+          if (selected_rhino_file) {
+            filename = selected_rhino_file.name.substring(0, selected_rhino_file.name.lastIndexOf('.') + 1);
+          } else if (selected_rhino_url_file) {
+            filename = selected_rhino_url_file.substring(selected_rhino_url_file.lastIndexOf('/') + 1, selected_rhino_url_file.lastIndexOf('.') + 1);
+          } else {
+            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+          }
+
+          let string = obj_exporter.parse( obj_mesh ).split( ',' );
+          let blob = new Blob( [ string ], { type:'text/plain' } );
+          link.href = URL.createObjectURL( blob );
+          link.download = filename + 'obj';
+          link.click();
+
+          if (obj_mesh.material) obj_mesh.material.dispose();
+          if (obj_mesh.material && obj_mesh.material.map) obj_mesh.material.map.dispose();
+          if (obj_mesh.geometry) obj_mesh.geometry.dispose();
+        }
+      }
+
+      function export_ply() {
+        document.getElementById("export_names").selectedIndex = 0;
+
+        if (rhino_obj) {
+          let ply_mesh = rhino_obj.clone();
+          let filename;
+
+          ply_mesh.traverse( function( child ) {
+      	    if (child instanceof THREE.Mesh) {
+              if (child.material.opacity == 1) child.material.transparent = false;
+    		    }
+    	    });
+
+          if (selected_rhino_file) {
+            filename = selected_rhino_file.name.substring(0, selected_rhino_file.name.lastIndexOf('.') + 1);
+          } else if (selected_rhino_url_file) {
+            filename = selected_rhino_url_file.substring(selected_rhino_url_file.lastIndexOf('/') + 1, selected_rhino_url_file.lastIndexOf('.') + 1);
+          } else {
+            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+          }
+
+          let string = ply_exporter.parse( ply_mesh ).split( ',' );
+          let blob = new Blob( [ string ], { type:'text/plain' } );
+          link.href = URL.createObjectURL( blob );
+          link.download = filename + 'ply';
+          link.click();
+
+          if (ply_mesh.material) ply_mesh.material.dispose();
+          if (ply_mesh.material && ply_mesh.material.map) ply_mesh.material.map.dispose();
+          if (ply_mesh.geometry) ply_mesh.geometry.dispose();
+        }
+      }
+
+      function export_stl() {
+        document.getElementById("export_names").selectedIndex = 0;
+
+        if (rhino_obj) {
+          let stl_mesh = rhino_obj.clone();
+          let filename;
+
+          stl_mesh.traverse( function( child ) {
+      	    if (child instanceof THREE.Mesh) {
+              if (child.material.opacity == 1) child.material.transparent = false;
+    		    }
+    	    });
+
+          if (selected_rhino_file) {
+            filename = selected_rhino_file.name.substring(0, selected_rhino_file.name.lastIndexOf('.') + 1);
+          } else if (selected_rhino_url_file) {
+            filename = selected_rhino_url_file.substring(selected_rhino_url_file.lastIndexOf('/') + 1, selected_rhino_url_file.lastIndexOf('.') + 1);
+          } else {
+            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+          }
+
+          let string = stl_exporter.parse( stl_mesh ).split( ',' );
+          let blob = new Blob( [ string ], { type:'text/plain' } );
+          link.href = URL.createObjectURL( blob );
+          link.download = filename + 'stl';
+          link.click();
+
+          if (stl_mesh.material) stl_mesh.material.dispose();
+          if (stl_mesh.material && stl_mesh.material.map) stl_mesh.material.map.dispose();
+          if (stl_mesh.geometry) stl_mesh.geometry.dispose();
+        }
+      }
+
+      function export_gltf() {
+        document.getElementById("export_names").selectedIndex = 0;
+
+        if (rhino_obj) {
+          let gltf_mesh = rhino_obj.clone();
+          let filename;
+
+          gltf_mesh.traverse( function( child ) {
+      	    if (child instanceof THREE.Mesh) {
+              if (child.material.opacity == 1) child.material.transparent = false;
+    		    }
+    	    });
+
+          if (selected_rhino_file) {
+            filename = selected_rhino_file.name.substring(0, selected_rhino_file.name.lastIndexOf('.') + 1);
+          } else if (selected_rhino_url_file) {
+            filename = selected_rhino_url_file.substring(selected_rhino_url_file.lastIndexOf('/') + 1, selected_rhino_url_file.lastIndexOf('.') + 1);
+          } else {
+            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+          }
+
+          gltf_mesh.rotation.x -= Math.PI / 2;
+
+          const options = {	binary: false, maxTextureSize: 4096 || Infinity };
+
+          gltf_exporter.parse( gltf_mesh, ( json ) => {
+            let string = JSON.stringify( json, null, 2 );
+            let blob = new Blob( [ string ], { type:'text/plain' } );
+            link.href = URL.createObjectURL( blob );
+            link.download = filename + 'gltf';
+            link.click();
+          }, options);
+
+          if (gltf_mesh.material) gltf_mesh.material.dispose();
+          if (gltf_mesh.material && gltf_mesh.material.map) gltf_mesh.material.map.dispose();
+          if (gltf_mesh.geometry) gltf_mesh.geometry.dispose();
+        }
+      }
+
+      function export_glb() {
+        document.getElementById("export_names").selectedIndex = 0;
+
+        if (rhino_obj) {
+          let gltf_mesh = rhino_obj.clone();
+          let filename;
+
+          gltf_mesh.traverse( function( child ) {
+      	    if (child instanceof THREE.Mesh) {
+              if (child.material.opacity == 1) child.material.transparent = false;
+    		    }
+    	    });
+
+          if (selected_rhino_file) {
+            filename = selected_rhino_file.name.substring(0, selected_rhino_file.name.lastIndexOf('.') + 1);
+          } else if (selected_rhino_url_file) {
+            filename = selected_rhino_url_file.substring(selected_rhino_url_file.lastIndexOf('/') + 1, selected_rhino_url_file.lastIndexOf('.') + 1);
+          } else {
+            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+          }
+
+          gltf_mesh.rotation.x -= Math.PI / 2;
+
+          const options = {	binary: true, maxTextureSize: 4096 || Infinity };
+
+          gltf_exporter.parse( gltf_mesh, ( json ) => {
+            let blob = new Blob( [ json ], { type:'application/octet-stream' } );
+            link.href = URL.createObjectURL( blob );
+            link.download = filename + 'glb';
+            link.click();
+          }, options );
+
+          if (gltf_mesh.material) gltf_mesh.material.dispose();
+          if (gltf_mesh.material && gltf_mesh.material.map) gltf_mesh.material.map.dispose();
+          if (gltf_mesh.geometry) gltf_mesh.geometry.dispose();
+        }
+      }
+
       function set_back_color() {
         scene.background = null;
         document.getElementById('file_image_input').value = "";
@@ -287,12 +485,12 @@
                 child.traverse( function( childX ) {
                   if (childX.type === 'Mesh' || childX instanceof THREE.Mesh) {
                     childX.material.opacity = initial_opacity[ childX.name ] * opacity_value;
-    		          }
+                  }
     	          });
               } else {
                 if (child.type === 'Mesh' || child instanceof THREE.Mesh) {
                   child.material.opacity = initial_opacity[ child.name ] * opacity_value;
-    	  	      }
+                }
               }
             });
           });
@@ -496,11 +694,8 @@
         enable_disable( true );
 
         selected_rhino_file = null;
-        texture_files_jpg = [];
-        texture_files_png = [];
-        texture_files_bmp = [];
-        texture_files_gif = [];
-        tex = null;
+        selected_rhino_url_file = null;
+        textures = [];
         edges = {};
         initial_opacity = {};
         edges_visible = false;
@@ -508,6 +703,8 @@
         polar_grid_visible = false;
         render_requested = false;
         flatShading_enabled = false;
+        current_texture = -1;
+        document.getElementById('btn_textures').disabled = true;
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_polar_grid').style.backgroundColor = '#d1cefc';
@@ -518,10 +715,7 @@
 
           for (let i = 0; i < fi.files.length; i++) {
             if (fi.files[i].name.toUpperCase().endsWith('.3DM')) selected_rhino_file = fi.files[i];
-            else if (fi.files[i].name.toUpperCase().endsWith('.PNG')) texture_files_png.push( fi.files[i] );
-            else if (fi.files[i].name.toUpperCase().endsWith('.JPG')) texture_files_jpg.push( fi.files[i] );
-            else if (fi.files[i].name.toUpperCase().endsWith('.BMP')) texture_files_bmp.push( fi.files[i] );
-            else if (fi.files[i].name.toUpperCase().endsWith('.GIF')) texture_files_gif.push( fi.files[i] );
+            else if (fi.files[i].type.startsWith('image/')) textures.push( fi.files[i] );
           };
 
           if (!selected_rhino_file) {
@@ -532,6 +726,8 @@
             document.getElementById('div_error').style.display = "block";
             return;
           }
+
+          if (textures.length > 0) { document.getElementById('btn_textures').disabled = false; }
 
           selected_url_file = '';
         } else {
@@ -640,30 +836,6 @@
                     childX.material.transparent = true;
                     childX.material.skinning = true;
 
-                    if (texture_files_jpg.length > 0) {
-                      tex = texture_loader.load( URL.createObjectURL( texture_files_jpg[0] ));
-                      URL.revokeObjectURL( texture_files_jpg[0] );
-                    } else if (texture_files_png.length > 0) {
-                      tex = texture_loader.load( URL.createObjectURL( texture_files_png[0] ));
-                      URL.revokeObjectURL( texture_files_png[0] );
-                    } else if (texture_files_bmp.length > 0) {
-                      tex = texture_loader.load( URL.createObjectURL( texture_files_bmp[0] ));
-                      URL.revokeObjectURL( texture_files_bmp[0] );
-                    } else if (texture_files_gif.length > 0) {
-                      tex = texture_loader.load( URL.createObjectURL( texture_files_gif[0] ));
-                      URL.revokeObjectURL( texture_files_gif[0] );
-          	        }
-
-                    if (tex) {
-                      tex.encoding = THREE.sRGBEncoding;
-                      tex.wrapS = THREE.RepeatWrapping;
-                      tex.wrapT = THREE.RepeatWrapping;
-                      tex.magFilter = THREE.NearestFilter;
-
-                      childX.material.map = tex;
-                      childX.material.needsUpdate = true;
-                    }
-
                     childX.name = 'child_' + child_count;
                     initial_opacity[ childX.name ] = childX.material.opacity;
                     edges[ childX.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( childX.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
@@ -675,30 +847,6 @@
                   child.castShadow = true;
                   child.material.transparent = true;
                   child.material.skinning = true;
-
-                  if (texture_files_jpg.length > 0) {
-                    tex = texture_loader.load( URL.createObjectURL( texture_files_jpg[0] ));
-                    URL.revokeObjectURL( texture_files_jpg[0] );
-                  } else if (texture_files_png.length > 0) {
-                    tex = texture_loader.load( URL.createObjectURL( texture_files_png[0] ));
-                    URL.revokeObjectURL( texture_files_png[0] );
-                  } else if (texture_files_bmp.length > 0) {
-                    tex = texture_loader.load( URL.createObjectURL( texture_files_bmp[0] ));
-                    URL.revokeObjectURL( texture_files_bmp[0] );
-                  } else if (texture_files_gif.length > 0) {
-                    tex = texture_loader.load( URL.createObjectURL( texture_files_gif[0] ));
-                    URL.revokeObjectURL( texture_files_gif[0] );
-                  }
-
-                  if (tex) {
-                    tex.encoding = THREE.sRGBEncoding;
-                    tex.wrapS = THREE.RepeatWrapping;
-                    tex.wrapT = THREE.RepeatWrapping;
-                    tex.magFilter = THREE.NearestFilter;
-
-                    child.material.map = tex;
-                    child.material.needsUpdate = true;
-                  }
 
                   child.name = 'child_' + child_count;
                   initial_opacity[ child.name ] = child.material.opacity;
@@ -750,10 +898,27 @@
 
       function loadURLFile() {
         if (selected_url_file != '') {
-          if (selected_url_file.toUpperCase().endsWith('.3DM')) {
+          if (selected_url_file.indexOf(',') > -1) {
+            let urls = selected_url_file.split(',');
+
+            for (let i = 0; i < urls.length; i++) {
+              let url = urls[i].trim();
+
+              if (url.toUpperCase().endsWith('.PNG') || url.toUpperCase().endsWith('.JPG') || url.toUpperCase().endsWith('.JPEG') || url.toUpperCase().endsWith('.JFIF') || url.toUpperCase().endsWith('.PJPEG') || url.toUpperCase().endsWith('.PJP') || url.toUpperCase().endsWith('.BMP') || url.toUpperCase().endsWith('.GIF') || url.toUpperCase().endsWith('.SVG')) {
+                texture_loader.load( url, function( texture ) { textures.push( texture ); });
+                document.getElementById('btn_textures').disabled = false;
+              } else if (url.toUpperCase().endsWith('.3DM')) {
+                selected_rhino_url_file = url;
+              }
+            }
+          } else {
+            if (selected_url_file.toUpperCase().endsWith('.3DM')) selected_rhino_url_file = selected_url_file;
+          }
+
+          if (selected_rhino_url_file) {
             document.getElementById('div_loading').style.display = "block";
 
-            rhino_loader.load( selected_url_file, function( object ) {
+            rhino_loader.load( selected_rhino_url_file, function( object ) {
               rhino_obj = object.clone();
 
               let child_count = 1;
@@ -795,7 +960,7 @@
               set_initial_scale();
               resize();
 
-              if (rhino_obj.userData.layers.length > 1) { start_gui(); }
+              if (rhino_obj.userData.layers.length > 1) start_gui();
 
               document.getElementById('div_loading').style.display = "none";
             }, function ( xhr ) {
@@ -966,6 +1131,132 @@
         });
       }
 
+      function set_texture() {
+        if (current_texture == textures.length - 1) {
+          document.getElementById('btn_textures').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_textures').innerHTML = 'T';
+          current_texture = -1;
+        } else {
+          current_texture += 1;
+          document.getElementById('btn_textures').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_textures').innerHTML = 'T' + current_texture;
+        }
+
+        rhino_obj.children.forEach( element => {
+          element.traverse( function( child ) {
+            if (child.type === 'Group' || child instanceof THREE.Group) {
+              child.traverse( function( childX ) {
+                if (childX.type === 'Mesh' || childX instanceof THREE.Mesh) {
+                  if (current_texture == -1) {
+                    // Remove texture
+                    if (Array.isArray( childX.material )) {
+                      childX.material.forEach( mtl => {
+                        mtl.map = null;
+                        mtl.needsUpdate = true;
+                      });
+                    } else {
+                      childX.material.map = null;
+                      childX.material.needsUpdate = true;
+                    }
+                  } else {
+                    if (selected_rhino_url_file) {
+                      textures[ current_texture ].encoding = THREE.sRGBEncoding;
+                      textures[ current_texture ].wrapS = THREE.RepeatWrapping;
+                      textures[ current_texture ].wrapT = THREE.RepeatWrapping;
+                      textures[ current_texture ].magFilter = THREE.NearestFilter;
+
+                      // Apply texture
+                      if (Array.isArray( childX.material )) {
+                        childX.material.forEach( mtl => {
+                          mtl.map = textures[ current_texture ];
+                          mtl.needsUpdate = true;
+                        });
+                      } else {
+                        childX.material.map = textures[ current_texture ];
+                        childX.material.needsUpdate = true;
+                      }
+                    } else {
+                      texture_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                        URL.revokeObjectURL( textures[ current_texture ] );
+
+                        texture.encoding = THREE.sRGBEncoding;
+                        texture.wrapS = THREE.RepeatWrapping;
+                        texture.wrapT = THREE.RepeatWrapping;
+                        texture.magFilter = THREE.NearestFilter;
+
+                        // Apply texture
+                        if (Array.isArray( childX.material )) {
+                          childX.material.forEach( mtl => {
+                            mtl.map = texture;
+                            mtl.needsUpdate = true;
+                          });
+                        } else {
+                          childX.material.map = texture;
+                          childX.material.needsUpdate = true;
+                        }
+                      });
+                    }
+                  }
+    		        }
+    	        });
+            } else {
+              if (child.type === 'Mesh' || child instanceof THREE.Mesh) {
+                if (current_texture == -1) {
+                  // Remove texture
+                  if (Array.isArray( child.material )) {
+                    child.material.forEach( mtl => {
+                      mtl.map = null;
+                      mtl.needsUpdate = true;
+                    });
+                  } else {
+                    child.material.map = null;
+                    child.material.needsUpdate = true;
+                  }
+                } else {
+                  if (selected_rhino_url_file) {
+                    textures[ current_texture ].encoding = THREE.sRGBEncoding;
+                    textures[ current_texture ].wrapS = THREE.RepeatWrapping;
+                    textures[ current_texture ].wrapT = THREE.RepeatWrapping;
+                    textures[ current_texture ].magFilter = THREE.NearestFilter;
+
+                    // Apply texture
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        mtl.map = textures[ current_texture ];
+                        mtl.needsUpdate = true;
+                      });
+                    } else {
+                      child.material.map = textures[ current_texture ];
+                      child.material.needsUpdate = true;
+                    }
+                  } else {
+                    texture_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                      URL.revokeObjectURL( textures[ current_texture ] );
+
+                      texture.encoding = THREE.sRGBEncoding;
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
+                      texture.magFilter = THREE.NearestFilter;
+
+                      // Apply texture
+                      if (Array.isArray( child.material )) {
+                        child.material.forEach( mtl => {
+                          mtl.map = texture;
+                          mtl.needsUpdate = true;
+                        });
+                      } else {
+                        child.material.map = texture;
+                        child.material.needsUpdate = true;
+                      }
+                    });
+                  }
+                }
+    	  	    }
+            }
+          });
+        });
+      }
+
       function set_flat() {
         if (flatShading_enabled) {
           flatShading_enabled = false;
@@ -1057,12 +1348,15 @@
         document.getElementById('hlight').checked = false;
         radio_changed();
 
-        // Reset flat, opacity, edges and rhino_obj scale values
+        // Reset flat, opacity, edges, textures and rhino_obj scale values
         flatShading_enabled = false;
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         document.getElementById('rhino_opacity').value = 1;
         edges_visible = false;
         document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
+        current_texture = -1;
+        document.getElementById('btn_textures').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_textures').innerHTML = 'T';
         previous_rhino_scale = '1';
         document.getElementById('rhino_scale').value = 1;
 
@@ -1094,6 +1388,7 @@
           document.getElementById('div_error').style.display = "none";
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
+          document.getElementById('btn_textures').disabled = true;
           enable_disable( true );
         }
       }
@@ -1120,6 +1415,7 @@
         document.getElementById('btn_polar_grid').disabled = disable;
         document.getElementById('btn_grid').disabled = disable;
         document.getElementById('reset').disabled = disable;
+        document.getElementById('export_names').disabled = disable;
       }
     </script>
   </body>
