@@ -8,6 +8,8 @@
     <script src="../static/js/PCDLoader.js"></script>
     <script src="../static/js/OrbitControls.js"></script>
     <script src="../static/js/OrbitControlsGizmo.js"></script>
+    <script src="../static/js/exporters/OBJExporter.js"></script>
+    <script src="../static/js/exporters/GLTFExporter.js"></script>
 
     <style>
       body,html{
@@ -31,6 +33,14 @@
         border-radius: 2px;
         margin: 2px 2px 2px 0;
         padding: 1px;
+      }
+
+      select {
+        border: 1px solid blue;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        margin: 1px 2px 1px 0;
+        padding: 1px 0 2px 0;
       }
 
       .spinner {
@@ -137,9 +147,9 @@
         <input type="file" id="file_input" name="file" onchange="init()" accept=".pcd" style="margin: 2px 3px 2px 0; max-width: 190px;" multiple />
         <label for="file_image_input" style="color: #CE8704; margin: 2px 2px 2px 0;">BGND</label>
         <input type="file" id="file_image_input" name="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" onchange="set_scene_image()" style="margin: 2px 3px 2px 0; max-width: 190px;" disabled />
-        <label for="back_color" style="margin: 2px 0 2px 0;">BG</label>
-        <input type="color" id="back_color" name="back_color" onchange="set_back_color()" style="vertical-align: middle; background: none; padding: 0; width: 23px; margin: 0 5px 0 0;" disabled />
-        <button id="reset" onclick="reset_only()" style="vertical-align: middle; color: maroon; width: 40px;" disabled>RST</button>
+        <label for="pcd_scale" style="margin: 2px 2px 2px 0;">Scale</label>
+        <input type="number" id="pcd_scale" name="pcd_scale" onkeydown="return_false()" oninput="set_pcd_scale()" min="0.25" max="2" value="1" step="0.25" style="margin: 2px 3px 2px 0; width: 48px;" disabled />
+        <label style="margin: 2px 5px 2px 0;"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
         <button id="btn_full_screen" onclick="full_screen()" style="vertical-align: middle; width: 22px;"><p class="full_screen"></p></button>
       </div>
       <div class="fm" id="url" style="display: none;">
@@ -156,14 +166,19 @@
         <input type="number" id="rotation_y" onchange="rot_y_changed()" min="-50" max="50" value="0" step="1" style="width: 50px; margin: 2px 0 2px 0;" disabled />&nbsp;
         <label for="rotation_z" style="color: blue;">Z</label>
         <input type="number" id="rotation_z" onchange="rot_z_changed()" min="-50" max="50" value="0" step="1" style="width: 50px; margin: 2px 0 2px 0;" disabled />&nbsp; &nbsp;
+        <label for="back_color" style="margin: 2px 0 2px 0;">BG</label>
+        <input type="color" id="back_color" name="back_color" onchange="set_back_color()" style="vertical-align: middle; background: none; padding: 0; width: 23px; margin: 0 5px 0 0;" disabled />
         <label for="points_color" style="margin: 2px 2px 2px 0;">Pts Color</label>
         <input type="color" id="points_color" name="points_color" onchange="set_points_color()" style="vertical-align: middle; background: none; padding: 0; width: 23px; margin: 0 5px 0 0;" disabled />
         <label for="points_size" style="margin: 2px 2px 2px 0;">Pts Size</label>
         <button id="btn_plus" onclick="increase_points_size()" style="vertical-align: middle; color: red; width: 22px;" disabled>+</button>
         <button id="btn_minus" onclick="decrease_points_size()" style="vertical-align: middle; color: red; width: 22px;" disabled>-</button>
-        <label for="pcd_scale" style="margin: 2px 2px 2px 0;">Scale</label>
-        <input type="number" id="pcd_scale" name="pcd_scale" onkeydown="return_false()" oninput="set_pcd_scale()" min="0.25" max="2" value="1" step="0.25" style="margin: 2px 3px 2px 0; width: 48px;" disabled />
-        <label style="margin: 2px 5px 2px 0;"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
+        <select name="export_names" id="export_names" style="vertical-align: middle; color: blue; background: none;" disabled>
+          <option value="" selected disabled>Export</option>
+          <option value="obj" onclick="export_obj()">OBJ</option>
+          <option value="gltf" onclick="export_gltf()">GLTF</option>
+        </select>
+        <button id="reset" onclick="reset_only()" style="vertical-align: middle; color: maroon; width: 40px;" disabled>RST</button>
       </div>
     </div><br />
 
@@ -242,6 +257,87 @@
       const pcd_loader = new THREE.PCDLoader( manager );
 
       const texture_loader = new THREE.TextureLoader();
+
+      const obj_exporter = new THREE.OBJExporter( manager );
+      const gltf_exporter = new THREE.GLTFExporter( manager );
+
+      const link = document.createElement( 'a' );
+      link.style.display = 'none';
+      document.body.appendChild( link );
+
+      function export_obj() {
+        document.getElementById("export_names").selectedIndex = 0;
+
+        if (pcd_obj) {
+          let obj_mesh = pcd_obj.clone();
+          let filename;
+
+          obj_mesh.traverse( function( child ) {
+      	    if (child instanceof THREE.Mesh) {
+              if (child.material.opacity == 1) child.material.transparent = false;
+    		    }
+    	    });
+
+          if (!(obj_mesh.geometry instanceof THREE.BufferGeometry)) {
+            obj_mesh.geometry = new THREE.BufferGeometry().fromGeometry( obj_mesh.geometry );
+          }
+
+          if (selected_pcd_file) {
+            filename = selected_pcd_file.name.substring(0, selected_pcd_file.name.lastIndexOf('.') + 1);
+          } else {
+            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+          }
+
+          let string = obj_exporter.parse( obj_mesh ).split( ',' );
+          let blob = new Blob( [ string ], { type:'text/plain' } );
+          link.href = URL.createObjectURL( blob );
+          link.download = filename + 'obj';
+          link.click();
+
+          if (obj_mesh.material) obj_mesh.material.dispose();
+          if (obj_mesh.material && obj_mesh.material.map) obj_mesh.material.map.dispose();
+          if (obj_mesh.geometry) obj_mesh.geometry.dispose();
+        }
+      }
+
+      function export_gltf() {
+        document.getElementById("export_names").selectedIndex = 0;
+
+        if (pcd_obj) {
+          let gltf_mesh = pcd_obj.clone();
+          let filename;
+
+          gltf_mesh.traverse( function( child ) {
+      	    if (child instanceof THREE.Mesh) {
+              if (child.material.opacity == 1) child.material.transparent = false;
+    		    }
+    	    });
+
+          if (!(gltf_mesh.geometry instanceof THREE.BufferGeometry)) {
+            gltf_mesh.geometry = new THREE.BufferGeometry().fromGeometry( gltf_mesh.geometry );
+          }
+
+          if (selected_pcd_file) {
+            filename = selected_pcd_file.name.substring(0, selected_pcd_file.name.lastIndexOf('.') + 1);
+          } else {
+            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+          }
+
+          const options = {	binary: false, maxTextureSize: 4096 || Infinity };
+
+          gltf_exporter.parse( gltf_mesh, ( json ) => {
+            let string = JSON.stringify( json, null, 2 );
+            let blob = new Blob( [ string ], { type:'text/plain' } );
+            link.href = URL.createObjectURL( blob );
+            link.download = filename + 'gltf';
+            link.click();
+          }, function( error ) { console.log(error); }, options );
+
+          if (gltf_mesh.material) gltf_mesh.material.dispose();
+          if (gltf_mesh.material && gltf_mesh.material.map) gltf_mesh.material.map.dispose();
+          if (gltf_mesh.geometry) gltf_mesh.geometry.dispose();
+        }
+      }
 
       function set_back_color() {
         scene.background = null;
@@ -690,6 +786,7 @@
         document.getElementById('reset').disabled = disable;
         document.getElementById('btn_plus').disabled = disable;
         document.getElementById('btn_minus').disabled = disable;
+        document.getElementById('export_names').disabled = disable;
       }
     </script>
   </body>
