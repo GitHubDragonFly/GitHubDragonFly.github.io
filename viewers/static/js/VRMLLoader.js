@@ -551,6 +551,10 @@
 						build = buildGroupingNode( node );
 						break;
 
+					case 'Switch':
+						build = buildSwitchingNode( node );
+						break;
+
 					case 'Background':
 						build = buildBackgroundNode( node );
 						break;
@@ -630,7 +634,6 @@
 					case 'Billboard':
 					case 'Inline':
 					case 'LOD':
-					case 'Switch':
 					case 'AudioClip':
 					case 'DirectionalLight':
 					case 'PointLight':
@@ -657,6 +660,7 @@
 					case 'NavigationInfo':
 					case 'Viewpoint':
 						// node not supported yet
+						console.warn( 'THREE.VRMLLoader: Node not supported yet:', nodeName );
 						break;
 
 					default:
@@ -728,6 +732,40 @@
 							break;
 
 						case 'proxy':
+							// field not supported
+							break;
+
+						default:
+							console.warn( 'THREE.VRMLLoader: Unknown field:', fieldName );
+							break;
+
+					}
+
+				}
+
+				return object;
+
+			}
+
+			function buildSwitchingNode( node ) {
+
+				var object = new THREE.Object3D(); //
+
+				const fields = node.fields;
+
+				for ( let i = 0, l = fields.length; i < l; i ++ ) {
+
+					const field = fields[ i ];
+					const fieldName = field.name || 'undefined';
+					const fieldValues = field.values;
+
+					switch ( fieldName ) {
+
+						case 'choice':
+							object.add( buildNode( fieldValues[0].fields[0].values[1] ) );
+							break;
+
+						case 'whichChoice':
 							// field not supported
 							break;
 
