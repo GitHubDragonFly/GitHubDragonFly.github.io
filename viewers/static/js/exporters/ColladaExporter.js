@@ -117,7 +117,28 @@
 				ctx = ctx || canvas.getContext( '2d' );
 				canvas.width = image.width;
 				canvas.height = image.height;
-				ctx.drawImage( image, 0, 0 ); // Get the base64 encoded data
+
+				// this seems to work fine for exporting TGA images as PNG but unflipped
+				if ( image.data && image.data.constructor === Uint8Array ) {
+
+					let imgData = ctx.createImageData( image.width, image.height );
+
+					for (let i = 0; i < imgData.data.length; i += 4) {
+
+						imgData.data[ i + 0 ] = image.data[ i + 0 ];
+					  	imgData.data[ i + 1 ] = image.data[ i + 1 ];
+					  	imgData.data[ i + 2 ] = image.data[ i + 2 ];
+					  	imgData.data[ i + 3 ] = image.data[ i + 3 ];
+
+					}
+
+					ctx.putImageData(imgData, 0, 0);
+
+				} else {
+
+					ctx.drawImage( image, 0, 0 ); // Get the base64 encoded data
+
+				}
 
 				const base64data = canvas.toDataURL( `image/${ext}`, 1 ).replace( /^data:image\/(png|jpg);base64,/, '' ); // Convert to a uint8 array
 
