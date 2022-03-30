@@ -1128,7 +1128,7 @@
 			} // pbrMetallicRoughness.metallicRoughnessTexture
 
 
-			if ( material.metalnessMap || material.roughnessMap ) {
+			if ( (material.metalnessMap && material.metalnessMap.image) || (material.roughnessMap && material.roughnessMap.image) ) {
 
 				const metalRoughTexture = this.buildMetalRoughTexture( material.metalnessMap, material.roughnessMap );
 				const metalRoughMapDef = {
@@ -1140,7 +1140,7 @@
 			} // pbrMetallicRoughness.baseColorTexture or pbrSpecularGlossiness diffuseTexture
 
 
-			if ( material.map ) {
+			if ( material.map && material.map.image ) {
 
 				const baseColorMapDef = {
 					index: this.processTexture( material.map )
@@ -1170,7 +1170,7 @@
 				} // emissiveTexture
 
 
-				if ( material.emissiveMap ) {
+				if ( material.emissiveMap && material.emissiveMap.image ) {
 
 					const emissiveMapDef = {
 						index: this.processTexture( material.emissiveMap )
@@ -1183,7 +1183,7 @@
 			} // normalTexture
 
 
-			if ( material.normalMap ) {
+			if ( material.normalMap && material.normalMap.image ) {
 
 				const normalMapDef = {
 					index: this.processTexture( material.normalMap )
@@ -1203,7 +1203,7 @@
 			} // occlusionTexture
 
 
-			if ( material.aoMap ) {
+			if ( material.aoMap && material.aoMap.image ) {
 
 				const occlusionMapDef = {
 					index: this.processTexture( material.aoMap ),
