@@ -24,6 +24,7 @@ Notes about modifications, some of which are only added to work with these viewe
  - PLYLoader.js file includes "vertex_index" to avoid console error related to non-existing "vertex_indices"
  - LDRAWLoader.js file includes additional color definitions
  - ColladaExporter.js file includes modification for exporting TGA textures as well
+ - OBJExporter.js file includes modification for exporting MTL file & textures
  - `ddsLoader` section was added to ColladaLoader.js and FBXLoader.js files to support DDS textures
  - OrbitControls.js file has `rotateLeft` and `rotateUp` exposed so the OrbitControlsGizmo could work properly
  - OrbitControlsGizmo file was converted to non-module
