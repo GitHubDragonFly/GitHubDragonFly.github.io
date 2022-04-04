@@ -14,7 +14,7 @@ Notes about three.js viewers:
  - intended for viewing a single 3D model
  - the best choice of loading 3D models is via the viewers `URL` option (for URLs that have no CORS restrictions)
  - multiple URLs are allowed in some viewers and can be from mixed websites
- - buttons, where applicable: `E` - edges, `F` - flatShading, `K` - kinematics, `A` - animations, `X`- morphs, `V` - variants, `T` - textures, `R` - reflectivity, `P` - poses, `CS` - construction step (ldraw), `DS` - material side (front/back/double), `#` - grid, `RST` - reset
+ - buttons, where applicable: `E` - edges, `F` - flatShading, `K` - kinematics, `A` - animations, `X`- morphs, `V` - variants, `T` - textures, `VC` - vertex colors, `R` - reflectivity, `P` - poses, `CS` - construction step (ldraw), `DS` - material side (front/back/double), `#` - grid, `RST` - reset
  - light controls, where applicable: `DL` - directional, `SL` - spotlight, `HL` - hemisphere, `AL` - ambient, `DLi` or `SLi` - light intensity
  - other controls, where applicable: `BG` - background color, `C` - object color, `Eq` - equirectangular, `Opy` - opacity, `Shdw` - shadow
  - see `URLS4MODELS.md` for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
