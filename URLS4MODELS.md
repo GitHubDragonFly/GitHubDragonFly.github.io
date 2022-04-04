@@ -24,12 +24,15 @@ Example models:
 - access to [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF examples, mind the correct path after `2.0`:
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Sponza/glTF/Sponza.gltf`
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf`
-- access to PCD example files at [Point Cloud Library (PCL)](https://github.com/PointCloudLibrary):
+- access to some PCD example files at [Point Cloud Library (PCL)](https://github.com/PointCloudLibrary):
   - `https://raw.githubusercontent.com/PointCloudLibrary/pcl/master/test/office1.pcd`
   - `https://raw.githubusercontent.com/PointCloudLibrary/pcl/master/test/five_people.pcd`
-- access to 3DS example files at [tutushubham](https://github.com/tutushubham/3D-Models---Military), mind the correct path after `master`:
+- access to some 3DS example files at [tutushubham](https://github.com/tutushubham/3D-Models---Military), mind the correct path after `master`:
   - `https://raw.githubusercontent.com/tutushubham/3D-Models---Military/master/SWIM/SWIM/SWIM_L.3DS`
   - `https://raw.githubusercontent.com/tutushubham/3D-Models---Military/master/M60/M60/M60_L.3DS`
+- access to some VTK example files at [spl-brain-atlas](https://github.com/mhalle/spl-brain-atlas/tree/master/slicer/models):
+  - `https://raw.githubusercontent.com/mhalle/spl-brain-atlas/master/slicer/models/Model_4050_tongue.vtk`
+  - `https://raw.githubusercontent.com/mhalle/spl-brain-atlas/master/slicer/models/Model_1000_left_insula.vtk`
 - other examples:
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.obj`
   - `https://raw.githubusercontent.com/robertlong/GLTFExporterTextureSizes/master/BlendToFBX/Atrium.fbx`
