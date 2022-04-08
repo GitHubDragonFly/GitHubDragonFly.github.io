@@ -28,5 +28,6 @@ Notes about three.js viewers:
  - MMD / GLTF viewers can export to DAE (Collada) format but all exported textures seem to need to be flipped vertically afterwards (use some paint program for this)
  - GLTF viewer can export to OBJ format but all exported textures seem to need to be flipped vertically afterwards (use some paint program for this)
  - GLTF/GLB exporter seems to have a limitation, as reported [here](https://discourse.threejs.org/t/exporting-model-with-animations/6792), applicable to DAE / FBX / MMD models which contain joints (for DAE you could try [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and for FBX you could try [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) converters instead)
+ - Tip: if it happens that the model is loaded but you cannot see it then try any or all of the following: apply edges - zoom in/out or apply Scale - apply flatShading - apply Vertex Colors
 
 This is all MIT licensed but please observe any other licenses that might be applicable to some files or content.
