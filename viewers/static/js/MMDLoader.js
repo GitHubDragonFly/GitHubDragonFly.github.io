@@ -1189,7 +1189,7 @@
 					let blobs = this.resourcePath.split(',');
 
 					blobs.forEach( ( blob_name, index ) => {
-						if (blob_name === filePath) {
+						if (blob_name === filePath || blob_name === filePath.substring( filePath.lastIndexOf('/') + 1) || blob_name === filePath.substring( filePath.lastIndexOf('\\') + 1) ) {
 							fullPath = blobs[ index + 1 ];
 							texture_set = true;
 						}
