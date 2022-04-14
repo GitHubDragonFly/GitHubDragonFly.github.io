@@ -250,7 +250,7 @@
 			}
 
 			object.traverse( function ( child ) {
-				console.log(child);
+
 				if ( child.isMesh === true ) {
 
 					parseMesh( child );
