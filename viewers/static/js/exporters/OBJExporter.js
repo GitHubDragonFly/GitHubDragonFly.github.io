@@ -250,7 +250,7 @@
 			}
 
 			object.traverse( function ( child ) {
-
+				console.log(child);
 				if ( child.isMesh === true ) {
 
 					parseMesh( child );
@@ -277,6 +277,7 @@
 				let mtlOutput = '';
 				let textures = [];
 				const ext = 'png';
+				let count = 1;
       
 				Object.keys( materials ).forEach( ( key ) => {
 
@@ -291,23 +292,94 @@
 					mtlOutput += 'Tr 0.0000\n';
 					mtlOutput += 'Tf 1.0000 1.0000 1.0000\n';
 					mtlOutput += 'illum 2\n';
-					mtlOutput += 'Ka ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + ' ' + '\n';
+					mtlOutput += 'Ka 0.2500 0.2500 0.2500\n';
 					mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + ' ' + '\n';
 					mtlOutput += 'Ks 0.2500 0.2500 0.2500\n';
-					mtlOutput += 'Ke 0.0500 0.0500 0.0500\n';
+					mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + ' ' + '\n' : 'Ke 0.0000 0.0000 0.0000\n';
 
-					if (mat.map && mat.map instanceof THREE.Texture) {
+					if ( mat.map && mat.map instanceof THREE.Texture ) {
+
 						textures.push( {
 							name,
 							ext,
 							data: imageToData( mat.map.image, ext )
 						});
 	
-						mtlOutput += 'map_Ka ' + name + '.png' + '\n';
 						mtlOutput += 'map_Kd ' + name + '.png' + '\n';
 
 					}
+					
+					if ( mat.emissiveMap && mat.emissiveMap instanceof THREE.Texture ) {
 
+						name = 'emissiveMap' + count;
+
+						textures.push( {
+							name,
+							ext,
+							data: imageToData( mat.emissiveMap.image, ext )
+						});
+	
+						mtlOutput += 'map_Ke ' + name + '.png' + '\n';
+
+					}
+
+					if ( mat.roughnessMap && mat.roughnessMap instanceof THREE.Texture ) {
+
+						name = 'bumpMap' + count;
+
+						textures.push( {
+							name,
+							ext,
+							data: imageToData( mat.roughnessMap.image, ext )
+						});
+	
+						mtlOutput += 'map_bump ' + name + '.png' + '\n';
+
+					}
+
+					if ( mat.normalMap && mat.normalMap instanceof THREE.Texture ) {
+
+						name = 'normalMap' + count;
+
+						textures.push( {
+							name,
+							ext,
+							data: imageToData( mat.normalMap.image, ext )
+						});
+	
+						mtlOutput += 'map_Ks ' + name + '.png' + '\n';
+
+					}
+
+					if ( mat.alphaMap && mat.alphaMap instanceof THREE.Texture ) {
+
+						name = 'alphaMap' + count;
+
+						textures.push( {
+							name,
+							ext,
+							data: imageToData( mat.alphaMap.image, ext )
+						});
+	
+						mtlOutput += 'map_d ' + name + '.png' + '\n';
+
+					}
+
+					if ( mat.aoMap && mat.aoMap instanceof THREE.Texture ) {
+
+						name = 'ambientMap' + count;
+
+						textures.push( {
+							name,
+							ext,
+							data: imageToData( mat.aoMap.image, ext )
+						});
+	
+						mtlOutput += 'map_Ka ' + name + '.png' + '\n';
+
+					}
+
+					count += 1;
 				});
 
 				return { obj: output, mtl: mtlOutput, tex: textures };
