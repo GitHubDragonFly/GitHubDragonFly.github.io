@@ -1,13 +1,13 @@
-/**
- * @author Wei Meng / http://about.me/menway
- *
- * Description: A THREE loader for PLY ASCII files (known as the Polygon File Format or the Stanford Triangle Format).
- *
+( function () {
+
+	/**
+ * Description: A THREE loader for PLY ASCII files (known as the Polygon
+ * File Format or the Stanford Triangle Format).
  *
  * Limitations: ASCII decoding assumes file is UTF-8.
  *
  * Usage:
- *	var loader = new THREE.PLYLoader();
+ *	const loader = new PLYLoader();
  *	loader.load('./models/ply/ascii/dolphins.ply', function (geometry) {
  *
  *		scene.add( new THREE.Mesh( geometry ) );
@@ -26,452 +26,533 @@
  *
  */
 
+	class PLYLoader extends THREE.Loader {
 
-THREE.PLYLoader = function ( manager ) {
+		constructor( manager ) {
 
-	this.manager = ( manager !== undefined ) ? manager : THREE.DefaultLoadingManager;
-
-	this.propertyNameMapping = {};
-
-};
-
-THREE.PLYLoader.prototype = {
-
-	constructor: THREE.PLYLoader,
-
-	load: function ( url, onLoad, onProgress, onError ) {
-
-		var scope = this;
-
-		var loader = new THREE.FileLoader( this.manager );
-		loader.setResponseType( 'arraybuffer' );
-		loader.load( url, function ( text ) {
-
-			onLoad( scope.parse( text ) );
-
-		}, onProgress, onError );
-
-	},
-
-	setPropertyNameMapping: function ( mapping ) {
-
-		this.propertyNameMapping = mapping;
-
-	},
-
-	bin2str: function ( buf ) {
-
-		var array_buffer = new Uint8Array( buf );
-		var str = '';
-		for ( var i = 0; i < buf.byteLength; i ++ ) {
-
-			str += String.fromCharCode( array_buffer[ i ] ); // implicitly assumes little-endian
+			super( manager );
+			this.propertyNameMapping = {};
 
 		}
 
-		return str;
+		load( url, onLoad, onProgress, onError ) {
 
-	},
+			const scope = this;
+			const loader = new THREE.FileLoader( this.manager );
+			loader.setPath( this.path );
+			loader.setResponseType( 'arraybuffer' );
+			loader.setRequestHeader( this.requestHeader );
+			loader.setWithCredentials( this.withCredentials );
+			loader.load( url, function ( text ) {
 
-	isASCII: function( data ) {
+				try {
 
-		var header = this.parseHeader( this.bin2str( data ) );
+					onLoad( scope.parse( text ) );
 
-		return header.format === "ascii";
+				} catch ( e ) {
 
-	},
+					if ( onError ) {
 
-	parse: function ( data ) {
+						onError( e );
 
-		if ( data instanceof ArrayBuffer ) {
+					} else {
 
-			return this.isASCII( data )
-				? this.parseASCII( this.bin2str( data ) )
-				: this.parseBinary( data );
+						console.error( e );
 
-		} else {
+					}
 
-			return this.parseASCII( data );
+					scope.manager.itemError( url );
 
-		}
+				}
 
-	},
-
-	parseHeader: function ( data ) {
-
-		var patternHeader = /ply([\s\S]*)end_header\s/;
-		var headerText = "";
-		var headerLength = 0;
-		var result = patternHeader.exec( data );
-		if ( result !== null ) {
-
-			headerText = result [ 1 ];
-			headerLength = result[ 0 ].length;
+			}, onProgress, onError );
 
 		}
 
-		var header = {
-			comments: [],
-			elements: [],
-			headerLength: headerLength
-		};
+		setPropertyNameMapping( mapping ) {
 
-		var lines = headerText.split( '\n' );
-		var currentElement = undefined;
-		var lineType, lineValues;
-
-		function make_ply_element_property( propertValues, propertyNameMapping ) {
-
-			var property = {
-				type: propertValues[ 0 ]
-			};
-
-			if ( property.type === 'list' ) {
-
-				property.name = propertValues[ 3 ];
-				property.countType = propertValues[ 1 ];
-				property.itemType = propertValues[ 2 ];
-
-			} else {
-
-				property.name = propertValues[ 1 ];
-
-			}
-
-			if ( property.name in propertyNameMapping ) {
-
-				property.name = propertyNameMapping[ property.name ];
-
-			}
-
-			return property;
+			this.propertyNameMapping = mapping;
 
 		}
 
-		for ( var i = 0; i < lines.length; i ++ ) {
+		parse( data ) {
 
-			var line = lines[ i ];
-			line = line.trim();
-			if ( line === "" ) {
+			function parseHeader( data ) {
 
-				continue;
+				const patternHeader = /ply([\s\S]*)end_header\r?\n/;
+				let headerText = '';
+				let headerLength = 0;
+				const result = patternHeader.exec( data );
 
-			}
-			lineValues = line.split( /\s+/ );
-			lineType = lineValues.shift();
-			line = lineValues.join( " " );
+				if ( result !== null ) {
 
-			switch ( lineType ) {
+					headerText = result[ 1 ];
+					headerLength = new Blob( [ result[ 0 ] ] ).size;
 
-			case "format":
+				}
 
-				header.format = lineValues[ 0 ];
-				header.version = lineValues[ 1 ];
+				const header = {
+					comments: [],
+					elements: [],
+					headerLength: headerLength,
+					objInfo: ''
+				};
+				const lines = headerText.split( '\n' );
+				let currentElement;
 
-				break;
+				function make_ply_element_property( propertValues, propertyNameMapping ) {
 
-			case "comment":
+					const property = {
+						type: propertValues[ 0 ]
+					};
 
-				header.comments.push( line );
+					if ( property.type === 'list' ) {
 
-				break;
+						property.name = propertValues[ 3 ];
+						property.countType = propertValues[ 1 ];
+						property.itemType = propertValues[ 2 ];
 
-			case "element":
+					} else {
 
-				if ( ! ( currentElement === undefined ) ) {
+						property.name = propertValues[ 1 ];
+
+					}
+
+					if ( property.name in propertyNameMapping ) {
+
+						property.name = propertyNameMapping[ property.name ];
+
+					}
+
+					return property;
+
+				}
+
+				for ( let i = 0; i < lines.length; i ++ ) {
+
+					let line = lines[ i ];
+					line = line.trim();
+					if ( line === '' ) continue;
+					const lineValues = line.split( /\s+/ );
+					const lineType = lineValues.shift();
+					line = lineValues.join( ' ' );
+
+					switch ( lineType ) {
+
+						case 'format':
+							header.format = lineValues[ 0 ];
+							header.version = lineValues[ 1 ];
+							break;
+
+						case 'comment':
+							header.comments.push( line );
+							break;
+
+						case 'element':
+							if ( currentElement !== undefined ) {
+
+								header.elements.push( currentElement );
+
+							}
+
+							currentElement = {};
+							currentElement.name = lineValues[ 0 ];
+							currentElement.count = parseInt( lineValues[ 1 ] );
+							currentElement.properties = [];
+							break;
+
+						case 'property':
+							currentElement.properties.push( make_ply_element_property( lineValues, scope.propertyNameMapping ) );
+							break;
+
+						case 'obj_info':
+							header.objInfo = line;
+							break;
+
+						default:
+							console.log( 'unhandled', lineType, lineValues );
+
+					}
+
+				}
+
+				if ( currentElement !== undefined ) {
 
 					header.elements.push( currentElement );
 
 				}
 
-				currentElement = Object();
-				currentElement.name = lineValues[ 0 ];
-				currentElement.count = parseInt( lineValues[ 1 ] );
-				currentElement.properties = [];
-
-				break;
-
-			case "property":
-
-				currentElement.properties.push( make_ply_element_property( lineValues, this.propertyNameMapping ) );
-
-				break;
-
-
-			default:
-
-				console.log( "unhandled", lineType, lineValues );
+				return header;
 
 			}
 
-		}
+			function parseASCIINumber( n, type ) {
 
-		if ( ! ( currentElement === undefined ) ) {
+				switch ( type ) {
 
-			header.elements.push( currentElement );
+					case 'char':
+					case 'uchar':
+					case 'short':
+					case 'ushort':
+					case 'int':
+					case 'uint':
+					case 'int8':
+					case 'uint8':
+					case 'int16':
+					case 'uint16':
+					case 'int32':
+					case 'uint32':
+						return parseInt( n );
 
-		}
-
-		return header;
-
-	},
-
-	parseASCIINumber: function ( n, type ) {
-
-		switch ( type ) {
-
-		case 'char': case 'uchar': case 'short': case 'ushort': case 'int': case 'uint':
-		case 'int8': case 'uint8': case 'int16': case 'uint16': case 'int32': case 'uint32':
-
-			return parseInt( n );
-
-		case 'float': case 'double': case 'float32': case 'float64':
-
-			return parseFloat( n );
-
-		}
-
-	},
-
-	parseASCIIElement: function ( properties, line ) {
-
-		var values = line.split( /\s+/ );
-
-		var element = Object();
-
-		for ( var i = 0; i < properties.length; i ++ ) {
-
-			if ( properties[ i ].type === "list" ) {
-
-				var list = [];
-				var n = this.parseASCIINumber( values.shift(), properties[ i ].countType );
-
-				for ( var j = 0; j < n; j ++ ) {
-
-					list.push( this.parseASCIINumber( values.shift(), properties[ i ].itemType ) );
+					case 'float':
+					case 'double':
+					case 'float32':
+					case 'float64':
+						return parseFloat( n );
 
 				}
 
-				element[ properties[ i ].name ] = list;
-
-			} else {
-
-				element[ properties[ i ].name ] = this.parseASCIINumber( values.shift(), properties[ i ].type );
-
 			}
 
-		}
+			function parseASCIIElement( properties, line ) {
 
-		return element;
+				const values = line.split( /\s+/ );
+				const element = {};
 
-	},
+				for ( let i = 0; i < properties.length; i ++ ) {
 
-	parseASCII: function ( data ) {
+					if ( properties[ i ].type === 'list' ) {
 
-		// PLY ascii format specification, as per http://en.wikipedia.org/wiki/PLY_(file_format)
+						const list = [];
+						const n = parseASCIINumber( values.shift(), properties[ i ].countType );
 
-		var geometry = new THREE.Geometry();
+						for ( let j = 0; j < n; j ++ ) {
 
-		var result;
+							list.push( parseASCIINumber( values.shift(), properties[ i ].itemType ) );
 
-		var header = this.parseHeader( data );
+						}
 
-		var patternBody = /end_header\s([\s\S]*)$/;
-		var body = "";
-		if ( ( result = patternBody.exec( data ) ) !== null ) {
+						element[ properties[ i ].name ] = list;
 
-			body = result [ 1 ];
+					} else {
 
-		}
+						element[ properties[ i ].name ] = parseASCIINumber( values.shift(), properties[ i ].type );
 
-		var lines = body.split( '\n' );
-		var currentElement = 0;
-		var currentElementCount = 0;
-		geometry.useColor = false;
-
-		for ( var i = 0; i < lines.length; i ++ ) {
-
-			var line = lines[ i ];
-			line = line.trim();
-			if ( line === "" ) {
-
-				continue;
-
-			}
-
-			if ( currentElementCount >= header.elements[ currentElement ].count ) {
-
-				currentElement ++;
-				currentElementCount = 0;
-
-			}
-
-			var element = this.parseASCIIElement( header.elements[ currentElement ].properties, line );
-
-			this.handleElement( geometry, header.elements[ currentElement ].name, element );
-
-			currentElementCount ++;
-
-		}
-
-		return this.postProcess( geometry );
-
-	},
-
-	postProcess: function ( geometry ) {
-
-		if ( geometry.useColor ) {
-
-			for ( var i = 0; i < geometry.faces.length; i ++ ) {
-
-				geometry.faces[ i ].vertexColors = [
-					geometry.colors[ geometry.faces[ i ].a ],
-					geometry.colors[ geometry.faces[ i ].b ],
-					geometry.colors[ geometry.faces[ i ].c ]
-				];
-
-			}
-
-			geometry.elementsNeedUpdate = true;
-
-		}
-
-		geometry.computeBoundingSphere();
-
-		return geometry;
-
-	},
-
-	handleElement: function ( geometry, elementName, element ) {
-
-		if ( elementName === "vertex" ) {
-
-			geometry.vertices.push(
-				new THREE.Vector3( element.x, element.y, element.z )
-			);
-
-			if ( 'red' in element && 'green' in element && 'blue' in element ) {
-
-				geometry.useColor = true;
-
-				var color = new THREE.Color();
-				color.setRGB( element.red / 255.0, element.green / 255.0, element.blue / 255.0 );
-				geometry.colors.push( color );
-
-			}
-
-		} else if ( elementName === "face" ) {
-
-			var vertex_indices = element.vertex_indices || element.vertex_index;
-
-			if ( vertex_indices.length === 3 ) {
-
-				geometry.faces.push(
-					new THREE.Face3( vertex_indices[ 0 ], vertex_indices[ 1 ], vertex_indices[ 2 ] )
-				);
-
-			} else if ( vertex_indices.length === 4 ) {
-
-				geometry.faces.push(
-					new THREE.Face3( vertex_indices[ 0 ], vertex_indices[ 1 ], vertex_indices[ 3 ] ),
-					new THREE.Face3( vertex_indices[ 1 ], vertex_indices[ 2 ], vertex_indices[ 3 ] )
-				);
-
-			}
-
-		}
-
-	},
-
-	binaryRead: function ( dataview, at, type, little_endian ) {
-
-		switch ( type ) {
-
-			// corespondences for non-specific length types here match rply:
-		case 'int8':		case 'char':	 return [ dataview.getInt8( at ), 1 ];
-
-		case 'uint8':		case 'uchar':	 return [ dataview.getUint8( at ), 1 ];
-
-		case 'int16':		case 'short':	 return [ dataview.getInt16( at, little_endian ), 2 ];
-
-		case 'uint16':	case 'ushort': return [ dataview.getUint16( at, little_endian ), 2 ];
-
-		case 'int32':		case 'int':		 return [ dataview.getInt32( at, little_endian ), 4 ];
-
-		case 'uint32':	case 'uint':	 return [ dataview.getUint32( at, little_endian ), 4 ];
-
-		case 'float32': case 'float':	 return [ dataview.getFloat32( at, little_endian ), 4 ];
-
-		case 'float64': case 'double': return [ dataview.getFloat64( at, little_endian ), 8 ];
-
-		}
-
-	},
-
-	binaryReadElement: function ( dataview, at, properties, little_endian ) {
-
-		var element = Object();
-		var result, read = 0;
-
-		for ( var i = 0; i < properties.length; i ++ ) {
-
-			if ( properties[ i ].type === "list" ) {
-
-				var list = [];
-
-				result = this.binaryRead( dataview, at + read, properties[ i ].countType, little_endian );
-				var n = result[ 0 ];
-				read += result[ 1 ];
-
-				for ( var j = 0; j < n; j ++ ) {
-
-					result = this.binaryRead( dataview, at + read, properties[ i ].itemType, little_endian );
-					list.push( result[ 0 ] );
-					read += result[ 1 ];
+					}
 
 				}
 
-				element[ properties[ i ].name ] = list;
+				return element;
+
+			}
+
+			function parseASCII( data, header ) {
+
+				// PLY ascii format specification, as per http://en.wikipedia.org/wiki/PLY_(file_format)
+				const buffer = {
+					indices: [],
+					vertices: [],
+					normals: [],
+					uvs: [],
+					faceVertexUvs: [],
+					colors: []
+				};
+				let result;
+				const patternBody = /end_header\s([\s\S]*)$/;
+				let body = '';
+
+				if ( ( result = patternBody.exec( data ) ) !== null ) {
+
+					body = result[ 1 ];
+
+				}
+
+				const lines = body.split( '\n' );
+				let currentElement = 0;
+				let currentElementCount = 0;
+
+				for ( let i = 0; i < lines.length; i ++ ) {
+
+					let line = lines[ i ];
+					line = line.trim();
+
+					if ( line === '' ) {
+
+						continue;
+
+					}
+
+					if ( currentElementCount >= header.elements[ currentElement ].count ) {
+
+						currentElement ++;
+						currentElementCount = 0;
+
+					}
+
+					const element = parseASCIIElement( header.elements[ currentElement ].properties, line );
+					handleElement( buffer, header.elements[ currentElement ].name, element );
+					currentElementCount ++;
+
+				}
+
+				return postProcess( buffer );
+
+			}
+
+			function postProcess( buffer ) {
+
+				let geometry = new THREE.BufferGeometry(); // mandatory buffer data
+
+				if ( buffer.indices.length > 0 ) {
+
+					geometry.setIndex( buffer.indices );
+
+				}
+
+				geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( buffer.vertices, 3 ) ); // optional buffer data
+
+				if ( buffer.normals.length > 0 ) {
+
+					geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( buffer.normals, 3 ) );
+
+				}
+
+				if ( buffer.uvs.length > 0 ) {
+
+					geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( buffer.uvs, 2 ) );
+
+				}
+
+				if ( buffer.colors.length > 0 ) {
+
+					geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( buffer.colors, 3 ) );
+
+				}
+
+				if ( buffer.faceVertexUvs.length > 0 ) {
+
+					geometry = geometry.toNonIndexed();
+					geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( buffer.faceVertexUvs, 2 ) );
+
+				}
+
+				geometry.computeBoundingSphere();
+				return geometry;
+
+			}
+
+			function handleElement( buffer, elementName, element ) {
+
+				function findAttrName( names ) {
+
+					for ( let i = 0, l = names.length; i < l; i ++ ) {
+
+						const name = names[ i ];
+						if ( name in element ) return name;
+
+					}
+
+					return null;
+
+				}
+
+				const attrX = findAttrName( [ 'x', 'px', 'posx' ] ) || 'x';
+				const attrY = findAttrName( [ 'y', 'py', 'posy' ] ) || 'y';
+				const attrZ = findAttrName( [ 'z', 'pz', 'posz' ] ) || 'z';
+				const attrNX = findAttrName( [ 'nx', 'normalx' ] );
+				const attrNY = findAttrName( [ 'ny', 'normaly' ] );
+				const attrNZ = findAttrName( [ 'nz', 'normalz' ] );
+				const attrS = findAttrName( [ 's', 'u', 'texture_u', 'tx' ] );
+				const attrT = findAttrName( [ 't', 'v', 'texture_v', 'ty' ] );
+				const attrR = findAttrName( [ 'red', 'diffuse_red', 'r', 'diffuse_r' ] );
+				const attrG = findAttrName( [ 'green', 'diffuse_green', 'g', 'diffuse_g' ] );
+				const attrB = findAttrName( [ 'blue', 'diffuse_blue', 'b', 'diffuse_b' ] );
+
+				if ( elementName === 'vertex' ) {
+
+					buffer.vertices.push( element[ attrX ], element[ attrY ], element[ attrZ ] );
+
+					if ( attrNX !== null && attrNY !== null && attrNZ !== null ) {
+
+						buffer.normals.push( element[ attrNX ], element[ attrNY ], element[ attrNZ ] );
+
+					}
+
+					if ( attrS !== null && attrT !== null ) {
+
+						buffer.uvs.push( element[ attrS ], element[ attrT ] );
+
+					}
+
+					if ( attrR !== null && attrG !== null && attrB !== null ) {
+
+						buffer.colors.push( element[ attrR ] / 255.0, element[ attrG ] / 255.0, element[ attrB ] / 255.0 );
+
+					}
+
+				} else if ( elementName === 'face' ) {
+
+					const vertex_indices = element.vertex_indices || element.vertex_index; // issue #9338
+
+					const texcoord = element.texcoord;
+
+					if ( vertex_indices.length === 3 ) {
+
+						buffer.indices.push( vertex_indices[ 0 ], vertex_indices[ 1 ], vertex_indices[ 2 ] );
+
+						if ( texcoord && texcoord.length === 6 ) {
+
+							buffer.faceVertexUvs.push( texcoord[ 0 ], texcoord[ 1 ] );
+							buffer.faceVertexUvs.push( texcoord[ 2 ], texcoord[ 3 ] );
+							buffer.faceVertexUvs.push( texcoord[ 4 ], texcoord[ 5 ] );
+
+						}
+
+					} else if ( vertex_indices.length === 4 ) {
+
+						buffer.indices.push( vertex_indices[ 0 ], vertex_indices[ 1 ], vertex_indices[ 3 ] );
+						buffer.indices.push( vertex_indices[ 1 ], vertex_indices[ 2 ], vertex_indices[ 3 ] );
+
+					}
+
+				}
+
+			}
+
+			function binaryRead( dataview, at, type, little_endian ) {
+
+				switch ( type ) {
+
+					// corespondences for non-specific length types here match rply:
+					case 'int8':
+					case 'char':
+						return [ dataview.getInt8( at ), 1 ];
+
+					case 'uint8':
+					case 'uchar':
+						return [ dataview.getUint8( at ), 1 ];
+
+					case 'int16':
+					case 'short':
+						return [ dataview.getInt16( at, little_endian ), 2 ];
+
+					case 'uint16':
+					case 'ushort':
+						return [ dataview.getUint16( at, little_endian ), 2 ];
+
+					case 'int32':
+					case 'int':
+						return [ dataview.getInt32( at, little_endian ), 4 ];
+
+					case 'uint32':
+					case 'uint':
+						return [ dataview.getUint32( at, little_endian ), 4 ];
+
+					case 'float32':
+					case 'float':
+						return [ dataview.getFloat32( at, little_endian ), 4 ];
+
+					case 'float64':
+					case 'double':
+						return [ dataview.getFloat64( at, little_endian ), 8 ];
+
+				}
+
+			}
+
+			function binaryReadElement( dataview, at, properties, little_endian ) {
+
+				const element = {};
+				let result,
+					read = 0;
+
+				for ( let i = 0; i < properties.length; i ++ ) {
+
+					if ( properties[ i ].type === 'list' ) {
+
+						const list = [];
+						result = binaryRead( dataview, at + read, properties[ i ].countType, little_endian );
+						const n = result[ 0 ];
+						read += result[ 1 ];
+
+						for ( let j = 0; j < n; j ++ ) {
+
+							result = binaryRead( dataview, at + read, properties[ i ].itemType, little_endian );
+							list.push( result[ 0 ] );
+							read += result[ 1 ];
+
+						}
+
+						element[ properties[ i ].name ] = list;
+
+					} else {
+
+						result = binaryRead( dataview, at + read, properties[ i ].type, little_endian );
+						element[ properties[ i ].name ] = result[ 0 ];
+						read += result[ 1 ];
+
+					}
+
+				}
+
+				return [ element, read ];
+
+			}
+
+			function parseBinary( data, header ) {
+
+				const buffer = {
+					indices: [],
+					vertices: [],
+					normals: [],
+					uvs: [],
+					faceVertexUvs: [],
+					colors: []
+				};
+				const little_endian = header.format === 'binary_little_endian';
+				const body = new DataView( data, header.headerLength );
+				let result,
+					loc = 0;
+
+				for ( let currentElement = 0; currentElement < header.elements.length; currentElement ++ ) {
+
+					for ( let currentElementCount = 0; currentElementCount < header.elements[ currentElement ].count; currentElementCount ++ ) {
+
+						result = binaryReadElement( body, loc, header.elements[ currentElement ].properties, little_endian );
+						loc += result[ 1 ];
+						const element = result[ 0 ];
+						handleElement( buffer, header.elements[ currentElement ].name, element );
+
+					}
+
+				}
+
+				return postProcess( buffer );
+
+			} //
+
+
+			let geometry;
+			const scope = this;
+
+			if ( data instanceof ArrayBuffer ) {
+
+				const text = THREE.LoaderUtils.decodeText( new Uint8Array( data ) );
+				const header = parseHeader( text );
+				geometry = header.format === 'ascii' ? parseASCII( text, header ) : parseBinary( data, header );
 
 			} else {
 
-				result = this.binaryRead( dataview, at + read, properties[ i ].type, little_endian );
-				element[ properties[ i ].name ] = result[ 0 ];
-				read += result[ 1 ];
+				geometry = parseASCII( data, parseHeader( data ) );
 
 			}
 
-		}
-
-		return [ element, read ];
-
-	},
-
-	parseBinary: function ( data ) {
-
-		var geometry = new THREE.Geometry();
-
-		var header = this.parseHeader( this.bin2str( data ) );
-		var little_endian = ( header.format === "binary_little_endian" );
-		var body = new DataView( data, header.headerLength );
-		var result, loc = 0;
-
-		for ( var currentElement = 0; currentElement < header.elements.length; currentElement ++ ) {
-
-			for ( var currentElementCount = 0; currentElementCount < header.elements[ currentElement ].count; currentElementCount ++ ) {
-
-				result = this.binaryReadElement( body, loc, header.elements[ currentElement ].properties, little_endian );
-				loc += result[ 1 ];
-				var element = result[ 0 ];
-
-				this.handleElement( geometry, header.elements[ currentElement ].name, element );
-
-			}
+			return geometry;
 
 		}
-
-		return this.postProcess( geometry );
 
 	}
 
-};
+	THREE.PLYLoader = PLYLoader;
+
+} )();
