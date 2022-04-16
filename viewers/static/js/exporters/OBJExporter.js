@@ -30,8 +30,8 @@
 
 				} // shortcuts
 
-
 				const groups = geometry.groups;
+				const vertex_colors = geometry.getAttribute( 'color' );
 				const vertices = geometry.getAttribute( 'position' );
 				const normals = geometry.getAttribute( 'normal' );
 				const uvs = geometry.getAttribute( 'uv' );
@@ -75,7 +75,15 @@
 
 						vertex.applyMatrix4( mesh.matrixWorld ); // transform the vertex to export format
 
-						output += 'v ' + vertex.x + ' ' + vertex.y + ' ' + vertex.z + '\n';
+						if ( vertex_colors ) {
+
+							output += 'v ' + vertex.x + ' ' + vertex.y + ' ' + vertex.z + ' ' + vertex_colors.getX( i ) + ' ' + vertex_colors.getY( i ) + ' ' + vertex_colors.getZ( i ) + '\n';
+
+						} else {
+
+							output += 'v ' + vertex.x + ' ' + vertex.y + ' ' + vertex.z + '\n';
+
+						}
 
 					}
 
