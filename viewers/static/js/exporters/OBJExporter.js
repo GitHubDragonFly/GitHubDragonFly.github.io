@@ -344,7 +344,7 @@
 							mtlOutput += 'Tr 0.0000\n';
 							mtlOutput += 'Tf 1.0000 1.0000 1.0000\n';
 							mtlOutput += 'illum 2\n';
-							mtlOutput += 'Ka 0.2500 0.2500 0.2500\n';
+							mtlOutput += 'Ka 0.7500 0.7500 0.7500\n';
 							mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + ' ' + '\n';
 							mtlOutput += 'Ks 0.2500 0.2500 0.2500\n';
 							mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + ' ' + '\n' : 'Ke 0.0000 0.0000 0.0000\n';
@@ -463,7 +463,7 @@
 						mtlOutput += 'Tr 0.0000\n';
 						mtlOutput += 'Tf 1.0000 1.0000 1.0000\n';
 						mtlOutput += 'illum 2\n';
-						mtlOutput += 'Ka 0.2500 0.2500 0.2500\n';
+						mtlOutput += 'Ka 0.7500 0.7500 0.7500\n';
 						mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + ' ' + '\n';
 						mtlOutput += 'Ks 0.2500 0.2500 0.2500\n';
 						mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + ' ' + '\n' : 'Ke 0.0000 0.0000 0.0000\n';
@@ -589,7 +589,7 @@
 				canvas.width = image.width;
 				canvas.height = image.height;
 
-				// this seems to work fine for exporting TGA images as PNG but unflipped
+				// this seems to work fine for exporting TGA images as PNG
 				if ( image.data && image.data.constructor === Uint8Array ) {
 
 					let imgData = ctx.createImageData( image.width, image.height );
