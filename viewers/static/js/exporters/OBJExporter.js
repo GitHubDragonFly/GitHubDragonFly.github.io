@@ -62,6 +62,11 @@
 
 					}
 
+				} else if ( mesh.material && vertex_colors === undefined ) {
+
+					output += 'usemtl material' + mesh.material.id + '\n';
+					materials[ mesh.material.id ] = mesh.material;
+
 				} // vertices
 
 
