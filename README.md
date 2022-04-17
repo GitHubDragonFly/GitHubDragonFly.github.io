@@ -30,6 +30,6 @@ Notes about three.js viewers:
  - Tips:
    - if it happens that the model is correctly loaded but you cannot see it then try any or all of the following: apply edges - zoom in/out or apply Scale - apply flatShading - apply Vertex Colors - change background color to white
    - exporting some models might be better done using multiple viewers, for example GLTF -> OBJ and then OBJ -> JSON might be better than straight GLTF -> JSON export
-   - large resolution textures should be scaled down before loading, as an example see `Bedroom` [here](https://casual-effects.com/data/index.html) which is using 8k images
+   - large resolution textures should be scaled down before loading, as an example see `Bedroom` [here](https://casual-effects.com/data/index.html) which is using 8k images (you would also need to modify map_Kd and map_Ke statements in the MTL file by removing `-bm + value` entries since the loader is not reading them properly)
 
 This is all MIT licensed but please observe any other licenses that might be applicable to some files or content.
