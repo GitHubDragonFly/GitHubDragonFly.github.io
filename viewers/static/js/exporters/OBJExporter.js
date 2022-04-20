@@ -396,7 +396,7 @@
 		
 							if ( mat.roughnessMap && mat.roughnessMap instanceof THREE.Texture ) {
 		
-								name = 'bump' + count;
+								name = 'specularMap' + count;
 		
 								textures.push( {
 									name,
@@ -404,7 +404,7 @@
 									data: imageToData( mat.roughnessMap.image, ext )
 								});
 			
-								mtlOutput += 'bump ' + name + '.png' + '\n';
+								mtlOutput += 'map_Ks ' + name + '.png' + '\n';
 		
 							}
 			
@@ -418,7 +418,7 @@
 									data: imageToData( mat.normalMap.image, ext )
 								});
 			
-								mtlOutput += 'map_Ks ' + name + '.png' + '\n';
+								mtlOutput += 'norm ' + name + '.png' + '\n';
 		
 							}
 		
@@ -515,7 +515,7 @@
 	
 						if ( mat.roughnessMap && mat.roughnessMap instanceof THREE.Texture ) {
 	
-							name = 'bump' + count;
+							name = 'specularMap' + count;
 	
 							textures.push( {
 								name,
@@ -523,7 +523,7 @@
 								data: imageToData( mat.roughnessMap.image, ext )
 							});
 		
-							mtlOutput += 'bump ' + name + '.png' + '\n';
+							mtlOutput += 'map_Ks ' + name + '.png' + '\n';
 	
 						}
 		
@@ -537,7 +537,7 @@
 								data: imageToData( mat.normalMap.image, ext )
 							});
 		
-							mtlOutput += 'map_Ks ' + name + '.png' + '\n';
+							mtlOutput += 'norm ' + name + '.png' + '\n';
 	
 						}
 	
