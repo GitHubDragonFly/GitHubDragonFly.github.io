@@ -340,13 +340,14 @@
 
 							let mat = mtl;
 							let name = 'multi_' + ( mat.name ? ( mat.name.toUpperCase().endsWith( '.PNG' ) ? mat.name.substring(0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : mat.name ) || 'material' + mat.id;
+							let transparency = ( mat.opacity < 1 ) ? ( 1 - mat.opacity ) : '0.0000';
 		
 							mtlOutput += 'newmtl ' + name + '\n';
 		
 							mtlOutput += 'Ns 15.0000\n';
 							mtlOutput += 'Ni 1.5000\n';
 							mtlOutput += 'd 1.0000\n';
-							mtlOutput += 'Tr 0.0000\n';
+							mtlOutput += 'Tr ' + transparency + '\n';
 							mtlOutput += 'Tf 1.0000 1.0000 1.0000\n';
 							mtlOutput += 'illum 2\n';
 							mtlOutput += 'Ka 0.7500 0.7500 0.7500\n';
@@ -459,13 +460,14 @@
 
 						let mat = materials[ key ];
 						let name = ( mat.name ? ( mat.name.toUpperCase().endsWith( '.PNG' ) ? mat.name.substring(0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : mat.name ) || 'material' + mat.id;
+						let transparency = ( mat.opacity < 1 ) ? ( 1 - mat.opacity ) : '0.0000';
 	
 						mtlOutput += 'newmtl ' + name + '\n';
 	
 						mtlOutput += 'Ns 15.0000\n';
 						mtlOutput += 'Ni 1.5000\n';
 						mtlOutput += 'd 1.0000\n';
-						mtlOutput += 'Tr 0.0000\n';
+						mtlOutput += 'Tr ' + transparency + '\n';
 						mtlOutput += 'Tf 1.0000 1.0000 1.0000\n';
 						mtlOutput += 'illum 2\n';
 						mtlOutput += 'Ka 0.7500 0.7500 0.7500\n';
