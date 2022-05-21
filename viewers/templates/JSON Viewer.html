@@ -156,11 +156,11 @@
         <label style="margin: 2px 5px 2px 0;"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
         <button id="btn_edges" onclick="show_edges()" style="background-color: #d1cefc; vertical-align: middle; width: 20px;" disabled>E</button>
         <button id="btn_flat" onclick="set_flat()" style="background-color: #d1cefc; vertical-align: middle; width: 20px;" disabled>F</button>
+        <button id="btn_animate" onclick="animate_json()" style="background-color: #d1cefc; vertical-align: middle; min-width: 28px;" disabled>A</button>
         <button id="btn_vertex_colors" onclick="set_vertex_colors()" style="background-color: #d1cefc; vertical-align: middle; min-width: 28px;" disabled>VC</button>
         <button id="btn_mtl_side" onclick="switch_mtl_side()" style="background-color: #d1cefc; vertical-align: middle; width: 28px;" disabled>OS</button>
         <button id="btn_grid" onclick="show_grid()" style="background-color: #d1cefc; vertical-align: middle; width: 22px;" disabled>#</button>
         <button id="btn_polar_grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; vertical-align: middle; width: 24px;" disabled><p class="polar"></p></button>
-        <button id="btn_full_screen" onclick="full_screen()" style="vertical-align: middle; width: 22px;"><p class="full_screen"></p></button>
       </div>
       <div id="url" style="display: none;">
         <label for="url_entry" style="margin: 2px 2px 2px 5px;">URL:</label>
@@ -201,6 +201,7 @@
           <option value="gltf" onclick="export_gltf()">GLTF</option>
         </select>
         <button id="reset" onclick="reset_only()" style="vertical-align: middle; color: maroon; width: 40px;" disabled>RST</button>
+        <button id="btn_full_screen" onclick="full_screen()" style="vertical-align: middle; width: 22px;"><p class="full_screen"></p></button>
       </div>
     </div><br />
 
@@ -274,7 +275,9 @@
       var previous_json_scale = '1', bounding_box = new THREE.Box3(), material;
       var selected_json_file, selected_url_file = '', selected_json_url_file;
       var loader, fd, material, textures, buffer_geometry, url_displayed, url_loading;
-      var initial_opacity, initial_opacity_array, original_color, original_color_array;
+      var animations, animation_mixer, current_animation, clock;
+      var initial_opacity, initial_opacity_array;
+      var original_color, original_color_array;
       var original_side, original_side_array;
 
       // Manager from ThreeJs to track a loader and its status
@@ -925,6 +928,28 @@
         }
       }
 
+      function animate_json() {
+        if (animation_running) {
+          animation_mixer.clipAction( animations[ current_animation ] ).stop();
+
+          if (current_animation == animations.length - 1) {
+            document.getElementById('btn_animate').style.backgroundColor = '#d1cefc';
+            document.getElementById('btn_animate').innerHTML = 'A';
+            current_animation = 0;
+            animation_running = false;
+          } else {
+            current_animation += 1;
+            animation_mixer.clipAction( animations[ current_animation ] ).play();
+            document.getElementById('btn_animate').innerHTML = 'A' + current_animation;
+          }
+        } else {
+          animation_mixer.clipAction( animations[ current_animation ] ).play();
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_animate').innerHTML = 'A0';
+          animation_running = true;
+        }
+      }
+
       async function init() {
         if (scene) {
           if (gizmo) gizmo.dispose();
@@ -944,6 +969,9 @@
         fd = null;
         edges = {};
         edges_visible = false;
+        animations = [];
+        animation_mixer = null;
+        animation_running = false;
         initial_opacity = {};
         initial_opacity_array = {};
         original_color = {};
@@ -959,6 +987,8 @@
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_polar_grid').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_animate').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_animate').disabled = true;
         document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
 
         if (!url_loading) {
@@ -1024,6 +1054,8 @@
         }
 
         document.body.appendChild( renderer.domElement );
+
+        clock = new THREE.Clock();
 
         if (scene == undefined) scene = new THREE.Scene();
         if (mesh == undefined) mesh = new THREE.Object3D();
@@ -1142,7 +1174,7 @@
         let child_count_array = 1;
 
         if (mesh.material && !(mesh instanceof THREE.Points)) {
-          mesh.name = 'mesh_' + child_count;
+          mesh.name = 'mesh_0';
           initial_opacity_array[ mesh.name ] = {};
           original_color_array[ mesh.name ] = {};
           original_side_array[ mesh.name ] = {};
@@ -1201,8 +1233,19 @@
 
           if (mesh.geometry && mesh.geometry.attributes.position) edges[ mesh.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
         } else {
+          animations = mesh.animations;
+
+          if (animations && animations.length > 0) {
+            animation_mixer = new THREE.AnimationMixer( mesh );
+            current_animation = 0;
+            animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; });
+          }
+
           mesh.traverse( function( child ) {
-            child.name = 'child_' + child_count;
+            if (child.name === '') {
+              child.name = 'child_' + child_count;
+              child_count += 1;
+            }
 
             if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
               if (child.material) {
@@ -1245,7 +1288,6 @@
               }
 
               if (child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
-              child_count += 1;
             }
           });
         }
@@ -1258,6 +1300,14 @@
 
         set_initial_scale();
         resize();
+
+        if (animations && animations.length > 0) {
+          animation_mixer.clipAction( animations[0] ).play();
+          document.getElementById('btn_animate').disabled = false;
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_animate').innerHTML = 'A0';
+          animation_running = true;
+        }
 
         document.getElementById('div_loading').style.display = "none";
       }
@@ -1395,7 +1445,7 @@
         let child_count_array = 1;
 
         if (mesh.material && !(mesh instanceof THREE.Points)) {
-          mesh.name = 'mesh_' + child_count;
+          mesh.name = 'mesh_0';
           initial_opacity_array[ mesh.name ] = {};
           original_color_array[ mesh.name ] = {};
           original_side_array[ mesh.name ] = {};
@@ -1435,8 +1485,19 @@
 
           if (mesh.geometry && mesh.geometry.attributes.position) edges[ mesh.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
         } else {
+          animations = mesh.animations;
+
+          if (animations && animations.length > 0) {
+            animation_mixer = new THREE.AnimationMixer( mesh );
+            current_animation = 0;
+            animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; });
+          }
+
           mesh.traverse( function( child ) {
-            child.name = 'child_' + child_count;
+            if (child.name === '') {
+              child.name = 'child_' + child_count;
+              child_count += 1;
+            }
 
             if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
               if (Array.isArray( child.material )) {
@@ -1477,7 +1538,6 @@
               }
 
               if (child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
-              child_count += 1;
             }
           });
         }
@@ -1488,6 +1548,14 @@
 
         set_initial_scale();
         resize();
+
+        if (animations && animations.length > 0) {
+          animation_mixer.clipAction( animations[0] ).play();
+          document.getElementById('btn_animate').disabled = false;
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_animate').innerHTML = 'A0';
+          animation_running = true;
+        }
 
         document.getElementById('div_loading').style.display = "none";
       }
@@ -1694,6 +1762,8 @@
             if (Math.abs(mesh.rotation.z) > 2 * Math.PI ) mesh.rotation.z = 0;
           }
 
+          if (animation_running) animation_mixer.update( clock.getDelta() );
+
           controls.update();
           if (gizmo) gizmo.update();
 
@@ -1751,6 +1821,9 @@
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         edges_visible = false;
         document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
+        animation_running = false;
+        document.getElementById('btn_animate').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_animate').innerHTML = 'A';
 
         reset_rotation = true;
 
@@ -1777,6 +1850,7 @@
           document.getElementById('file_input').value = "";
           document.getElementById('div_spinner').style.display = "block";
           document.getElementById('div_error').style.display = "none";
+          document.getElementById('btn_animate').disabled = true;
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
           enable_disable( true );
