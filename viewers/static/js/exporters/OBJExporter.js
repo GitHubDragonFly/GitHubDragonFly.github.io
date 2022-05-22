@@ -8,6 +8,7 @@
 			let indexVertex = 0;
 			let indexVertexUvs = 0;
 			let indexNormals = 0;
+			let mesh_count = 0;
 			let materials = {};
 			let multi_materials = {};
 			const vertex = new THREE.Vector3();
@@ -37,9 +38,19 @@
 				const uvs = geometry.getAttribute( 'uv' );
 				const indices = geometry.getIndex(); // name of the mesh object
 
+				if (mesh.name === '') {
+					mesh[ 'name' ] = 'mesh_' + mesh_count;
+					mesh_count += 1;
+				}
+
 				output += 'o ' + mesh.name + '\n'; // name of the mesh material
 
 				if ( mesh.material && mesh.material.name ) {
+
+					if (mesh.material.name === '') {
+						mesh.material[ 'name' ] = 'mesh_material_' + mesh_count;
+						mesh_count += 1;
+					}
 
 					output += 'usemtl ' + mesh.material.name + '\n';
 					materials[ mesh.material.id ] = mesh.material;
@@ -51,6 +62,11 @@
 					if ( groups !== undefined ) {
 
 						for ( let i = 0, l = groups.length; i < l; i ++ ) {
+
+							if (mesh.material[ groups[ i ].materialIndex ].name === '') {
+								mesh.material[ groups[ i ].materialIndex ][ 'name' ] = 'mesh_group_material_' + mesh_count;
+								mesh_count += 1;
+							}
 
 							multi_materials[ groups[ i ].start ] = 'multi_' + mesh.material[ groups[ i ].materialIndex ].name;
 
