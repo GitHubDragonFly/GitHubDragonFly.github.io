@@ -351,7 +351,7 @@
 
 					texid = `image-${libraryImages.length + 1}`;
 					const ext = 'png';
-					const name = ( tex.name ? ( tex.name.toUpperCase().endsWith( '.PNG' ) ? tex.name.substring(0, tex.name.lastIndexOf( '.' ) ) : tex.name ) : tex.name ) || texid;
+					const name = ( tex.name ? ( ( tex.name.toUpperCase().endsWith( '.PNG' ) || tex.name.toUpperCase().endsWith( '.JPG' ) ) ? tex.name.substring(0, tex.name.lastIndexOf( '.' ) ) : tex.name ) : tex.name ) || texid;
 					let imageNode = `<image id="${texid}" name="${name}">`;
 
 					if ( version === '1.5.0' ) {

@@ -1055,7 +1055,8 @@
 			const json = this.json;
 			if ( cache.textures.has( map ) ) return cache.textures.get( map );
 			if ( ! json.textures ) json.textures = [];
-			let mimeType = map.userData.mimeType;
+			let mimeType = 'image/png';
+			if ( map.userData && map.userData.mimeType ) mimeType = map.userData.mimeType;
 			if ( mimeType === 'image/webp' ) mimeType = 'image/png';
 			const textureDef = {
 				sampler: this.processSampler( map ),

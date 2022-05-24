@@ -50,6 +50,8 @@
 					if (mesh.material.name === '') {
 						mesh.material[ 'name' ] = 'mesh_material_' + mesh_count;
 						mesh_count += 1;
+					} else if ( mesh.material.name.toUpperCase().endsWith( '.PNG' ) || mesh.material.name.toUpperCase().endsWith( '.JPG' ) ) {
+						mesh.material[ 'name' ] = mesh.material.name.substring( 0, mesh.material.name.lastIndexOf( '.' ) );
 					}
 
 					output += 'usemtl ' + mesh.material.name + '\n';
@@ -66,6 +68,8 @@
 							if (mesh.material[ groups[ i ].materialIndex ].name === '') {
 								mesh.material[ groups[ i ].materialIndex ][ 'name' ] = 'mesh_group_material_' + mesh_count;
 								mesh_count += 1;
+							} else if ( mesh.material[ groups[ i ].materialIndex ].name.toUpperCase().endsWith( '.PNG' ) || mesh.material[ groups[ i ].materialIndex ].name.toUpperCase().endsWith( '.JPG' ) ) {
+								mesh.material[ groups[ i ].materialIndex ][ 'name' ] = mesh.material[ groups[ i ].materialIndex ].name.substring( 0, mesh.material[ groups[ i ].materialIndex ].name.lastIndexOf( '.' ) );
 							}
 
 							multi_materials[ groups[ i ].start ] = 'multi_' + mesh.material[ groups[ i ].materialIndex ].name;
@@ -354,7 +358,7 @@
 						materials[ key ].forEach( ( mtl ) => {
 
 							let mat = mtl;
-							let name = 'multi_' + ( mat.name ? ( mat.name.toUpperCase().endsWith( '.PNG' ) ? mat.name.substring(0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : mat.name ) || 'material' + mat.id;
+							let name = 'multi_' + ( mat.name ? ( ( mat.name.toUpperCase().endsWith( '.PNG' ) || mat.name.toUpperCase().endsWith( '.JPG' ) ) ? mat.name.substring(0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : mat.name ) || 'material' + mat.id;
 							let transparency = ( mat.opacity < 1 ) ? ( 1 - mat.opacity ) : '0.0000';
 
 							mtlOutput += 'newmtl ' + name + '\n';
@@ -473,7 +477,7 @@
 					} else {
 
 						let mat = materials[ key ];
-						let name = ( mat.name ? ( mat.name.toUpperCase().endsWith( '.PNG' ) ? mat.name.substring(0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : mat.name ) || 'material' + mat.id;
+						let name = ( mat.name ? ( ( mat.name.toUpperCase().endsWith( '.PNG' ) || mat.name.toUpperCase().endsWith( '.JPG' ) ) ? mat.name.substring(0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : mat.name ) || 'material' + mat.id;
 						let transparency = ( mat.opacity < 1 ) ? ( 1 - mat.opacity ) : '0.0000';
 
 						mtlOutput += 'newmtl ' + name + '\n';
