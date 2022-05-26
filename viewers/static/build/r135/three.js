@@ -18354,7 +18354,7 @@
 				uniforms.alphaMap.value = material.alphaMap;
 			}
 
-			if (material.specularMap) {
+			if (material.specularMap && uniforms.specularMap) {
 				uniforms.specularMap.value = material.specularMap;
 			}
 
