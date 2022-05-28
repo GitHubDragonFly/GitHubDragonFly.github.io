@@ -170,6 +170,7 @@
         </select>
         <button id="reset" onclick="reset_only()" style="vertical-align: middle; color: maroon; width: 40px;" disabled>RST</button>
         <button id="btn_full_screen" onclick="full_screen()" style="vertical-align: middle; width: 22px;"><p class="full_screen"></p></button>
+        <button id="btn_polar_grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; vertical-align: middle; width: 24px;" disabled><p class="polar"></p></button>
       </div>
       <div id="url" style="display: none;">
         <label for="url_entry" style="margin: 2px 2px 2px 5px;">URL:</label>
@@ -200,11 +201,11 @@
         <input type="color" id="back_color" name="back_color" onchange="set_back_color()" style="vertical-align: middle; background: none; padding: 0; width: 23px; margin: 0 5px 0 0;" disabled />
         <button id="btn_edges" onclick="show_edges()" style="background-color: #d1cefc; vertical-align: middle; width: 20px;" disabled>E</button>
         <button id="btn_flat" onclick="set_flat()" style="background-color: #d1cefc; vertical-align: middle; width: 20px;" disabled>F</button>
+        <button id="btn_animate" onclick="dae_animations()" style="background-color: #d1cefc; vertical-align: middle; min-width: 28px;" disabled>A</button>
         <button id="btn_kinematics" onclick="dae_kinematics()" style="background-color: #d1cefc; vertical-align: middle; width: 20px;" disabled>K</button>
         <button id="btn_vertex_colors" onclick="set_vertex_colors()" style="background-color: #d1cefc; vertical-align: middle; min-width: 28px;" disabled>VC</button>
-        <button id="btn_animate" onclick="dae_animations()" style="background-color: #d1cefc; vertical-align: middle; min-width: 28px;" disabled>A</button>
+        <button id="btn_mtl_side" onclick="switch_mtl_side()" style="background-color: #d1cefc; vertical-align: middle; width: 28px;" disabled>OS</button>
         <button id="btn_grid" onclick="show_grid()" style="background-color: #d1cefc; vertical-align: middle; width: 22px;" disabled>#</button>
-        <button id="btn_polar_grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; vertical-align: middle; width: 24px;" disabled><p class="polar"></p></button>
       </div>
     </div><br />
 
@@ -282,15 +283,17 @@
       var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
       var edges, edges_visible, vertex_colors_enabled;
-      var kinematics, kinematics_running, kinematicsTween, tween;
       var ww = window.innerWidth,	wh = window.innerHeight;
       var mouse_rotation, reset_rotation, events_initialized;
       var rot_x = 0, rot_y = 0, rot_z = 0;
-      var initial_opacity, previous_dae_scale = '1', bounding_box = new THREE.Box3();
+      var previous_dae_scale = '1', bounding_box = new THREE.Box3();
       var selected_dae_file, selected_url_file = '', url_displayed, url_loading;
       var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif;
       var ktx2_loader, texture_files_ktx2, texture_files_dds, texture_files_tga, texture_files_svg;
+      var kinematics, kinematics_running, kinematicsTween, tween;
       var tex, extra, technique, material_set, flat_shading_enabled;
+      var initial_opacity, initial_opacity_array;
+      var original_side, original_side_array;
 
       const target = {};
       const tweenParameters = {};
@@ -485,6 +488,18 @@
             link.download = filename + 'gltf';
             link.click();
           }, function( error ) { console.log(error); }, options);
+
+          dae_obj.traverse( function( child ) {
+      	    if (child instanceof THREE.Mesh) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  if (mtl.opacity == 1) mtl.transparent = true;
+                });
+              } else {
+                if (child.material.opacity == 1) child.material.transparent = true;
+              }
+    		    }
+    	    });
         }
       }
 
@@ -524,6 +539,18 @@
             link.download = filename + 'glb';
             link.click();
           }, function( error ) { console.log(error); }, options );
+
+          dae_obj.traverse( function( child ) {
+      	    if (child instanceof THREE.Mesh) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  if (mtl.opacity == 1) mtl.transparent = true;
+                });
+              } else {
+                if (child.material.opacity == 1) child.material.transparent = true;
+              }
+    		    }
+    	    });
         }
       }
 
@@ -563,12 +590,25 @@
             // This allow us to check if the children is an instance of the Mesh constructor
           	if (child instanceof THREE.Mesh) {
               if (Array.isArray( child.material )) {
+                let child_count_array = 1;
+
                 child.material.forEach( mtl => {
-                  mtl.opacity = opacity_value;
+                  if (initial_opacity_array[ child.name ] && initial_opacity_array[ child.name ][ child_count_array ]) {
+                    mtl.opacity = initial_opacity_array[ child.name ][ child_count_array ] * opacity_value;
+                  } else {
+                    mtl.opacity = opacity_value;
+                  }
+
                   mtl.needsUpdate = true;
+                  child_count_array += 1;
                 });
               } else {
-                child.material.opacity = initial_opacity[ child.name ] * opacity_value;
+                if (initial_opacity[ child.name ]) {
+                  child.material.opacity = initial_opacity[ child.name ] * opacity_value;
+                } else {
+                  child.material.opacity = opacity_value;
+                }
+
                 child.material.needsUpdate = true;
               }
     		    }
@@ -843,6 +883,9 @@
         edges = {};
         edges_visible = false;
         initial_opacity = {};
+        initial_opacity_array = {};
+        original_side = {};
+        original_side_array = {};
         flat_shading_enabled = false;
         vertex_colors_enabled = false;
         grid_visible = false;
@@ -987,9 +1030,6 @@
         // Launch loading of the selected file
         dae_loader.load( URL.createObjectURL( selected_dae_file ), function( collada ) {
           URL.revokeObjectURL( selected_dae_file );
-
-          kinematics = collada.kinematics;
-          if (Object.keys(kinematics).length !== 0 && tween) document.getElementById('btn_kinematics').disabled = false;
 
           if (Object.keys(collada.library.materials).length !== 0) {
             for (const [ key, value ] of Object.entries( collada.library.materials )) {
@@ -1224,7 +1264,7 @@
 
           // Go through all children of the loaded object and search for a Mesh
           collada.scene.traverse( function( child ) {
-            // This allow us to check if the children is an instance of the Mesh constructor
+            // This will allow us to check if the child is an instance of the Mesh constructor
             if (child instanceof THREE.Mesh) {
               if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
               if (child.isSkinnedMesh) child.frustumCulled = false;
@@ -1237,23 +1277,28 @@
               if (child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
 
               if (Array.isArray( child.material )) {
+                initial_opacity_array[ child.name ] = {};
+                original_side_array[ child.name ] = {};
+                let child_count_array = 1;
+
                 child.material.forEach( mtl => {
                   // Enable transparency for the Opacity control
-                  mtl.opacity = 1;
                   mtl.transparent = true;
                   mtl.skinning = true;
-                  mtl.side = THREE.DoubleSide;
                   if (child.geometry.attributes.color) {
                     mtl.vertexColors = THREE.VertexColors;
                     vertex_colors_enabled = true;
                     document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                   }
+
+                  initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                  original_side_array[ child.name ][ child_count_array ] = mtl.side;
+                  child_count_array += 1;
                 });
               } else {
                 // Enable transparency for the Opacity control
                 child.material.transparent = true;
                 child.material.skinning = true;
-                child.material.side = THREE.DoubleSide;
                 if (child.geometry.attributes.color) {
                   child.material.vertexColors = THREE.VertexColors;
                   vertex_colors_enabled = true;
@@ -1261,6 +1306,7 @@
                 }
 
                 initial_opacity[ child.name ] = child.material.opacity;
+                original_side[ child.name ] = child.material.side;
               }
 
               if (Object.keys(collada.library.images).length === 0) {
@@ -1371,6 +1417,9 @@
           set_initial_scale();
           resize();
 
+          kinematics = collada.kinematics;
+          if (Object.keys(kinematics).length !== 0 && tween) document.getElementById('btn_kinematics').disabled = false;
+
           animations = collada.scene.animations;
 
           if (animations.length > 0) {
@@ -1419,9 +1468,6 @@
             document.getElementById('div_loading').style.display = "block";
 
             dae_loader.load( selected_url_file, ( collada ) => {
-              kinematics = collada.kinematics;
-              if (Object.keys(kinematics).length !== 0 && tween) document.getElementById('btn_kinematics').disabled = false;
-
               let child_count = 1;
 
               // Go through all children of the loaded object and search for a Mesh
@@ -1439,23 +1485,28 @@
                   if (child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
 
                   if (Array.isArray( child.material )) {
+                    initial_opacity_array[ child.name ] = {};
+                    original_side_array[ child.name ] = {};
+                    let child_count_array = 1;
+
                     child.material.forEach( mtl => {
                       // Enable transparency for the Opacity control
-                      mtl.opacity = 1;
                       mtl.transparent = true;
                       mtl.skinning = true;
-                      mtl.side = THREE.DoubleSide;
                       if (child.geometry.attributes.color) {
                         mtl.vertexColors = THREE.VertexColors;
                         vertex_colors_enabled = true;
                         document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                       }
+
+                      initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                      original_side_array[ child.name ][ child_count_array ] = mtl.side;
+                      child_count_array += 1;
                     });
                   } else {
                     // Enable transparency for the Opacity control
                     child.material.transparent = true;
                     child.material.skinning = true;
-                    child.material.side = THREE.DoubleSide;
                     if (child.geometry.attributes.color) {
                       child.material.vertexColors = THREE.VertexColors;
                       vertex_colors_enabled = true;
@@ -1463,6 +1514,7 @@
                     }
 
                     initial_opacity[ child.name ] = child.material.opacity;
+                    original_side[ child.name ] = child.material.side;
                   }
     		        }
     	        });
@@ -1476,6 +1528,9 @@
 
               set_initial_scale();
               resize();
+
+              kinematics = collada.kinematics;
+              if (Object.keys(kinematics).length !== 0 && tween) document.getElementById('btn_kinematics').disabled = false;
 
               animations = collada.scene.animations;
 
@@ -1651,6 +1706,61 @@
     	  });
       }
 
+      function switch_mtl_side() {
+        if (dae_obj) {
+          let current_side = document.getElementById('btn_mtl_side').innerHTML;
+
+          if (current_side === 'OS') {
+            current_side = 'FS';
+            document.getElementById('btn_mtl_side').innerHTML = 'FS';
+          } else if (current_side === 'FS') {
+            current_side = 'DS';
+            document.getElementById('btn_mtl_side').innerHTML = 'DS';
+          } else if (current_side === 'DS') {
+            current_side = 'BS';
+            document.getElementById('btn_mtl_side').innerHTML = 'BS';
+          } else {
+            current_side = 'OS';
+            document.getElementById('btn_mtl_side').innerHTML = 'OS';
+          }
+
+          dae_obj.traverse( function ( child ) {
+    	      if (child instanceof THREE.Mesh) {
+              if (Array.isArray( child.material )) {
+                let child_count_array = 1;
+
+                child.material.forEach( mtl => {
+                  if (current_side === 'FS') {
+                    mtl.side = THREE.FrontSide;
+                  } else if (current_side === 'DS') {
+                    mtl.side = THREE.DoubleSide;
+                  } else if (current_side === 'BS') {
+                    mtl.side = THREE.BackSide;
+                  } else {
+                    mtl.side = original_side_array[ child.name ][ child_count_array ];
+                    child_count_array += 1;
+                  }
+
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                if (current_side === 'FS') {
+                  child.material.side = THREE.FrontSide;
+                } else if (current_side === 'DS') {
+                  child.material.side = THREE.DoubleSide;
+                } else if (current_side === 'BS') {
+                  child.material.side = THREE.BackSide;
+                } else {
+                  child.material.side = original_side[ child.name ];
+                }
+
+                child.material.needsUpdate = true;
+              }
+    		    }
+    	    });
+        }
+      }
+
       function set_vertex_colors() {
         if (vertex_colors_enabled) {
           document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
@@ -1815,6 +1925,7 @@
         document.getElementById('btn_edges').disabled = disable;
         document.getElementById('btn_flat').disabled = disable;
         document.getElementById('btn_vertex_colors').disabled = disable;
+        document.getElementById('btn_mtl_side').disabled = disable;
         document.getElementById('btn_polar_grid').disabled = disable;
         document.getElementById('btn_grid').disabled = disable;
         document.getElementById('reset').disabled = disable;
