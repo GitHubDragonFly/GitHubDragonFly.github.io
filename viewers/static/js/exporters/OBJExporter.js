@@ -371,7 +371,7 @@
 							mtlOutput += 'illum 2\n';
 							mtlOutput += 'Ka 0.7500 0.7500 0.7500\n';
 							mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + ' ' + '\n';
-							mtlOutput += 'Ks 0.2500 0.2500 0.2500\n';
+							mtlOutput += mat.specular ? 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + ' ' + '\n' : 'Ks 0.2500 0.2500 0.2500\n';
 							mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + ' ' + '\n' : 'Ke 0.0000 0.0000 0.0000\n';
 
 							if ( mat.map && mat.map.type === 1009 && mat.map.image ) {
@@ -386,7 +386,21 @@
 
 							}
 
-							if ( mat.emissiveMap && mat.emissiveMap.type === 1009 && mat.emissiveMap.image ) {
+							if ( mat.specularMap && mat.specularMap.type === 1009 && mat.specularMap.image ) {
+
+								name = 'specularMap' + count;
+
+								textures.push( {
+									name,
+									ext,
+									data: imageToData( mat.specularMap.image, ext )
+								});
+
+								mtlOutput += 'map_Ks ' + name + '.png' + '\n';
+
+							}
+
+								if ( mat.emissiveMap && mat.emissiveMap.type === 1009 && mat.emissiveMap.image ) {
 
 								name = 'emissiveMap' + count;
 
@@ -490,7 +504,7 @@
 						mtlOutput += 'illum 2\n';
 						mtlOutput += 'Ka 0.7500 0.7500 0.7500\n';
 						mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + ' ' + '\n';
-						mtlOutput += 'Ks 0.2500 0.2500 0.2500\n';
+						mtlOutput += mat.specular ? 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + ' ' + '\n' : 'Ks 0.2500 0.2500 0.2500\n';
 						mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + ' ' + '\n' : 'Ke 0.0000 0.0000 0.0000\n';
 
 						if ( mat.map && mat.map.type === 1009 && mat.map.image ) {
@@ -502,6 +516,20 @@
 							});
 
 							mtlOutput += 'map_Kd ' + name + '.png' + '\n';
+
+						}
+
+						if ( mat.specularMap && mat.specularMap.type === 1009 && mat.specularMap.image ) {
+
+							name = 'specularMap' + count;
+
+							textures.push( {
+								name,
+								ext,
+								data: imageToData( mat.specularMap.image, ext )
+							});
+
+							mtlOutput += 'map_Ks ' + name + '.png' + '\n';
 
 						}
 
