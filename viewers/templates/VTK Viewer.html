@@ -6,6 +6,7 @@
 
     <script src="../static/build/r135/three.js"></script>
     <script src="../static/js/VTKLoader.js"></script>
+    <script src="../static/js/RGBELoader.js"></script>
     <script src="../static/js/TGALoader.js"></script>
     <script src="../static/js/DDSLoader.js"></script>
     <script src="../static/js/OrbitControls.js"></script>
@@ -183,7 +184,8 @@
         <label style="margin: 2px 5px 2px 0;"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
         <button id="btn_edges" onclick="show_edges()" style="background-color: #d1cefc; width: 20px;" disabled>E</button>
         <button id="btn_flat" onclick="set_flat()" style="background-color: #d1cefc; width: 20px;" disabled>F</button>
-        <button id="btn_material" onclick="set_material()" style="background-color: #d1cefc; width: 28px;" disabled>MP</button>
+        <button id="btn_material" onclick="set_material()" style="background-color: #d1cefc; width: 28px; margin-right: 0px;" disabled>MP</button>
+        <button id="btn_material_extra" onclick="set_material_extra()" style="background-color: #d1cefc; width: 14px; margin-left: 0px;" disabled>*</button>
         <button id="btn_textures" onclick="set_texture()" style="background-color: #d1cefc; min-width: 28px;" disabled>T</button>
         <button id="btn_vertex_colors" onclick="set_vertex_colors()" style="background-color: #d1cefc; min-width: 28px;" disabled>VC</button>
         <button id="btn_grid" onclick="show_grid()" style="background-color: #d1cefc; width: 22px;" disabled>#</button>
@@ -300,10 +302,13 @@
       var ww = window.innerWidth,	wh = window.innerHeight;
       var mouse_rotation, reset_rotation, events_initialized;
       var rot_x = 0, rot_y = 0, rot_z = 0;
-      var vertex_colors_enabled, flat_shading_enabled;
+      var tex, pmremGenerator, vertex_colors_enabled, flat_shading_enabled, material_extra_enabled;
       var previous_vtk_scale = '1', bounding_box = new THREE.Box3(), material;
       var selected_vtk_file, selected_url_file = '', selected_url_vtk_file;
       var textures, current_texture, url_tga_loaded, url_displayed, url_loading;
+
+      const rgbe_loader = new THREE.RGBELoader();
+      rgbe_loader.setDataType( THREE.UnsignedByteType );
 
       // Manager from ThreeJs to track a loader and its status
       var manager = new THREE.LoadingManager();
@@ -809,6 +814,9 @@
             if (mesh.material) mesh.material.dispose();
             if (mesh.material && mesh.material.map) mesh.material.map.dispose();
             if (mesh.geometry) mesh.geometry.dispose();
+
+            tex.dispose();
+            tex = null;
           }
 
           if (gizmo) gizmo.dispose();
@@ -829,6 +837,7 @@
         polar_grid_visible = false;
         flat_shading_enabled = false;
         vertex_colors_enabled = false;
+        material_extra_enabled = false;
         render_requested = false;
         textures = [];
         current_texture = -1;
@@ -931,6 +940,9 @@
         //controls.minDistance = 2;
         //controls.maxDistance = 500;
 
+				pmremGenerator = new THREE.PMREMGenerator( renderer );
+				pmremGenerator.compileEquirectangularShader();
+
         gizmo = new OrbitControlsGizmo( controls, {
           size: 65,
           padding: 4,
@@ -947,10 +959,16 @@
         material = new THREE.MeshPhongMaterial( {
           side: THREE.DoubleSide,
           color: 0xFFFFFF,
-          shininess: 100,
+          shininess: 50,
           opacity: 1,
           transparent: true,
           vertexColors: false
+        });
+
+        rgbe_loader.load( 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/venice_sunset_1k.hdr', function ( texture ) {
+          tex = pmremGenerator.fromEquirectangular( texture ).texture;
+          pmremGenerator.dispose();
+          texture.dispose();
         });
 
         // Load the vtk file
@@ -1256,11 +1274,21 @@
               child.material.needsUpdate = true;
             }
           });
+
+          document.getElementById('btn_material_extra').disabled = false;
         } else if (current_material === 'MS') {
           document.getElementById('btn_material').innerHTML = 'ML';
 
+          document.getElementById('btn_material_extra').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_material_extra').disabled = true;
+          if (mesh.material.envMap) {
+            mesh.material.envMap.dispose();
+            mesh.material.envMap = null;
+            mesh.material.metalness = 0.1;
+          }
+
           let mtrl = new THREE.MeshLambertMaterial( {
-            side: THREE.DoubleSide,
+            side: THREE.DoubleSide
           });
 
           mesh.traverse( function( child ) {
@@ -1294,6 +1322,25 @@
         set_object_color();
         set_vtk_opacity();
         show_wireframe();
+      }
+
+      function set_material_extra() {
+        if (material_extra_enabled) {
+          material_extra_enabled = false;
+          document.getElementById('btn_material_extra').style.backgroundColor = '#d1cefc';
+
+          mesh.material.envMap.dispose();
+          mesh.material.envMap = null;
+          mesh.material.metalness = 0.1;
+        } else {
+          material_extra_enabled = true;
+          document.getElementById('btn_material_extra').style.backgroundColor = 'lightgreen';
+
+          mesh.material.envMap = tex;
+          mesh.material.metalness = 0.8;
+        }
+
+        mesh.material.needsUpdate = true;
       }
 
       function set_texture() {
@@ -1443,6 +1490,9 @@
           if (mesh.material && mesh.material.map) { mesh.material.map.dispose(); mesh.material.map = null; }
           if (mesh.geometry) mesh.geometry.dispose();
 
+          tex.dispose();
+          tex = null;
+
           scene.remove( mesh );
         }
 
@@ -1492,6 +1542,9 @@
         document.getElementById('btn_textures').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_textures').innerHTML = 'T';
         document.getElementById('btn_material').innerHTML = 'MP';
+        material_extra_enabled = false;
+        document.getElementById('btn_material_extra').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_material_extra').disabled = true;
         vertex_colors_enabled = false;
         document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
 
