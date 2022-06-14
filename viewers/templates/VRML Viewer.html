@@ -174,6 +174,8 @@
         <input type="file" id="file_input" name="file" onchange="init()" accept=".wrl, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" multiple />
         <label for="file_image_input" style="color: #CE8704; margin: 2px 2px 2px 0;">BGND</label>
         <input type="file" id="file_image_input" name="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" onchange="set_scene_image()" disabled />
+        <label for="vrml_opacity" style="margin: 2px 2px 2px 0;">Opy</label>
+        <input type="number" id="vrml_opacity" name="vrml_opacity" min="0" max="1" step="0.05" value="1" onkeydown="return_false()" oninput="set_vrml_opacity()" style="width: 48px;" disabled />
         <label for="vrml_scale" style="margin: 2px 2px 2px 0;">Scale</label>
         <input type="number" id="vrml_scale" name="vrml_scale" onkeydown="return_false()" oninput="set_vrml_scale()" min="0.25" max="2" value="1" step="0.25" style="width: 48px;" disabled />
         <label style="margin: 2px 3px 2px 0;"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
@@ -182,8 +184,6 @@
         <button id="btn_mtl_side" onclick="switch_mtl_side()" style="background-color: #d1cefc; width: 28px;" disabled>OS</button>
         <button id="btn_grid" onclick="show_grid()" style="background-color: #d1cefc; width: 22px;" disabled>#</button>
         <button id="btn_polar_grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; width: 24px;" disabled><p class="polar"></p></button>
-        <button id="reset" onclick="reset_only()" style="color: maroon; width: 40px;" disabled>RST</button>
-        <button id="btn_full_screen" onclick="full_screen()" style="width: 22px;"><p class="full_screen"></p></button>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" style="margin: 2px 2px 2px 5px;">URL:</label>
@@ -222,6 +222,8 @@
           <option value="gltf" onclick="export_gltf()">GLTF</option>
           <option value="json" onclick="export_json()">JSON</option>
         </select>
+        <button id="reset" onclick="reset_only()" style="color: maroon; width: 40px;" disabled>RST</button>
+        <button id="btn_full_screen" onclick="full_screen()" style="width: 22px;"><p class="full_screen"></p></button>
       </div>
     </div><br />
 
@@ -295,6 +297,8 @@
       var previous_vrml_scale = '1', bounding_box = new THREE.Box3();
       var selected_vrml_file, selected_url_file = '', selected_url_vrml_file;
       var url_displayed, url_loading, local_blobs, flat_shading_enabled;
+      var initial_opacity, initial_opacity_array;
+      var original_side, original_side_array;
 
       // Manager from ThreeJs to track a loader and its status
       var manager = new THREE.LoadingManager();
@@ -573,6 +577,29 @@
         document.body.style.backgroundColor = document.getElementById('back_color').value;
       }
 
+      function set_vrml_opacity() {
+        if (vrml_obj) {
+          let opacity_value = document.getElementById('vrml_opacity').value;
+
+          vrml_obj.traverse( function ( child ) {
+    	      if (child.type == 'Mesh' || child instanceof THREE.Mesh) {
+              if (Array.isArray( child.material )) {
+                let child_count_array = 1;
+
+                child.material.forEach( mtl => {
+                  mtl.opacity = initial_opacity_array[ child.name ][ child_count_array ] * opacity_value;
+                  child_count_array += 1;
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                child.material.opacity = initial_opacity[ child.name ] * opacity_value;
+                child.material.needsUpdate = true;
+              }
+            }
+    	    });
+        }
+      }
+
       function set_scene_image() {
         fii = document.getElementById('file_image_input');
 
@@ -756,7 +783,10 @@
         local_blobs = '';
         edges = {};
         edges_visible = false;
+        initial_opacity = {};
+        initial_opacity_array = {};
         original_side = {};
+        original_side_array = {};
         render_requested = false;
         grid_visible = false;
         polar_grid_visible = false;
@@ -881,16 +911,39 @@
           vrml_obj = object.clone();
 
           let child_count = 1;
+          let child_count_array = 1;
 
           vrml_obj.traverse( child => {
             if (child.type == 'Mesh' || child instanceof THREE.Mesh) {
               child.name = 'child_' + child_count;
               child_count += 1;
-
-              child.material.emissiveIntensity = 0.3;
-              child.material.flatShading = false;
               flat_shading_enabled = false;
-              original_side[ child.name ] = child.material.side;
+
+              if (Array.isArray( child.material )) {
+                initial_opacity_array[ child.name ] = {};
+                original_side_array[ child.name ] = {};
+
+                child.material.forEach( mtl => {
+                  mtl.transparent = true;
+                  mtl.emissiveIntensity = 0.3;
+                  mtl.flatShading = flat_shading_enabled;
+
+                  initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                  original_side_array[ child.name ][ child_count_array ] = mtl.side;
+                  child_count_array += 1;
+
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                child.material.transparent = true;
+                child.material.emissiveIntensity = 0.3;
+                child.material.flatShading = flat_shading_enabled;
+
+                initial_opacity[ child.name ] = child.material.opacity;
+                original_side[ child.name ] = child.material.side;
+
+                child.material.needsUpdate = true;
+              }
 
               edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
             }
@@ -957,16 +1010,39 @@
               vrml_obj = object.clone();
 
               let child_count = 1;
+              let child_count_array = 1;
 
               vrml_obj.traverse( child => {
                 if (child.type == 'Mesh' || child instanceof THREE.Mesh) {
                   child.name = 'child_' + child_count;
                   child_count += 1;
-
-                  child.material.emissiveIntensity = 0.3;
-                  child.material.flatShading = false;
                   flat_shading_enabled = false;
-                  original_side[ child.name ] = child.material.side;
+
+                  if (Array.isArray( child.material )) {
+                    initial_opacity_array[ child.name ] = {};
+                    original_side_array[ child.name ] = {};
+
+                    child.material.forEach( mtl => {
+                      mtl.transparent = true;
+                      mtl.emissiveIntensity = 0.3;
+                      mtl.flatShading = flat_shading_enabled;
+
+                      initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                      original_side_array[ child.name ][ child_count_array ] = mtl.side;
+                      child_count_array += 1;
+
+                      mtl.needsUpdate = true;
+                    });
+                  } else {
+                    child.material.transparent = true;
+                    child.material.emissiveIntensity = 0.3;
+                    child.material.flatShading = flat_shading_enabled;
+
+                    initial_opacity[ child.name ] = child.material.opacity;
+                    original_side[ child.name ] = child.material.side;
+
+                    child.material.needsUpdate = true;
+                  }
 
                   edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
                 }
@@ -1009,15 +1085,39 @@
                 vrml_obj = object.clone();
 
                 let child_count = 1;
+                let child_count_array = 1;
 
                 vrml_obj.traverse( child => {
                   if (child.type == 'Mesh' || child instanceof THREE.Mesh) {
                     child.name = 'child_' + child_count;
                     child_count += 1;
-
-                    child.material.emissiveIntensity = 0.3;
-                    child.material.flatShading = false;
                     flat_shading_enabled = false;
+
+                    if (Array.isArray( child.material )) {
+                      initial_opacity_array[ child.name ] = {};
+                      original_side_array[ child.name ] = {};
+
+                      child.material.forEach( mtl => {
+                        mtl.transparent = true;
+                        mtl.emissiveIntensity = 0.3;
+                        mtl.flatShading = flat_shading_enabled;
+
+                        initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                        original_side_array[ child.name ][ child_count_array ] = mtl.side;
+                        child_count_array += 1;
+
+                        mtl.needsUpdate = true;
+                      });
+                    } else {
+                      child.material.transparent = true;
+                      child.material.emissiveIntensity = 0.3;
+                      child.material.flatShading = flat_shading_enabled;
+
+                      initial_opacity[ child.name ] = child.material.opacity;
+                      original_side[ child.name ] = child.material.side;
+
+                      child.material.needsUpdate = true;
+                    }
 
                     edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
                   }
@@ -1173,18 +1273,50 @@
 
           vrml_obj.traverse( function ( child ) {
     	      if (child.type == 'Mesh' || child instanceof THREE.Mesh) {
-              console.log(child.material);
               if (current_side === 'FS') {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.side = THREE.FrontSide;
+                    mtl.needsUpdate = true;
+                  });
+                } else {
                   child.material.side = THREE.FrontSide;
-                } else if (current_side === 'DS') {
+                  child.material.needsUpdate = true;
+                }
+              } else if (current_side === 'DS') {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.side = THREE.DoubleSide;
+                    mtl.needsUpdate = true;
+                  });
+                } else {
                   child.material.side = THREE.DoubleSide;
-                } else if (current_side === 'BS') {
+                  child.material.needsUpdate = true;
+                }
+              } else if (current_side === 'BS') {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.side = THREE.BackSide;
+                    mtl.needsUpdate = true;
+                  });
+                } else {
                   child.material.side = THREE.BackSide;
+                  child.material.needsUpdate = true;
+                }
+              } else {
+                if (Array.isArray( child.material )) {
+                  let child_count_array = 1;
+
+                  child.material.forEach( mtl => {
+                    mtl.side = original_side_array[ child.name ][ child_count_array ];
+                    child_count_array += 1;
+                    mtl.needsUpdate = true;
+                  });
                 } else {
                   child.material.side = original_side[ child.name ];
+                  child.material.needsUpdate = true;
                 }
-
-                child.material.needsUpdate = true;
+              }
     		    }
     	    });
         }
@@ -1193,7 +1325,11 @@
       function show_wireframe() {
         vrml_obj.traverse( function( child ) {
           if (child.type == 'Mesh' || child instanceof THREE.Mesh) {
-            if (child.material) {
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtl => {
+                mtl.wireframe = document.getElementById('wireframe').checked;
+              });
+            } else {
               child.material.wireframe = document.getElementById('wireframe').checked;
             }
           }
@@ -1211,7 +1347,12 @@
 
         vrml_obj.traverse( function( child ) {
           if (child.type == 'Mesh' || child instanceof THREE.Mesh) {
-            if (child.material) {
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtl => {
+                mtl.flatShading = flat_shading_enabled;
+                mtl.needsUpdate = true;
+              });
+            } else {
               child.material.flatShading = flat_shading_enabled;
               child.material.needsUpdate = true;
             }
@@ -1223,8 +1364,8 @@
         if (polar_grid_visible) show_polar_grid();
         if (grid_visible) show_grid();
 
-        if (vrml_obj.material) vrml_obj.material.dispose();
         if (vrml_obj.material && vrml_obj.material.map) vrml_obj.material.map.dispose();
+        if (vrml_obj.material) vrml_obj.material.dispose();
         if (vrml_obj.geometry) vrml_obj.geometry.dispose();
 
         scene.remove( vrml_obj );
@@ -1257,9 +1398,10 @@
         document.getElementById('hlight').checked = false;
         radio_changed();
 
-        // Reset edges and vrml_obj scale values
+        // Reset edges, opacity and vrml_obj scale values
         edges_visible = false;
         document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
+        document.getElementById('vrml_opacity').value = 1;
         previous_vrml_scale = '1';
         document.getElementById('vrml_scale').value = 1;
 
@@ -1306,6 +1448,7 @@
         document.getElementById('wireframe').disabled = disable;
         document.getElementById('scale_10x').disabled = disable;
         document.getElementById('vrml_scale').disabled = disable;
+        document.getElementById('vrml_opacity').disabled = disable;
         document.getElementById('ambient_light_color').disabled = disable;
         document.getElementById('hemisphere_light_color').disabled = disable;
         document.getElementById('directional_light_color').disabled = disable;
