@@ -14,7 +14,7 @@ THREE.LegacyJSONLoader = ( function () {
 
 		}
 
-		//THREE.Loader.call( this, manager );
+		THREE.Loader.call( this, manager );
 
 		this.withCredentials = false;
 
@@ -56,7 +56,7 @@ THREE.LegacyJSONLoader = ( function () {
 				}
 
 				var object = scope.parse( json, path );
-				onLoad( object.geometry, object.materials );
+				onLoad( { geometry: object.geometry, materials: object.materials } );
 
 			}, onProgress, onError );
 
