@@ -56,7 +56,7 @@ THREE.LegacyJSONLoader = ( function () {
 				}
 
 				var object = scope.parse( json, path );
-				onLoad( { geometry: object.geometry, materials: object.materials } );
+				onLoad( { geometry: object.geometry, bones: object.geometry.bones, materials: object.materials } );
 
 			}, onProgress, onError );
 
