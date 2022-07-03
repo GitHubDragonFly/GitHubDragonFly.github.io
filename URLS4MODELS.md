@@ -40,3 +40,6 @@ Example models:
   - `https://raw.githubusercontent.com/takahirox/mmd-viewer-js/master/model/default/miku_m.pmd`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/three/scene.json`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/vrml/cow.wrl`
+
+Additional resources for file downloads:
+ - for STEP / IGES files visit [novotechnik](https://www.novotechnik.de/en/downloads/cad-data)
