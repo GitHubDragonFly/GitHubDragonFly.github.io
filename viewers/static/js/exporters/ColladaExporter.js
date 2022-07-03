@@ -427,7 +427,7 @@
 
 					if ( m.transparent === true ) {
 
-						transparencyNode += '<transparent>' + ( m.map ? '<texture texture="diffuse-sampler"></texture>' : '<float>1</float>' ) + '</transparent>';
+						transparencyNode += '<transparent>' + ( m.map ? '<texture texture="diffuse-sampler" texcoord="TEXCOORD" />' : '<float>1</float>' ) + '</transparent>';
 
 						if ( m.opacity < 1 ) {
 
@@ -437,7 +437,7 @@
 
 					}
 
-					const techniqueNode = `<technique sid="common"><${type}>` + '<emission>' + ( m.emissiveMap ? '<texture texture="emissive-sampler" texcoord="TEXCOORD" />' : `<color sid="emission">${emissive.r} ${emissive.g} ${emissive.b} 1</color>` ) + '</emission>' + ( type !== 'constant' ? '<diffuse>' + ( m.map ? '<texture texture="diffuse-sampler" texcoord="TEXCOORD" />' : `<color sid="diffuse">${diffuse.r} ${diffuse.g} ${diffuse.b} 1</color>` ) + '</diffuse>' : '' ) + ( type !== 'constant' ? '<bump>' + ( m.normalMap ? '<texture texture="bump-sampler" texcoord="TEXCOORD" />' : '' ) + '</bump>' : '' ) + ( type === 'phong' ? `<specular><color sid="specular">${specular.r} ${specular.g} ${specular.b} 1</color></specular>` + '<shininess>' + ( m.specularMap ? '<texture texture="specular-sampler" texcoord="TEXCOORD" />' : `<float sid="shininess">${shininess}</float>` ) + '</shininess>' : '' ) + `<reflective><color>${diffuse.r} ${diffuse.g} ${diffuse.b} 1</color></reflective>` + `<reflectivity><float>${reflectivity}</float></reflectivity>` + transparencyNode + `</${type}></technique>`;
+					const techniqueNode = `<technique sid="common"><${type}>` + '<emission>' + ( m.emissiveMap ? '<texture texture="emissive-sampler" texcoord="TEXCOORD" />' + `<color sid="emission">1 1 1 1</color>` : `<color sid="emission">${emissive.r} ${emissive.g} ${emissive.b} 1</color>` ) + '</emission>' + ( type !== 'constant' ? '<diffuse>' + ( m.map ? '<texture texture="diffuse-sampler" texcoord="TEXCOORD" />' + `<color sid="diffuse">1 1 1 1</color>` : `<color sid="diffuse">${diffuse.r} ${diffuse.g} ${diffuse.b} 1</color>` ) + '</diffuse>' : '' ) + ( type !== 'constant' ? '<bump>' + ( m.normalMap ? '<texture texture="bump-sampler" texcoord="TEXCOORD" />' : '' ) + '</bump>' : '' ) + ( type === 'phong' ?  '<specular>' + ( m.specularMap ? '<texture texture="specular-sampler" texcoord="TEXCOORD" />' + `<color sid="specular">1 1 1 1</color>` : `<color sid="specular">${specular.r} ${specular.g} ${specular.b} 1</color>` ) : '' ) + '</specular>' + `<shininess><float>${shininess}</float></shininess>` + `<reflective><color>${diffuse.r} ${diffuse.g} ${diffuse.b} 1</color></reflective>` + `<reflectivity><float>${reflectivity}</float></reflectivity>` + transparencyNode + `</${type}></technique>`;
 					const effectnode = `<effect id="${matid}-effect">` + '<profile_COMMON>' + ( m.map ? '<newparam sid="diffuse-surface"><surface type="2D">' + `<init_from>${processTexture( m.map )}</init_from>` + '</surface></newparam>' + '<newparam sid="diffuse-sampler"><sampler2D><source>diffuse-surface</source></sampler2D></newparam>' : '' ) + ( m.specularMap ? '<newparam sid="specular-surface"><surface type="2D">' + `<init_from>${processTexture( m.specularMap )}</init_from>` + '</surface></newparam>' + '<newparam sid="specular-sampler"><sampler2D><source>specular-surface</source></sampler2D></newparam>' : '' ) + ( m.emissiveMap ? '<newparam sid="emissive-surface"><surface type="2D">' + `<init_from>${processTexture( m.emissiveMap )}</init_from>` + '</surface></newparam>' + '<newparam sid="emissive-sampler"><sampler2D><source>emissive-surface</source></sampler2D></newparam>' : '' ) + ( m.normalMap ? '<newparam sid="bump-surface"><surface type="2D">' + `<init_from>${processTexture( m.normalMap )}</init_from>` + '</surface></newparam>' + '<newparam sid="bump-sampler"><sampler2D><source>bump-surface</source></sampler2D></newparam>' : '' ) + techniqueNode + ( m.side === THREE.DoubleSide ? '<extra><technique profile="THREEJS"><double_sided sid="double_sided" type="int">1</double_sided></technique></extra>' : '' ) + '</profile_COMMON>' + '</effect>';
 					const materialName = m.name ? ` name="${m.name}"` : '';
 					const materialNode = `<material id="${matid}"${materialName}><instance_effect url="#${matid}-effect" /></material>`;
@@ -457,7 +457,7 @@
 				let node = `<node name="${o.name}">`;
 				node += getTransform( o );
 
-				if ( o.isMesh === true && o.geometry !== null ) {
+				if ( (o.isMesh === true || o.isPoints === true) && o.geometry !== null ) {
 
 					// function returns the id associated with the mesh and a "BufferGeometry" version
 					// of the geometry in case it's not a geometry.
