@@ -50,7 +50,7 @@ Notes about three.js viewers:
  - lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
  - all files have to be in the same folder when loading files locally from a hard drive
  - some viewers might have some limitations when loading files locally from a hard drive
- - STEP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
+ - STEP / IGES Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
  - JSON Viewer has timeouts which might need to be adjusted when loading large files
  - LDRAW Viewer currently only supports MPD packed files as they are in the [three.js](https://github.com/mrdoob/three.js/tree/master/examples/models/ldraw/officialLibrary/models) repository, LDR and L3B support is possible but would require the whole LDraw parts library and modifications to the loader
  - DAE (Collada) exporter appears to brighten up the original model as well as the exported model
