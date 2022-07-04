@@ -18,18 +18,18 @@ Notes about three.js viewers:
    - `A` - animations
    - `E` - edges
    - `F` - flatShading
-   - `K` - kinematics
+   - `K` - kinematics (collada)
    - `L` - lines (ldraw)
    - `O` - opacity
-   - `P` - poses
+   - `P` - poses (mmd)
    - `R` - reflectivity
    - `S` - skeleton
    - `T` - textures
-   - `V` - variants
-   - `X`- morphs
+   - `V` - variants (gltf)
+   - `X` - morphs
    - `CS` - construction step (ldraw)
-   - `MP` - material (Phong/Standard/Lambert)
-   - `OS` - material side (Original/Front/Back/Double)
+   - `MP` - material (Phong / Standard / Lambert)
+   - `OS` - material side (Original / Front / Back / Double)
    - `VC` - vertex colors
    - `RST` - reset
    - `#` - grid
