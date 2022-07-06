@@ -6,6 +6,9 @@
 
     <script src="../static/build/r135/three.js"></script>
     <script src="../static/js/PRWMLoader.js"></script>
+    <script src="../static/js/TGALoader.js"></script>
+    <script src="../static/js/DDSLoader.js"></script>
+    <script src="../static/js/RGBELoader.js"></script>
     <script src="../static/js/OrbitControls.js"></script>
     <script src="../static/js/OrbitControlsGizmo.js"></script>
     <script src="../static/js/exporters/PLYExporter.js"></script>
@@ -175,13 +178,15 @@
         <input type="file" id="file_input" name="file" onchange="init()" accept=".prwm, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" multiple />
         <label for="file_image_input" style="color: #CE8704; margin: 2px 2px 2px 0;">BGND</label>
         <input type="file" id="file_image_input" name="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" onchange="set_scene_image()" disabled />
-        <label for="prwm_opacity" style="margin: 2px 2px 2px 0;">Opy</label>
+        <button id="btn_prwm_opacity" onclick="set_opacity()" style="background-color: #d1cefc; width: 20px;" disabled>O</button>
         <input type="number" id="prwm_opacity" name="prwm_opacity" min="0" max="1" step="0.05" value="1" onkeydown="return_false()" oninput="set_prwm_opacity()" style="width: 48px;" disabled />
         <label for="prwm_scale" style="margin: 2px 2px 2px 0;">Scale</label>
         <input type="number" id="prwm_scale" name="prwm_scale" onkeydown="return_false()" oninput="set_prwm_scale()" min="0.25" max="2" value="1" step="0.25" style="width: 48px;" disabled />
         <label style="margin: 2px 5px 2px 0;"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
         <button id="btn_edges" onclick="show_edges()" style="background-color: #d1cefc; width: 20px;" disabled>E</button>
         <button id="btn_flat" onclick="set_flat()" style="background-color: #d1cefc; width: 20px;" disabled>F</button>
+        <button id="btn_material" onclick="set_material()" style="background-color: #d1cefc; width: 28px; margin-right: 0px;" disabled>MP</button>
+        <button id="btn_material_extra" onclick="set_material_extra()" style="background-color: #d1cefc; width: 14px; margin-left: 0px;" disabled>*</button>
         <button id="btn_textures" onclick="set_texture()" style="background-color: #d1cefc; min-width: 28px;" disabled>T</button>
         <button id="btn_grid" onclick="show_grid()" style="background-color: #d1cefc; width: 22px;" disabled>#</button>
         <button id="btn_polar_grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; width: 24px;" disabled><p class="polar"></p></button>
@@ -296,10 +301,14 @@
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth,	wh = window.innerHeight;
       var mouse_rotation, reset_rotation, events_initialized;
-      var rot_x = 0, rot_y = 0, rot_z = 0, material, flatShading_enabled;
+      var rot_x = 0, rot_y = 0, rot_z = 0;
       var previous_prwm_scale = '1', bounding_box = new THREE.Box3();
-      var selected_prwm_file, selected_url_file = '', selected_prwm_url_file;
-      var textures, current_texture, url_displayed, url_loading;
+      var selected_prwm_file, selected_url_file = '', selected_url_prwm_file;
+      var pmremGenerator, flat_shading_enabled, material_extra_enabled, enable_opacity;
+      var material, tex, textures, current_texture, url_tga_loaded, url_displayed, url_loading;
+
+      const rgbe_loader = new THREE.RGBELoader();
+      rgbe_loader.setDataType( THREE.UnsignedByteType );
 
       // Manager from ThreeJs to track a loader and its status
       var manager = new THREE.LoadingManager();
@@ -310,6 +319,12 @@
       document.getElementById( 'endianness' ).innerHTML = prwm_loader.isBigEndianPlatform ? 'be' : 'le';
 
       const texture_loader = new THREE.TextureLoader();
+
+      const tga_loader = new THREE.TGALoader( manager );
+      manager.addHandler( /\.tga$/i, tga_loader );
+
+      const dds_loader = new THREE.DDSLoader( manager );
+      manager.addHandler( /\.dds$/i, dds_loader );
 
       const obj_exporter = new THREE.OBJExporter( manager );
       const ply_exporter = new THREE.PLYExporter( manager );
@@ -326,12 +341,6 @@
 
         if (mesh) {
           let filename;
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = false;
-    		    }
-    	    });
 
           if (selected_prwm_file) {
             filename = selected_prwm_file.name.substring(0, selected_prwm_file.name.lastIndexOf('.') + 1);
@@ -362,12 +371,6 @@
               link.click();
             });
           }
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = true;
-    		    }
-    	    });
         }
       }
 
@@ -376,12 +379,6 @@
 
         if (mesh) {
           let filename;
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = false;
-    		    }
-    	    });
 
           if (selected_prwm_file) {
             filename = selected_prwm_file.name.substring(0, selected_prwm_file.name.lastIndexOf('.') + 1);
@@ -394,12 +391,6 @@
           link.href = URL.createObjectURL( blob );
           link.download = filename + 'ply';
           link.click();
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = true;
-    		    }
-    	    });
         }
       }
 
@@ -408,12 +399,6 @@
 
         if (mesh) {
           let filename;
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = false;
-    		    }
-    	    });
 
           if (selected_prwm_file) {
             filename = selected_prwm_file.name.substring(0, selected_prwm_file.name.lastIndexOf('.') + 1);
@@ -426,12 +411,6 @@
           link.href = URL.createObjectURL( blob );
           link.download = filename + 'stl';
           link.click();
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = true;
-    		    }
-    	    });
         }
       }
 
@@ -440,12 +419,6 @@
 
         if (mesh) {
           let filename;
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = false;
-    		    }
-    	    });
 
           if (selected_prwm_file) {
             filename = selected_prwm_file.name.substring(0, selected_prwm_file.name.lastIndexOf('.') + 1);
@@ -467,12 +440,6 @@
               link.click();
             });
           }
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = true;
-    		    }
-    	    });
         }
       }
 
@@ -481,12 +448,6 @@
 
         if (mesh) {
           let filename;
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = false;
-    		    }
-    	    });
 
           if (selected_prwm_file) {
             filename = selected_prwm_file.name.substring(0, selected_prwm_file.name.lastIndexOf('.') + 1);
@@ -503,12 +464,6 @@
             link.download = filename + 'gltf';
             link.click();
           }, function( error ) { console.log(error); }, options );
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = true;
-    		    }
-    	    });
         }
       }
 
@@ -517,12 +472,6 @@
 
         if (mesh) {
           let filename;
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = false;
-    		    }
-    	    });
 
           if (selected_prwm_file) {
             filename = selected_prwm_file.name.substring(0, selected_prwm_file.name.lastIndexOf('.') + 1);
@@ -538,12 +487,6 @@
             link.download = filename + 'glb';
             link.click();
           }, function( error ) { console.log(error); }, options );
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = true;
-    		    }
-    	    });
         }
       }
 
@@ -552,12 +495,6 @@
 
         if (mesh) {
           let filename;
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = false;
-    		    }
-    	    });
 
           if (selected_prwm_file) {
             filename = selected_prwm_file.name.substring(0, selected_prwm_file.name.lastIndexOf('.') + 1);
@@ -570,12 +507,6 @@
           link.href = URL.createObjectURL( blob );
           link.download = filename + 'json';
           link.click();
-
-          mesh.traverse( function( child ) {
-      	    if (child instanceof THREE.Mesh) {
-              if (child.material.opacity == 1) child.material.transparent = true;
-    		    }
-    	    });
         }
       }
 
@@ -586,19 +517,19 @@
       }
 
       function set_object_color() {
-        if (material) {
+        if (mesh) {
           let obj_colors = document.getElementById('object_color').value; // hex format '#rrggbb'
 
           if (obj_colors === '#000000') obj_colors = '#ffffff';
 
-          material.color.setRGB( parseInt(obj_colors.substring(1, 3), 16) / 250, parseInt(obj_colors.substring(3, 5), 16) / 250, parseInt(obj_colors.substring(5), 16) / 250 ); // hex format '#rrggbb'
+          mesh.material.color.setRGB( parseInt(obj_colors.substring(1, 3), 16) / 250, parseInt(obj_colors.substring(3, 5), 16) / 250, parseInt(obj_colors.substring(5), 16) / 250 ); // hex format '#rrggbb'
 
-          set_prwm_opacity();
+          if (enable_opacity) set_prwm_opacity();
         }
       }
 
       function set_prwm_opacity() {
-        if (material) material.opacity = document.getElementById('prwm_opacity').value;
+        if (mesh) mesh.material.opacity = document.getElementById('prwm_opacity').value;
       }
 
       function set_scene_image() {
@@ -635,6 +566,23 @@
           }
         } else {
           scene.background = null;
+        }
+      }
+
+      function set_opacity() {
+        if (mesh) {
+          if (enable_opacity) {
+            enable_opacity = false;
+            document.getElementById('prwm_opacity').value = 1;
+            document.getElementById('prwm_opacity').disabled = true;
+            document.getElementById('btn_prwm_opacity').style.backgroundColor = '#d1cefc';
+
+            set_prwm_opacity();
+          } else {
+            enable_opacity = true;
+            document.getElementById('prwm_opacity').disabled = false;
+            document.getElementById('btn_prwm_opacity').style.backgroundColor = 'lightgreen';
+          }
         }
       }
 
@@ -710,14 +658,10 @@
       }
 
       function scale_10x_set() {
-        if (document.getElementById('scale_10x').checked) {
-          mesh.scale.multiplyScalar( 10 );
-        } else {
-          mesh.scale.multiplyScalar( 0.1 );
+        document.getElementById('scale_10x').checked ? mesh.scale.multiplyScalar( 10 ) : mesh.scale.multiplyScalar( 0.1 );
 
-          set_polar_grid_y();
-          set_grid_y();
-        }
+        set_polar_grid_y();
+        set_grid_y();
       }
 
       function radio_changed() {
@@ -784,9 +728,8 @@
       function init() {
         if (scene) {
           if (mesh) {
-            if (flatShading_enabled) set_flat();
-            if (mesh.material) mesh.material.dispose();
             if (mesh.material && mesh.material.map) mesh.material.map.dispose();
+            if (mesh.material) mesh.material.dispose();
             if (mesh.geometry) mesh.geometry.dispose();
           }
 
@@ -801,15 +744,18 @@
         enable_disable( true );
 
         selected_prwm_file = null;
-        selected_prwm_url_file = null;
-        textures = [];
+        selected_url_prwm_file = null;
         edges = null;
         edges_visible = false;
+        enable_opacity = false;
         grid_visible = false;
         polar_grid_visible = false;
         render_requested = false;
-        flatShading_enabled = false;
+        flat_shading_enabled = false;
+        material_extra_enabled = false;
+        textures = [];
         current_texture = -1;
+        url_tga_loaded = false;
         document.getElementById('btn_textures').disabled = true;
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
@@ -900,6 +846,9 @@
         //controls.minDistance = 2;
         //controls.maxDistance = 500;
 
+				pmremGenerator = new THREE.PMREMGenerator( renderer );
+				pmremGenerator.compileEquirectangularShader();
+
         gizmo = new OrbitControlsGizmo( controls, {
           size: 65,
           padding: 4,
@@ -915,20 +864,23 @@
 
         material = new THREE.MeshPhongMaterial( {
           side: THREE.DoubleSide,
-          color: 0xFFFFFF,
-          shininess: 100,
+          shininess: 50,
           opacity: 1,
           transparent: true,
-          vertexColors: THREE.VertexColors
+          flatShading: false
         });
 
-        if (prwm_loader) {
-          // Load the prwm file
-          loadFile();
+        rgbe_loader.load( 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/venice_sunset_1k.hdr', function ( texture ) {
+          tex = pmremGenerator.fromEquirectangular( texture ).texture;
+          pmremGenerator.dispose();
+          texture.dispose();
+        });
 
-          render_requested = true;
-          render();
-        }
+        // Load the prwm file
+        loadFile();
+
+        render_requested = true;
+        render();
       }
 
       function loadFile() {
@@ -974,14 +926,11 @@
         smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
         smooth.computeVertexNormals();
 
-        if (!object.hasColors) material.vertexColors = false;
-
         document.getElementById('directional_light_intensity').value = 0.75;
         set_directional_light_intensity();
 
         mesh = new THREE.Mesh( smooth, material );
-
-        edges = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
+        edges = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
         // Add mesh to the scene
         scene.add( mesh );
@@ -1005,17 +954,17 @@
                 texture_loader.load( url, function( texture ) { textures.push( texture ); });
                 document.getElementById('btn_textures').disabled = false;
               } else if (url.toUpperCase().endsWith('.PRWM')) {
-                selected_prwm_url_file = url;
+                selected_url_prwm_file = url;
               }
             }
           } else {
-            if (selected_url_file.toUpperCase().endsWith('.PRWM')) selected_prwm_url_file = selected_url_file;
+            if (selected_url_file.toUpperCase().endsWith('.PRWM')) selected_url_prwm_file = selected_url_file;
           }
 
-          if (selected_prwm_url_file) {
+          if (selected_url_prwm_file) {
             document.getElementById('div_loading').style.display = "block";
 
-            prwm_loader.load( selected_prwm_url_file, addURLFileInScene, function( xhr ) {
+            prwm_loader.load( selected_url_prwm_file, addURLFileInScene, function( xhr ) {
               let today = new Date();
               let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
 
@@ -1057,14 +1006,11 @@
         smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
         smooth.computeVertexNormals();
 
-        if (!object.hasColors) material.vertexColors = false;
-
         document.getElementById('directional_light_intensity').value = 0.75;
         set_directional_light_intensity();
 
         mesh = new THREE.Mesh( smooth, material );
-
-        edges = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xA52A2A } ) );
+        edges = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
         // Add mesh to the scene
         scene.add( mesh );
@@ -1130,41 +1076,170 @@
 
       function show_wireframe() {
         if (mesh) {
-          // Go through all children of the loaded object and search for a Mesh
-          mesh.traverse( function( child ) {
-            // This will allow us to check if the child is an instance of the Mesh constructor
-            if (child instanceof THREE.Mesh) {
-              child.material.wireframe = document.getElementById('wireframe').checked;
-            }
-          });
+          mesh.material.wireframe = document.getElementById('wireframe').checked;
         }
       }
 
-      function set_texture() {
-        if (current_texture == textures.length - 1) {
-          document.getElementById('btn_textures').style.backgroundColor = '#d1cefc';
-          document.getElementById('btn_textures').innerHTML = 'T';
-          current_texture = -1;
+      function set_flat() {
+        if (mesh) {
+          if (flat_shading_enabled) {
+            document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
+            flat_shading_enabled = false;
+          } else {
+            document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+            flat_shading_enabled = true;
+          }
+
+          mesh.material.flatShading = flat_shading_enabled;
+          mesh.material.needsUpdate = true;
+        }
+      }
+
+      function set_material() {
+        if (mesh) {
+          let current_material = document.getElementById('btn_material').innerHTML;
+
+          if (current_material === 'MP') {
+            document.getElementById('btn_material').innerHTML = 'MS';
+            document.getElementById('btn_material').style.backgroundColor = 'lightgreen';
+
+            document.getElementById('btn_material_extra').disabled = false;
+
+            let mtrl = new THREE.MeshStandardMaterial( {
+              side: THREE.DoubleSide,
+              metalness: 0.5,
+              roughness: 0.3,
+              transparent: true,
+              envMapIntensity: 1.0,
+              flatShading: flat_shading_enabled
+            });
+
+            if (mesh.material.map) { mtrl.map = mesh.material.map; mesh.material.map.dispose(); mesh.material.map = null; }
+            mesh.material.dispose();
+            mesh[ 'material' ] = mtrl;
+            mesh.material.needsUpdate = true;
+
+            mtrl.dispose();
+          } else if (current_material === 'MS') {
+            document.getElementById('btn_material').innerHTML = 'ML';
+            document.getElementById('btn_material').style.backgroundColor = 'lightblue';
+
+            document.getElementById('btn_material_extra').style.backgroundColor = '#d1cefc';
+            document.getElementById('btn_material_extra').disabled = true;
+
+            if (mesh.material.envMap) {
+              mesh.material.envMap.dispose();
+              mesh.material.envMap = null;
+              material_extra_enabled = false;
+            }
+
+            let mtrl = new THREE.MeshLambertMaterial( {
+              side: THREE.DoubleSide,
+              transparent: true
+            });
+
+            if (mesh.material.map) { mtrl.map = mesh.material.map; mesh.material.map.dispose(); mesh.material.map = null; }
+            mesh.material.dispose();
+            mesh[ 'material' ] = mtrl;
+            mesh.material.needsUpdate = true;
+
+            mtrl.dispose();
+          } else {
+            document.getElementById('btn_material').innerHTML = 'MP';
+            document.getElementById('btn_material').style.backgroundColor = '#d1cefc';
+
+            if (mesh.material.map) { material.map = mesh.material.map; mesh.material.map.dispose(); mesh.material.map = null; }
+            mesh.material.dispose();
+            mesh[ 'material' ] = material;
+            mesh.material.flatShading = flat_shading_enabled;
+            mesh.material.needsUpdate = true;
+          }
+
+          set_object_color();
+          set_prwm_opacity();
+          show_wireframe();
+        }
+      }
+
+      function set_material_extra() {
+        if (material_extra_enabled) {
+          material_extra_enabled = false;
+          document.getElementById('btn_material_extra').style.backgroundColor = '#d1cefc';
+
+          mesh.material.envMap.dispose();
+          mesh.material.envMap = null;
         } else {
-          current_texture += 1;
-          document.getElementById('btn_textures').style.backgroundColor = 'lightgreen';
-          document.getElementById('btn_textures').innerHTML = 'T' + current_texture;
+          material_extra_enabled = true;
+          document.getElementById('btn_material_extra').style.backgroundColor = 'lightgreen';
+
+          mesh.material.envMap = tex;
         }
 
-        mesh.traverse( function( child ) {
-    	    if (child instanceof THREE.Mesh) {
-            if (current_texture == -1) {
-              // Remove texture
-              child.material.map = null;
-            } else {
-              if (selected_prwm_url_file) {
-                textures[ current_texture ].encoding = THREE.sRGBEncoding;
-                textures[ current_texture ].wrapS = THREE.RepeatWrapping;
-                textures[ current_texture ].wrapT = THREE.RepeatWrapping;
-                textures[ current_texture ].magFilter = THREE.NearestFilter;
+        mesh.material.needsUpdate = true;
+      }
 
-                // Apply texture
-                child.material.map = textures[ current_texture ];
+      function set_texture() {
+        if (mesh) {
+          if (current_texture === textures.length - 1) {
+            document.getElementById('btn_textures').style.backgroundColor = '#d1cefc';
+            document.getElementById('btn_textures').innerHTML = 'T';
+            current_texture = -1;
+          } else {
+            current_texture += 1;
+            document.getElementById('btn_textures').style.backgroundColor = 'lightgreen';
+            document.getElementById('btn_textures').innerHTML = 'T' + current_texture;
+          }
+
+          if (current_texture === -1) {
+            // Remove texture
+            mesh.material.map.dispose();
+            mesh.material.map = null;
+            mesh.material.needsUpdate = true;
+          } else {
+            if (selected_url_prwm_file) {
+              textures[ current_texture ].encoding = THREE.sRGBEncoding;
+              textures[ current_texture ].wrapS = THREE.RepeatWrapping;
+              textures[ current_texture ].wrapT = THREE.RepeatWrapping;
+              textures[ current_texture ].magFilter = THREE.NearestFilter;
+
+              // Apply texture
+              mesh.material.map = textures[ current_texture ];
+
+              if (url_tga_loaded) {
+                mesh.material.map.generateMipmaps = true;
+                mesh.material.map.flipY = true;
+              }
+
+              mesh.material.needsUpdate = true;
+            } else {
+              if (textures[ current_texture ].name.toUpperCase().endsWith('.DDS')) {
+                dds_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                  URL.revokeObjectURL( textures[ current_texture ] );
+
+                  texture.encoding = THREE.sRGBEncoding;
+                  texture.wrapS = THREE.RepeatWrapping;
+                  texture.wrapT = THREE.RepeatWrapping;
+                  texture.magFilter = THREE.NearestFilter;
+
+                  // Apply texture
+                  mesh.material.map = texture;
+                  mesh.material.needsUpdate = true;
+                });
+              } else if (textures[ current_texture ].name.toUpperCase().endsWith('.TGA')) {
+                tga_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                  URL.revokeObjectURL( textures[ current_texture ] );
+
+                  texture.encoding = THREE.sRGBEncoding;
+                  texture.wrapS = THREE.RepeatWrapping;
+                  texture.wrapT = THREE.RepeatWrapping;
+                  texture.magFilter = THREE.NearestFilter;
+
+                  // Apply texture
+                  mesh.material.map = texture;
+                  mesh.material.map.generateMipmaps = true;
+                  mesh.material.map.flipY = true;
+                  mesh.material.needsUpdate = true;
+                });
               } else {
                 texture_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
                   URL.revokeObjectURL( textures[ current_texture ] );
@@ -1175,33 +1250,13 @@
                   texture.magFilter = THREE.NearestFilter;
 
                   // Apply texture
-                  child.material.map = texture;
+                  mesh.material.map = texture;
+                  mesh.material.needsUpdate = true;
                 });
               }
             }
-
-            child.material.needsUpdate = true;
-    		  }
-    	  });
-      }
-
-      function set_flat() {
-        if (flatShading_enabled) {
-          flatShading_enabled = false;
-          document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
-        } else {
-          flatShading_enabled = true;
-          document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+          }
         }
-
-        // Go through all children of the loaded object and search for a Mesh
-        mesh.traverse( function( child ) {
-          // This will allow us to check if the child is an instance of the Mesh constructor
-    	    if (child instanceof THREE.Mesh) {
-            child.material.flatShading = flatShading_enabled;
-            child.material.needsUpdate = true;
-    		  }
-    	  });
       }
 
       function render() {
@@ -1238,9 +1293,8 @@
         if (grid_visible) show_grid();
 
         if (mesh) {
-          if (flatShading_enabled) set_flat();
-          if (mesh.material) mesh.material.dispose();
           if (mesh.material && mesh.material.map) mesh.material.map.dispose();
+          if (mesh.material) mesh.material.dispose();
           if (mesh.geometry) mesh.geometry.dispose();
         }
 
@@ -1276,7 +1330,10 @@
         radio_changed();
 
         // Reset the prwm opacity and scale values
+        enable_opacity = false;
         document.getElementById('prwm_opacity').value = 1;
+        document.getElementById('prwm_opacity').disabled = true;
+        document.getElementById('btn_prwm_opacity').style.backgroundColor = '#d1cefc';
         document.getElementById('prwm_scale').value = 1;
         previous_prwm_scale = '1';
 
@@ -1284,14 +1341,19 @@
         document.getElementById('wireframe').checked = false;
         document.getElementById('scale_10x').checked = false;
 
-        // Reset flat, textures and edges related values
-        flatShading_enabled = false;
+        // Reset flat, edges, textures and material related values
+        flat_shading_enabled = false;
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
+        edges_visible = false;
+        document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
         current_texture = -1;
         document.getElementById('btn_textures').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_textures').innerHTML = 'T';
-        edges_visible = false;
-        document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_material').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_material').innerHTML = 'MP';
+        material_extra_enabled = false;
+        document.getElementById('btn_material_extra').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_material_extra').disabled = true;
 
         reset_rotation = true;
 
@@ -1299,12 +1361,15 @@
         if (reset) {
           controls.reset();
           if (mesh) mesh.position.set( 0, 0, 0 );
+          if (material.map) { material.map.dispose(); material.map = null; }
+          material.color.setRGB( 1, 1, 1 );
+          material.flatShading = false;
+          material.opacity = 1;
           hemisphereLight.position.set( 0, 10, 0 );
           directionalLight.position.set( 0, 0, 250 );
           set_scene_image();
           show_wireframe();
           set_back_color();
-          set_object_color();
           set_ambient_light_color();
           set_hemisphere_light_color();
           set_directional_light_color();
@@ -1334,7 +1399,6 @@
         document.getElementById('wireframe').disabled = disable;
         document.getElementById('scale_10x').disabled = disable;
         document.getElementById('prwm_scale').disabled = disable;
-        document.getElementById('prwm_opacity').disabled = disable;
         document.getElementById('ambient_light_color').disabled = disable;
         document.getElementById('hemisphere_light_color').disabled = disable;
         document.getElementById('directional_light_color').disabled = disable;
@@ -1343,6 +1407,8 @@
         document.getElementById('object_color').disabled = disable;
         document.getElementById('btn_edges').disabled = disable;
         document.getElementById('btn_flat').disabled = disable;
+        document.getElementById('btn_material').disabled = disable;
+        document.getElementById('btn_prwm_opacity').disabled = disable;
         document.getElementById('btn_polar_grid').disabled = disable;
         document.getElementById('btn_grid').disabled = disable;
         document.getElementById('reset').disabled = disable;
