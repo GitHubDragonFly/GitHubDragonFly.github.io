@@ -32,7 +32,7 @@ Notes about three.js viewers:
    - `OS` - material side (Original / Front / Back / Double)
    - `VC` - vertex colors
    - `RST` - reset
-   - `*` - envMap + metalness (vtk)
+   - `*` - envMap + metalness (vtk / prwm)
    - `#` - grid
  - light controls, where applicable:
    - `AL` - ambient light
