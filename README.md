@@ -22,17 +22,16 @@ Notes about three.js viewers:
    - `L` - lines (ldraw)
    - `O` - opacity
    - `P` - poses (mmd)
-   - `R` - reflectivity
    - `S` - skeleton
    - `T` - textures
    - `V` - variants (gltf)
    - `X` - morphs
    - `CS` - construction step (ldraw)
    - `MP` - material (Phong / Standard / Lambert)
+     - `*` - envMap + metalness (vtk / prwm)
    - `OS` - material side (Original / Front / Back / Double)
    - `VC` - vertex colors
    - `RST` - reset
-   - `*` - envMap + metalness (vtk / prwm)
    - `#` - grid
  - light controls, where applicable:
    - `AL` - ambient light
@@ -45,6 +44,7 @@ Notes about three.js viewers:
    - `C` - object color
    - `BG` - background color
    - `Eq` - equirectangular
+     - `R` - reflectivity
    - `Opy` - opacity
    - `Shdw` - shadow
  - see `URLS4MODELS.md` for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
