@@ -1104,6 +1104,7 @@
 
 						case 'constant':
 						case 'lambert':
+						case 'points':
 						case 'blinn':
 						case 'phong':
 							data.type = child.nodeName;
@@ -1141,7 +1142,7 @@
 
 						case 'transparent':
 							data[ child.nodeName ] = {
-								opaque: child.getAttribute( 'opaque' ),
+								opaque: child.hasAttribute( 'opaque' ) ? child.getAttribute( 'opaque' ) : 'A_ONE',
 								data: parseEffectParameter( child )
 							};
 							break;
@@ -1399,6 +1400,10 @@
 
 					case 'lambert':
 						material = new THREE.MeshLambertMaterial();
+						break;
+	
+					case 'points':
+						material = new THREE.PointsMaterial();
 						break;
 
 					default:
@@ -2732,7 +2737,7 @@
 							const param = child.getElementsByTagName( 'param' )[ 0 ];
 							data.axis = param.textContent;
 							const tmpJointIndex = data.axis.split( 'inst_' ).pop().split( 'axis' )[ 0 ];
-							data.jointIndex = tmpJointIndex.substr( 0, tmpJointIndex.length - 1 );
+							data.jointIndex = tmpJointIndex.substring( 0, tmpJointIndex.length - 1 );
 							break;
 
 					}
@@ -3461,14 +3466,23 @@
 
 						case 'triangles':
 						case 'polylist':
-							if ( skinning ) {
+							if ( type === 'triangles' && material.isPointsMaterial === true) {
 
-								object = new THREE.SkinnedMesh( geometry.data, material );
+								object = new THREE.Points( geometry.data, material );
+								object.material.size /= 20;
 
 							} else {
 
-								object = new THREE.Mesh( geometry.data, material );
+								if ( skinning ) {
 
+									object = new THREE.SkinnedMesh( geometry.data, material );
+	
+								} else {
+	
+									object = new THREE.Mesh( geometry.data, material );
+	
+								}
+	
 							}
 
 							break;
