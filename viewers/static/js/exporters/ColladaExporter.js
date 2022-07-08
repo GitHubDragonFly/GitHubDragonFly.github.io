@@ -397,6 +397,10 @@
 
 						type = 'lambert';
 
+					} else if ( m.isPointsMaterial === true ) {
+
+						type = 'points';
+
 					} else if ( m.isMeshBasicMaterial === true ) {
 
 						type = 'constant';
@@ -451,7 +455,7 @@
 				let node = `<node name="${o.name}">`;
 				node += getTransform( o );
 
-				if ( (o.isMesh === true || o.isPoints === true) && o.geometry !== null ) {
+				if ( (o.isMesh === true || o instanceof THREE.Points === true) && o.geometry !== null ) {
 
 					// function returns the id associated with the mesh and a "BufferGeometry" version
 					// of the geometry in case it's not a geometry.
