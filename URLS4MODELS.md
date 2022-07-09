@@ -43,4 +43,5 @@ Example models:
 
 Additional resources:
  - `https://github.com/josdirksen/learning-threejs/tree/master/assets/models`
+ - `https://github.com/mikelovesrobots/mmmm`
  - for STEP / IGES file downloads visit [novotechnik](https://www.novotechnik.de/en/downloads/cad-data)
