@@ -45,7 +45,6 @@ Notes about three.js viewers:
    - `BG` - background color
    - `Eq` - equirectangular
      - `R` - reflectivity
-   - `Opy` - opacity
    - `Shdw` - shadow
  - see `URLS4MODELS.md` for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
  - lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
