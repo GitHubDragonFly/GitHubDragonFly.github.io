@@ -174,16 +174,17 @@
         <input type="file" id="file_input" name="file" onchange="init()" accept=".amf" multiple />
         <label for="file_image_input" style="color: #CE8704; margin: 2px 2px 2px 0;">BGND</label>
         <input type="file" id="file_image_input" name="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" onchange="set_scene_image()" disabled />
-        <label for="amf_opacity" style="margin: 2px 2px 2px 0;">Opy</label>
+        <button id="btn_amf_opacity" onclick="set_opacity()" style="background-color: #d1cefc; width: 20px;" disabled>O</button>
         <input type="number" id="amf_opacity" name="amf_opacity" min="0" max="1" step="0.05" value="1" onkeydown="return_false()" oninput="set_amf_opacity()" style="width: 48px;" disabled />
         <label for="amf_scale" style="margin: 2px 2px 2px 0;">Scale</label>
         <input type="number" id="amf_scale" name="amf_scale" onkeydown="return_false()" oninput="set_amf_scale()" min="0.25" max="2" value="1" step="0.25" style="width: 48px;" disabled />
-        <label style="margin: 2px 5px 2px 0;"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
+        <label style="margin: 2px 0 2px 0;"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
+        <label style="margin: 2px 5px 2px 0;"><input type="checkbox" id="equi" onchange="set_equi();" disabled />Eq</label>
+        <button id="btn_reflective" onclick="set_reflectivity()" style="background-color: #d1cefc; width: 20px;" disabled>R</button>
         <button id="btn_edges" onclick="show_edges()" style="background-color: #d1cefc; width: 20px;" disabled>E</button>
         <button id="btn_flat" onclick="set_flat()" style="background-color: #d1cefc; width: 20px;" disabled>F</button>
         <button id="btn_grid" onclick="show_grid()" style="background-color: #d1cefc; width: 22px;" disabled>#</button>
         <button id="btn_polar_grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; width: 24px;" disabled><p class="polar"></p></button>
-        <button id="btn_full_screen" onclick="full_screen()" style="width: 22px;"><p class="full_screen"></p></button>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" style="margin: 2px 2px 2px 5px;">URL:</label>
@@ -223,6 +224,7 @@
           <option value="json" onclick="export_json()">JSON</option>
         </select>
         <button id="reset" onclick="reset_only()" style="color: maroon; width: 40px;" disabled>RST</button>
+        <button id="btn_full_screen" onclick="full_screen()" style="width: 22px;"><p class="full_screen"></p></button>
       </div>
     </div><br />
 
@@ -293,10 +295,10 @@
       var ww = window.innerWidth,	wh = window.innerHeight;
       var mouse_rotation, reset_rotation, events_initialized, flat_shading_enabled;
       var rot_x = 0, rot_y = 0, rot_z = 0;
-      var initial_opacity, initial_opacity_array, previous_amf_scale = '1', bounding_box = new THREE.Box3();
+      var previous_amf_scale = '1', bounding_box = new THREE.Box3();
+      var initial_opacity, initial_opacity_array, enable_opacity;
+      var initial_transparency, initial_transparency_array, reflect;
       var selected_amf_file, selected_amf_url_file, selected_url_file = '', url_displayed, url_loading;
-
-      THREE.Object3D.DefaultUp = new THREE.Vector3( 0, 0, 1 );
 
       // Manager from ThreeJs to track a loader and its status
       var manager = new THREE.LoadingManager();
@@ -304,6 +306,8 @@
       const amf_loader = new THREE.AMFLoader( manager );
 
       const texture_loader = new THREE.TextureLoader();
+
+      const equi_loader = new THREE.CubeTextureLoader();
 
       const obj_exporter = new THREE.OBJExporter( manager );
       const ply_exporter = new THREE.PLYExporter( manager );
@@ -413,8 +417,6 @@
             filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
           }
 
-          amf_obj.rotation.x -= Math.PI / 2;
-
           let result = dae_exporter.parse( amf_obj );
           let blob = new Blob( [ result.data ], { type:'text/plain' } );
           link.href = URL.createObjectURL( blob );
@@ -429,8 +431,6 @@
               link.click();
             });
           }
-
-          amf_obj.rotation.x += Math.PI / 2;
         }
       }
 
@@ -448,8 +448,6 @@
             filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
           }
 
-          amf_obj.rotation.x -= Math.PI / 2;
-
           const options = {	binary: false, maxTextureSize: 4096 || Infinity };
 
           gltf_exporter.parse( amf_obj, ( json ) => {
@@ -459,8 +457,6 @@
             link.download = filename + 'gltf';
             link.click();
           }, function( error ) { console.log(error); }, options);
-
-          amf_obj.rotation.x += Math.PI / 2;
         }
       }
 
@@ -478,8 +474,6 @@
             filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
           }
 
-          amf_obj.rotation.x -= Math.PI / 2;
-
           const options = {	binary: true, maxTextureSize: 4096 || Infinity };
 
           gltf_exporter.parse( amf_obj, ( json ) => {
@@ -488,8 +482,6 @@
             link.download = filename + 'glb';
             link.click();
           }, function( error ) { console.log(error); }, options );
-
-          amf_obj.rotation.x += Math.PI / 2;
         }
       }
 
@@ -528,17 +520,125 @@
           let child_count_array = 1;
 
           amf_obj.traverse( function ( child ) {
-            // This will allow us to check if the child is an instance of the Mesh constructor
     	      if (child instanceof THREE.Mesh) {
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
                   mtl.opacity = initial_opacity_array[ child.name ][ child_count_array ] * opacity_value;
+                  mtl.needsUpdate = true;
                   child_count_array += 1;
                 });
               } else {
                 child.material.opacity = initial_opacity[ child.name ] * opacity_value;
+                child.material.needsUpdate = true;
               }
     		    }
+    	    });
+        }
+      }
+
+      function set_opacity() {
+        if (amf_obj) {
+          if (enable_opacity) {
+            enable_opacity = false;
+            document.getElementById('amf_opacity').value = 1;
+            document.getElementById('amf_opacity').disabled = true;
+            document.getElementById('btn_amf_opacity').style.backgroundColor = '#d1cefc';
+
+            set_amf_opacity();
+
+            amf_obj.traverse( function ( child ) {
+              if (child instanceof THREE.Mesh) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.transparent = initial_transparency_array[ child.name ][ child_count_array ];
+                    mtl.needsUpdate = true;
+                    child_count_array += 1;
+                  });
+                } else {
+                  child.material.transparent = initial_transparency[ child.name ];
+                  child.material.needsUpdate = true;
+                }
+              }
+            });
+          } else {
+            enable_opacity = true;
+            document.getElementById('amf_opacity').disabled = false;
+            document.getElementById('btn_amf_opacity').style.backgroundColor = 'lightgreen';
+
+            amf_obj.traverse( function ( child ) {
+              if (child instanceof THREE.Mesh) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.transparent = true;
+                    mtl.needsUpdate = true;
+                  });
+                } else {
+                  child.material.transparent = true;
+                  child.material.needsUpdate = true;
+                }
+              }
+            });
+          }
+        }
+      }
+
+      function set_equi() {
+        if (document.getElementById('equi').checked) {
+
+          //Textures: http://reije081.home.xs4all.nl/skyboxes/
+
+          let tex = equi_loader.load([
+            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/skyboxsun25deg/px.jpg',
+            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/skyboxsun25deg/nx.jpg',
+            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/skyboxsun25deg/py.jpg',
+            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/skyboxsun25deg/ny.jpg',
+            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/skyboxsun25deg/pz.jpg',
+            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/skyboxsun25deg/nz.jpg',
+          ]);
+
+          document.getElementById('file_image_input').value = "";
+          document.getElementById('file_image_input').disabled = true;
+          document.getElementById('btn_reflective').disabled = false;
+          document.getElementById('back_color').value = "0x000000";
+          document.body.style.backgroundColor = document.getElementById('back_color').value;
+          document.getElementById('back_color').disabled = true;
+          scene.background = tex;
+          tex.dispose();
+        } else {
+          scene.background = null;
+          document.getElementById('file_image_input').disabled = false;
+          document.getElementById('back_color').disabled = false;
+          document.getElementById('btn_reflective').disabled = true;
+          document.getElementById('btn_reflective').style.backgroundColor = '#d1cefc';
+          reflect = false;
+          set_reflectivity();
+        }
+      }
+
+      function set_reflectivity() {
+        if (amf_obj) {
+          if (reflect) {
+            reflect = false;
+            document.getElementById('btn_reflective').style.backgroundColor = '#d1cefc';
+          } else {
+            if (document.getElementById('equi').checked) {
+              reflect = true;
+              document.getElementById('btn_reflective').style.backgroundColor = 'lightgreen';
+            }
+          }
+
+          amf_obj.traverse( function ( child ) {
+            if (child instanceof THREE.Mesh) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.envMap = reflect ? scene.background : null;
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                child.material.envMap = reflect ? scene.background : null;
+                child.material.needsUpdate = true;
+              }
+            }
     	    });
         }
       }
@@ -739,9 +839,12 @@
         selected_amf_file = null;
         selected_amf_url_file = null;
         edges = {};
+        edges_visible = false;
         initial_opacity = {};
         initial_opacity_array = {};
-        edges_visible = false;
+        initial_transparency = {};
+        initial_transparency_array = {};
+        enable_opacity = false;
         grid_visible = false;
         polar_grid_visible = false;
         flat_shading_enabled = false;
@@ -797,11 +900,11 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         // Create a grid helper for use with Orbit Controls
-        if (polar_grid == undefined) { polar_grid = new THREE.PolarGridHelper( 40, 10 ); polar_grid.geometry.rotateX( Math.PI / 2 ); }
-        if (grid == undefined) { grid = new THREE.GridHelper( 200, 200, "yellow" ); grid.geometry.rotateX( Math.PI / 2 ); }
+        if (polar_grid == undefined) polar_grid = new THREE.PolarGridHelper( 100, 10 );
+        if (grid == undefined) grid = new THREE.GridHelper( 200, 200, "yellow" );
 
         camera = new THREE.PerspectiveCamera( 45, ww/wh, 0.1, 1500 );
-        camera.position.set( 0, -250, 0 );
+        camera.position.set( 0, 0, 250 );
         scene.add( camera );
 
         // Add AmbientLight to the scene
@@ -844,13 +947,11 @@
 
         document.getElementById('gizmo').appendChild( gizmo.domElement );
 
-        if (amf_loader) {
-          // Load AMF file
-          selected_amf_file ? loadFile() : loadURLFile();
+        // Load AMF file
+        selected_amf_file ? loadFile() : loadURLFile();
 
-          render_requested = true;
-          render();
-        }
+        render_requested = true;
+        render();
       }
 
       function loadFile(){
@@ -873,28 +974,31 @@
 
               if (Array.isArray( child.material )) {
                 initial_opacity_array[ child.name ] = {};
+                initial_transparency_array[ child.name ] = {};
 
                 child.material.forEach( mtl => {
                   mtl.side = THREE.DoubleSide;
                   mtl.flatShading = false;
                   mtl.skinning = true;
-                  mtl.transparent = true;
 
                   initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                  initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
                   child_count_array += 1;
                 });
               } else {
                 child.material.side = THREE.DoubleSide;
                 child.material.flatShading = false;
                 child.material.skinning = true;
-                child.material.transparent = true;
 
                 initial_opacity[ child.name ] = child.material.opacity;
+                initial_transparency[ child.name ] = child.material.transparent;
               }
 
               if (child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
             }
           });
+
+          amf_obj.rotation.x -= Math.PI / 2;
 
           // Add amf_obj to the scene
           scene.add( amf_obj );
@@ -974,28 +1078,31 @@
 
                 if (Array.isArray( child.material )) {
                   initial_opacity_array[ child.name ] = {};
+                  initial_transparency_array[ child.name ] = {};
 
                   child.material.forEach( mtl => {
                     mtl.side = THREE.DoubleSide;
                     mtl.flatShading = false;
                     mtl.skinning = true;
-                    mtl.transparent = true;
 
                     initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                    initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
                     child_count_array += 1;
                   });
                 } else {
                   child.material.side = THREE.DoubleSide;
                   child.material.flatShading = false;
                   child.material.skinning = true;
-                  child.material.transparent = true;
 
                   initial_opacity[ child.name ] = child.material.opacity;
+                  initial_transparency[ child.name ] = child.material.transparent;
                 }
 
                 if (child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
               }
             });
+
+            amf_obj.rotation.x -= Math.PI / 2;
 
             // Add amf_obj to the scene
             scene.add( amf_obj );
@@ -1193,18 +1300,25 @@
         document.getElementById('hlight').checked = false;
         radio_changed();
 
-        // Reset opacity, flat, edges and amf_obj scale values
+        // Reset the equi, wireframe and scale_10x checkboxes
+        document.getElementById('equi').checked = false;
+        document.getElementById('wireframe').checked = false;
+        document.getElementById('scale_10x').checked = false;
+
+        // Reset opacity, scale, flat, edges and reflectivity values
+        enable_opacity = false;
         document.getElementById('amf_opacity').value = 1;
+        document.getElementById('amf_opacity').disabled = true;
+        document.getElementById('btn_amf_opacity').style.backgroundColor = '#d1cefc';
+        previous_amf_scale = '1';
+        document.getElementById('amf_scale').value = 1;
         flat_shading_enabled = false;
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         edges_visible = false;
         document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
-        previous_amf_scale = '1';
-        document.getElementById('amf_scale').value = 1;
-
-        // Reset the wireframe and scale_10x checkboxes
-        document.getElementById('wireframe').checked = false;
-        document.getElementById('scale_10x').checked = false;
+        reflect = false;
+        document.getElementById('btn_reflective').disabled = true;
+        document.getElementById('btn_reflective').style.backgroundColor = '#d1cefc';
 
         reset_rotation = true;
 
@@ -1242,10 +1356,10 @@
         document.getElementById('rotation_x').disabled = disable;
         document.getElementById('rotation_y').disabled = disable;
         document.getElementById('rotation_z').disabled = disable;
+        document.getElementById('equi').disabled = disable;
         document.getElementById('wireframe').disabled = disable;
         document.getElementById('scale_10x').disabled = disable;
         document.getElementById('amf_scale').disabled = disable;
-        document.getElementById('amf_opacity').disabled = disable;
         document.getElementById('ambient_light_color').disabled = disable;
         document.getElementById('hemisphere_light_color').disabled = disable;
         document.getElementById('directional_light_color').disabled = disable;
@@ -1253,6 +1367,7 @@
         document.getElementById('back_color').disabled = disable;
         document.getElementById('btn_edges').disabled = disable;
         document.getElementById('btn_flat').disabled = disable;
+        document.getElementById('btn_amf_opacity').disabled = disable;
         document.getElementById('btn_polar_grid').disabled = disable;
         document.getElementById('btn_grid').disabled = disable;
         document.getElementById('reset').disabled = disable;
