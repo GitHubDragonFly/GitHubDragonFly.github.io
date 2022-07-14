@@ -189,11 +189,12 @@
         <input type="number" id="mmd_scale" name="mmd_scale" onkeydown="return_false()" oninput="set_mmd_scale()" min="0.25" max="2" value="1" step="0.25" style="width: 48px;" disabled />
         <label style="margin: 2px 2px 2px 0;"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
         <label style="margin: 2px 2px 2px 0;"><input type="checkbox" id="equi" onchange="set_equi();" disabled />Eq</label>
+        <button id="btn_reflective" onclick="set_reflectivity()" style="background-color: #d1cefc; width: 20px;" disabled>R</button>
+        <button id="btn_edges" onclick="show_edges()" style="background-color: #d1cefc; width: 20px;" disabled>E</button>
+        <button id="btn_flat" onclick="set_flat()" style="background-color: #d1cefc; width: 20px;" disabled>F</button>
         <button id="btn_extras" onclick="animate_extra()" style="background-color: #d1cefc; min-width: 28px;" disabled>X</button>
         <button id="btn_poses" onclick="change_pose()" style="background-color: #d1cefc; min-width: 28px;" disabled>P</button>
         <button id="btn_mtl_side" onclick="switch_mtl_side()" style="background-color: #d1cefc; width: 28px;" disabled>OS</button>
-        <button id="btn_grid" onclick="show_grid()" style="background-color: #d1cefc; width: 22px;" disabled>#</button>
-        <button id="btn_polar_grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; width: 24px;" disabled><p class="polar"></p></button>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" style="margin: 2px 2px 2px 5px;">URL:</label>
@@ -222,6 +223,8 @@
         <input type="color" id="ambient_light_color" name="ambient_light_color" onchange="set_ambient_light_color()" disabled />
         <label for="back_color" style="margin: 2px 0 2px 0;">BG</label>
         <input type="color" id="back_color" name="back_color" onchange="set_back_color()" disabled />
+        <button id="btn_grid" onclick="show_grid()" style="background-color: #d1cefc; width: 22px;" disabled>#</button>
+        <button id="btn_polar_grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; width: 24px;" disabled><p class="polar"></p></button>
         <select name="export_names" id="export_names" disabled>
           <option value="" selected disabled>Export</option>
           <option value="ply" onclick="export_ply()">PLY</option>
@@ -303,15 +306,15 @@
     <script>
       var extras, current_extra, poses, current_pose, ammo, clock;
       var renderer, scene, camera, grid, polar_grid, grid_visible, polar_grid_visible;
-      var mmd_obj, controls, gizmo, ready, render_requested;
+      var mmd_obj, controls, gizmo, ready, render_requested, flat_shading_enabled;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth,	wh = window.innerHeight;
       var mouse_rotation, reset_rotation, events_initialized;
       var rot_x = 0, rot_y = 0, rot_z = 0;
       var previous_mmd_scale = '1', bounding_box = new THREE.Box3();
       var initial_opacity, initial_opacity_array, enable_opacity;
-      var initial_transparency, initial_transparency_array;
-      var original_side, original_side_array;
+      var initial_transparency, initial_transparency_array, reflect;
+      var original_side, original_side_array, edges, edges_visible;
       var selected_url_file = '', url_displayed, url_loading, resource_path;
       var selected_mmd_file, selected_vmd_file, selected_vmd_camera_file, selected_vpd_files, selected_audio_file;
       var selected_mmd_url_file, selected_vmd_url_file, selected_vmd_camera_url_file, selected_vpd_url_files, selected_audio_url_file;
@@ -605,14 +608,47 @@
           document.getElementById('file_image_input').value = "";
           document.getElementById('file_image_input').disabled = true;
           document.getElementById('back_color').value = "0x000000";
+          document.getElementById('btn_reflective').disabled = false;
           document.body.style.backgroundColor = document.getElementById('back_color').value;
           document.getElementById('back_color').disabled = true;
           scene.background = tex;
           tex.dispose();
         } else {
+          scene.background = null;
           document.getElementById('file_image_input').disabled = false;
           document.getElementById('back_color').disabled = false;
-          scene.background = null;
+          document.getElementById('btn_reflective').disabled = true;
+          document.getElementById('btn_reflective').style.backgroundColor = '#d1cefc';
+          reflect = false;
+          set_reflectivity();
+        }
+      }
+
+      function set_reflectivity() {
+        if (mmd_obj) {
+          if (reflect) {
+            reflect = false;
+            document.getElementById('btn_reflective').style.backgroundColor = '#d1cefc';
+          } else {
+            if (document.getElementById('equi').checked) {
+              reflect = true;
+              document.getElementById('btn_reflective').style.backgroundColor = 'lightgreen';
+            }
+          }
+
+          mmd_obj.traverse( function ( child ) {
+            if (child instanceof THREE.Mesh) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.envMap = reflect ? scene.background : null;
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                child.material.envMap = reflect ? scene.background : null;
+                child.material.needsUpdate = true;
+              }
+            }
+          });
         }
       }
 
@@ -906,12 +942,16 @@
         initial_transparency_array = {};
         original_side = {};
         original_side_array = {};
+        edges = {};
+        edges_visible = false;
+        flat_shading_enabled = false;
         grid_visible = false;
         polar_grid_visible = false;
         render_requested = false;
         ready = false;
         document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_polar_grid').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_extras').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_extras').disabled = true;
 
@@ -1122,9 +1162,16 @@
         mmd_loader.load( URL.createObjectURL( selected_mmd_file ), ext, mesh => {
           URL.revokeObjectURL( selected_mmd_file );
 
+          let child_count = 1;
+
           mesh.traverse( function( child ) {
             // This will allow us to check if the child is an instance of the Mesh constructor
             if (child instanceof THREE.Mesh) {
+              if (child.name === '') {
+                child.name = 'child_' + child_count;
+                child_count += 1;
+              }
+
               if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
               if (child.isSkinnedMesh) child.frustumCulled = false;
 
@@ -1221,6 +1268,7 @@
 
           mmd_obj = mesh;
           mmd_obj.name = 'local_pose_model';
+          if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
           scene.add( mmd_obj );
           camera.lookAt( mmd_obj.position );
@@ -1270,10 +1318,17 @@
 
             helper.add( mmd.mesh, { animation: mmd.animation,	physics: true	});
 
+            let child_count = 1;
+
             // Go through all children of the loaded object and search for a Mesh
             mmd.mesh.traverse( function( child ) {
               // This will allow us to check if the child is an instance of the Mesh constructor
               if (child instanceof THREE.Mesh) {
+                if (child.name === '') {
+                  child.name = 'child_' + child_count;
+                  child_count += 1;
+                }
+
                 if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
                 if (child.isSkinnedMesh) child.frustumCulled = false;
 
@@ -1354,6 +1409,7 @@
 
             mmd_obj = mmd.mesh;
             mmd_obj.name = 'local_motion_model';
+            if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
             scene.add( mmd_obj );
             camera.lookAt( mmd_obj.position );
@@ -1396,10 +1452,17 @@
 
             helper.add( mmd.mesh, { animation: mmd.animation,	physics: true	});
 
+            let child_count = 1;
+
             // Go through all children of the loaded object and search for a Mesh
             mmd.mesh.traverse( function( child ) {
               // This will allow us to check if the child is an instance of the Mesh constructor
               if (child instanceof THREE.Mesh) {
+                if (child.name === '') {
+                  child.name = 'child_' + child_count;
+                  child_count += 1;
+                }
+
                 if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
                 if (child.isSkinnedMesh) child.frustumCulled = false;
 
@@ -1458,6 +1521,7 @@
 
             mmd_obj = mmd.mesh;
             mmd_obj.name = 'local_motion_model';
+            if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
             scene.add( mmd_obj );
             camera.lookAt( mmd_obj.position );
@@ -1546,10 +1610,17 @@
         mmd_loader.load( URL.createObjectURL( selected_mmd_file ), ext, mesh => {
           URL.revokeObjectURL( selected_mmd_file );
 
+          let child_count = 1;
+
           // Go through all children of the loaded object and search for a Mesh
           mesh.traverse( function( child ) {
             // This will allow us to check if the child is an instance of the Mesh constructor
             if (child instanceof THREE.Mesh) {
+              if (child.name === '') {
+                child.name = 'child_' + child_count;
+                child_count += 1;
+              }
+
               if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
               if (child.isSkinnedMesh) child.frustumCulled = false;
 
@@ -1620,6 +1691,7 @@
 
           mmd_obj = mesh;
           mmd_obj.name = 'local_model';
+          if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
           // Add mmd model to scene
           scene.add( mmd_obj );
@@ -1627,45 +1699,6 @@
 
           set_initial_scale();
           resize();
-
-          ready = true;
-          document.getElementById('div_loading').style.display = "none";
-        }, function ( xhr ) {
-          let today = new Date();
-          let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-          if (xhr.loaded == 0 && xhr.total == 0) {
-            console.log( 'Local MMD 0% loaded - ' + time );
-            document.getElementById('div_loading').innerHTML = 'Local MMD 0% loaded - ' + time;
-          } else {
-            console.log( 'Local MMD ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
-
-            if (parseInt(( xhr.loaded / xhr.total * 100 )) >= 95) {
-              document.getElementById('div_loading').innerHTML = 'Visualizing';
-            } else {
-              document.getElementById('div_loading').innerHTML = 'Local MMD ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time;
-            }
-          }
-        }, function ( error ) {
-          console.log( 'Error loading Local MMD!' );
-          console.log( error );
-          render_requested = false;
-          ready = false;
-          enable_disable( true );
-          if (gizmo) gi
-          mmd_obj = mesh;
-          mmd_obj.name = 'url_pose_model';
-
-          scene.add( mmd_obj );
-          camera.lookAt( mmd_obj.position );
-
-          set_initial_scale();
-          resize();
-
-          if (extras.length > 0) {
-            document.getElementById('btn_extras').disabled = false;
-            current_extra = 0;
-          }
 
           ready = true;
           document.getElementById('div_loading').style.display = "none";
@@ -1745,11 +1778,18 @@
             if (selected_url_file.toUpperCase().endsWith('.PMD') || selected_url_file.toUpperCase().endsWith('.PMX')) {
               document.getElementById('div_loading').style.display = "block";
 
+              let child_count = 1;
+
               mmd_loader.load( selected_url_file, '', ( mesh ) => {
                 // Go through all children of the loaded object and search for a Mesh
                 mesh.traverse( function( child ) {
                   // This will allow us to check if the child is an instance of the Mesh constructor
               	  if (child instanceof THREE.Mesh) {
+                    if (child.name === '') {
+                      child.name = 'child_' + child_count;
+                      child_count += 1;
+                    }
+
                     if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
                     if (child.isSkinnedMesh) child.frustumCulled = false;
 
@@ -1788,6 +1828,7 @@
 
                 mmd_obj = mesh;
                 mmd_obj.name = 'url_model';
+                if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
                 // Add mmd model to scene
                 scene.add( mmd_obj );
@@ -1855,10 +1896,17 @@
 
         let ext = selected_mmd_url_file.toUpperCase().endsWith('.PMX') ? 'pmx' : 'pmd';
 
+        let child_count = 1;
+
         mmd_loader.load( selected_mmd_url_file, ext, mesh => {
           mesh.traverse( function( child ) {
             // This will allow us to check if the child is an instance of the Mesh constructor
             if (child instanceof THREE.Mesh) {
+              if (child.name === '') {
+                child.name = 'child_' + child_count;
+                child_count += 1;
+              }
+
               if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
               if (child.isSkinnedMesh) child.frustumCulled = false;
 
@@ -1947,6 +1995,7 @@
 
           mmd_obj = mesh;
           mmd_obj.name = 'url_pose_model';
+          if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
           scene.add( mmd_obj );
           camera.lookAt( mmd_obj.position );
@@ -1996,10 +2045,17 @@
           mmd_loader.loadWithAnimation( selected_mmd_url_file, selected_vmd_url_file, ext, mmd => {
             helper.add( mmd.mesh, { animation: mmd.animation,	physics: true	});
 
+            let child_count = 1;
+
             // Go through all children of the loaded object and search for a Mesh
             mmd.mesh.traverse( function( child ) {
               // This will allow us to check if the child is an instance of the Mesh constructor
               if (child instanceof THREE.Mesh) {
+                if (child.name === '') {
+                  child.name = 'child_' + child_count;
+                  child_count += 1;
+                }
+
                 if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
                 if (child.isSkinnedMesh) child.frustumCulled = false;
 
@@ -2079,6 +2135,7 @@
 
             mmd_obj = mmd.mesh;
             mmd_obj.name = 'url_motion_model';
+            if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
             scene.add( mmd_obj );
             camera.lookAt( mmd_obj.position );
@@ -2120,10 +2177,17 @@
           mmd_loader.loadWithAnimation( selected_mmd_url_file, selected_vmd_url_file, ext, mmd => {
             helper.add( mmd.mesh, { animation: mmd.animation,	physics: true	});
 
+            let child_count = 1;
+
             // Go through all children of the loaded object and search for a Mesh
             mmd.mesh.traverse( function( child ) {
               // This will allow us to check if the child is an instance of the Mesh constructor
               if (child instanceof THREE.Mesh) {
+                if (child.name === '') {
+                  child.name = 'child_' + child_count;
+                  child_count += 1;
+                }
+
                 if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
                 if (child.isSkinnedMesh) child.frustumCulled = false;
 
@@ -2185,6 +2249,7 @@
 
             mmd_obj = mmd.mesh;
             mmd_obj.name = 'url_motion_model';
+            if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
             scene.add( mmd_obj );
             camera.lookAt( mmd_obj.position );
@@ -2231,11 +2296,18 @@
       function loadURLMMDFile(){
         let ext = selected_mmd_url_file.toUpperCase().endsWith('.PMX') ? 'pmx' : 'pmd';
 
+        let child_count = 1;
+
         mmd_loader.load( selected_mmd_url_file, ext, mesh => {
           // Go through all children of the loaded object and search for a Mesh
           mesh.traverse( function( child ) {
             // This will allow us to check if the child is an instance of the Mesh constructor
             if (child instanceof THREE.Mesh) {
+              if (child.name === '') {
+                child.name = 'child_' + child_count;
+                child_count += 1;
+              }
+
               if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
               if ( child.isSkinnedMesh ) child.frustumCulled = false;
 
@@ -2302,6 +2374,7 @@
 
           mmd_obj = mesh;
           mmd_obj.name = 'url_model';
+          if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
           // Add mmd model to scene
           scene.add( mmd_obj );
@@ -2485,6 +2558,48 @@
         }
       }
 
+      function show_edges() {
+        if (Object.getOwnPropertyNames(edges).length !== 0) {
+          if (edges_visible) {
+            mmd_obj.traverse( function( child ) { if (child instanceof THREE.Mesh) { child.remove( edges[ child.name ] ); } });
+            edges_visible = false;
+            document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
+          } else {
+            mmd_obj.traverse( function( child ) { if (child instanceof THREE.Mesh) { child.add( edges[ child.name ] ); } });
+            edges_visible = true;
+            document.getElementById('btn_edges').style.backgroundColor = 'lightgreen';
+          }
+        }
+      }
+
+      function set_flat() {
+        if (flat_shading_enabled) {
+          document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
+          flat_shading_enabled = false;
+        } else {
+          document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+          flat_shading_enabled = true;
+        }
+
+        // Go through all children of the loaded object and search for a Mesh
+        mmd_obj.traverse( function( child ) {
+          // This will allow us to check if the child is an instance of the Mesh constructor
+          if (child instanceof THREE.Mesh) {
+            if (child.material) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.flatShading = flat_shading_enabled;
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                child.material.flatShading = flat_shading_enabled;
+                child.material.needsUpdate = true;
+              }
+            }
+          }
+    	  });
+      }
+
       function render() {
         if (render_requested) { requestAnimationFrame( render ); }
 
@@ -2567,18 +2682,25 @@
         document.getElementById('hlight').checked = false;
         radio_changed();
 
-        // Reset the mmd opacity and scale values
+        // Reset the equi, wireframe and scale_10x checkboxes
+        document.getElementById('equi').checked = false;
+        document.getElementById('wireframe').checked = false;
+        document.getElementById('scale_10x').checked = false;
+
+        // Reset opacity, scale, flat, edges and reflectivity values
         enable_opacity = false;
         document.getElementById('mmd_opacity').value = 1;
         document.getElementById('mmd_opacity').disabled = true;
         document.getElementById('btn_mmd_opacity').style.backgroundColor = '#d1cefc';
         document.getElementById('mmd_scale').value = 1;
         previous_mmd_scale = '1';
-
-        // Reset the equi, wireframe and scale_10x checkboxes
-        document.getElementById('equi').checked = false;
-        document.getElementById('wireframe').checked = false;
-        document.getElementById('scale_10x').checked = false;
+        flat_shading_enabled = true;
+        document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
+        edges_visible = false;
+        document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
+        reflect = false;
+        document.getElementById('btn_reflective').disabled = true;
+        document.getElementById('btn_reflective').style.backgroundColor = '#d1cefc';
 
         // Reset extras and poses related values
         extras = [];
@@ -2638,6 +2760,8 @@
         document.getElementById('directional_light_color').disabled = disable;
         document.getElementById('directional_light_intensity').disabled = disable;
         document.getElementById('back_color').disabled = disable;
+        document.getElementById('btn_flat').disabled = disable;
+        document.getElementById('btn_edges').disabled = disable;
         document.getElementById('btn_mmd_opacity').disabled = disable;
         document.getElementById('btn_mtl_side').disabled = disable;
         document.getElementById('btn_polar_grid').disabled = disable;
