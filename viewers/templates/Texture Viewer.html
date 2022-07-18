@@ -7,9 +7,13 @@
     <script src="../static/build/r135/three.js"></script>
     <script src="../static/js/TGALoader.js"></script>
     <script src="../static/js/DDSLoader.js"></script>
+    <script src="../static/js/KTXLoader.js"></script>
+    <script src="../static/js/KTX2Loader.js"></script>
     <script src="../static/js/LottieLoader.js"></script>
+    <script src="../static/js/BasisTextureLoader.js"></script>
     <script src="../static/js/OrbitControls.js"></script>
     <script src="../static/js/OrbitControlsGizmo.js"></script>
+    <script src="../static/js/utils/WorkerPool.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.7.3/lottie.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/geotiff@1.0.8/dist-browser/geotiff.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/geotiff@1.0.8/dist-browser/raw.261f1ae7.js"></script>
@@ -143,7 +147,7 @@
       <div class="fm">
         <label for="file" style="color: #CE8704; margin: 2px 2px 2px 3px;">Image</label>
         <button onclick="show_url()" style="padding: 1px 3px 1px 3px;">URL</button>
-        <input type="file" id="file_input" name="file" accept=".ktx2, .basis, .tga, .dds, .json, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/tiff" onchange="init()" multiple />
+        <input type="file" id="file_input" name="file" accept=".ktx, .ktx2, .basis, .tga, .dds, .json, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/tiff" onchange="init()" multiple />
         <label for="file_image_input" style="color: #CE8704; margin: 2px 2px 2px 0;">BGND</label>
         <input type="file" id="file_image_input" name="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" onchange="set_scene_image()" disabled />
         <button id="btn_img_opacity" onclick="set_opacity()" style="background-color: #d1cefc; width: 20px;" disabled>O</button>
@@ -237,7 +241,7 @@
           // This fullscreen mode was triggered with F11 key press and requires the same again
         } else {
           document.body.requestFullscreen();
-          document.getElementById('btn_full_screen').style.backgroundColor = '#ffff00';
+          document.getElementById('btn_full_screen').style.backgroundColor = '#FFFF00';
         }
       }
     </script>
@@ -250,7 +254,7 @@
       var events_initialized, enable_opacity, mesh_flipped;
       var previous_img_scale = '1', bounding_box = new THREE.Box3();
       var texture_files, current_texture, tiff, tiff_image, tiff_loaded;
-      var ktx2_loader, basis_loader, selected_url_file = '', url_loading, url_displayed;
+      var selected_url_file = '', url_loading, url_displayed;
 
       // Manager from ThreeJs to track a loader and its status
       var manager = new THREE.LoadingManager();
@@ -260,6 +264,15 @@
       file_loader.setResponseType( 'blob' );
 
       const texture_loader = new THREE.TextureLoader( manager );
+
+      const ktx_loader = new THREE.KTXLoader( manager );
+
+      const ktx2_loader = new THREE.KTX2Loader( manager );
+      ktx2_loader.setTranscoderPath('../static/js/libs/basis/');
+
+      const basis_loader = new THREE.BasisTextureLoader( manager );
+      basis_loader.setTranscoderPath( '../static/js/libs/basis/' );
+      manager.addHandler(/\.basis$/i, basis_loader);
 
       const lottie_loader = new THREE.LottieLoader();
       lottie_loader.setQuality( 2 );
@@ -497,6 +510,18 @@
         document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_polar_grid').style.backgroundColor = '#d1cefc';
 
+        if (renderer == undefined) {
+          renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.outputEncoding = THREE.sRGBEncoding;
+          renderer.setSize( ww, wh );
+          renderer.setClearColor( 0xFFFFFF, 0); // Allow setting the background color
+          renderer.autoClear = false;
+        }
+
+        ktx2_loader.detectSupport(renderer);
+        basis_loader.detectSupport( renderer );
+
         if (!url_loading) {
           var fi = document.getElementById('file_input');
 
@@ -508,6 +533,7 @@
             else if (fi.files[i].name.toUpperCase().endsWith('.GIF')) { texture_files.push( texture_loader.load( URL.createObjectURL( fi.files[i] ) )); URL.revokeObjectURL( fi.files[i] ); }
             else if (fi.files[i].name.toUpperCase().endsWith('.SVG')) { texture_files.push( texture_loader.load( URL.createObjectURL( fi.files[i] ) )); URL.revokeObjectURL( fi.files[i] ); }
             else if (fi.files[i].name.toUpperCase().endsWith('.JSON')) { texture_files.push( lottie_loader.load( URL.createObjectURL( fi.files[i] ) )); URL.revokeObjectURL( fi.files[i] ); }
+            else if (fi.files[i].name.toUpperCase().endsWith('.KTX')) { texture_files.push( { flip: true, tex: ktx_loader.load( URL.createObjectURL( fi.files[i] ) ) }); URL.revokeObjectURL( fi.files[i] ); }
             else if (fi.files[i].name.toUpperCase().endsWith('.KTX2')) { texture_files.push( { flip: true, tex: ktx2_loader.load( URL.createObjectURL( fi.files[i] ) ) }); URL.revokeObjectURL( fi.files[i] ); }
             else if (fi.files[i].name.toUpperCase().endsWith('.BASIS')) { texture_files.push( { flip: true, tex: basis_loader.load( URL.createObjectURL( fi.files[i] ) ) }); URL.revokeObjectURL( fi.files[i] ); }
             else if (fi.files[i].name.toUpperCase().endsWith('.DDS')) { texture_files.push( { flip: true, tex: dds_loader.load( URL.createObjectURL( fi.files[i] ) ) }); URL.revokeObjectURL( fi.files[i] ); }
@@ -572,15 +598,6 @@
         document.getElementById('div_spinner').style.display = "none";
         document.getElementById('div_error').style.display = "none";
         enable_disable( false );
-
-        if (renderer == undefined) {
-          renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-          renderer.setPixelRatio( window.devicePixelRatio );
-          renderer.outputEncoding = THREE.sRGBEncoding;
-          renderer.setSize( ww, wh );
-          renderer.setClearColor( 0xFFFFFF, 0); // Allow setting the background color
-          renderer.autoClear = false;
-        }
 
         document.body.appendChild( renderer.domElement );
 
@@ -725,6 +742,24 @@
                 }
               }, function ( error ) {
                 console.log( 'Error loading URL TIF!' );
+                console.log( error );
+                render_requested = false;
+              });
+            } else if (url.toUpperCase().endsWith('.KTX')) {
+              ktx_loader.load( url, function( texture ) {
+                texture_files.push( { flip: true, tex: texture } );
+                document.getElementById('btn_textures').disabled = false;
+              }, function ( xhr ) {
+                let today = new Date();
+                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
+
+                if (xhr.loaded == 0 && xhr.total == 0) {
+                  console.log( 'URL KTX 0% loaded - ' + time );
+                } else {
+                  console.log( 'URL KTX ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
+                }
+              }, function ( error ) {
+                console.log( 'Error loading URL KTX!' );
                 console.log( error );
                 render_requested = false;
               });
@@ -892,6 +927,24 @@
               }
             }, function ( error ) {
               console.log( 'Error loading URL TIF!' );
+              console.log( error );
+              render_requested = false;
+            });
+          } else if (selected_url_file.toUpperCase().endsWith('.KTX')) {
+            ktx_loader.load( selected_url_file, function( texture ) {
+              texture_files.push( { flip: true, tex: texture } );
+              document.getElementById('btn_textures').disabled = false;
+            }, function ( xhr ) {
+              let today = new Date();
+              let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
+
+              if (xhr.loaded == 0 && xhr.total == 0) {
+                console.log( 'URL KTX 0% loaded - ' + time );
+              } else {
+                console.log( 'URL KTX ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
+              }
+            }, function ( error ) {
+              console.log( 'Error loading URL KTX!' );
               console.log( error );
               render_requested = false;
             });
@@ -1084,7 +1137,7 @@
               texture_files[ current_texture ].tex.minFilter = texture_files[ current_texture ].tex.maxFilter = THREE.LinearFilter;
 
               if (texture_files[ current_texture ].tex.image.length > 0 && !texture_files[ current_texture ].tex.mipmaps) {
-                texture_files[ current_texture ].tex.mipmaps = texture_files[ current_texture ].tex.image[0].mipmaps;
+                texture_files[ current_texture ].tex.mipmaps = texture_files[ current_texture ].tex.image[ 0 ].mipmaps;
               }
 
               // Apply texture
@@ -1098,7 +1151,7 @@
               texture_files[ current_texture ].minFilter = texture_files[ current_texture ].maxFilter = THREE.LinearFilter;
 
               if (texture_files[ current_texture ].image.length > 0 && !texture_files[ current_texture ].mipmaps) {
-                texture_files[ current_texture ].mipmaps = texture_files[ current_texture ].image[0].mipmaps;
+                texture_files[ current_texture ].mipmaps = texture_files[ current_texture ].image[ 0 ].mipmaps;
               }
 
               // Apply texture
@@ -1112,8 +1165,12 @@
         });
       }
 
-      function set_plane_scale( tex ) {
-        mesh.scale.set( tex.image.width, tex.image.height, 1 );
+      function set_plane_scale( map ) {
+        if (Array.isArray( map.image )) {
+          mesh.scale.set( map.image[ 0 ].width, map.image[ 0 ].height, 1 );
+        } else {
+          mesh.scale.set( map.image.width, map.image.height, 1 );
+        }
 
         set_initial_scale();
         resize();
@@ -1228,27 +1285,6 @@
         document.getElementById('btn_grid').disabled = disable;
         document.getElementById('reset').disabled = disable;
       }
-    </script>
-
-    <script type="module">
-      import { KTX2Loader } from '../static/jsm/KTX2Loader.js';
-      import { BasisTextureLoader } from '../static/jsm/BasisTextureLoader.js';
-
-      renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
-      renderer.setPixelRatio( window.devicePixelRatio );
-      renderer.outputEncoding = THREE.sRGBEncoding;
-      renderer.setSize( ww, wh );
-      renderer.setClearColor( 0xFFFFFF, 0); // Allow setting the background color
-      renderer.autoClear = false;
-
-      ktx2_loader = new KTX2Loader( manager );
-      ktx2_loader.setTranscoderPath('../static/js/libs/basis/');
-      ktx2_loader.detectSupport(renderer);
-
-      basis_loader = new BasisTextureLoader( manager );
-      basis_loader.setTranscoderPath( '../static/js/libs/basis/' );
-      basis_loader.detectSupport( renderer );
-      manager.addHandler(/\.basis$/i, basis_loader);
     </script>
   </body>
 </html>
