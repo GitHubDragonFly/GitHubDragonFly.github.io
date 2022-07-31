@@ -51,7 +51,6 @@ Notes about three.js viewers:
    - `Shdw` - shadow
  - STEP / IGES Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
  - JSON Viewer has timeouts which might need to be adjusted when loading large files
- - LDRAW Viewer currently only supports MPD packed files as they are in the [three.js](https://github.com/mrdoob/three.js/tree/master/examples/models/ldraw/officialLibrary/models) repository, LDR and L3B support is possible but would require the whole LDraw parts library and modifications to the loader
  - DAE (Collada) exporter appears to brighten up the original model as well as the exported model
  - MMD / GLTF viewers can export to DAE (Collada) / OBJ formats but all exported textures seem to need to be flipped vertically afterwards (use some paint program for this)
  - GLTF / FBX / DAE viewers will also export animations to JSON format
