@@ -44,7 +44,8 @@ Example models:
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/three/scene.json`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/vrml/cow.wrl`
 
-Additional resources:
+Additional resources - use the `Raw` button in any of the GitHub repositories to get correct URL or download the file:
+ - `https://github.com/gkjohnson/3d-demo-data/tree/main/models`
  - `https://github.com/josdirksen/learning-threejs/tree/master/assets/models`
  - `https://github.com/mikelovesrobots/mmmm`
  - for STEP / IGES file downloads visit [novotechnik](https://www.novotechnik.de/en/downloads/cad-data)
