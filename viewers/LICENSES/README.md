@@ -21,8 +21,7 @@ Notes about modifications, some of which are only added to work with these viewe
  - MTLLoader.js file includes modification for local loading of DDS and TGA texture files in OBJ viewer
  - TDSLoader.js file includes modification for both local and URL loading of texture files in 3DS viewer
  - FBXLoader.js file includes modification for both local and URL loading of texture files in FBX viewer
- - PLYLoader.js file includes "vertex_index" to avoid console error related to non-existing "vertex_indices"
- - LDRAWLoader.js file includes additional color definitions
+ - PLYLoader.js file includes both "vertex_index" and "vertex_indices"
  - LDRAW parts library pointing to: https://github.com/gkjohnson/ldraw-parts-library
  - ColladaLoader.js file includes modification for supporting THREE.Points
  - ColladaExporter.js file includes modifications for exporting TGA textures as well as supporting THREE.Points
