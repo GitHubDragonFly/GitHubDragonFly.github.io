@@ -54,7 +54,7 @@ Notes about three.js viewers:
  - DAE (Collada) exporter appears to brighten up the original model as well as the exported model
  - MMD / GLTF viewers can export to DAE (Collada) / OBJ formats but all exported textures seem to need to be flipped vertically afterwards (use some paint program for this)
  - GLTF / FBX / DAE viewers will also export animations to JSON format
- - GLTF / GLB exporter seems to have a limitation related to shader material which can be seen when exporting MMD models
+ - GLTF / GLB exporter has a limitation related to shader material seen when exporting MMD models
  - Tips:
    - if it happens that the model is correctly loaded but you cannot see it then try any or all of the following: apply edges - zoom in/out or apply Scale - apply flatShading - apply Vertex Colors - change ambient light to white - change background color to white
    - exporting some models might be better done using multiple viewers, for example MMD -> OBJ and then OBJ -> JSON might be better than straight MMD -> JSON export
