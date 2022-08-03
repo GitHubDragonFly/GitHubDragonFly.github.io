@@ -552,7 +552,7 @@
 					// g group_name
 					// WORKAROUND: https://bugs.chromium.org/p/v8/issues/detail?id=2869
 					// let name = result[ 0 ].substr( 1 ).trim();
-					const name = ( ' ' + result[ 0 ].substr( 1 ).trim() ).substr( 1 );
+					const name = ( ' ' + result[ 0 ].substring( 1 ).trim() ).substring( 1 );
 					state.startObject( name );
 
 				} else if ( _material_use_pattern.test( line ) ) {

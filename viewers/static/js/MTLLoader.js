@@ -441,7 +441,7 @@
 
 			if ( pos >= 0 ) {
 
-				matParams.bumpScale = parseFloat( items[ pos + 1 ] );
+				texParams.bumpScale = parseFloat( items[ pos + 1 ] );
 				items.splice( pos, 2 );
 
 			}
