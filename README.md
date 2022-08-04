@@ -9,6 +9,10 @@ Repositories do contain projects in several different programming languages or a
 
 There is a lot of information and descriptions, some intended for Industrial Automation and some for general/personal use.
 
+# Firefox Screenshot
+
+![Start Page](images/screenshot.png?raw=true)
+
 Notes about three.js viewers:
  - they are functional `AS THEY ARE` and intended for viewing a single 3D model
  - the best choice of loading 3D models is via the viewers `URL` option (for URLs that have no CORS restrictions)
