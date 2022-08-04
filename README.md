@@ -9,7 +9,7 @@ Repositories do contain projects in several different programming languages or a
 
 There is a lot of information and descriptions, some intended for Industrial Automation and some for general/personal use.
 
-# Mozilla Firefox Screenshot
+# Mozilla Firefox screenshot
 
 ![Start Page](images/screenshot.png?raw=true)
 
