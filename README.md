@@ -13,7 +13,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 
 ![Start Page](images/screenshot.png?raw=true)
 
-# Notes about three.js viewers
+# Notes about three.js 3D Model viewers
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model
 - Import formats, where applicable:
@@ -22,7 +22,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
   - MMD supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
 - Export formats, where applicable:
   - DAE, GLB, GLTF, JSON, OBJ, PLY, STL
-- The best choice of loading 3D models is via the viewers `URL` option (for URLs WITH no CORS restrictions)
+- The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
 - Multiple URLs are allowed in some viewers and can be from mixed websites
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
 - Lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
@@ -62,9 +62,9 @@ There is a lot of information and descriptions, some intended for Industrial Aut
   - `Shdw` - shadow
 - STEP / IGES Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
 - JSON Viewer has timeouts which might need to be adjusted when loading large files
+- GLTF / FBX / DAE viewers will also export animations to JSON format
 - DAE (Collada) exporter appears to brighten up the original model as well as the exported model
 - MMD / GLTF viewers can export to DAE (Collada) / OBJ formats but all exported textures seem to need to be flipped vertically afterwards (use some paint program for this)
-- GLTF / FBX / DAE viewers will also export animations to JSON format
 - GLTF / GLB exporter has a limitation related to shader material, seen when exporting MMD models
 - Tips:
   - if model is correctly loaded but you cannot see it then try any or all of the following:
