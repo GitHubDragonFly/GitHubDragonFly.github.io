@@ -23,7 +23,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 - Export formats, where applicable:
   - DAE, GLB, GLTF, JSON, OBJ, PLY, STL
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
-- Multiple URLs are allowed in some viewers and can be from mixed websites
+- Multiple URLs, comma separated, are allowed in some viewers and can be from mixed websites
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
 - Lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
 - All files have to be in the same folder when loading files locally from a hard drive
