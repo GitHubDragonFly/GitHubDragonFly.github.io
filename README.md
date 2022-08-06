@@ -5,7 +5,7 @@ Initially designed to serve as a hub with links to repositories and [three.js](h
 
 Do understand that GitHub servers are providing correct access to files, so cloning or downloading this repository will not have the same functionality if run locally without some server.
 
-Repositories do contain projects in several different programming languages or a mix of: Java, VB .Net, C#, python, JavaScript, jQuery, HTML/CSS, shell.
+Repositories do contain projects in several different programming languages or a mix of: `Java` `VB .Net` `C#` `python` `JavaScript` `jQuery` `HTML/CSS` `shell`.
 
 There is a lot of information and descriptions, some intended for Industrial Automation and some for general/personal use.
 
@@ -18,7 +18,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model
 - Import formats, where applicable:
   - 3DS, 3DM, 3MF, AMF, DAE, FBX, GLB, GLTF, IFC, IGES, IGS, JSON, MTL, OBJ, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
-  - LDRAW supported formats: L3B, LDR, LDRAW
+  - LDRAW supported formats: L3B, LDR, MPD
   - MMD supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
 - Export formats, where applicable:
   - DAE, GLB, GLTF, JSON, OBJ, PLY, STL
