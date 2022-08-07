@@ -83,3 +83,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 # License
 
 This is all MIT licensed but please observe any other licenses that might be applicable to some files or content.
+
+# Trademarks
+
+Any and all trademarks, either directly or indirectly mentioned in this project, belong to their respective owners.
