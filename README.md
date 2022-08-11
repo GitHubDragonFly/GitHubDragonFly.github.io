@@ -75,7 +75,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
     - change `ambient light` to white
     - change `background color` to white
   - exporting some models might be better done using multiple viewers, for example MMD -> OBJ and then OBJ -> JSON might be better than straight MMD -> JSON export
-  - experiment with all exporters available
+  - experiment with all exporters available by exporting original model as well as its exported versions
   - large resolution textures should be scaled down before loading, as an example download [`Bedroom`](https://casual-effects.com/data/index.html) which is using 8k images (2k size seems to be optimal for browsers)
   - `Lambert` material does not have flatShading functionality
   - you could also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) converters
