@@ -1,11 +1,11 @@
 # GitHubDragonFly.github.io
 GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io)
 
-Initially designed to serve as a hub with links to repositories and [three.js](https://threejs.org) 3D model viewers.
+Designed to serve as a hub with links to repositories and FREE online [three.js](https://threejs.org) 3D model viewers.
 
-Do understand that GitHub servers are providing correct access to files, so cloning or downloading this repository will not have the same functionality if run locally without some server.
+GitHub servers are providing correct access to files, so cloning or downloading this repository will not have the same functionality if run locally without some server.
 
-Repositories do contain projects in several different programming languages or a mix of: `Java` `VB .Net` `C#` `python` `JavaScript` `jQuery` `HTML/CSS` `shell`.
+Repositories do contain projects in several different programming languages or a mix of: `Java` `VB.Net` `C#` `python` `JavaScript` `jQuery` `HTML/CSS` `shell`.
 
 There is a lot of information and descriptions, some intended for Industrial Automation and some for general/personal use.
 
