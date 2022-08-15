@@ -13,7 +13,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 
 ![Start Page](images/screenshot.png?raw=true)
 
-# Notes about three.js 3D Model viewers
+# Notes about three.js 3D Model Viewers
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model
 - Import formats, where applicable:
@@ -79,6 +79,12 @@ There is a lot of information and descriptions, some intended for Industrial Aut
   - large resolution textures should be scaled down before loading, as an example download [`Bedroom`](https://casual-effects.com/data/index.html) which is using 8k images (2k size seems to be optimal for browsers)
   - `Lambert` material does not have flatShading functionality
   - you could also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) converters
+
+# Notes about three.js Texture Viewer
+
+- Supporting PNG, JPG, JPEG, JFIF, PJPEG, PJP, BMP, DIB, GIF, TIF, TIFF, TGA, SVG, DDS, KTX, KTX2, BASIS and Lottie JSON texture files
+- Use `T` button to switch between textures
+- Texture is displayed on a rotatable plane
 
 # License
 
