@@ -46,6 +46,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
     - `*` - envMap + metalness (vtk / prwm)
   - `OS` - material side (Original / Front / Back / Double)
   - `VC` - vertex colors
+  - `XS` - xtra smooth
   - `RST` - reset
   - `#` - grid
 - Light controls, where applicable:
