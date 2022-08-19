@@ -17,8 +17,8 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model
 - Import files locally from a file browser dialog or specify remote URL
-- Import formats, where applicable:
-  - 3DS, 3DM, 3MF, AMF, DAE, FBX, GLB, GLTF, IFC, IGES, IGS, JSON, MTL, OBJ, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
+- Import formats, where applicable, with any optional textures:
+  - 3DS, 3DM, 3MF, AMF, DAE, DRC, FBX, GLB, GLTF, IFC, IGES, IGS, JSON, MTL, OBJ, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
 - Export formats, where applicable:
