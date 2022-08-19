@@ -22,7 +22,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
 - Export formats, where applicable:
-  - DAE, GLB, GLTF, JSON, OBJ, PLY, STL
+  - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL
 - JSON import/export is actually three.js created format
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
 - Multiple URLs, comma separated, are allowed in some viewers and can be from mixed websites
