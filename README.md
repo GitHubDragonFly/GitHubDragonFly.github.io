@@ -20,7 +20,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 - Import formats, where applicable, with any optional textures:
   - 3DS, 3DM, 3MF, AMF, DAE, DRC, FBX, GLB, GLTF, IFC, IGES, IGS, JSON, MTL, OBJ, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
   - LDRAW supported formats: DAT, L3B, LDR, MPD
-  - MMD supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
+  - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
 - Export formats, where applicable:
   - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL
 - JSON import/export is actually three.js created format
