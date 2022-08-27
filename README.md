@@ -18,18 +18,19 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model
 - Import files locally from a file browser dialog or specify remote URL
 - Import formats, where applicable, with any optional textures:
-  - 3DS, 3DM, 3MF, AMF, DAE, DRC, FBX, GLB, GLTF, IFC, IGES, IGS, JSON, MTL, OBJ, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
+  - 3DS, 3DM, 3MF, AMF, DAE, DRC, FBX, GLB, GLTF, IFC, IGES, IGS, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
 - Export formats, where applicable:
   - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL
 - JSON import/export is actually three.js created format
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
-- Multiple URLs, comma separated, are allowed in some viewers and can be from mixed websites
+- Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
 - Lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
 - All files have to be in the same folder when loading files locally from a hard drive
 - Some viewers might have some limitations when loading files locally from a hard drive
+- Update your models to look for textures in the same folder
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
