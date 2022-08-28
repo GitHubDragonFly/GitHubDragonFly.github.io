@@ -30,7 +30,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 - Lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
 - All files have to be in the same folder when loading files locally from a hard drive
 - Some viewers might have some limitations when loading files locally from a hard drive
-- Update your models to look for textures in the same folder
+- Possibly update your models to look for textures in the same folder when loading files locally from a hard drive
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
