@@ -31,4 +31,5 @@ Notes about modifications, some of which are only added to work with these viewe
  - OrbitControlsGizmo file was converted to non-module
  - other minor modifications mainly to module paths to be able to access the `viewers/static/libs` folder
  - some non-breaking code updates, where applicable, as per latest three.js revisions
+ - GCodeLoader.js file is a modified version from: https://github.com/emplast/Threejs-GcodeLoaderNGCfile
 
