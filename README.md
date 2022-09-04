@@ -20,6 +20,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 - Import formats, where applicable, with any optional textures:
   - 3DS, 3DM, 3MF, AMF, DAE, FBX, IFC, IGES, IGS, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
   - GLTF supported formats: GLB, GLTF + BIN, DRC
+  - GCODE supported formats: GCODE, NCC, NGC
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
 - Export formats, where applicable:
