@@ -64,10 +64,10 @@
 
 			let currentLayer = undefined;
 
-			const pathMaterial = new THREE.LineBasicMaterial( { color: 0xFF0000 } );
+			const pathMaterial = new THREE.LineBasicMaterial( { color: 0xF50505 } );
 			pathMaterial.name = 'path';
 
-			const extrudingMaterial = new THREE.LineBasicMaterial( { color: 0x00FF00 } );
+			const extrudingMaterial = new THREE.LineBasicMaterial( { color: 0x05F505 } );
 			extrudingMaterial.name = 'extruded';
 
 			function newLayer( line ) {
