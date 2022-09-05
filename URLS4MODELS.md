@@ -50,5 +50,6 @@ Additional resources - use the `Raw` button in any of the GitHub repositories to
  - `https://github.com/gkjohnson/3d-demo-data/tree/main/models`
  - `https://github.com/josdirksen/learning-threejs/tree/master/assets/models`
  - `https://github.com/mikelovesrobots/mmmm`
+ - `https://github.com/joewalnes/gcode-viewer/tree/master/web/examples`
  - `https://github.com/thecooltool/example-gcode`
  - for STEP / IGES file downloads visit [novotechnik](https://www.novotechnik.de/en/downloads/cad-data)
