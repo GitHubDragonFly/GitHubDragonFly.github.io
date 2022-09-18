@@ -1,6 +1,6 @@
-USAGE: Copy any of the following links and then paste it within the `URL` option of the corresponding viewer
+# Usage
 
-Example models:
+Copy any of the following links and then paste it within the `URL` option of the corresponding viewer:
 
 - access to [three.js](https://github.com/mrdoob/three.js/tree/master/examples) examples can be achieved with the following URL format, mind the correct path after `models`:
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/LittlestTokyo.glb`
@@ -46,7 +46,9 @@ Example models:
   - `https://raw.githubusercontent.com/antlafarge/ALLoader/master/examples/textures/, https://raw.githubusercontent.com/antlafarge/ALLoader/master/examples/fbx/crate.fbx`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3ds/portalgun/textures/, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3ds/portalgun/portalgun.3ds`
 
-Additional resources - use the `Raw` button in any of the GitHub repositories to get correct URL or download the file to a hard drive and load it with the `Browse` option of the corresponding viewer:
+# Additional Resources
+
+Use the `Raw` button in any of the GitHub repositories to get the correct URL or just download the file to a hard drive and load it with the `Browse` option of the corresponding viewer:
  - `https://github.com/gkjohnson/3d-demo-data/tree/main/models`
  - `https://github.com/josdirksen/learning-threejs/tree/master/assets/models`
  - `https://github.com/mikelovesrobots/mmmm`
