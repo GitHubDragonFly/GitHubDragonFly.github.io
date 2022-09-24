@@ -89,7 +89,8 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 # Notes about three.js Texture Viewer
 
 - Supporting PNG, JPG, JPEG, JFIF, PJPEG, PJP, BMP, DIB, GIF, TIF, TIFF, TGA, SVG, DDS, KTX, KTX2, BASIS and Lottie JSON texture files
-- Use `T` button to switch between textures
+- TIF / TIFF image file support provided by [geotiffjs](https://github.com/geotiffjs/geotiff.js)
+- Use the `T` button to switch between textures
 - Texture is displayed on a rotatable plane
 
 # License
