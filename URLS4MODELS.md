@@ -51,6 +51,7 @@ Copy any of the following links and then paste it within the `URL` option of the
 Use the `Raw` button in any of the GitHub repositories to get the correct URL or just download the file to a hard drive and load it with the `Browse` option of the corresponding viewer:
  - `https://github.com/gkjohnson/3d-demo-data/tree/main/models`
  - `https://github.com/josdirksen/learning-threejs/tree/master/assets/models`
+ - `https://github.com/buildingsmart-private/IfcDoc/tree/master/IfcKit/examples`
  - `https://github.com/mikelovesrobots/mmmm`
  - `https://github.com/joewalnes/gcode-viewer/tree/master/web/examples`
  - `https://github.com/thecooltool/example-gcode`
