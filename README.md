@@ -18,7 +18,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model
 - Import files locally from a file browser dialog or specify remote URL
 - Import formats, where applicable, with any optional textures:
-  - 3DS, 3DM, 3MF, AMF, DAE, FBX, IFC, IGES, IGS, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
+  - 3DS, 3DM, 3MF, AMF, BRP, BREP, DAE, FBX, IFC, IGES, IGS, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
   - GLTF supported formats: GLB, GLTF + BIN, DRC
   - GCODE supported formats: GCODE, NCC, NGC
   - LDRAW supported formats: DAT, L3B, LDR, MPD
@@ -66,7 +66,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
   - `Eq` - equirectangular
     - `R` - reflectivity
   - `Shdw` - shadow
-- STEP / IGES Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
+- STEP / IGES / BREP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
 - JSON Viewer has timeouts which might need to be adjusted when loading large files
 - GLTF / FBX / DAE viewers will also export animations to JSON format
 - DAE (Collada) exporter appears to brighten up the original model as well as the exported model
