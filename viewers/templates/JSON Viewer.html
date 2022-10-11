@@ -5,6 +5,7 @@
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="../static/build/r135/three.js"></script>
+    <script src="../static/js/omggif/omggif.js"></script>
     <script src="../static/js/OrbitControls.js"></script>
     <script src="../static/js/OrbitControlsGizmo.js"></script>
     <script src="../static/js/exporters/PLYExporter.js"></script>
@@ -161,6 +162,9 @@
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/ThreeOrbitControlsGizmo -->
+    <!-- Animated GIF export is based on the following example and library: -->
+    <!--   https://github.com/mrdoob/omggif-example  -->
+    <!--   https://github.com/deanm/omggif  -->
 
     <title>JSON Viewer</title>
   </head>
@@ -169,7 +173,7 @@
       <div class="fm" id="gizmo" style="width: 63px; height: 63px; float: right; background-color: black; margin-right: 3px;"></div>
       <div class="fm">
         <label for="file" style="color: #CE8704; margin: 2px 2px 2px 0;">JSON</label>
-        <button onclick="show_url()" style="padding: 1px 3px 1px 3px;">URL</button>
+        <button id="btn_url" onclick="show_url()" style="padding: 1px 3px 1px 3px;">URL</button>
         <input type="file" id="file_input" name="file" onchange="init()" accept=".json, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" multiple />
         <label for="file_image_input" title="Background Image" style="color: #CE8704; margin: 2px 2px 2px 0;">BGND</label>
         <input type="file" id="file_image_input" name="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" onchange="set_scene_image()" disabled />
@@ -182,6 +186,7 @@
         <label title="Wireframe" style="margin: 2px 0 2px 0;"><input type="checkbox" id="wireframe" name="wireframe" onchange="show_wireframe()" disabled />Wire</label>
         <select name="export_names" id="export_names" disabled>
           <option value="" selected disabled>Export</option>
+          <option value="gif" onclick="export_animated_gif()">GIF</option>
           <option value="ply" onclick="export_ply()">PLY</option>
           <option value="stl" onclick="export_stl()">STL</option>
           <option value="obj" onclick="export_obj()">OBJ</option>
@@ -230,6 +235,9 @@
         <button id="btn_grid" title="Grid" onclick="show_grid()" style="background-color: #d1cefc; width: 22px;" disabled>#</button>
         <button id="btn_polar_grid" title="Polar Grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; width: 24px;" disabled><p class="polar"></p></button>
       </div>
+      <div id="gif_progress" style="display: none; background-color: transparent; border: none; height: 1px;">
+        <progress id="progress" value="0" max="1" style="width: 99.5%; margin-left: 3px; margin-right: 3px;"></progress>
+      </div>
     </div><br />
 
     <div id="div_spinner" class="spinner"></div>
@@ -257,7 +265,7 @@
       function clear_url() { document.getElementById('url_entry').value = ''; }
 
       function initialize_event_listeners() {
-        window.addEventListener( 'mousedown', (event) => { mouse_rotation = true; }, false);
+        window.addEventListener( 'mousedown', (event) => { if (progress.value === 0) mouse_rotation = true; }, false);
         window.addEventListener( 'mouseup', (event) => { mouse_rotation = false; }, false);
       }
 
@@ -300,7 +308,7 @@
       var ww = window.innerWidth,	wh = window.innerHeight;
       var mouse_rotation, reset_rotation, events_initialized, reflect;
       var rot_x = 0, rot_y = 0, rot_z = 0, vertex_colors_enabled, flat_shading_enabled;
-      var previous_json_scale = '1', bounding_box = new THREE.Box3(), material;
+      var previous_json_scale = '1', bounding_box = new THREE.Box3(), material, filename;
       var selected_json_file, selected_url_file = '', selected_json_url_file;
       var loader, fd, material, textures, buffer_geometry, url_displayed, url_loading;
       var animations, animation_mixer, current_animation, clock;
@@ -308,6 +316,8 @@
       var initial_transparency, initial_transparency_array;
       var original_color, original_color_array;
       var original_side, original_side_array;
+
+      const two_PI = 2 * Math.PI;
 
       // Manager from ThreeJs to track a loader and its status
       var manager = new THREE.LoadingManager();
@@ -338,19 +348,17 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (mesh) {
-          let filename;
-
           if (selected_json_file) {
-            filename = selected_json_file.name.substring(0, selected_json_file.name.lastIndexOf('.') + 1);
+            filename = selected_json_file.name.substring( 0, selected_json_file.name.lastIndexOf('.') + 1 );
           } else if (selected_json_url_file) {
-            filename = selected_json_url_file.substring(selected_json_url_file.lastIndexOf('/') + 1, selected_json_url_file.lastIndexOf('.') + 1);
+            filename = selected_json_url_file.substring( selected_json_url_file.lastIndexOf('/') + 1, selected_json_url_file.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let exported = obj_exporter.parse( mesh );
           let obj = exported[ 'obj' ].split( ',' );
-          let blob = new Blob( [ obj ], { type:'text/plain' } );
+          let blob = new Blob( [ obj ], { type: 'text/plain' } );
           link.href = URL.createObjectURL( blob );
           URL.revokeObjectURL( blob );
           link.download = filename + 'obj';
@@ -358,13 +366,13 @@
 
           if (exported[ 'mtl' ]) {
             let mtl = exported[ 'mtl' ].split( ',' );
-            blob = new Blob( [ mtl ], { type:'text/plain' } );
+            blob = new Blob( [ mtl ], { type: 'text/plain' } );
             link.href = URL.createObjectURL( blob );
             URL.revokeObjectURL( blob );
             link.download = filename + 'mtl';
             link.click();
             exported[ 'tex' ].forEach( tex => {
-              blob = new Blob( [ tex.data ], { type:'image/png' } );
+              blob = new Blob( [ tex.data ], { type: 'image/png' } );
               link.href = URL.createObjectURL( blob );
               URL.revokeObjectURL( blob );
               link.download = `${ tex.name }.${ tex.ext }`;
@@ -378,18 +386,16 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (mesh) {
-          let filename;
-
           if (selected_json_file) {
-            filename = selected_json_file.name.substring(0, selected_json_file.name.lastIndexOf('.') + 1);
+            filename = selected_json_file.name.substring( 0, selected_json_file.name.lastIndexOf('.') + 1 );
           } else if (selected_json_url_file) {
-            filename = selected_json_url_file.substring(selected_json_url_file.lastIndexOf('/') + 1, selected_json_url_file.lastIndexOf('.') + 1);
+            filename = selected_json_url_file.substring( selected_json_url_file.lastIndexOf('/') + 1, selected_json_url_file.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let string = ply_exporter.parse( mesh ).split( ',' );
-          let blob = new Blob( [ string ], { type:'text/plain' } );
+          let blob = new Blob( [ string ], { type: 'text/plain' } );
           link.href = URL.createObjectURL( blob );
           link.download = filename + 'ply';
           link.click();
@@ -400,18 +406,16 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (mesh) {
-          let filename;
-
           if (selected_json_file) {
-            filename = selected_json_file.name.substring(0, selected_json_file.name.lastIndexOf('.') + 1);
+            filename = selected_json_file.name.substring( 0, selected_json_file.name.lastIndexOf('.') + 1 );
           } else if (selected_json_url_file) {
-            filename = selected_json_url_file.substring(selected_json_url_file.lastIndexOf('/') + 1, selected_json_url_file.lastIndexOf('.') + 1);
+            filename = selected_json_url_file.substring( selected_json_url_file.lastIndexOf('/') + 1, selected_json_url_file.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let string = stl_exporter.parse( mesh ).split( ',' );
-          let blob = new Blob( [ string ], { type:'text/plain' } );
+          let blob = new Blob( [ string ], { type: 'text/plain' } );
           link.href = URL.createObjectURL( blob );
           link.download = filename + 'stl';
           link.click();
@@ -422,25 +426,23 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (mesh) {
-          let filename;
-
           if (selected_json_file) {
-            filename = selected_json_file.name.substring(0, selected_json_file.name.lastIndexOf('.') + 1);
+            filename = selected_json_file.name.substring( 0, selected_json_file.name.lastIndexOf('.') + 1 );
           } else if (selected_json_url_file) {
-            filename = selected_json_url_file.substring(selected_json_url_file.lastIndexOf('/') + 1, selected_json_url_file.lastIndexOf('.') + 1);
+            filename = selected_json_url_file.substring( selected_json_url_file.lastIndexOf('/') + 1, selected_json_url_file.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let result = dae_exporter.parse( mesh );
-          let blob = new Blob( [ result.data ], { type:'text/plain' } );
+          let blob = new Blob( [ result.data ], { type: 'text/plain' } );
           link.href = URL.createObjectURL( blob );
           link.download = filename + 'dae';
           link.click();
 
           if (result.textures.length > 0) {
             result.textures.forEach( tex => {
-              blob = new Blob( [ tex.data ], { type:'image/png' } );
+              blob = new Blob( [ tex.data ], { type: 'image/png' } );
               link.href = URL.createObjectURL( blob );
               link.download = `${ tex.name }.${ tex.ext }`;
               link.click();
@@ -453,14 +455,12 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (mesh) {
-          let filename;
-
           if (selected_json_file) {
-            filename = selected_json_file.name.substring(0, selected_json_file.name.lastIndexOf('.') + 1);
+            filename = selected_json_file.name.substring( 0, selected_json_file.name.lastIndexOf('.') + 1 );
           } else if (selected_json_url_file) {
-            filename = selected_json_url_file.substring(selected_json_url_file.lastIndexOf('/') + 1, selected_json_url_file.lastIndexOf('.') + 1);
+            filename = selected_json_url_file.substring( selected_json_url_file.lastIndexOf('/') + 1, selected_json_url_file.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           if (animations.length > 0) {
@@ -471,11 +471,11 @@
 
           gltf_exporter.parse( mesh, ( json ) => {
             let string = JSON.stringify( json, null, 2 );
-            let blob = new Blob( [ string ], { type:'text/plain' } );
+            let blob = new Blob( [ string ], { type: 'text/plain' } );
             link.href = URL.createObjectURL( blob );
             link.download = filename + 'gltf';
             link.click();
-          }, function( error ) { console.log(error); }, options );
+          }, function( error ) { console.log( error ); }, options );
         }
       }
 
@@ -483,14 +483,12 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (mesh) {
-          let filename;
-
           if (selected_json_file) {
-            filename = selected_json_file.name.substring(0, selected_json_file.name.lastIndexOf('.') + 1);
+            filename = selected_json_file.name.substring( 0, selected_json_file.name.lastIndexOf('.') + 1 );
           } else if (selected_json_url_file) {
-            filename = selected_json_url_file.substring(selected_json_url_file.lastIndexOf('/') + 1, selected_json_url_file.lastIndexOf('.') + 1);
+            filename = selected_json_url_file.substring( selected_json_url_file.lastIndexOf('/') + 1, selected_json_url_file.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           if (animations.length > 0) {
@@ -500,12 +498,118 @@
           }
 
           gltf_exporter.parse( mesh, ( json ) => {
-            let blob = new Blob( [ json ], { type:'application/octet-stream' } );
+            let blob = new Blob( [ json ], { type: 'application/octet-stream' } );
             link.href = URL.createObjectURL( blob );
             link.download = filename + 'glb';
             link.click();
-          }, function( error ) { console.log(error); }, options );
+          }, function( error ) { console.log( error ); }, options );
         }
+      }
+
+      async function export_animated_gif() {
+        document.getElementById("export_names").selectedIndex = 0;
+
+        if (selected_json_file) {
+          filename = selected_json_file.name.substring( 0, selected_json_file.name.lastIndexOf('.') + 1 );
+        } else if (selected_json_url_file) {
+          filename = selected_json_url_file.substring( selected_json_url_file.lastIndexOf('/') + 1, selected_json_url_file.lastIndexOf('.') + 1 );
+        } else {
+          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
+        }
+
+        // Generate
+
+        let fx = (ww - 500) / 2 + 60;
+        let fy = (wh - 500) / 2 + 25;
+        let frames = 320;
+        let buffer = new Uint8Array( 500 * 500 * 150 * 5 );
+        let pixels = new Uint8Array( 500 * 500 );
+        let writer = new GifWriter( buffer, 500, 500, { loop: 0 } );
+
+        await generateGIF( render, frames, fx, fy, buffer, pixels, writer );
+      }
+
+      function generateGIF( renderFunction, frames = 100, frame_x, frame_y, buffer, pixels, writer ) {
+        let canvas = document.createElement( 'canvas' );
+				canvas.width = ww;
+				canvas.height = wh;
+
+				let context = canvas.getContext( '2d' );
+
+        let current = 0;
+
+        function addFrame() {
+          context.clearRect( 0, 0, ww, wh );
+
+          renderFunction();
+
+          context.drawImage( renderer.domElement, 0, 0 );
+          let data = context.getImageData( frame_x, frame_y, 500, 500 ).data;
+
+          let palette = [];
+
+          for ( var j = 0, k = 0, jl = data.length; j < jl; j += 4, k ++ ) {
+            let r = Math.floor( data[ j + 0 ] * 0.1 ) * 10;
+            let g = Math.floor( data[ j + 1 ] * 0.1 ) * 10;
+            let b = Math.floor( data[ j + 2 ] * 0.1 ) * 10;
+            let color = r << 16 | g << 8 | b << 0;
+
+            let index = palette.indexOf( color );
+
+            if ( index === -1 ) {
+              pixels[ k ] = palette.length;
+              palette.push( color );
+            } else {
+              pixels[ k ] = index;
+            }
+          }
+
+          // Force palette to be power of 2
+          let powof2 = 1;
+          while ( powof2 < palette.length ) powof2 <<= 1;
+          if (powof2 > 256) powof2 = 256;
+          palette.length = powof2;
+
+          let options = { palette: new Uint32Array( palette ), delay: 0.1 };
+
+          current ++;
+
+          if ( current < frames ) {
+            if (current > 2) {
+              writer.addFrame( 0, 0, 500, 500, pixels, options );
+            } else {
+              enable_disable( true );
+              document.getElementById('gizmo').style.display = 'none';
+              document.getElementById('btn_url').disabled = true;
+              document.getElementById('file_input').disabled = true;
+              document.getElementById('btn_full_screen').disabled = true;
+              document.getElementById("gif_progress").style.display = '';
+            }
+
+            progress.value = current / frames;
+            setTimeout( addFrame, 0 );
+          } else {
+            progress.value = 0;
+            enable_disable( false );
+            document.getElementById('gizmo').style.display = '';
+            document.getElementById('btn_url').disabled = false;
+            document.getElementById('file_input').disabled = false;
+            document.getElementById('btn_full_screen').disabled = false;
+            document.getElementById("gif_progress").style.display = 'none';
+
+            // Download
+
+            let blob = new Blob( [ buffer.subarray( 0, writer.end() ) ], { type: 'image/gif' } );
+            link.href = URL.createObjectURL( blob );
+            link.download = filename + 'gif';
+            link.click();
+
+            mesh.rotation.set( 0, 0, 0 );
+            if (render_requested) render();
+          }
+        }
+
+        addFrame();
       }
 
       function set_back_color() {
@@ -522,12 +626,12 @@
             if (obj_colors === '#000000') {
               mesh.material.color.setRGB( 1, 1, 1 );
             } else {
-              mesh.material.color.setRGB( parseInt(obj_colors.substring(1, 3), 16) / 250, parseInt(obj_colors.substring(3, 5), 16) / 250, parseInt(obj_colors.substring(5), 16) / 250 ); // hex format '#rrggbb'
+              mesh.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 250, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 250, parseInt( obj_colors.substring( 5 ), 16 ) / 250 ); // hex format '#rrggbb'
             }
           } else {
             let child_count_array = 1;
 
-            mesh.traverse( function ( child ) {
+            mesh.traverse( function( child ) {
               if ((child instanceof THREE.Mesh || child instanceof THREE.Points) && child.material) {
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
@@ -536,13 +640,13 @@
                         mtl.color.setRGB( original_color_array[ child.name ][ child_count_array ].r, original_color_array[ child.name ][ child_count_array ].g, original_color_array[ child.name ][ child_count_array ].b );
                         child_count_array += 1;
                       } else {
-                        mtl.color.setRGB( parseInt(obj_colors.substring(1, 3), 16) / 250, parseInt(obj_colors.substring(3, 5), 16) / 250, parseInt(obj_colors.substring(5), 16) / 250 ); // hex format '#rrggbb'
+                        mtl.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 250, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 250, parseInt( obj_colors.substring( 5 ), 16 ) / 250 ); // hex format '#rrggbb'
                       }
                     } else {
                       if (obj_colors === '#000000') {
                         mtl.color.setRGB( 1, 1, 1 );
                       } else {
-                        mtl.color.setRGB( parseInt(obj_colors.substring(1, 3), 16) / 250, parseInt(obj_colors.substring(3, 5), 16) / 250, parseInt(obj_colors.substring(5), 16) / 250 ); // hex format '#rrggbb'
+                        mtl.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 250, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 250, parseInt( obj_colors.substring( 5 ), 16 ) / 250 ); // hex format '#rrggbb'
                       }
                     }
                   });
@@ -554,7 +658,7 @@
                       child.material.color.setRGB( 1, 1, 1 );
                     }
                   } else {
-                    child.material.color.setRGB( parseInt(obj_colors.substring(1, 3), 16) / 250, parseInt(obj_colors.substring(3, 5), 16) / 250, parseInt(obj_colors.substring(5), 16) / 250 ); // hex format '#rrggbb'
+                    child.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 250, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 250, parseInt( obj_colors.substring( 5 ), 16 ) / 250 ); // hex format '#rrggbb'
                   }
                 }
               }
@@ -576,7 +680,7 @@
             let child_count_array = 1;
 
             mesh.traverse( function( child ) {
-              if (child instanceof THREE.Mesh || child instanceof THREE.Points){
+              if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
                 if (child.material) {
                   if (Array.isArray( child.material )) {
                     child.material.forEach( mtl => {
@@ -617,7 +721,7 @@
 
             set_json_opacity();
 
-            mesh.traverse( function ( child ) {
+            mesh.traverse( function( child ) {
               if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
@@ -636,7 +740,7 @@
             document.getElementById('json_opacity').disabled = false;
             document.getElementById('btn_json_opacity').style.backgroundColor = 'lightgreen';
 
-            mesh.traverse( function ( child ) {
+            mesh.traverse( function( child ) {
               if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
@@ -698,7 +802,7 @@
             }
           }
 
-          mesh.traverse( function ( child ) {
+          mesh.traverse( function( child ) {
             if (child instanceof THREE.Mesh) {
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
@@ -710,36 +814,36 @@
                 child.material.needsUpdate = true;
               }
             }
-    	    });
+          });
         }
       }
 
       function set_scene_image() {
         fii = document.getElementById('file_image_input');
 
-        if (fii.files[0]) {
+        if (fii.files[ 0 ]) {
           document.getElementById('back_color').value = "0x000000";
           document.body.style.backgroundColor = document.getElementById('back_color').value;
 
-          if (fii.files[0].type.startsWith('image/')) {
-            texture_loader.load( URL.createObjectURL( fii.files[0] ) , function(texture) {
-              URL.revokeObjectURL( fii.files[0] );
+          if (fii.files[ 0 ].type.startsWith('image/')) {
+            texture_loader.load( URL.createObjectURL( fii.files[ 0 ] ) , function( texture ) {
+              URL.revokeObjectURL( fii.files[ 0 ] );
 
               scene.background = texture;
             }, function ( xhr ) {
               let today = new Date();
               let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
 
-              if (xhr.loaded == 0 && xhr.total == 0) {
+              if (xhr.loaded === 0 && xhr.total === 0) {
                 console.log( 'Background Image File 0% loaded - ' + time );
               } else {
-                console.log( 'Background Image File ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
+                console.log( 'Background Image File ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
               }
             }, function ( error ) {
               console.log( 'Error loading Background Image File!' );
               console.log( error );
 
-              URL.revokeObjectURL( fii.files[0] );
+              URL.revokeObjectURL( fii.files[ 0 ] );
             });
           } else {
             fii.value = "";
@@ -752,20 +856,20 @@
       }
 
       function set_ambient_light_color() {
-        let colors = document.getElementById('ambient_light_color').value; // hex format '#rrggbb'
-        ambientLight.color.setRGB( parseInt(colors.substring(1, 3), 16) / 10, parseInt(colors.substring(3, 5), 16) / 10, parseInt(colors.substring(5), 16) / 10 );
+        let al_colors = document.getElementById('ambient_light_color').value; // hex format '#rrggbb'
+        ambientLight.color.setRGB( parseInt( al_colors.substring( 1, 3 ), 16 ) / 10, parseInt( al_colors.substring( 3, 5 ), 16 ) / 10, parseInt( al_colors.substring( 5 ), 16 ) / 10 );
       }
 
       function set_hemisphere_light_color() {
         let hl_colors = document.getElementById('hemisphere_light_color').value; // hex format '#rrggbb'
-        hemisphereLight.color.setRGB( parseInt(hl_colors.substring(1, 3), 16) / 10, parseInt(hl_colors.substring(3, 5), 16) / 10, parseInt(hl_colors.substring(5), 16) / 10 );
+        hemisphereLight.color.setRGB( parseInt( hl_colors.substring( 1, 3 ), 16 ) / 10, parseInt( hl_colors.substring( 3, 5 ), 16 ) / 10, parseInt( hl_colors.substring( 5 ), 16 ) / 10 );
 
         (hl_colors === '#000000') ? hemisphereLight.groundColor.setRGB( 0, 0, 0 ) : hemisphereLight.groundColor.setRGB( 9.2, 9.2, 9.2 );
       }
 
       function set_directional_light_color() {
         let dl_colors = document.getElementById('directional_light_color').value; // hex format '#rrggbb'
-        (dl_colors === '#000000') ? directionalLight.color.setRGB( 1, 1, 1 ) : directionalLight.color.setRGB( parseInt(dl_colors.substring(1, 3), 16) / 250, parseInt(dl_colors.substring(3, 5), 16) / 250, parseInt(dl_colors.substring(5), 16) / 250 );
+        (dl_colors === '#000000') ? directionalLight.color.setRGB( 1, 1, 1 ) : directionalLight.color.setRGB( parseInt( dl_colors.substring( 1, 3 ), 16 ) / 250, parseInt( dl_colors.substring( 3, 5 ), 16 ) / 250, parseInt( dl_colors.substring( 5 ), 16 ) / 250 );
       }
 
       function set_directional_light_intensity() {
@@ -796,22 +900,22 @@
             mesh.scale.multiplyScalar( 2 );
             break;
           case '0.5':
-            mesh.scale.multiplyScalar( (current_json_scale == '0.75') ? 3/2 : 1/2 );
+            mesh.scale.multiplyScalar( (current_json_scale === '0.75') ? 3/2 : 1/2 );
             break;
           case '0.75':
-            mesh.scale.multiplyScalar( (current_json_scale == '1') ? 4/3 : 2/3 );
+            mesh.scale.multiplyScalar( (current_json_scale === '1') ? 4/3 : 2/3 );
             break;
           case '1':
-            mesh.scale.multiplyScalar( (current_json_scale == '1.25') ? 5/4 : 3/4 );
+            mesh.scale.multiplyScalar( (current_json_scale === '1.25') ? 5/4 : 3/4 );
             break;
           case '1.25':
-            mesh.scale.multiplyScalar( (current_json_scale == '1.5') ? 6/5 : 4/5 );
+            mesh.scale.multiplyScalar( (current_json_scale === '1.5') ? 6/5 : 4/5 );
             break;
           case '1.5':
-            mesh.scale.multiplyScalar( (current_json_scale == '1.75') ? 7/6 : 5/6 );
+            mesh.scale.multiplyScalar( (current_json_scale === '1.75') ? 7/6 : 5/6 );
             break;
           case '1.75':
-            mesh.scale.multiplyScalar( (current_json_scale == '2') ? 8/7 : 6/7 );
+            mesh.scale.multiplyScalar( (current_json_scale === '2') ? 8/7 : 6/7 );
             break;
           default:
             mesh.scale.multiplyScalar( 7/8 );
@@ -830,32 +934,36 @@
       }
 
       function radio_changed() {
+        let x_num = document.getElementById('rotation_x');
+        let y_num = document.getElementById('rotation_y');
+        let z_num = document.getElementById('rotation_z');
+
         if (document.getElementById('dlight').checked) {
-          document.getElementById('rotation_x').value = directionalLight.position.x;
-          document.getElementById('rotation_y').value = directionalLight.position.y;
-          document.getElementById('rotation_z').value = directionalLight.position.z;
-          document.getElementById('rotation_x').min = document.getElementById('rotation_y').min = document.getElementById('rotation_z').min = -500;
-          document.getElementById('rotation_x').max = document.getElementById('rotation_y').max = document.getElementById('rotation_z').max = 500;
-          document.getElementById('rotation_x').step = document.getElementById('rotation_y').step = document.getElementById('rotation_z').step = 10;
+          x_num.value = directionalLight.position.x;
+          y_num.value = directionalLight.position.y;
+          z_num.value = directionalLight.position.z;
+          x_num.min = y_num.min = z_num.min = -500;
+          x_num.max = y_num.max = z_num.max = 500;
+          x_num.step = y_num.step = z_num.step = 10;
         } else if (document.getElementById('hlight').checked) {
-          document.getElementById('rotation_x').value = hemisphereLight.position.x;
-          document.getElementById('rotation_y').value = hemisphereLight.position.y;
-          document.getElementById('rotation_z').value = hemisphereLight.position.z;
-          document.getElementById('rotation_x').min = document.getElementById('rotation_y').min = document.getElementById('rotation_z').min = -100;
-          document.getElementById('rotation_x').max = document.getElementById('rotation_y').max = document.getElementById('rotation_z').max = 100;
-          document.getElementById('rotation_x').step = document.getElementById('rotation_y').step = document.getElementById('rotation_z').step = 5;
+          x_num.value = hemisphereLight.position.x;
+          y_num.value = hemisphereLight.position.y;
+          z_num.value = hemisphereLight.position.z;
+          x_num.min = y_num.min = z_num.min = -100;
+          x_num.max = y_num.max = z_num.max = 100;
+          x_num.step = y_num.step = z_num.step = 5;
         } else {
-          document.getElementById('rotation_x').value = parseInt(rot_x * 1000);
-          document.getElementById('rotation_y').value = parseInt(rot_y * 1000);
-          document.getElementById('rotation_z').value = parseInt(rot_z * 1000);
-          document.getElementById('rotation_x').min = document.getElementById('rotation_y').min = document.getElementById('rotation_z').min = -50;
-          document.getElementById('rotation_x').max = document.getElementById('rotation_y').max = document.getElementById('rotation_z').max = 50;
-          document.getElementById('rotation_x').step = document.getElementById('rotation_y').step = document.getElementById('rotation_z').step = 1;
+          x_num.value = parseInt( rot_x * 1000 );
+          y_num.value = parseInt(rot_y * 1000);
+          z_num.value = parseInt(rot_z * 1000);
+          x_num.min = y_num.min = z_num.min = -50;
+          x_num.max = y_num.max = z_num.max = 50;
+          x_num.step = y_num.step = z_num.step = 1;
         }
       }
 
       function rot_x_changed() {
-        let x = parseFloat(document.getElementById('rotation_x').value);
+        let x = parseFloat( document.getElementById('rotation_x').value );
 
         if (document.getElementById('dlight').checked) {
           directionalLight.position.x = x;
@@ -867,7 +975,7 @@
       }
 
       function rot_y_changed() {
-        let y = parseFloat(document.getElementById('rotation_y').value);
+        let y = parseFloat( document.getElementById('rotation_y').value );
 
         if (document.getElementById('dlight').checked) {
           directionalLight.position.y = y;
@@ -879,7 +987,7 @@
       }
 
       function rot_z_changed() {
-        let z = parseFloat(document.getElementById('rotation_z').value);
+        let z = parseFloat( document.getElementById('rotation_z').value );
 
         if (document.getElementById('dlight').checked) {
           directionalLight.position.z = z;
@@ -965,12 +1073,12 @@
 
           // Include check for JPG/PNG/BMP/GIF/SVG
           for (let i = 0; i < fi.files.length; i++) {
-            if (fi.files[i].name.toUpperCase().endsWith('.JSON')) { selected_json_file = fi.files[i]; }
-            else if (fi.files[i].name.toUpperCase().endsWith('.PNG')) { textures[ fi.files[i].name ] =  URL.createObjectURL( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.JPG')) { textures[ fi.files[i].name ] =  URL.createObjectURL( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.BMP')) { textures[ fi.files[i].name ] =  URL.createObjectURL( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.GIF')) { textures[ fi.files[i].name ] =  URL.createObjectURL( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.SVG')) { textures[ fi.files[i].name ] =  URL.createObjectURL( fi.files[i] ); }
+            if (fi.files[ i ].name.toUpperCase().endsWith('.JSON')) { selected_json_file = fi.files[ i ]; }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.PNG')) { textures[ fi.files[ i ].name ] =  URL.createObjectURL( fi.files[ i ] ); }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.JPG')) { textures[ fi.files[ i ].name ] =  URL.createObjectURL( fi.files[ i ] ); }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.BMP')) { textures[ fi.files[ i ].name ] =  URL.createObjectURL( fi.files[ i ] ); }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.GIF')) { textures[ fi.files[ i ].name ] =  URL.createObjectURL( fi.files[ i ] ); }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.SVG')) { textures[ fi.files[ i ].name ] =  URL.createObjectURL( fi.files[ i ] ); }
           };
 
           if (!selected_json_file) {
@@ -988,7 +1096,7 @@
             fd = file_data;
           });
 
-          await new Promise(resolve => setTimeout(resolve, 500)); // adjust if necessary
+          await new Promise( resolve => setTimeout( resolve, 500 ) ); // adjust timing if necessary
 
           if (fd && fd.metadata && fd.metadata.type === "BufferGeometry") {
             buffer_geometry = true;
@@ -1017,14 +1125,14 @@
         document.getElementById('div_error').style.display = "none";
         enable_disable( false );
 
-        if (renderer == undefined) {
+        if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
           renderer.gammaFactor = 2.2;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-          renderer.setClearColor( 0xFFFFFF, 0); // Allow setting the background color
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
           renderer.autoClear = false;
         }
 
@@ -1032,21 +1140,21 @@
 
         clock = new THREE.Clock();
 
-        if (scene == undefined) scene = new THREE.Scene();
-        if (mesh == undefined) mesh = new THREE.Object3D();
+        if (scene === undefined) scene = new THREE.Scene();
+        if (mesh === undefined) mesh = new THREE.Object3D();
 
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         // Create a grid helper for use with Orbit Controls
-        if (polar_grid == undefined) polar_grid = new THREE.PolarGridHelper( 100, 10 );
-        if (grid == undefined) grid = new THREE.GridHelper( 200, 200, "yellow" );
+        if (polar_grid === undefined) polar_grid = new THREE.PolarGridHelper( 100, 10 );
+        if (grid === undefined) grid = new THREE.GridHelper( 200, 200, "yellow" );
 
         camera = new THREE.PerspectiveCamera( 45, ww/wh, 0.1, 2000 );
         camera.position.set( 0, 0, 250 );
         scene.add( camera );
 
         // Add AmbientLight to the scene
-        ambientLight = new THREE.AmbientLight(0x000000, 0.05);
+        ambientLight = new THREE.AmbientLight( 0x000000, 0.05 );
         ambientLight.position.set( 0, 0, 250 );
         scene.add( ambientLight );
 
@@ -1058,10 +1166,10 @@
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 1 );
         directionalLight.position.set( 0, 0, 250 );
-        directionalLight.lookAt(new THREE.Vector3( 0, 0, 0 ));
+        directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
         camera.add( directionalLight );
 
-        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls = new THREE.OrbitControls( camera, renderer.domElement );
         controls.enableDamping = true;
         //controls.enableKeys = false;
         //controls.enableZoom = true;
@@ -1108,15 +1216,16 @@
             let today = new Date();
             let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
 
-            if (xhr.loaded == 0 && xhr.total == 0) {
+            if (xhr.loaded === 0 && xhr.total === 0) {
               console.log( 'JSON 0% loaded - ' + time );
               document.getElementById('div_loading').innerHTML = 'JSON 0% loaded - ' + time;
             } else {
-              console.log( 'JSON ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
-              if (parseInt(( xhr.loaded / xhr.total * 100 )) >= 95) {
+              console.log( 'JSON ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
+
+              if (parseInt( ( xhr.loaded / xhr.total ) * 100 ) >= 95) {
                 document.getElementById('div_loading').innerHTML = 'Visualizing';
               } else {
-                document.getElementById('div_loading').innerHTML = 'JSON ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time;
+                document.getElementById('div_loading').innerHTML = 'JSON ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time;
               }
             }
           }, function ( error ) {
@@ -1136,7 +1245,7 @@
 
         if (buffer_geometry) {
           renderer.outputEncoding = THREE.LinearEncoding;
-          object.deleteAttribute('normal');
+          object.deleteAttribute( 'normal' );
           object = THREE.BufferGeometryUtils.mergeVertices( object );
           object.computeVertexNormals();
           object.center();
@@ -1194,7 +1303,7 @@
 
               initial_opacity_array[ mesh.name ][ child_count_array ] = mtl.opacity;
               initial_transparency_array[ mesh.name ][ child_count_array ] = mtl.transparent;
-              original_color_array[ mesh.name ][ child_count_array ] = new THREE.Color ( mtl.color );
+              original_color_array[ mesh.name ][ child_count_array ] = new THREE.Color( mtl.color );
               original_side_array[ mesh.name ][ child_count_array ] = mtl.side;
               child_count_array += 1;
 
@@ -1217,7 +1326,7 @@
 
             initial_opacity[ mesh.name ] = mesh.material.opacity;
             initial_transparency[ mesh.name ] = mesh.material.transparent;
-            original_color[ mesh.name ] = new THREE.Color ( mesh.material.color );
+            original_color[ mesh.name ] = new THREE.Color( mesh.material.color );
             original_side[ mesh.name ] = mesh.material.side;
 
             mesh.material.needsUpdate = true;
@@ -1260,7 +1369,7 @@
 
                     initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
                     initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
-                    original_color_array[ child.name ][ child_count_array ] = new THREE.Color ( mtl.color );
+                    original_color_array[ child.name ][ child_count_array ] = new THREE.Color( mtl.color );
                     original_side_array[ child.name ][ child_count_array ] = mtl.side;
                     child_count_array += 1;
 
@@ -1283,7 +1392,7 @@
 
                   initial_opacity[ child.name ] = child.material.opacity;
                   initial_transparency[ child.name ] = child.material.transparent;
-                  original_color[ child.name ] = new THREE.Color ( child.material.color );
+                  original_color[ child.name ] = new THREE.Color( child.material.color );
                   original_side[ child.name ] = child.material.side;
 
                   child.material.needsUpdate = true;
@@ -1295,7 +1404,7 @@
           });
         }
 
-        await new Promise(resolve => setTimeout(resolve, 100));
+        await new Promise( resolve => setTimeout( resolve, 100 ) );
 
         if (bones_exist) {
           skeleton_helper = new THREE.SkeletonHelper( mesh );
@@ -1327,8 +1436,8 @@
 
       async function loadURLFile() {
         if (selected_url_file != '') {
-          if (selected_url_file.indexOf(',') > -1) {
-            let urls = selected_url_file.split(',');
+          if (selected_url_file.indexOf( ',' ) > -1) {
+            let urls = selected_url_file.split( ',' );
 
             for (let i = 0; i < urls.length; i++) {
               let url = urls[ i ].trim();
@@ -1341,7 +1450,7 @@
             }
 
             if (!selected_json_url_file) {
-              console.log('Unsupported URL file!');
+              console.log( 'Unsupported URL file!' );
               render_requested = false;
               enable_disable( true );
               if (gizmo) gizmo.dispose();
@@ -1351,11 +1460,9 @@
 
             document.getElementById('div_loading').style.display = "block";
 
-            file_loader.load( selected_json_url_file, async function( file_data ) {
-              fd = file_data;
-            });
+            file_loader.load( selected_json_url_file, async function( file_data ) { fd = file_data; });
 
-            await new Promise( resolve => setTimeout( resolve, 1000 )); // adjust if necessary
+            await new Promise( resolve => setTimeout( resolve, 1000 ) ); // adjust timing if necessary
 
             if (fd && fd.metadata.type === "BufferGeometry") {
               buffer_geometry = true;
@@ -1379,11 +1486,11 @@
                 console.log( 'URL JSON 0% loaded - ' + time );
                 document.getElementById('div_loading').innerHTML = 'URL JSON 0% loaded - ' + time;
               } else {
-                console.log( 'URL JSON ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
-                if (parseInt(( xhr.loaded / xhr.total * 100 )) >= 95) {
+                console.log( 'URL JSON ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
+                if (parseInt( ( xhr.loaded / xhr.total ) * 100 ) >= 95) {
                   document.getElementById('div_loading').innerHTML = 'Visualizing';
                 } else {
-                  document.getElementById('div_loading').innerHTML = 'URL JSON ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time;
+                  document.getElementById('div_loading').innerHTML = 'URL JSON ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time;
                 }
               }
             }, function ( error ) {
@@ -1396,15 +1503,12 @@
               document.getElementById('div_error').style.display = "block";
             });
           } else {
-            // Launch loading of the selected file, addURLFileInScene is the callback when it's ready
             if (selected_url_file.toUpperCase().endsWith('.JSON')) {
               document.getElementById('div_loading').style.display = "block";
 
-              file_loader.load( selected_url_file, async function( file_data ) {
-                fd = file_data;
-              });
+              file_loader.load( selected_url_file, async function( file_data ) { fd = file_data; });
 
-              await new Promise( resolve => setTimeout( resolve, 1000 )); // adjust if necessary
+              await new Promise( resolve => setTimeout( resolve, 1000 ) ); // adjust timing if necessary
 
               if (fd && fd.metadata && fd.metadata.type === "BufferGeometry") {
                 buffer_geometry = true;
@@ -1420,6 +1524,7 @@
                 loader = json_loader;
               }
 
+              // Launch loading of the selected file, addURLFileInScene is the callback when it's ready
               loader.load( selected_url_file, addURLFileInScene, function( xhr ) {
                 let today = new Date();
                 let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
@@ -1428,11 +1533,12 @@
                   console.log( 'URL JSON 0% loaded - ' + time );
                   document.getElementById('div_loading').innerHTML = 'URL JSON 0% loaded - ' + time;
                 } else {
-                  console.log( 'URL JSON ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
-                  if (parseInt(( xhr.loaded / xhr.total * 100 )) >= 95) {
+                  console.log( 'URL JSON ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
+
+                  if (parseInt( ( xhr.loaded / xhr.total ) * 100 ) >= 95) {
                     document.getElementById('div_loading').innerHTML = 'Visualizing';
                   } else {
-                    document.getElementById('div_loading').innerHTML = 'URL JSON ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time;
+                    document.getElementById('div_loading').innerHTML = 'URL JSON ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time;
                   }
                 }
               }, function ( error ) {
@@ -1758,7 +1864,7 @@
             document.getElementById('btn_mtl_side').innerHTML = 'OS';
           }
 
-          mesh.traverse( function ( child ) {
+          mesh.traverse( function( child ) {
     	      if (child instanceof THREE.Mesh) {
               if (Array.isArray( child.material )) {
                 let child_count_array = 1;
@@ -1820,8 +1926,6 @@
       }
 
       function render() {
-        if (render_requested) requestAnimationFrame( render );
-
         if (mesh) {
           // Reset mesh rotational values
           if (reset_rotation) {
@@ -1830,14 +1934,17 @@
           }
 
           // Rotate the mesh
-          if (!mouse_rotation && (rot_x != 0 || rot_y != 0 || rot_z != 0)) {
-            mesh.rotation.x += rot_x;
-            mesh.rotation.y += rot_y;
-            mesh.rotation.z += rot_z;
+          if (!mouse_rotation) {
+            if (rot_x !== 0) mesh.rotation.x += rot_x;
+            if (rot_y !== 0) mesh.rotation.y += rot_y;
+            if (rot_z !== 0) mesh.rotation.z += rot_z;
 
-            if (Math.abs(mesh.rotation.x) > 2 * Math.PI ) mesh.rotation.x = 0;
-            if (Math.abs(mesh.rotation.y) > 2 * Math.PI ) mesh.rotation.y = 0;
-            if (Math.abs(mesh.rotation.z) > 2 * Math.PI ) mesh.rotation.z = 0;
+            // Animated GIF generation
+            if (progress.value > 0.01) mesh.rotation.y += 0.02;
+
+            if (Math.abs(mesh.rotation.x) > two_PI) mesh.rotation.x = 0;
+            if (Math.abs(mesh.rotation.y) > two_PI) mesh.rotation.y = 0;
+            if (Math.abs(mesh.rotation.z) > two_PI) mesh.rotation.z = 0;
           }
 
           if (animation_running) animation_mixer.update( clock.getDelta() );
@@ -1847,6 +1954,10 @@
 
           renderer.clear();
           renderer.render( scene, camera );
+
+          if (document.getElementById('gif_progress').style.display === 'none') {
+            if (render_requested) requestAnimationFrame( render );
+          }
         }
       }
 
