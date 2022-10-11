@@ -4,6 +4,8 @@ The included MIT license is for three.js files in any of the folders. Notes abou
 
 License for three.js extensions is in the `viewers/static/jsm/extensions` folder
 
+See `viewers/static/js/omggif` folder for Animated GIF export info, related to mrdoob's [example](https://github.com/mrdoob/omggif-example) and [omggif](https://github.com/deanm/omggif) library
+
 jQuery license can be seen [here](https://jquery.org/license/)
 
 OrbitControlsGizmo MIT license can be seen [here](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo/blob/master/LICENSE)
