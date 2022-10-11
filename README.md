@@ -24,8 +24,13 @@ There is a lot of information and descriptions, some intended for Industrial Aut
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
 - Export formats, where applicable:
-  - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL
+  - DAE, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL
 - JSON import/export is actually three.js created format
+- GIF export is actually Animated GIF based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
+  - currently set to 500 x 500 size in the centre of the screen
+  - the more colors in the model the bigger the size of the resulting GIF file
+  - it disregards the background color but does observe the background image with simple color palette
+  - it is highly experimental as it is but seems to be functional
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
 - Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
