@@ -29,7 +29,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 - GIF export is actually Animated GIF based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
   - currently set to 500 x 500 size in the centre of the screen
   - non-animated / non-rotating models will spin 360 degrees
-  - the larger the model / the more colors in the model = the bigger the size of the resulting GIF file
+  - the larger the model and/or the more colors in the model = the bigger the size of the resulting GIF file
   - it disregards the background color but does observe the background image with simple color palette
   - it is highly experimental as it is but seems to be functional
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
