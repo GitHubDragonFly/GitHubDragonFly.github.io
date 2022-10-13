@@ -6,6 +6,7 @@
 
     <script src="../static/build/r135/three.js"></script>
     <script src="../static/js/LDrawLoader.js"></script>
+    <script src="../static/js/omggif/omggif.js"></script>
     <script src="../static/js/OrbitControls.js"></script>
     <script src="../static/js/OrbitControlsGizmo.js"></script>
     <script src="../static/js/exporters/PLYExporter.js"></script>
@@ -162,6 +163,10 @@
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/ThreeOrbitControlsGizmo -->
     <!-- Check the official info at https://ldraw.org/ -->
+    <!-- Animated GIF export is based on the following example and library: -->
+    <!--   https://github.com/mrdoob/omggif-example  -->
+    <!--   https://github.com/deanm/omggif  -->
+
 
     <title>LDRAW Viewer</title>
   </head>
@@ -170,7 +175,7 @@
       <div class="fm" id="gizmo" style="width: 63px; height: 63px; float: right; background-color: black; margin-right: 3px;"></div>
       <div class="fm">
         <label for="file" title="DAT, L3B, LDR, MPD" style="color: #CE8704; margin: 2px 2px 2px 3px;">LDRAW</label>
-        <button onclick="show_url()" style="padding: 1px 3px 1px 3px;">URL</button>
+        <button id="btn_url" onclick="show_url()" style="padding: 1px 3px 1px 3px;">URL</button>
         <input type="file" id="file_input" name="file" onchange="init()"accept=".dat, .l3b, .ldr, .mpd" multiple />
         <label for="file_image_input" title="Background Image" style="color: #CE8704; margin: 2px 2px 2px 0;">BGND</label>
         <input type="file" id="file_image_input" name="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" onchange="set_scene_image()" disabled />
@@ -214,6 +219,7 @@
         <input type="color" id="back_color" name="back_color" onchange="set_back_color()" disabled />
         <select name="export_names" id="export_names" disabled>
           <option value="" selected disabled>Export</option>
+          <option value="gif" onclick="export_animated_gif()">GIF</option>
           <option value="ply" onclick="export_ply()">PLY</option>
           <option value="stl" onclick="export_stl()">STL</option>
           <option value="obj" onclick="export_obj()">OBJ</option>
@@ -224,7 +230,11 @@
         <button id="reset" title="Reset" onclick="reset_only()" style="color: maroon; width: 40px;" disabled>RST</button>
         <button id="btn_full_screen" title="Full Screen" onclick="full_screen()" style="width: 22px;"><p class="full_screen"></p></button>
       </div>
+      <div id="gif_progress" style="display: none; background-color: transparent; border: none; height: 1px;">
+        <progress id="progress" value="0" max="1" style="width: 99.5%; margin-left: 3px; margin-right: 3px;"></progress>
+      </div>
     </div><br />
+
 
     <div id="div_spinner" class="spinner"></div>
     <div id="div_error" class="error_msg">E R R O R !</div>
@@ -251,7 +261,7 @@
       function clear_url() { document.getElementById('url_entry').value = ''; }
 
       function initialize_event_listeners() {
-        window.addEventListener( 'mousedown', (event) => { mouse_rotation = true; }, false);
+        window.addEventListener( 'mousedown', (event) => { if (progress.value === 0) mouse_rotation = true; }, false);
         window.addEventListener( 'mouseup', (event) => { mouse_rotation = false; }, false);
       }
 
@@ -292,8 +302,9 @@
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth,	wh = window.innerHeight;
       var mouse_rotation, reset_rotation, events_initialized;
-      var rot_x = 0, rot_y = 0, rot_z = 0, lines_visible;
-      var previous_ldraw_scale = '1', bounding_box, c_steps, count_up;
+      var rot_x = 0, rot_y = 0, rot_z = 0, lines_visible, filename;
+      var previous_ldraw_scale = '1', bounding_box = new THREE.Box3()
+      var construction_steps_present, c_steps, count_up;
       var selected_ldraw_file, selected_url_file = '', url_displayed, url_loading;
 
       // Manager from ThreeJs to track a loader and its status
@@ -323,17 +334,15 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (ldraw_obj) {
-          let filename;
-
           if (selected_ldraw_file) {
-            filename = selected_ldraw_file.name.substring(0, selected_ldraw_file.name.lastIndexOf('.') + 1);
+            filename = selected_ldraw_file.name.substring( 0, selected_ldraw_file.name.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let exported = obj_exporter.parse( ldraw_obj );
           let obj = exported[ 'obj' ].split( ',' );
-          let blob = new Blob( [ obj ], { type:'text/plain' } );
+          let blob = new Blob( [ obj ], { type: 'text/plain' } );
           link.href = URL.createObjectURL( blob );
           URL.revokeObjectURL( blob );
           link.download = filename + 'obj';
@@ -341,13 +350,13 @@
 
           if (exported[ 'mtl' ]) {
             let mtl = exported[ 'mtl' ].split( ',' );
-            blob = new Blob( [ mtl ], { type:'text/plain' } );
+            blob = new Blob( [ mtl ], { type: 'text/plain' } );
             link.href = URL.createObjectURL( blob );
             URL.revokeObjectURL( blob );
             link.download = filename + 'mtl';
             link.click();
             exported[ 'tex' ].forEach( tex => {
-              blob = new Blob( [ tex.data ], { type:'image/png' } );
+              blob = new Blob( [ tex.data ], { type: 'image/png' } );
               link.href = URL.createObjectURL( blob );
               URL.revokeObjectURL( blob );
               link.download = `${ tex.name }.${ tex.ext }`;
@@ -361,16 +370,14 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (ldraw_obj) {
-          let filename;
-
           if (selected_ldraw_file) {
-            filename = selected_ldraw_file.name.substring(0, selected_ldraw_file.name.lastIndexOf('.') + 1);
+            filename = selected_ldraw_file.name.substring( 0, selected_ldraw_file.name.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let string = ply_exporter.parse( ldraw_obj ).split( ',' );
-          let blob = new Blob( [ string ], { type:'text/plain' } );
+          let blob = new Blob( [ string ], { type: 'text/plain' } );
           link.href = URL.createObjectURL( blob );
           link.download = filename + 'ply';
           link.click();
@@ -381,16 +388,14 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (ldraw_obj) {
-          let filename;
-
           if (selected_ldraw_file) {
-            filename = selected_ldraw_file.name.substring(0, selected_ldraw_file.name.lastIndexOf('.') + 1);
+            filename = selected_ldraw_file.name.substring( 0, selected_ldraw_file.name.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let string = stl_exporter.parse( ldraw_obj ).split( ',' );
-          let blob = new Blob( [ string ], { type:'text/plain' } );
+          let blob = new Blob( [ string ], { type: 'text/plain' } );
           link.href = URL.createObjectURL( blob );
           link.download = filename + 'stl';
           link.click();
@@ -401,23 +406,21 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (ldraw_obj) {
-          let filename;
-
           if (selected_ldraw_file) {
-            filename = selected_ldraw_file.name.substring(0, selected_ldraw_file.name.lastIndexOf('.') + 1);
+            filename = selected_ldraw_file.name.substring( 0, selected_ldraw_file.name.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let result = dae_exporter.parse( ldraw_obj );
-          let blob = new Blob( [ result.data ], { type:'text/plain' } );
+          let blob = new Blob( [ result.data ], { type: 'text/plain' } );
           link.href = URL.createObjectURL( blob );
           link.download = filename + 'dae';
           link.click();
 
           if (result.textures.length > 0) {
             result.textures.forEach( tex => {
-              blob = new Blob( [ tex.data ], { type:'image/png' } );
+              blob = new Blob( [ tex.data ], { type: 'image/png' } );
               link.href = URL.createObjectURL( blob );
               link.download = `${ tex.name }.${ tex.ext }`;
               link.click();
@@ -430,23 +433,21 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (ldraw_obj) {
-          let filename;
-
           if (selected_ldraw_file) {
-            filename = selected_ldraw_file.name.substring(0, selected_ldraw_file.name.lastIndexOf('.') + 1);
+            filename = selected_ldraw_file.name.substring( 0, selected_ldraw_file.name.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           const options = {	binary: false, maxTextureSize: 4096 || Infinity };
 
           gltf_exporter.parse( ldraw_obj, ( json ) => {
             let string = JSON.stringify( json, null, 2 );
-            let blob = new Blob( [ string ], { type:'text/plain' } );
+            let blob = new Blob( [ string ], { type: 'text/plain' } );
             link.href = URL.createObjectURL( blob );
             link.download = filename + 'gltf';
             link.click();
-          }, function( error ) { console.log(error); }, options );
+          }, function( error ) { console.log( error ); }, options );
         }
       }
 
@@ -454,20 +455,131 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (ldraw_obj) {
-          let filename;
-
           if (selected_ldraw_file) {
-            filename = selected_ldraw_file.name.substring(0, selected_ldraw_file.name.lastIndexOf('.') + 1);
+            filename = selected_ldraw_file.name.substring( 0, selected_ldraw_file.name.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let json = JSON.stringify( ldraw_obj.toJSON() );
-          let blob = new Blob( [ json ], { type:'text/plain' } );
+          let blob = new Blob( [ json ], { type: 'text/plain' } );
           link.href = URL.createObjectURL( blob );
           link.download = filename + 'json';
           link.click();
         }
+      }
+
+      async function export_animated_gif() {
+        document.getElementById("export_names").selectedIndex = 0;
+
+        if (selected_ldraw_file) {
+          filename = selected_ldraw_file.name.substring( 0, selected_ldraw_file.name.lastIndexOf('.') + 1 );
+        } else {
+          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
+        }
+
+        // Generate
+
+        let fx = (ww - 500) / 2 + 60;
+        let fy = (wh - 500) / 2 + 25;
+        let frames = 318;
+        let buffer = new Uint8Array( 500 * 500 * 150 * 5 );
+        let pixels = new Uint8Array( 500 * 500 );
+        let writer = new GifWriter( buffer, 500, 500, { loop: 0 } );
+
+        await generateGIF( render, frames, fx, fy, buffer, pixels, writer );
+      }
+
+      function generateGIF( renderFunction, frames = 100, frame_x, frame_y, buffer, pixels, writer ) {
+        let canvas = document.createElement( 'canvas' );
+        canvas.width = ww;
+        canvas.height = wh;
+
+        let context = canvas.getContext( '2d' );
+
+        let current = 0;
+
+        function addFrame() {
+          context.clearRect( 0, 0, ww, wh );
+
+          renderFunction();
+
+          context.drawImage( renderer.domElement, 0, 0 );
+          let data = context.getImageData( frame_x, frame_y, 500, 500 ).data;
+
+          let palette = [];
+
+          for ( var j = 0, k = 0, jl = data.length; j < jl; j += 4, k ++ ) {
+            let r = Math.floor( data[ j + 0 ] * 0.1 ) * 10;
+            let g = Math.floor( data[ j + 1 ] * 0.1 ) * 10;
+            let b = Math.floor( data[ j + 2 ] * 0.1 ) * 10;
+            let color = r << 16 | g << 8 | b << 0;
+
+            let index = palette.indexOf( color );
+
+            if (index === -1) {
+              pixels[ k ] = palette.length;
+              palette.push( color );
+            } else {
+              pixels[ k ] = index;
+            }
+          }
+
+          // Force palette to be power of 2
+          let powof2 = 1;
+          while ( powof2 < palette.length ) powof2 <<= 1;
+          if (powof2 > 256) powof2 = 256;
+          palette.length = powof2;
+
+          let options = { palette: new Uint32Array( palette ), delay: 8 };
+
+          current ++;
+
+          if ( current < frames ) {
+            if (current > 2) {
+              writer.addFrame( 0, 0, 500, 500, pixels, options );
+            } else {
+              enable_disable( true );
+              document.getElementById('gizmo').style.display = 'none';
+              document.getElementById('btn_url').disabled = true;
+              document.getElementById('btn_lines').disabled = true;
+              document.getElementById('file_input').disabled = true;
+              document.getElementById("gif_progress").style.display = '';
+              document.getElementById('btn_full_screen').disabled = true;
+              if (construction_steps_present) {
+                document.getElementById('btn_construction_steps').disabled = true;
+                document.getElementById('btn_construction_steps_direction').disabled = true;
+              }
+            }
+
+            progress.value = current / frames;
+            setTimeout( addFrame, 0 );
+          } else {
+            progress.value = 0;
+            enable_disable( false );
+            document.getElementById('gizmo').style.display = '';
+            document.getElementById('btn_url').disabled = false;
+            document.getElementById('btn_lines').disabled = false;
+            document.getElementById('file_input').disabled = false;
+            document.getElementById('btn_full_screen').disabled = false;
+            document.getElementById("gif_progress").style.display = 'none';
+            if (construction_steps_present) {
+              document.getElementById('btn_construction_steps').disabled = false;
+              document.getElementById('btn_construction_steps_direction').disabled = false;
+            }
+
+            // Download
+
+            let blob = new Blob( [ buffer.subarray( 0, writer.end() ) ], { type: 'image/gif' } );
+            link.href = URL.createObjectURL( blob );
+            link.download = filename + 'gif';
+            link.click();
+
+            if (render_requested) render();
+          }
+        }
+
+        addFrame();
       }
 
       function set_back_color() {
@@ -507,29 +619,29 @@
       function set_scene_image() {
         fii = document.getElementById('file_image_input');
 
-        if (fii.files[0]) {
+        if (fii.files[ 0 ]) {
           document.getElementById('back_color').value = "0x000000";
           document.body.style.backgroundColor = document.getElementById('back_color').value;
 
-          if (fii.files[0].type.startsWith('image/')) {
-            texture_loader.load( URL.createObjectURL( fii.files[0] ) , function(texture) {
-              URL.revokeObjectURL( fii.files[0] );
+          if (fii.files[ 0 ].type.startsWith('image/')) {
+            texture_loader.load( URL.createObjectURL( fii.files[ 0 ] ) , function( texture ) {
+              URL.revokeObjectURL( fii.files[ 0 ] );
 
               scene.background = texture;
             }, function ( xhr ) {
               let today = new Date();
               let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
 
-              if (xhr.loaded == 0 && xhr.total == 0) {
+              if (xhr.loaded === 0 && xhr.total === 0) {
                 console.log( 'Background Image File 0% loaded - ' + time );
               } else {
-                console.log( 'Background Image File ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
+                console.log( 'Background Image File ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
               }
             }, function ( error ) {
               console.log( 'Error loading Background Image File!' );
               console.log( error );
 
-              URL.revokeObjectURL( fii.files[0] );
+              URL.revokeObjectURL( fii.files[ 0 ] );
             });
           } else {
             fii.value = "";
@@ -542,20 +654,20 @@
       }
 
       function set_ambient_light_color() {
-        let colors = document.getElementById('ambient_light_color').value; // hex format '#rrggbb'
-        ambientLight.color.setRGB( parseInt(colors.substring(1, 3), 16) / 10, parseInt(colors.substring(3, 5), 16) / 10, parseInt(colors.substring(5), 16) / 10 );
+        let al_colors = document.getElementById('ambient_light_color').value; // hex format '#rrggbb'
+        ambientLight.color.setRGB( parseInt( al_colors.substring( 1, 3 ), 16 ) / 10, parseInt( al_colors.substring( 3, 5 ), 16 ) / 10, parseInt( al_colors.substring( 5 ), 16 ) / 10 );
       }
 
       function set_hemisphere_light_color() {
         let hl_colors = document.getElementById('hemisphere_light_color').value; // hex format '#rrggbb'
-        hemisphereLight.color.setRGB( parseInt(hl_colors.substring(1, 3), 16) / 10, parseInt(hl_colors.substring(3, 5), 16) / 10, parseInt(hl_colors.substring(5), 16) / 10 );
+        hemisphereLight.color.setRGB( parseInt( hl_colors.substring( 1, 3 ), 16 ) / 10, parseInt( hl_colors.substring( 3, 5 ), 16 ) / 10, parseInt( hl_colors.substring( 5 ), 16 ) / 10 );
 
         (hl_colors === '#000000') ? hemisphereLight.groundColor.setRGB( 0, 0, 0 ) : hemisphereLight.groundColor.setRGB( 9.2, 9.2, 9.2 );
       }
 
       function set_directional_light_color() {
         let dl_colors = document.getElementById('directional_light_color').value; // hex format '#rrggbb'
-        (dl_colors === '#000000') ? directionalLight.color.setRGB( 1, 1, 1 ) : directionalLight.color.setRGB( parseInt(dl_colors.substring(1, 3), 16) / 250, parseInt(dl_colors.substring(3, 5), 16) / 250, parseInt(dl_colors.substring(5), 16) / 250 );
+        (dl_colors === '#000000') ? directionalLight.color.setRGB( 1, 1, 1 ) : directionalLight.color.setRGB( parseInt( dl_colors.substring( 1, 3 ), 16 ) / 250, parseInt( dl_colors.substring( 3, 5 ), 16 ) / 250, parseInt( dl_colors.substring( 5 ), 16 ) / 250 );
       }
 
       function set_directional_light_intensity() {
@@ -565,27 +677,27 @@
       function set_ldraw_scale() {
         let current_ldraw_scale = document.getElementById('ldraw_scale').value;
 
-        switch (previous_ldraw_scale) {
+        switch ( previous_ldraw_scale ) {
           case '0.25':
             ldraw_obj.scale.multiplyScalar( 2 );
             break;
           case '0.5':
-            ldraw_obj.scale.multiplyScalar( (current_ldraw_scale == '0.75') ? 3/2 : 1/2 );
+            ldraw_obj.scale.multiplyScalar( (current_ldraw_scale === '0.75') ? 3/2 : 1/2 );
             break;
           case '0.75':
-            ldraw_obj.scale.multiplyScalar( (current_ldraw_scale == '1') ? 4/3 : 2/3 );
+            ldraw_obj.scale.multiplyScalar( (current_ldraw_scale === '1') ? 4/3 : 2/3 );
             break;
           case '1':
-            ldraw_obj.scale.multiplyScalar( (current_ldraw_scale == '1.25') ? 5/4 : 3/4 );
+            ldraw_obj.scale.multiplyScalar( (current_ldraw_scale === '1.25') ? 5/4 : 3/4 );
             break;
           case '1.25':
-            ldraw_obj.scale.multiplyScalar( (current_ldraw_scale == '1.5') ? 6/5 : 4/5 );
+            ldraw_obj.scale.multiplyScalar( (current_ldraw_scale === '1.5') ? 6/5 : 4/5 );
             break;
           case '1.5':
-            ldraw_obj.scale.multiplyScalar( (current_ldraw_scale == '1.75') ? 7/6 : 5/6 );
+            ldraw_obj.scale.multiplyScalar( (current_ldraw_scale === '1.75') ? 7/6 : 5/6 );
             break;
           case '1.75':
-            ldraw_obj.scale.multiplyScalar( (current_ldraw_scale == '2') ? 8/7 : 6/7 );
+            ldraw_obj.scale.multiplyScalar( (current_ldraw_scale === '2') ? 8/7 : 6/7 );
             break;
           default:
             ldraw_obj.scale.multiplyScalar( 7/8 );
@@ -597,38 +709,38 @@
       }
 
       function scale_10x_set() {
-        if (document.getElementById('scale_10x').checked) {
-          ldraw_obj.scale.multiplyScalar( 10 );
-        } else {
-          ldraw_obj.scale.multiplyScalar( 0.1 );
-        }
+        document.getElementById('scale_10x').checked ? Obj.scale.multiplyScalar( 10 ) : Obj.scale.multiplyScalar( 0.1 );
 
         set_polar_grid_y();
         set_grid_y();
       }
 
       function radio_changed() {
+        let x_num = document.getElementById('rotation_x');
+        let y_num = document.getElementById('rotation_y');
+        let z_num = document.getElementById('rotation_z');
+
         if (document.getElementById('dlight').checked) {
-          document.getElementById('rotation_x').value = directionalLight.position.x;
-          document.getElementById('rotation_y').value = directionalLight.position.y;
-          document.getElementById('rotation_z').value = directionalLight.position.z;
-          document.getElementById('rotation_x').min = document.getElementById('rotation_y').min = document.getElementById('rotation_z').min = -500;
-          document.getElementById('rotation_x').max = document.getElementById('rotation_y').max = document.getElementById('rotation_z').max = 500;
-          document.getElementById('rotation_x').step = document.getElementById('rotation_y').step = document.getElementById('rotation_z').step = 10;
+          x_num.value = directionalLight.position.x;
+          y_num.value = directionalLight.position.y;
+          z_num.value = directionalLight.position.z;
+          x_num.min = y_num.min = z_num.min = -500;
+          x_num.max = y_num.max = z_num.max = 500;
+          x_num.step = y_num.step = z_num.step = 10;
         } else if (document.getElementById('hlight').checked) {
-          document.getElementById('rotation_x').value = hemisphereLight.position.x;
-          document.getElementById('rotation_y').value = hemisphereLight.position.y;
-          document.getElementById('rotation_z').value = hemisphereLight.position.z;
-          document.getElementById('rotation_x').min = document.getElementById('rotation_y').min = document.getElementById('rotation_z').min = -100;
-          document.getElementById('rotation_x').max = document.getElementById('rotation_y').max = document.getElementById('rotation_z').max = 100;
-          document.getElementById('rotation_x').step = document.getElementById('rotation_y').step = document.getElementById('rotation_z').step = 5;
+          x_num.value = hemisphereLight.position.x;
+          y_num.value = hemisphereLight.position.y;
+          z_num.value = hemisphereLight.position.z;
+          x_num.min = y_num.min = z_num.min = -100;
+          x_num.max = y_num.max = z_num.max = 100;
+          x_num.step = y_num.step = z_num.step = 5;
         } else {
-          document.getElementById('rotation_x').value = parseInt(rot_x * 1000);
-          document.getElementById('rotation_y').value = parseInt(rot_y * 1000);
-          document.getElementById('rotation_z').value = parseInt(rot_z * 1000);
-          document.getElementById('rotation_x').min = document.getElementById('rotation_y').min = document.getElementById('rotation_z').min = -50;
-          document.getElementById('rotation_x').max = document.getElementById('rotation_y').max = document.getElementById('rotation_z').max = 50;
-          document.getElementById('rotation_x').step = document.getElementById('rotation_y').step = document.getElementById('rotation_z').step = 1;
+          x_num.value = parseInt( rot_x * 1000 );
+          y_num.value = parseInt( rot_y * 1000 );
+          z_num.value = parseInt( rot_z * 1000 );
+          x_num.min = y_num.min = z_num.min = -50;
+          x_num.max = y_num.max = z_num.max = 50;
+          x_num.step = y_num.step = z_num.step = 1;
         }
       }
 
@@ -684,19 +796,19 @@
         edges = {};
         edges_visible = false;
         lines_visible = false;
+        construction_steps_present = false;
         render_requested = false;
         grid_visible = false;
         polar_grid_visible = false;
         document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_polar_grid').style.backgroundColor = '#d1cefc';
-        document.getElementById('btn_lines').style.backgroundColor = '#d1cefc';
 
         if (!url_loading) {
           // Loaded file
           var fi = document.getElementById('file_input');
 
           for (let i = 0; i < fi.files.length; i++) {
-            if (fi.files[i].name.toUpperCase().endsWith('.MPD') || fi.files[i].name.toUpperCase().endsWith('.LDR') || fi.files[i].name.toUpperCase().endsWith('.L3B') || fi.files[i].name.toUpperCase().endsWith('.DAT')) { selected_ldraw_file = fi.files[i]; }
+            if (fi.files[ i ].name.toUpperCase().endsWith('.MPD') || fi.files[ i ].name.toUpperCase().endsWith('.LDR') || fi.files[ i ].name.toUpperCase().endsWith('.L3B') || fi.files[ i ].name.toUpperCase().endsWith('.DAT')) { selected_ldraw_file = fi.files[ i ]; }
           };
 
           if (!selected_ldraw_file) {
@@ -721,34 +833,34 @@
         document.getElementById('div_error').style.display = "none";
         enable_disable( false );
 
-        if (renderer == undefined) {
+        if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
           renderer.gammaFactor = 2.2;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-          renderer.setClearColor( 0xFFFFFF, 0); // Allow setting the background color
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
           renderer.autoClear = false;
         }
 
         document.body.appendChild( renderer.domElement );
 
-        if (scene == undefined) scene = new THREE.Scene();
-        if (ldraw_obj == undefined) ldraw_obj = new THREE.Object3D();
+        if (scene === undefined) scene = new THREE.Scene();
+        if (ldraw_obj === undefined) ldraw_obj = new THREE.Object3D();
 
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         // Create a grid helper for use with Orbit Controls
-        if (polar_grid == undefined) polar_grid = new THREE.PolarGridHelper( 100, 10 );
-        if (grid == undefined) grid = new THREE.GridHelper( 200, 200, "yellow" );
+        if (polar_grid === undefined) polar_grid = new THREE.PolarGridHelper( 100, 10 );
+        if (grid === undefined) grid = new THREE.GridHelper( 200, 200, "yellow" );
 
         camera = new THREE.PerspectiveCamera( 45, ww/wh, 0.1, 2500 );
         camera.position.set( 0, 0, 20 );
         scene.add( camera );
 
         // Add AmbientLight to the scene
-        ambientLight = new THREE.AmbientLight(0x000000, 0.05);
+        ambientLight = new THREE.AmbientLight( 0x000000, 0.05 );
         ambientLight.position.set( 0, 0, 20 );
         scene.add( ambientLight );
 
@@ -803,10 +915,10 @@
           URL.revokeObjectURL( selected_ldraw_file );
 
           document.getElementById('btn_construction_steps_direction').innerHTML = "&#x2193";
-          document.getElementById('btn_lines').disabled = false;
           count_up = false;
 
           if (object.userData.numConstructionSteps > 1) {
+            construction_steps_present = true;
             c_steps = object.userData.numConstructionSteps - 1;
             document.getElementById('btn_construction_steps').disabled = false;
             document.getElementById('btn_construction_steps').innerHTML = "CS" + c_steps;
@@ -822,7 +934,7 @@
 
           let child_count = 1;
 
-          ldraw_obj.traverse( function ( child ) {
+          ldraw_obj.traverse( function( child ) {
             if (child instanceof THREE.Mesh) {
               child.name = 'child_' + child_count;
               if (child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
@@ -840,9 +952,15 @@
             }
           });
 
-          selected_ldraw_file.name.toUpperCase().endsWith('.DAT') ? ldraw_obj.rotation.x = - Math.PI / 2 : ldraw_obj.rotation.x = Math.PI;
+          if (selected_ldraw_file.name.toUpperCase().endsWith('.DAT')) {
+            document.getElementById('directional_light_intensity').value = 0.5;
+            directionalLight.intensity = parseFloat( 0.5 );
+            ldraw_obj.rotation.x = - Math.PI / 2;
+          } else {
+            ldraw_obj.rotation.x = Math.PI
+          }
 
-          bounding_box = new THREE.Box3().setFromObject( ldraw_obj );
+          bounding_box.setFromObject( ldraw_obj );
           let size = bounding_box.getSize( new THREE.Vector3() );
           let radius = Math.max( size.x, Math.max( size.y, size.z ) ) * 0.5;
 
@@ -860,16 +978,16 @@
           let today = new Date();
           let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
 
-          if (xhr.loaded == 0 && xhr.total == 0) {
+          if (xhr.loaded === 0 && xhr.total === 0) {
             console.log( 'LDRAW 0% loaded - ' + time );
             document.getElementById('div_loading').innerHTML = 'LDRAW 0% loaded - ' + time;
           } else {
-            console.log( 'LDRAW ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
+            console.log( 'LDRAW ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
 
-            if (parseInt(( xhr.loaded / xhr.total * 100 )) >= 95) {
+            if (parseInt( ( xhr.loaded / xhr.total ) * 100 ) >= 95) {
               document.getElementById('div_loading').innerHTML = 'Visualizing';
             } else {
-              document.getElementById('div_loading').innerHTML = 'LDRAW ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time;
+              document.getElementById('div_loading').innerHTML = 'LDRAW ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time;
             }
           }
         }, function ( error ) {
@@ -892,10 +1010,10 @@
 
             ldraw_loader.load( selected_url_file, function( object ) {
               document.getElementById('btn_construction_steps_direction').innerHTML = "&#x2193"
-              document.getElementById('btn_lines').disabled = false;
               count_up = false;
 
               if (object.userData.numConstructionSteps > 1) {
+                construction_steps_present = true;
                 c_steps = object.userData.numConstructionSteps - 1;
                 document.getElementById('btn_construction_steps').disabled = false;
                 document.getElementById('btn_construction_steps').innerHTML = "CS" + c_steps;
@@ -911,7 +1029,7 @@
 
               let child_count = 1;
 
-              ldraw_obj.traverse( function ( child ) {
+              ldraw_obj.traverse( function( child ) {
                 if (child instanceof THREE.Mesh) {
                   child.name = 'child_' + child_count;
                   if (child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
@@ -929,9 +1047,15 @@
                 }
               });
 
-              selected_url_file.toUpperCase().endsWith('.DAT') ? ldraw_obj.rotation.x = - Math.PI / 2 : ldraw_obj.rotation.x = Math.PI;
+              if (selected_url_file.toUpperCase().endsWith('.DAT')) {
+                document.getElementById('directional_light_intensity').value = 0.5;
+                directionalLight.intensity = parseFloat( 0.5 );
+                ldraw_obj.rotation.x = - Math.PI / 2;
+              } else {
+                ldraw_obj.rotation.x = Math.PI
+              }
 
-              bounding_box = new THREE.Box3().setFromObject( ldraw_obj );
+              bounding_box.setFromObject( ldraw_obj );
               let size = bounding_box.getSize( new THREE.Vector3() );
               let radius = Math.max( size.x, Math.max( size.y, size.z ) ) * 0.5;
 
@@ -971,7 +1095,7 @@
               document.getElementById('div_error').style.display = "block";
             });
           } else {
-            console.log('Unsupported URL file!');
+            console.log( 'Unsupported URL file!' );
             render_requested = false;
             enable_disable( true );
             if (gizmo) gizmo.dispose();
@@ -1022,7 +1146,7 @@
 
       function update_object_visibility() {
         ldraw_obj.traverse( child => {
-          if ( child.isGroup ) {
+          if (child.isGroup) {
             child.visible = child.userData.constructionStep <= c_steps;
           }
         });
@@ -1042,35 +1166,6 @@
             child.visible = lines_visible;
           }
         });
-      }
-
-      function render() {
-        if (render_requested) requestAnimationFrame( render );
-
-        if (ldraw_obj) {
-          // Reset ldraw_obj rotational values
-          if (reset_rotation) {
-            ldraw_obj.rotation.set( 0, 0, 0 );
-            reset_rotation = false;
-          }
-
-          // Rotate the mesh
-          if (!mouse_rotation && (rot_x != 0 || rot_y != 0 || rot_z != 0)) {
-            ldraw_obj.rotation.x += rot_x;
-            ldraw_obj.rotation.y += rot_y;
-            ldraw_obj.rotation.z += rot_z;
-
-            if (Math.abs(ldraw_obj.rotation.x) > 2 * Math.PI ) ldraw_obj.rotation.x = 0;
-            if (Math.abs(ldraw_obj.rotation.y) > 2 * Math.PI ) ldraw_obj.rotation.y = 0;
-            if (Math.abs(ldraw_obj.rotation.z) > 2 * Math.PI ) ldraw_obj.rotation.z = 0;
-          }
-
-          controls.update();
-          if (gizmo) gizmo.update();
-
-          renderer.clear();
-          renderer.render( scene, camera );
-        }
       }
 
       function show_polar_grid() {
@@ -1115,11 +1210,11 @@
 
       function show_edges() {
         if (edges_visible) {
-          ldraw_obj.traverse( function( child ) { if (child instanceof THREE.Mesh) { child.remove( edges[ child.name ] ); } });
+          ldraw_obj.traverse( function( child ) { if (child instanceof THREE.Mesh) child.remove( edges[ child.name ] ); });
           edges_visible = false;
           document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
         } else {
-          ldraw_obj.traverse( function( child ) { if (child instanceof THREE.Mesh) { child.add( edges[ child.name ] ); } });
+          ldraw_obj.traverse( function( child ) { if (child instanceof THREE.Mesh) child.add( edges[ child.name ] ); });
           edges_visible = true;
           document.getElementById('btn_edges').style.backgroundColor = 'lightgreen';
         }
@@ -1138,6 +1233,44 @@
               }
             }
           });
+        }
+      }
+
+      function render() {
+        if (document.getElementById('gif_progress').style.display === 'none') {
+          if (render_requested) requestAnimationFrame( render );
+        }
+
+        if (ldraw_obj) {
+          // Reset ldraw_obj rotational values
+          if (reset_rotation) {
+            ldraw_obj.rotation.set( 0, 0, 0 );
+            reset_rotation = false;
+          }
+
+          // Rotate the object and account for Y_UP / Z_UP
+          if (!mouse_rotation) {
+            if (rot_x === 0 && rot_y === 0 && rot_z === 0) {
+              // Animated GIF generation
+              if (progress.value > 0.01) {
+                if ((selected_ldraw_file && selected_ldraw_file.name.toUpperCase().endsWith('.DAT')) || (selected_url_file !== '' && selected_url_file.toUpperCase().endsWith('.DAT'))) {
+                  ldraw_obj.rotation.z += 0.02;
+                } else {
+                  ldraw_obj.rotation.y -= 0.02;
+                }
+              }
+            } else {
+              if (rot_x !== 0) ldraw_obj.rotation.x += rot_x;
+              if (rot_y !== 0) ldraw_obj.rotation.y += rot_y;
+              if (rot_z !== 0) ldraw_obj.rotation.z += rot_z;
+            }
+          }
+
+          controls.update();
+          if (gizmo) gizmo.update();
+
+          renderer.clear();
+          renderer.render( scene, camera );
         }
       }
 
@@ -1184,7 +1317,8 @@
         document.getElementById('wireframe').checked = false;
         document.getElementById('scale_10x').checked = false;
 
-        // Reset edges and CS related values
+        // Reset lines, edges and CS related values
+        lines_visible = false;
         edges_visible = false;
         document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
         count_up = false;
@@ -1209,13 +1343,12 @@
         }
 
         if (!reset) {
-          // Page (re)loading so reset the file input, spinner, error, CS button, URL entry and disable controls
+          // Page (re)loading so reset the file input, spinner, error, CS buttons, URL entry and disable controls
           document.getElementById('file_input').value = "";
           document.getElementById('div_spinner').style.display = "block";
           document.getElementById('div_error').style.display = "none";
           document.getElementById('btn_construction_steps').disabled = true;
           document.getElementById('btn_construction_steps_direction').disabled = true;
-          document.getElementById('btn_lines').disabled = true;
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
           enable_disable( true );
@@ -1242,6 +1375,7 @@
         document.getElementById('btn_polar_grid').disabled = disable;
         document.getElementById('btn_grid').disabled = disable;
         document.getElementById('btn_edges').disabled = disable;
+        document.getElementById('btn_lines').disabled = disable;
         document.getElementById('reset').disabled = disable;
         document.getElementById('export_names').disabled = disable;
       }
