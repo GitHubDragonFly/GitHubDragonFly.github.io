@@ -17,7 +17,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model
 - Import files locally from a file browser dialog or specify remote URL
-- Import formats, where applicable, with any optional textures:
+- Import formats, where applicable, with any optional/required textures:
   - 3DS, 3DM, 3MF, AMF, BRP, BREP, DAE, FBX, IFC, IGES, IGS, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
   - GLTF supported formats: GLB, GLTF + BIN, DRC
   - GCODE supported formats: GCODE, NCC, NGC
@@ -31,7 +31,8 @@ There is a lot of information and descriptions, some intended for Industrial Aut
   - non-animated / non-rotating models will spin 360 degrees
   - the larger the model and/or the more colors in the model = the bigger the size of the resulting GIF file
   - it disregards the background color but does observe the background image with simple color palette
-  - it is highly experimental as it is but seems to be functional - see the `legobrick.gif` example in the `images` folder
+  - it is highly experimental as it is but seems to be functional
+  - see the `legobrick.gif` example in the `images` folder
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
 - Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
