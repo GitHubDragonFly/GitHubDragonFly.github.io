@@ -9,6 +9,7 @@
     <script src="../static/js/OBJLoader.js"></script>
     <script src="../static/js/TGALoader.js"></script>
     <script src="../static/js/DDSLoader.js"></script>
+    <script src="../static/js/omggif/omggif.js"></script>
     <script src="../static/js/OrbitControls.js"></script>
     <script src="../static/js/OrbitControlsGizmo.js"></script>
     <script src="../static/js/exporters/PLYExporter.js"></script>
@@ -171,6 +172,9 @@
     <!-- http://casual-effects.com/data/index.html -->
     <!-- https://www.videocopilot.net/blog/2016/05/free-star-wars-model-pack/ -->
     <!-- Also see: https://davidoreilly.itch.io/walt-disney-3d-head , http://www.davidoreilly.com/ -->
+    <!-- Animated GIF export is based on the following example and library: -->
+    <!--   https://github.com/mrdoob/omggif-example  -->
+    <!--   https://github.com/deanm/omggif  -->
 
     <title>OBJ Viewer</title>
   </head>
@@ -179,7 +183,7 @@
       <div class="fm" id="gizmo" style="width: 63px; height: 63px; float: right; background-color: black; margin-right: 3px;"></div>
       <div class="fm">
         <label for="file" title="OBJ + MTL" style="color: #CE8704; margin: 2px 2px 2px 3px;">OBJ</label>
-        <button onclick="show_url()" style="padding: 1px 3px 1px 3px;">URL</button>
+        <button id="btn_url" onclick="show_url()" style="padding: 1px 3px 1px 3px;">URL</button>
         <input type="file" id="file_input" name="file" onchange="init()" accept=".obj, .mtl, .dds, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" multiple />
         <label for="file_image_input" title="Background Image" style="color: #CE8704; margin: 2px 2px 2px 0;">BGND</label>
         <input type="file" id="file_image_input" name="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" onchange="set_scene_image()" disabled />
@@ -231,6 +235,7 @@
         <button id="btn_polar_grid" title="Polar Grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; width: 24px;" disabled><p class="polar"></p></button>
         <select name="export_names" id="export_names" disabled>
           <option value="" selected disabled>Export</option>
+          <option value="gif" onclick="export_animated_gif()">GIF</option>
           <option value="ply" onclick="export_ply()">PLY</option>
           <option value="stl" onclick="export_stl()">STL</option>
           <option value="obj" onclick="export_obj()">OBJ</option>
@@ -242,7 +247,10 @@
         <button id="reset" title="Reset" onclick="reset_only()" style="color: maroon; width: 40px;" disabled>RST</button>
         <button id="btn_full_screen" title="Full Screen" onclick="full_screen()" style="width: 22px;"><p class="full_screen"></p></button>
       </div>
-    </div>
+      <div id="gif_progress" style="display: none; background-color: transparent; border: none; height: 1px;">
+        <progress id="progress" value="0" max="1" style="width: 99.5%; margin-left: 3px; margin-right: 3px;"></progress>
+      </div>
+    </div><br />
 
     <div id="div_spinner" class="spinner"></div>
     <div id="div_error" class="error_msg">E R R O R !</div>
@@ -269,7 +277,7 @@
       function clear_url() { document.getElementById('url_entry').value = ''; }
 
       function initialize_event_listeners() {
-        window.addEventListener( 'mousedown', (event) => { mouse_rotation = true; }, false);
+        window.addEventListener( 'mousedown', (event) => { if (progress.value === 0) mouse_rotation = true; }, false);
         window.addEventListener( 'mouseup', (event) => { mouse_rotation = false; }, false);
       }
 
@@ -310,18 +318,20 @@
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth,	wh = window.innerHeight;
       var mouse_rotation, reset_rotation, events_initialized;
-      var rot_x = 0, rot_y = 0, rot_z = 0, vertex_colors_enabled;
+      var rot_x = 0, rot_y = 0, rot_z = 0;
+      var initial_rotation = new THREE.Vector3();
       var previous_obj_scale = '1', bounding_box = new THREE.Box3();
       var initial_opacity, initial_opacity_array, enable_opacity;
       var initial_transparency, initial_transparency_array;
-      var original_normals, original_indices, original_positions, original_uvs, original_attr_colors, xtra_smooth_enabled;
-      var original_color, original_color_array;
+      var original_normals, original_indices, original_positions;
+      var original_uvs, original_attr_colors, xtra_smooth_enabled;
+      var original_color, original_color_array, vertex_colors_enabled;
       var original_side, original_side_array;
       var selected_url_file = '', url_displayed, url_loading, flat_shading_enabled;
       var selected_mtl_file, selected_mtl_url_file, selected_obj_file, selected_obj_url_file;
       var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif;
       var texture_files_svg, texture_files_dds, texture_files_tga;
-      var url_tga_loaded, current_texture, textures, reflect, lines_visible;
+      var url_tga_loaded, current_texture, textures, reflect, filename, lines_visible;
 
       // Manager from ThreeJs to track a loader and its status
       var manager = new THREE.LoadingManager();
@@ -354,8 +364,6 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (Obj) {
-          let filename;
-
           if (selected_obj_file) {
             filename = selected_obj_file.name.substring(0, selected_obj_file.name.lastIndexOf('.') + 1);
           } else if (selected_obj_url_file) {
@@ -394,8 +402,6 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (Obj) {
-          let filename;
-
           if (selected_obj_file) {
             filename = selected_obj_file.name.substring(0, selected_obj_file.name.lastIndexOf('.') + 1);
           } else if (selected_obj_url_file) {
@@ -416,8 +422,6 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (Obj) {
-          let filename;
-
           if (selected_obj_file) {
             filename = selected_obj_file.name.substring(0, selected_obj_file.name.lastIndexOf('.') + 1);
           } else if (selected_obj_url_file) {
@@ -438,8 +442,6 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (Obj) {
-          let filename;
-
           if (selected_obj_file) {
             filename = selected_obj_file.name.substring(0, selected_obj_file.name.lastIndexOf('.') + 1);
           } else if (selected_obj_url_file) {
@@ -469,8 +471,6 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (Obj) {
-          let filename;
-
           if (selected_obj_file) {
             filename = selected_obj_file.name.substring(0, selected_obj_file.name.lastIndexOf('.') + 1);
           } else if (selected_obj_url_file) {
@@ -495,8 +495,6 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (Obj) {
-          let filename;
-
           if (selected_obj_file) {
             filename = selected_obj_file.name.substring(0, selected_obj_file.name.lastIndexOf('.') + 1);
           } else if (selected_obj_url_file) {
@@ -520,8 +518,6 @@
         document.getElementById("export_names").selectedIndex = 0;
 
         if (Obj) {
-          let filename;
-
           if (selected_obj_file) {
             filename = selected_obj_file.name.substring(0, selected_obj_file.name.lastIndexOf('.') + 1);
           } else if (selected_obj_url_file) {
@@ -536,6 +532,113 @@
           link.download = filename + 'json';
           link.click();
         }
+      }
+
+      async function export_animated_gif() {
+        document.getElementById("export_names").selectedIndex = 0;
+
+        if (selected_obj_file) {
+          filename = selected_obj_file.name.substring(0, selected_obj_file.name.lastIndexOf('.') + 1);
+        } else if (selected_obj_url_file) {
+          filename = selected_obj_url_file.substring(selected_obj_url_file.lastIndexOf('/') + 1, selected_obj_url_file.lastIndexOf('.') + 1);
+        } else {
+          filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+        }
+
+        // Generate
+
+        let fx = (ww - 500) / 2 + 60;
+        let fy = (wh - 500) / 2 + 25;
+        let frames = 318;
+        let buffer = new Uint8Array( 500 * 500 * 150 * 5 );
+        let pixels = new Uint8Array( 500 * 500 );
+        let writer = new GifWriter( buffer, 500, 500, { loop: 0 } );
+
+        await generateGIF( render, frames, fx, fy, buffer, pixels, writer );
+      }
+
+      function generateGIF( renderFunction, frames = 100, frame_x, frame_y, buffer, pixels, writer ) {
+        let canvas = document.createElement( 'canvas' );
+        canvas.width = ww;
+        canvas.height = wh;
+
+        let context = canvas.getContext( '2d' );
+
+        let current = 0;
+
+        function addFrame() {
+          context.clearRect( 0, 0, ww, wh );
+
+          renderFunction();
+
+          context.drawImage( renderer.domElement, 0, 0 );
+          let data = context.getImageData( frame_x, frame_y, 500, 500 ).data;
+
+          let palette = [];
+
+          for ( var j = 0, k = 0, jl = data.length; j < jl; j += 4, k ++ ) {
+            let r = Math.floor( data[ j + 0 ] * 0.1 ) * 10;
+            let g = Math.floor( data[ j + 1 ] * 0.1 ) * 10;
+            let b = Math.floor( data[ j + 2 ] * 0.1 ) * 10;
+            let color = r << 16 | g << 8 | b << 0;
+
+            let index = palette.indexOf( color );
+
+            if (index === -1) {
+              pixels[ k ] = palette.length;
+              palette.push( color );
+            } else {
+              pixels[ k ] = index;
+            }
+          }
+
+          // Force palette to be power of 2
+          let powof2 = 1;
+          while ( powof2 < palette.length ) powof2 <<= 1;
+          if (powof2 > 256) powof2 = 256;
+          palette.length = powof2;
+
+          let options = { palette: new Uint32Array( palette ), delay: 8 };
+
+          current ++;
+
+          if ( current < frames ) {
+            if (current > 2) {
+              writer.addFrame( 0, 0, 500, 500, pixels, options );
+            } else {
+              enable_disable( true );
+              document.getElementById('gizmo').style.display = 'none';
+              document.getElementById('btn_url').disabled = true;
+              document.getElementById('file_input').disabled = true;
+              document.getElementById('btn_reflective').disabled = true;
+              document.getElementById("gif_progress").style.display = '';
+              document.getElementById('btn_full_screen').disabled = true;
+            }
+
+            progress.value = current / frames;
+            setTimeout( addFrame, 0 );
+          } else {
+            progress.value = 0;
+            enable_disable( false );
+            document.getElementById('gizmo').style.display = '';
+            document.getElementById('btn_url').disabled = false;
+            document.getElementById('file_input').disabled = false;
+            document.getElementById('btn_full_screen').disabled = false;
+            document.getElementById("gif_progress").style.display = 'none';
+            if (document.getElementById('equi').checked) document.getElementById('btn_reflective').disabled = false;
+
+            // Download
+
+            let blob = new Blob( [ buffer.subarray( 0, writer.end() ) ], { type: 'image/gif' } );
+            link.href = URL.createObjectURL( blob );
+            link.download = filename + 'gif';
+            link.click();
+
+            if (render_requested) render();
+          }
+        }
+
+        addFrame();
       }
 
       function set_back_color() {
@@ -558,21 +661,21 @@
                     if (original_color_array[ child.name ][ child_count_array ]) mtl.color.setRGB( original_color_array[ child.name ][ child_count_array ].r, original_color_array[ child.name ][ child_count_array ].g, original_color_array[ child.name ][ child_count_array ].b );
                     child_count_array += 1;
                   } else {
-                    mtl.color.setRGB( parseInt(obj_colors.substring(1, 3), 16) / 250, parseInt(obj_colors.substring(3, 5), 16) / 250, parseInt(obj_colors.substring(5), 16) / 250 ); // hex format '#rrggbb'
+                    mtl.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 250, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 250, parseInt( obj_colors.substring( 5 ), 16 ) / 250 ); // hex format '#rrggbb'
                   }
                 });
               } else {
                 if (obj_colors === '#000000') {
                   if (original_color[ child.name ]) child.material.color.setRGB( original_color[ child.name ].r, original_color[ child.name ].g, original_color[ child.name ].b );
                 } else {
-                  child.material.color.setRGB( parseInt(obj_colors.substring(1, 3), 16) / 250, parseInt(obj_colors.substring(3, 5), 16) / 250, parseInt(obj_colors.substring(5), 16) / 250 ); // hex format '#rrggbb'
+                  child.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 250, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 250, parseInt( obj_colors.substring( 5 ), 16 ) / 250 ); // hex format '#rrggbb'
                 }
               }
             } else if (child instanceof THREE.LineSegments) {
               if (obj_colors === '#000000') {
                 child.material.color.setRGB( 0.85, 0.85, 0.85 );
               } else {
-                child.material.color.setRGB( parseInt(obj_colors.substring(1, 3), 16) / 250, parseInt(obj_colors.substring(3, 5), 16) / 250, parseInt(obj_colors.substring(5), 16) / 250 ); // hex format '#rrggbb'
+                child.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 250, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 250, parseInt( obj_colors.substring( 5 ), 16 ) / 250 ); // hex format '#rrggbb'
               }
             }
           });
@@ -717,13 +820,13 @@
       function set_scene_image() {
         fii = document.getElementById('file_image_input');
 
-        if (fii.files[0]) {
+        if (fii.files[ 0 ]) {
           document.getElementById('back_color').value = "0x000000";
           document.body.style.backgroundColor = document.getElementById('back_color').value;
 
-          if (fii.files[0].type.startsWith('image/')) {
-            texture_loader.load( URL.createObjectURL( fii.files[0] ) , function ( texture ) {
-              URL.revokeObjectURL( fii.files[0] );
+          if (fii.files[ 0 ].type.startsWith('image/')) {
+            texture_loader.load( URL.createObjectURL( fii.files[ 0 ] ) , function ( texture ) {
+              URL.revokeObjectURL( fii.files[ 0 ] );
 
               scene.background = texture;
             }, function ( xhr ) {
@@ -733,13 +836,13 @@
               if (xhr.loaded == 0 && xhr.total == 0) {
                 console.log( 'Background Image File 0% loaded - ' + time );
               } else {
-                console.log( 'Background Image File ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
+                console.log( 'Background Image File ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
               }
             }, function ( error ) {
               console.log( 'Error loading Background Image File!' );
               console.log( error );
 
-              URL.revokeObjectURL( fii.files[0] );
+              URL.revokeObjectURL( fii.files[ 0 ] );
             });
           } else {
             fii.value = "";
@@ -753,19 +856,19 @@
 
       function set_ambient_light_color() {
         let colors = document.getElementById('ambient_light_color').value; // hex format '#rrggbb'
-        ambientLight.color.setRGB( parseInt(colors.substring(1, 3), 16) / 10, parseInt(colors.substring(3, 5), 16) / 10, parseInt(colors.substring(5), 16) / 10 );
+        ambientLight.color.setRGB( parseInt( colors.substring( 1, 3 ), 16 ) / 10, parseInt( colors.substring( 3, 5 ), 16 ) / 10, parseInt( colors.substring( 5 ), 16 ) / 10 );
       }
 
       function set_hemisphere_light_color() {
         let hl_colors = document.getElementById('hemisphere_light_color').value; // hex format '#rrggbb'
-        hemisphereLight.color.setRGB( parseInt(hl_colors.substring(1, 3), 16) / 10, parseInt(hl_colors.substring(3, 5), 16) / 10, parseInt(hl_colors.substring(5), 16) / 10 );
+        hemisphereLight.color.setRGB( parseInt( hl_colors.substring( 1, 3 ), 16 ) / 10, parseInt( hl_colors.substring( 3, 5 ), 16 ) / 10, parseInt( hl_colors.substring( 5 ), 16 ) / 10 );
 
         (hl_colors === '#000000') ? hemisphereLight.groundColor.setRGB( 0, 0, 0 ) : hemisphereLight.groundColor.setRGB( 9.2, 9.2, 9.2 );
       }
 
       function set_directional_light_color() {
         let dl_colors = document.getElementById('directional_light_color').value; // hex format '#rrggbb'
-        (dl_colors === '#000000') ? directionalLight.color.setRGB( 1, 1, 1 ) : directionalLight.color.setRGB( parseInt(dl_colors.substring(1, 3), 16) / 250, parseInt(dl_colors.substring(3, 5), 16) / 250, parseInt(dl_colors.substring(5), 16) / 250 );
+        (dl_colors === '#000000') ? directionalLight.color.setRGB( 1, 1, 1 ) : directionalLight.color.setRGB( parseInt( dl_colors.substring( 1, 3 ), 16 ) / 250, parseInt( dl_colors.substring( 3, 5 ), 16 ) / 250, parseInt( dl_colors.substring( 5 ), 16 ) / 250 );
       }
 
       function set_directional_light_intensity() {
@@ -778,11 +881,11 @@
         let y;
 
         if (bounding_box.max.y < 0) {
-          y = (Math.abs(bounding_box.min.y) - Math.abs(bounding_box.max.y));
+          y = (Math.abs( bounding_box.min.y ) - Math.abs( bounding_box.max.y ));
         } else if (bounding_box.max.y >= 0 && bounding_box.min.y <= 0) {
-          y = (Math.abs(bounding_box.max.y) + Math.abs(bounding_box.min.y));
+          y = (Math.abs( bounding_box.max.y ) + Math.abs( bounding_box.min.y ));
         } else {
-          y = (Math.abs(bounding_box.max.y) - Math.abs(bounding_box.min.y));
+          y = (Math.abs( bounding_box.max.y ) - Math.abs( bounding_box.min.y ));
         }
 
         Obj.scale.multiplyScalar( 50 / y );
@@ -791,27 +894,27 @@
       function set_obj_scale() {
         let current_obj_scale = document.getElementById('obj_scale').value;
 
-        switch (previous_obj_scale) {
+        switch ( previous_obj_scale ) {
           case '0.25':
             Obj.scale.multiplyScalar( 2 );
             break;
           case '0.5':
-            Obj.scale.multiplyScalar( (current_obj_scale == '0.75') ? 3/2 : 1/2 );
+            Obj.scale.multiplyScalar( (current_obj_scale === '0.75') ? 3/2 : 1/2 );
             break;
           case '0.75':
-            Obj.scale.multiplyScalar( (current_obj_scale == '1') ? 4/3 : 2/3 );
+            Obj.scale.multiplyScalar( (current_obj_scale === '1') ? 4/3 : 2/3 );
             break;
           case '1':
-            Obj.scale.multiplyScalar( (current_obj_scale == '1.25') ? 5/4 : 3/4 );
+            Obj.scale.multiplyScalar( (current_obj_scale === '1.25') ? 5/4 : 3/4 );
             break;
           case '1.25':
-            Obj.scale.multiplyScalar( (current_obj_scale == '1.5') ? 6/5 : 4/5 );
+            Obj.scale.multiplyScalar( (current_obj_scale === '1.5') ? 6/5 : 4/5 );
             break;
           case '1.5':
-            Obj.scale.multiplyScalar( (current_obj_scale == '1.75') ? 7/6 : 5/6 );
+            Obj.scale.multiplyScalar( (current_obj_scale === '1.75') ? 7/6 : 5/6 );
             break;
           case '1.75':
-            Obj.scale.multiplyScalar( (current_obj_scale == '2') ? 8/7 : 6/7 );
+            Obj.scale.multiplyScalar( (current_obj_scale === '2') ? 8/7 : 6/7 );
             break;
           default:
             Obj.scale.multiplyScalar( 7/8 );
@@ -830,27 +933,31 @@
       }
 
       function radio_changed() {
+        let x_num = document.getElementById('rotation_x');
+        let y_num = document.getElementById('rotation_y');
+        let z_num = document.getElementById('rotation_z');
+
         if (document.getElementById('dlight').checked) {
-          document.getElementById('rotation_x').value = directionalLight.position.x;
-          document.getElementById('rotation_y').value = directionalLight.position.y;
-          document.getElementById('rotation_z').value = directionalLight.position.z;
-          document.getElementById('rotation_x').min = document.getElementById('rotation_y').min = document.getElementById('rotation_z').min = -1000;
-          document.getElementById('rotation_x').max = document.getElementById('rotation_y').max = document.getElementById('rotation_z').max = 1000;
-          document.getElementById('rotation_x').step = document.getElementById('rotation_y').step = document.getElementById('rotation_z').step = 5;
+          x_num.value = directionalLight.position.x;
+          y_num.value = directionalLight.position.y;
+          z_num.value = directionalLight.position.z;
+          x_num.min = y_num.min = z_num.min = -500;
+          x_num.max = y_num.max = z_num.max = 500;
+          x_num.step = y_num.step = z_num.step = 10;
         } else if (document.getElementById('hlight').checked) {
-          document.getElementById('rotation_x').value = hemisphereLight.position.x;
-          document.getElementById('rotation_y').value = hemisphereLight.position.y;
-          document.getElementById('rotation_z').value = hemisphereLight.position.z;
-          document.getElementById('rotation_x').min = document.getElementById('rotation_y').min = document.getElementById('rotation_z').min = -100;
-          document.getElementById('rotation_x').max = document.getElementById('rotation_y').max = document.getElementById('rotation_z').max = 100;
-          document.getElementById('rotation_x').step = document.getElementById('rotation_y').step = document.getElementById('rotation_z').step = 1;
+          x_num.value = hemisphereLight.position.x;
+          y_num.value = hemisphereLight.position.y;
+          z_num.value = hemisphereLight.position.z;
+          x_num.min = y_num.min = z_num.min = -100;
+          x_num.max = y_num.max = z_num.max = 100;
+          x_num.step = y_num.step = z_num.step = 5;
         } else {
-          document.getElementById('rotation_x').value = parseInt(rot_x * 1000);
-          document.getElementById('rotation_y').value = parseInt(rot_y * 1000);
-          document.getElementById('rotation_z').value = parseInt(rot_z * 1000);
-          document.getElementById('rotation_x').min = document.getElementById('rotation_y').min = document.getElementById('rotation_z').min = -50;
-          document.getElementById('rotation_x').max = document.getElementById('rotation_y').max = document.getElementById('rotation_z').max = 50;
-          document.getElementById('rotation_x').step = document.getElementById('rotation_y').step = document.getElementById('rotation_z').step = 1;
+          x_num.value = parseInt( rot_x * 1000 );
+          y_num.value = parseInt( rot_y * 1000 );
+          z_num.value = parseInt( rot_z * 1000 );
+          x_num.min = y_num.min = z_num.min = -50;
+          x_num.max = y_num.max = z_num.max = 50;
+          x_num.step = y_num.step = z_num.step = 1;
         }
       }
 
@@ -959,15 +1066,15 @@
 
           // Include check for JPG/PNG/BMP/GIF/TIF, SVG, TGA and DDS (DirectDraw Surface container file format)
           for (let i = 0; i < fi.files.length; i++) {
-            if (fi.files[i].name.toUpperCase().endsWith('.OBJ')) { selected_obj_file = fi.files[i]; }
-            else if (fi.files[i].name.toUpperCase().endsWith('.MTL')) { selected_mtl_file = fi.files[i]; }
-            else if (fi.files[i].name.toUpperCase().endsWith('.PNG')) { texture_files_png.push( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.JPG')) { texture_files_jpg.push( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.BMP')) { texture_files_bmp.push( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.GIF')) { texture_files_gif.push( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.SVG')) { texture_files_svg.push( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.TGA')) { texture_files_tga.push( fi.files[i] ); }
-            else if (fi.files[i].name.toUpperCase().endsWith('.DDS')) { texture_files_dds.push( fi.files[i] ); }
+            if (fi.files[ i ].name.toUpperCase().endsWith('.OBJ')) { selected_obj_file = fi.files[ i ]; }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.MTL')) { selected_mtl_file = fi.files[ i ]; }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.PNG')) { texture_files_png.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.JPG')) { texture_files_jpg.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.BMP')) { texture_files_bmp.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.GIF')) { texture_files_gif.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.SVG')) { texture_files_svg.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.TGA')) { texture_files_tga.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.DDS')) { texture_files_dds.push( fi.files[ i ] ); }
           };
 
           if (!selected_obj_file) {
@@ -991,14 +1098,14 @@
         document.getElementById('div_error').style.display = "none";
         enable_disable( false );
 
-        if (renderer == undefined) {
-          renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
           renderer.gammaFactor = 2.2;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-          renderer.setClearColor( 0xFFFFFF, 0); // Allow setting the background color
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
           renderer.autoClear = false;
         }
 
@@ -1009,15 +1116,15 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         // Create a grid helper for use with Orbit Controls
-        if (polar_grid == undefined) polar_grid = new THREE.PolarGridHelper( 100, 10 );
-        if (grid == undefined) grid = new THREE.GridHelper( 200, 200, "yellow" );
+        if (polar_grid === undefined) polar_grid = new THREE.PolarGridHelper( 100, 10 );
+        if (grid === undefined) grid = new THREE.GridHelper( 200, 200, "yellow" );
 
         camera = new THREE.PerspectiveCamera( 45, ww/wh, 0.1, 2000 );
         camera.position.set( 0, 0, 250 );
         scene.add( camera );
 
         // Add AmbientLight to the scene
-        ambientLight = new THREE.AmbientLight(0x000000, 0.05);
+        ambientLight = new THREE.AmbientLight( 0x000000, 0.05 );
         ambientLight.position.set( 0, 0, 250 );
         scene.add( ambientLight );
 
@@ -1032,7 +1139,7 @@
         directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
         camera.add( directionalLight );
 
-        controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls = new THREE.OrbitControls( camera, renderer.domElement );
         controls.enableDamping = true;
         //controls.enableKeys = false;
         //controls.enableZoom = true;
@@ -1199,6 +1306,8 @@
                 }
     	        });
 
+              initial_rotation = Obj.rotation;
+
               // Add 3D object to scene
               scene.add( Obj );
               camera.lookAt( Obj.position );
@@ -1211,16 +1320,16 @@
               let today = new Date();
               let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
 
-              if (xhr.loaded == 0 && xhr.total == 0) {
+              if (xhr.loaded === 0 && xhr.total === 0) {
                 console.log( 'OBJ 0% loaded - ' + time );
                 document.getElementById('div_loading').innerHTML = 'OBJ 0% loaded - ' + time;
               } else {
-                console.log( 'OBJ ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
+                console.log( 'OBJ ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
 
-                if (parseInt(( xhr.loaded / xhr.total * 100 )) >= 95) {
+                if (parseInt( ( xhr.loaded / xhr.total ) * 100 ) >= 95) {
                   document.getElementById('div_loading').innerHTML = 'Visualizing';
                 } else {
-                  document.getElementById('div_loading').innerHTML = 'OBJ ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time;
+                  document.getElementById('div_loading').innerHTML = 'OBJ ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time;
                 }
               }
             }, function ( error ) {
@@ -1237,12 +1346,12 @@
             let today = new Date();
             let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
 
-            if (xhr.loaded == 0 && xhr.total == 0) {
+            if (xhr.loaded === 0 && xhr.total === 0) {
               console.log( 'MTL 0% loaded - ' + time );
               document.getElementById('div_loading').innerHTML = 'MTL 0% loaded - ' + time;
             } else {
-              console.log( 'MTL ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
-              document.getElementById('div_loading').innerHTML = 'MTL ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time;
+              console.log( 'MTL ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
+              document.getElementById('div_loading').innerHTML = 'MTL ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time;
             }
           }, function ( error ) {
             console.log( 'Error loading MTL!' );
@@ -1259,7 +1368,7 @@
           document.getElementById('div_loading').style.display = "block";
 
           // Launch loading of the selected file
-          obj_loader.load( URL.createObjectURL( selected_obj_file ), function ( object ) {
+          obj_loader.load( URL.createObjectURL( selected_obj_file ), function( object ) {
             URL.revokeObjectURL( selected_obj_file );
 
             Obj = object;
@@ -1350,6 +1459,8 @@
               }
     	      });
 
+            initial_rotation = Obj.rotation;
+
             // Add 3D object to scene
             scene.add( Obj );
             camera.lookAt( Obj.position );
@@ -1362,16 +1473,16 @@
             let today = new Date();
             let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
 
-            if (xhr.loaded == 0 && xhr.total == 0) {
+            if (xhr.loaded === 0 && xhr.total === 0) {
               console.log( 'OBJ 0% loaded - ' + time );
               document.getElementById('div_loading').innerHTML = 'OBJ 0% loaded - ' + time;
             } else {
-              console.log( 'OBJ ' + parseInt(( xhr.loaded / xhr.total * 100 )) + '% loaded - ' + time );
+              console.log( 'OBJ ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
 
-              if (parseInt( xhr.loaded / xhr.total * 100 ) >= 95) {
+              if (parseInt( ( xhr.loaded / xhr.total ) * 100 ) >= 95) {
                 document.getElementById('div_loading').innerHTML = 'Visualizing';
               } else {
-                document.getElementById('div_loading').innerHTML = 'OBJ ' + parseInt( xhr.loaded / xhr.total * 100 ) + '% loaded - ' + time;
+                document.getElementById('div_loading').innerHTML = 'OBJ ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time;
               }
             }
           }, function ( error ) {
@@ -1390,48 +1501,48 @@
 
       function set_mtl_materialsInfo( key, value, file, mtl ) {
         if (value.map_d && (value.map_d.indexOf( ' ' ) ? file.name === value.map_d.substring( value.map_d.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_d)) {
-          mtl.materialsInfo[ key ][ 'map_d' ] = URL.createObjectURL( file ).substring(mtl.baseUrl.length);
+          mtl.materialsInfo[ key ][ 'map_d' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
           URL.revokeObjectURL( file );
         }
 
         if (value.map_kd && (value.map_kd.indexOf( ' ' ) ? file.name === value.map_kd.substring( value.map_kd.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_kd)) {
-          mtl.materialsInfo[ key ][ 'map_kd' ] = URL.createObjectURL( file ).substring(mtl.baseUrl.length);
+          mtl.materialsInfo[ key ][ 'map_kd' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
           URL.revokeObjectURL( file );
         }
 
         if (value.map_ka && (value.map_ka.indexOf( ' ' ) ? file.name === value.map_ka.substring( value.map_ka.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_ka)) {
-          mtl.materialsInfo[ key ][ 'map_ka' ] = URL.createObjectURL( file ).substring(mtl.baseUrl.length);
+          mtl.materialsInfo[ key ][ 'map_ka' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
           URL.revokeObjectURL( file );
         }
 
         if (value.map_ke && (value.map_ke.indexOf( ' ' ) ? file.name === value.map_ke.substring( value.map_ke.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_ke)) {
-          mtl.materialsInfo[ key ][ 'map_ke' ] = URL.createObjectURL( file ).substring(mtl.baseUrl.length);
+          mtl.materialsInfo[ key ][ 'map_ke' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
           URL.revokeObjectURL( file );
         }
 
         if (value.map_ks && (value.map_ks.indexOf( ' ' ) ? file.name === value.map_ks.substring( value.map_ks.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_ks)) {
-          mtl.materialsInfo[ key ][ 'map_ks' ] = URL.createObjectURL( file ).substring(mtl.baseUrl.length);
+          mtl.materialsInfo[ key ][ 'map_ks' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
           URL.revokeObjectURL( file );
         }
 
         if (value.map_bump && (value.map_bump.indexOf( ' ' ) ? file.name === value.map_bump.substring( value.map_bump.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_bump)) {
-          mtl.materialsInfo[ key ][ 'map_bump' ] = URL.createObjectURL( file ).substring(mtl.baseUrl.length);
+          mtl.materialsInfo[ key ][ 'map_bump' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
           URL.revokeObjectURL( file );
         }
 
         if (value.norm && (value.norm.indexOf( ' ' ) ? file.name === value.norm.substring( value.norm.lastIndexOf( ' ' ) + 1 ) : file.name === value.norm)) {
-          mtl.materialsInfo[ key ][ 'norm' ] = URL.createObjectURL( file ).substring(mtl.baseUrl.length);
+          mtl.materialsInfo[ key ][ 'norm' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
           URL.revokeObjectURL( file );
         }
 
         if (value.bump && (value.bump.indexOf( ' ' ) ? file.name === value.bump.substring( value.bump.lastIndexOf( ' ' ) + 1 ) : file.name === value.bump)) {
-          mtl.materialsInfo[ key ][ 'bump' ] = URL.createObjectURL( file ).substring(mtl.baseUrl.length);
+          mtl.materialsInfo[ key ][ 'bump' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
           URL.revokeObjectURL( file );
         }
       }
 
       function loadURLFile() {
-        if (selected_url_file != '') {
+        if (selected_url_file !== '') {
           if (selected_url_file.indexOf( ',' ) > -1) {
             let urls = selected_url_file.split( ',' );
             textures = [];
@@ -1471,7 +1582,7 @@
                   mtl.preload();
                   obj_loader.setMaterials( mtl );
 
-                  obj_loader.load( selected_obj_url_file, function ( object ) {
+                  obj_loader.load( selected_obj_url_file, function( object ) {
                     Obj = object;
 
                     let child_count = 1;
@@ -1559,7 +1670,9 @@
                       }
                     });
 
-                    // Add the 3D object in the scene
+                    initial_rotation = Obj.rotation;
+
+                    // Add 3D object to scene
                     scene.add( Obj );
                     camera.lookAt( Obj.position );
 
@@ -1571,16 +1684,16 @@
                     let today = new Date();
                     let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
 
-                    if (xhr.loaded == 0 && xhr.total == 0) {
+                    if (xhr.loaded === 0 && xhr.total === 0) {
                       console.log( 'URL OBJ 0% loaded - ' + time );
                       document.getElementById('div_loading').innerHTML = 'URL OBJ 0% loaded - ' + time;
                     } else {
-                      console.log( 'URL OBJ ' + parseInt( xhr.loaded / xhr.total * 100 ) + '% loaded - ' + time );
+                      console.log( 'URL OBJ ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
 
-                      if (parseInt( xhr.loaded / xhr.total * 100 ) >= 95) {
+                      if (parseInt( ( xhr.loaded / xhr.total ) * 100 ) >= 95) {
                         document.getElementById('div_loading').innerHTML = 'Visualizing';
                       } else {
-                        document.getElementById('div_loading').innerHTML = 'URL OBJ ' + parseInt( xhr.loaded / xhr.total * 100 ) + '% loaded - ' + time;
+                        document.getElementById('div_loading').innerHTML = 'URL OBJ ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time;
                       }
                     }
                   }, function ( error ) {
@@ -1596,12 +1709,12 @@
                   let today = new Date();
                   let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
 
-                  if (xhr.loaded == 0 && xhr.total == 0) {
+                  if (xhr.loaded === 0 && xhr.total === 0) {
                     console.log( 'URL MTL 0% loaded - ' + time );
                     document.getElementById('div_loading').innerHTML = 'URL MTL 0% loaded - ' + time;
                   } else {
-                    console.log( 'URL MTL ' + parseInt( xhr.loaded / xhr.total * 100 ) + '% loaded - ' + time );
-                    document.getElementById('div_loading').innerHTML = 'URL MTL ' + parseInt( xhr.loaded / xhr.total * 100 ) + '% loaded - ' + time;
+                    console.log( 'URL MTL ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
+                    document.getElementById('div_loading').innerHTML = 'URL MTL ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time;
                   }
                 }, function ( error ) {
                   console.log( 'Error loading URL MTL!' );
@@ -1697,6 +1810,8 @@
                     }
                   });
 
+                  initial_rotation = Obj.rotation;
+
                   // Add 3D object to scene
                   scene.add( Obj );
                   camera.lookAt( Obj.position );
@@ -1709,16 +1824,16 @@
                   let today = new Date();
                   let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
 
-                  if (xhr.loaded == 0 && xhr.total == 0) {
+                  if (xhr.loaded === 0 && xhr.total === 0) {
                     console.log( 'URL OBJ 0% loaded - ' + time );
                     document.getElementById('div_loading').innerHTML = 'URL OBJ 0% loaded - ' + time;
                   } else {
-                    console.log( 'URL OBJ ' + parseInt( xhr.loaded / xhr.total * 100 ) + '% loaded - ' + time );
+                    console.log( 'URL OBJ ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
 
-                    if (parseInt( xhr.loaded / xhr.total * 100 ) >= 95) {
+                    if (parseInt( ( xhr.loaded / xhr.total ) * 100 ) >= 95) {
                       document.getElementById('div_loading').innerHTML = 'Visualizing';
                     } else {
-                      document.getElementById('div_loading').innerHTML = 'URL OBJ ' + parseInt( xhr.loaded / xhr.total * 100 ) + '% loaded - ' + time;
+                      document.getElementById('div_loading').innerHTML = 'URL OBJ ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time;
                     }
                   }
                 }, function ( error ) {
@@ -1817,6 +1932,8 @@
                   }
     	          });
 
+                initial_rotation = Obj.rotation;
+
                 // Add 3D object to scene
                 scene.add( Obj );
                 camera.lookAt( Obj.position );
@@ -1829,16 +1946,16 @@
                 let today = new Date();
                 let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
 
-                if (xhr.loaded == 0 && xhr.total == 0) {
+                if (xhr.loaded === 0 && xhr.total === 0) {
                   console.log( 'URL OBJ 0% loaded - ' + time );
                   document.getElementById('div_loading').innerHTML = 'URL OBJ 0% loaded - ' + time;
                 } else {
-                  console.log( 'URL OBJ ' + parseInt( xhr.loaded / xhr.total * 100 ) + '% loaded - ' + time );
+                  console.log( 'URL OBJ ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
 
-                  if (parseInt( xhr.loaded / xhr.total * 100 ) >= 95) {
+                  if (parseInt( ( xhr.loaded / xhr.total ) * 100 ) >= 95) {
                     document.getElementById('div_loading').innerHTML = 'Visualizing';
                   } else {
-                    document.getElementById('div_loading').innerHTML = 'URL OBJ ' + parseInt( xhr.loaded / xhr.total * 100 ) + '% loaded - ' + time;
+                    document.getElementById('div_loading').innerHTML = 'URL OBJ ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time;
                   }
                 }
               }, function ( error ) {
@@ -1920,11 +2037,11 @@
 
       function show_edges() {
         if (edges_visible) {
-          Obj.traverse( function( child ) { if (child instanceof THREE.Mesh) { child.remove( edges[ child.name ] ); } });
+          Obj.traverse( function( child ) { if (child instanceof THREE.Mesh) child.remove( edges[ child.name ] ); } );
           edges_visible = false;
           document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
         } else {
-          Obj.traverse( function( child ) { if (child instanceof THREE.Mesh) { child.add( edges[ child.name ] ); } });
+          Obj.traverse( function( child ) { if (child instanceof THREE.Mesh) child.add( edges[ child.name ] ); } );
           edges_visible = true;
           document.getElementById('btn_edges').style.backgroundColor = 'lightgreen';
         }
@@ -2032,7 +2149,7 @@
       }
 
       function set_texture() {
-        if (current_texture == textures.length - 1) {
+        if (current_texture === textures.length - 1) {
           current_texture = -1;
           document.getElementById('btn_textures').innerHTML = 'T';
         } else {
@@ -2042,7 +2159,7 @@
 
         Obj.traverse( function( child ) {
           if (child instanceof THREE.Mesh || child instanceof THREE.Points) {
-            if (current_texture == -1) {
+            if (current_texture === -1) {
               // Remove texture
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
@@ -2211,24 +2328,29 @@
       }
 
       function render() {
-        if (render_requested) { requestAnimationFrame( render ); }
+        if (document.getElementById('gif_progress').style.display === 'none') {
+          if (render_requested) requestAnimationFrame( render );
+        }
 
         if (Obj) {
           // Reset Obj rotational values
           if (reset_rotation) {
-            Obj.rotation.set( 0, 0, 0 );
+            Obj.rotation.set( initial_rotation.x, initial_rotation.y, initial_rotation.z );
             reset_rotation = false;
           }
 
-          // Rotate the Obj
-          if (!mouse_rotation && (rot_x != 0 || rot_y != 0 || rot_z != 0)) {
-            Obj.rotation.x += rot_x;
-            Obj.rotation.y += rot_y;
-            Obj.rotation.z += rot_z;
-
-            if (Math.abs(Obj.rotation.x) > 2 * Math.PI ) { Obj.rotation.x = 0; }
-            if (Math.abs(Obj.rotation.y) > 2 * Math.PI ) { Obj.rotation.y = 0; }
-            if (Math.abs(Obj.rotation.z) > 2 * Math.PI ) { Obj.rotation.z = 0; }
+          // Rotate the object and account for Y_UP / Z_UP
+          if (!mouse_rotation) {
+            if (rot_x === 0 && rot_y === 0 && rot_z === 0) {
+              // Animated GIF generation
+              if (progress.value > 0.01) {
+                initial_rotation.x !== 0 ? Obj.rotation.z += 0.02 : Obj.rotation.y += 0.02;
+              }
+            } else {
+              if (rot_x !== 0) Obj.rotation.x += rot_x;
+              if (rot_y !== 0) initial_rotation.x !== 0 ? Obj.rotation.z += rot_y : Obj.rotation.y += rot_y;
+              if (rot_z !== 0) initial_rotation.x !== 0 ? Obj.rotation.y += rot_z : Obj.rotation.z += rot_z;
+            }
           }
 
           controls.update();
