@@ -30,6 +30,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
   - currently set to 500 x 500 size in the centre of the screen
   - non-animated / non-rotating models will spin 360 degrees
   - the larger the model and/or the more colors in the model = the bigger the size of the resulting GIF file
+  - consider using white Ambient Light and turning off Directional Light intensity to avoid glare
   - it disregards the background color but does observe the background image with simple color palette
   - it is highly experimental as it is but seems to be functional
   - see the `legobrick.gif` example in the `images` folder
