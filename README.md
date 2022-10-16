@@ -32,9 +32,8 @@ There is a lot of information and descriptions, some intended for Industrial Aut
   - positioning of the recorded model might get affected if the browser page is sized at other than 100% 
   - the larger the model and/or the more colors in the model = the bigger the size of the resulting GIF file
   - it disregards the background color but does observe the background image with simple color palette
-  - consider using white Ambient Light and turning off Directional Light intensity to avoid glare
+  - consider using Ambient Light instead of Directional Light to avoid glare in some models
   - non-animated / non-rotating models will spin 360 degrees
-  - it is highly experimental as it is but seems to be functional
   - see the `legobrick.gif` example in the `images` folder
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
 - Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
