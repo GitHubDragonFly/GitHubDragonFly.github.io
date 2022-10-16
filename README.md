@@ -28,6 +28,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 - JSON import/export is actually three.js created format
 - GIF export is actually Animated GIF based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
   - currently set to 500 x 500 size in the centre of the window
+  - positioning of the model might get affected if the browser page is sized at other than 100% 
   - the approximate GIF area rectangle will be shown during the GIF generation
   - the larger the model and/or the more colors in the model = the bigger the size of the resulting GIF file
   - it disregards the background color but does observe the background image with simple color palette
