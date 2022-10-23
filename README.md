@@ -1,7 +1,7 @@
 # GitHubDragonFly.github.io
 GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io)
 
-Designed to serve as a hub with links to repositories and FREE online [three.js](https://threejs.org) 3D model viewers.
+Designed to serve as a hub with links to repositories and FREE online [three.js](https://threejs.org) based 3D model viewers.
 
 GitHub servers are providing correct access to files, so cloning or downloading this repository will not have the same functionality if run locally without some server.
 
@@ -11,8 +11,10 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 
 # Mozilla Firefox screenshots
 
+Main Menu Page
 ![Start Page](images/screenshot.png?raw=true)
 
+PLY Viewer
 ![PLY Viewer](images/PLY%20Viewer.png?raw=true)
 
 # Notes about three.js 3D Model Viewers
