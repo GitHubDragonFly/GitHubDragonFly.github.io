@@ -12,6 +12,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 # Mozilla Firefox screenshots
 
 ![Start Page](images/screenshot.png?raw=true)
+
 ![PLY Viewer](images/PLY%20Viewer.png?raw=true)
 
 # Notes about three.js 3D Model Viewers
