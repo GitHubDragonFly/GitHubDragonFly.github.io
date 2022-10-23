@@ -103,6 +103,8 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 - Use the `T` button to switch between textures
 - Texture is displayed on a rotatable plane
 
+![Texture Viewer](images/Texture%20Viewer.png?raw=true)
+
 # License
 
 This is all MIT licensed but please observe any other licenses that might be applicable to some files or content.
