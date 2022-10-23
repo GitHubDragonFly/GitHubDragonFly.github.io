@@ -33,7 +33,7 @@ There is a lot of information and descriptions, some intended for Industrial Aut
   - it disregards the background color but does observe the background image with simple color palette
   - consider using Ambient Light instead of Directional Light to avoid glare in some models
   - non-animated / non-rotating models will spin 360 degrees
-  - see the `legobrick.gif` generated example and its optimized / resized version in the `images` folder
+  - see the `legobrick` generated GIF examples and their optimized / resized version in the `images` folder
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
 - Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
