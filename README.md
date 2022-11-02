@@ -9,13 +9,10 @@ Repositories do contain projects in several different programming languages or a
 
 There is a lot of information and descriptions, some intended for Industrial Automation and some for general/personal use.
 
-# Mozilla Firefox screenshots
+# Mozilla Firefox screenshot
 
 Main Menu Page
 ![Start Page](images/screenshot.png?raw=true)
-
-PLY Viewer
-![PLY Viewer](images/PLY%20Viewer.png?raw=true)
 
 # Notes about three.js 3D Model Viewers
 
@@ -97,6 +94,9 @@ PLY Viewer
   - large resolution textures should be scaled down before loading, as an example download [`Bedroom`](https://casual-effects.com/data/index.html) which is using 8k images (2k size seems to be optimal for browsers)
   - `Lambert` material does not have flatShading functionality
   - you could also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) converters
+
+PLY Viewer
+![PLY Viewer](images/PLY%20Viewer.png?raw=true)
 
 # Notes about three.js Texture Viewer
 
