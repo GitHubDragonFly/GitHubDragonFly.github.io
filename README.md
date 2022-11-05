@@ -32,7 +32,7 @@ Main Menu Page
   - the approximate GIF area rectangle will be shown during the GIF generation
   - the larger the model and/or the more colors in the model = the bigger the size of the resulting GIF file
   - it disregards the background color but does observe the background image with simple color palette
-  - consider using Ambient Light instead of Directional Light to avoid glare in some models
+  - consider changing Directional Light color or using Ambient Light in order to avoid poor quality GIF for some models
   - non-animated / non-rotating models will spin 360 degrees
   - see the `legobrick` generated GIF examples and their optimized / resized version in the `images` folder
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
