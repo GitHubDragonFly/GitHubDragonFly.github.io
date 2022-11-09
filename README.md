@@ -31,9 +31,9 @@ Main Menu Page
 - GIF export is actually Animated GIF based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
   - currently set to 500 x 500 size in the centre of the window
   - the approximate GIF area rectangle will be shown during the GIF generation
-  - the larger the model and/or the more colors in the model = the bigger the size of the resulting GIF file
+  - the larger the model and/or the more colors in the model will affect the size/quality of the resulting GIF file
   - it disregards the background color but does observe the background image with simple color palette
-  - consider changing Directional Light color or using Ambient Light in order to avoid poor quality GIF for some models
+  - consider changing Directional Light color and/or using Ambient Light to avoid poor quality GIF for some models
   - non-animated / non-rotating models will spin 360 degrees
   - see the `legobrick` generated GIF examples and their optimized / resized version in the `images` folder
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
