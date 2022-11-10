@@ -23,6 +23,8 @@
         const gifData = new Uint8Array( response );
         const reader = new GifReader( gifData );
 
+        texture[ 'num_frames' ] = reader.numFrames();
+
         texture.setReader( reader );
 
         if ( onLoad ) onLoad( reader );
