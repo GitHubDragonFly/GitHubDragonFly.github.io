@@ -101,7 +101,7 @@ PLY Viewer
 
 # Notes about three.js Texture Viewer
 
-- Supporting PNG, JPG, JPEG, JFIF, PJPEG, PJP, BMP, DIB, GIF, TIF, TIFF, TGA, SVG, DDS, KTX, KTX2, BASIS and Lottie JSON texture files
+- Supporting PNG, JPG, JPEG, JFIF, PJPEG, PJP, BMP, DIB, GIF, TIF, TIFF, WEBP, TGA, SVG, DDS, KTX, KTX2, BASIS and Lottie JSON texture files
 - Animated GIF file support provided by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
 - TIF / TIFF image file support provided by [geotiffjs](https://github.com/geotiffjs/geotiff.js)
 - Use the `T` button to switch between textures
