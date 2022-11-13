@@ -82,7 +82,7 @@ Main Menu Page
 - DAE (Collada) exporter appears to brighten up the original model as well as the exported model
 - MMD / GLTF viewers can export to DAE (Collada) / OBJ formats but all exported textures seem to need to be flipped vertically afterwards (use some paint program for this)
 - GLTF / GLB exporter has a limitation related to shader material, seen when exporting MMD models
-- Using Animated GIF as a texture is experimental and currently available only in OBJ / PLY+STL / PRWM viewers and should be tried on simple models, see the Animated GIF of a cube using Animated GIF as a texture in the `images` folder
+- Using Animated GIF as a texture is experimental and currently available only in FBX / OBJ / PLY+STL / PRWM viewers and should be tried on simple models, see the Animated GIF of a cube using Animated GIF as a texture in the `images` folder
 - Tips:
   - if the model is correctly loaded but you cannot see it then try any or all of the following:
     - apply `edges`
