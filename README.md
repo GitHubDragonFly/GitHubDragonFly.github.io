@@ -27,7 +27,9 @@ Main Menu Page
   - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
 - Export formats, where applicable:
   - DAE, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL
-- JSON import/export is actually three.js created format
+- JSON import/export is actually three.js created format:
+  - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry
+  - JSON Viewer is using r135 of three.js
 - GIF export is actually Animated GIF based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
   - currently set to 500 x 500 size in the centre of the window
   - the approximate GIF area rectangle will be shown during the GIF generation
