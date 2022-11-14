@@ -14,7 +14,8 @@ THREE.LegacyJSONLoader = ( function () {
 
 		}
 
-		THREE.Loader.call( this, manager );
+		const legacy_loader = new THREE.Loader( manager );
+		Object.assign(this, legacy_loader);
 
 		this.withCredentials = false;
 
