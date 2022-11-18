@@ -16,6 +16,7 @@
     <script src="../static/js/TGALoader.js" defer></script>
     <script src="../static/js/DDSLoader.js" defer></script>
     <script src="../static//js/CCDIKSolver.js" defer></script>
+    <script src="../static/js/omggif/omggif.js" defer></script>
     <script src="../static/js/OrbitControls.js" defer></script>
     <script src="../static/js/OrbitControlsGizmo.js" defer></script>
     <script src="../static/js/exporters/PLYExporter.js" defer></script>
@@ -78,6 +79,18 @@
         vertical-align: middle;
         color: blue;
         background: none;
+      }
+
+      .gif_rectangle {
+        position: absolute;
+        display: none;
+        z-index: 1;
+        background-color: transparent;
+        width: 500px;
+        height: 500px;
+        top: calc(50% - 252px);
+        left: calc(50% - 252px);
+        border: 1px solid blue;
       }
 
       .spinner {
@@ -172,6 +185,9 @@
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/ThreeOrbitControlsGizmo -->
+    <!-- Animated GIF export is based on the following example and library: -->
+    <!--   https://github.com/mrdoob/omggif-example  -->
+    <!--   https://github.com/deanm/omggif  -->
 
     <title>MMD Viewer</title>
   </head>
@@ -180,7 +196,7 @@
       <div class="fm" id="gizmo" style="width: 63px; height: 63px; float: right; background-color: black; margin-right: 3px;"></div>
       <div class="fm">
         <label for="file" title="PMD, PMX, VMD, VPD, SPH, SPA, MP3, OGG" style="color: #553801; margin: 2px 2px 2px 3px;">MMD</label>
-        <button onclick="show_url()" style="padding: 1px 3px 1px 3px;">URL</button>
+        <button id="btn_url" onclick="show_url()" style="padding: 1px 3px 1px 3px;">URL</button>
         <label for="file_input" title="File Input" style="margin: 0;"></label>
         <input type="file" id="file_input" name="file" onchange="init()" accept=".pmd, .pmx, .vmd, .vpd, .sph, .spa, .mp3, .ogg, .tga, image/png, image/jpeg, image/bmp, image/gif" multiple />
         <label for="file_image_input" title="Background Image" style="color: #553801; margin: 2px 2px 2px 0;">BGND</label>
@@ -229,6 +245,7 @@
         <button id="btn_polar_grid" title="Polar Grid" onclick="show_polar_grid()" style="font-size: 18px; background-color: #d1cefc; width: 22px;" disabled><p class="polar"></p></button>
         <select name="export_names" title="Export" id="export_names" disabled>
           <option value="" selected disabled>Export</option>
+          <option value="gif" onclick="export_animated_gif()">GIF</option>
           <option value="ply" onclick="export_ply()">PLY</option>
           <option value="stl" onclick="export_stl()">STL</option>
           <option value="obj" onclick="export_obj()">OBJ</option>
@@ -239,11 +256,15 @@
         <button id="reset" title="Reset" onclick="reset_only()" style="color: maroon; width: 40px;" disabled>RST</button>
         <button id="btn_full_screen" title="Full Screen" onclick="full_screen()" style="width: 22px;"><p class="full_screen"></p></button>
       </div>
+      <div id="gif_progress" style="display: none; background-color: transparent; border: none; height: 1px;">
+        <progress id="progress" value="0" max="1" style="width: 99.5%; margin-left: 3px; margin-right: 3px;"></progress>
+      </div>
     </div><br />
 
     <div id="div_spinner" class="spinner"></div>
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">Loading</div>
+    <div id="div_gif_rectangle" class="gif_rectangle"></div>
 
     <script>
       async function load_ammo() {
@@ -270,13 +291,13 @@
       function clear_url() { document.getElementById('url_entry').value = ''; }
 
       function initialize_event_listeners() {
-        window.addEventListener( 'mousedown', (event) => { mouse_rotation = true; }, false);
+        window.addEventListener( 'mousedown', (event) => { if (progress.value === 0) mouse_rotation = true; }, false);
         window.addEventListener( 'mouseup', (event) => { mouse_rotation = false; }, false);
       }
 
       function resize() {
         if (window.fullScreen || document.fullscreenElement) {
-          document.getElementById('btn_full_screen').style.backgroundColor = '#ffff00';
+          document.getElementById('btn_full_screen').style.backgroundColor = '#FFFF00';
         } else {
           document.getElementById('btn_full_screen').style.backgroundColor = null;
         }
@@ -311,8 +332,8 @@
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth,	wh = window.innerHeight;
       var mouse_rotation, reset_rotation, events_initialized;
-      var rot_x = 0, rot_y = 0, rot_z = 0;
-      var previous_mmd_scale = '1', bounding_box;
+      var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
+      var previous_mmd_scale = '1', bounding_box, filename;
       var initial_opacity, initial_opacity_array, enable_opacity;
       var initial_transparency, initial_transparency_array, reflect;
       var original_side, original_side_array, edges, edges_visible;
@@ -336,14 +357,12 @@
         const obj_exporter = new THREE.OBJExporter( manager );
 
         if (mmd_obj) {
-          let filename;
-
           if (selected_mmd_file) {
-            filename = selected_mmd_file.name.substring(0, selected_mmd_file.name.lastIndexOf('.') + 1);
+            filename = selected_mmd_file.name.substring( 0, selected_mmd_file.name.lastIndexOf('.') + 1 );
           } else if (selected_mmd_url_file) {
-            filename = selected_mmd_url_file.substring(selected_mmd_url_file.lastIndexOf('/') + 1, selected_mmd_url_file.lastIndexOf('.') + 1);
+            filename = selected_mmd_url_file.substring( selected_mmd_url_file.lastIndexOf('/') + 1, selected_mmd_url_file.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let exported = obj_exporter.parse( mmd_obj );
@@ -378,14 +397,12 @@
         const ply_exporter = new THREE.PLYExporter( manager );
 
         if (mmd_obj) {
-          let filename;
-
           if (selected_mmd_file) {
-            filename = selected_mmd_file.name.substring(0, selected_mmd_file.name.lastIndexOf('.') + 1);
+            filename = selected_mmd_file.name.substring( 0, selected_mmd_file.name.lastIndexOf('.') + 1 );
           } else if (selected_mmd_url_file) {
-            filename = selected_mmd_url_file.substring(selected_mmd_url_file.lastIndexOf('/') + 1, selected_mmd_url_file.lastIndexOf('.') + 1);
+            filename = selected_mmd_url_file.substring( selected_mmd_url_file.lastIndexOf('/') + 1, selected_mmd_url_file.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let string = ply_exporter.parse( mmd_obj ).split( ',' );
@@ -402,14 +419,12 @@
         const stl_exporter = new THREE.STLExporter( manager );
 
         if (mmd_obj) {
-          let filename;
-
           if (selected_mmd_file) {
-            filename = selected_mmd_file.name.substring(0, selected_mmd_file.name.lastIndexOf('.') + 1);
+            filename = selected_mmd_file.name.substring( 0, selected_mmd_file.name.lastIndexOf('.') + 1 );
           } else if (selected_mmd_url_file) {
-            filename = selected_mmd_url_file.substring(selected_mmd_url_file.lastIndexOf('/') + 1, selected_mmd_url_file.lastIndexOf('.') + 1);
+            filename = selected_mmd_url_file.substring( selected_mmd_url_file.lastIndexOf('/') + 1, selected_mmd_url_file.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let string = stl_exporter.parse( mmd_obj ).split( ',' );
@@ -426,14 +441,12 @@
         const dae_exporter = new THREE.ColladaExporter( manager );
 
         if (mmd_obj) {
-          let filename;
-
           if (selected_mmd_file) {
-            filename = selected_mmd_file.name.substring(0, selected_mmd_file.name.lastIndexOf('.') + 1);
+            filename = selected_mmd_file.name.substring( 0, selected_mmd_file.name.lastIndexOf('.') + 1 );
           } else if (selected_mmd_url_file) {
-            filename = selected_mmd_url_file.substring(selected_mmd_url_file.lastIndexOf('/') + 1, selected_mmd_url_file.lastIndexOf('.') + 1);
+            filename = selected_mmd_url_file.substring( selected_mmd_url_file.lastIndexOf('/') + 1, selected_mmd_url_file.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let result = dae_exporter.parse( mmd_obj );
@@ -459,14 +472,12 @@
         const gltf_exporter = new THREE.GLTFExporter( manager );
 
         if (mmd_obj) {
-          let filename;
-
           if (selected_mmd_file) {
-            filename = selected_mmd_file.name.substring(0, selected_mmd_file.name.lastIndexOf('.') + 1);
+            filename = selected_mmd_file.name.substring( 0, selected_mmd_file.name.lastIndexOf('.') + 1 );
           } else if (selected_mmd_url_file) {
-            filename = selected_mmd_url_file.substring(selected_mmd_url_file.lastIndexOf('/') + 1, selected_mmd_url_file.lastIndexOf('.') + 1);
+            filename = selected_mmd_url_file.substring( selected_mmd_url_file.lastIndexOf('/') + 1, selected_mmd_url_file.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let options = {	binary: false, maxTextureSize: 4096 || Infinity };
@@ -487,14 +498,12 @@
         const gltf_exporter = new THREE.GLTFExporter( manager );
 
         if (mmd_obj) {
-          let filename;
-
           if (selected_mmd_file) {
-            filename = selected_mmd_file.name.substring(0, selected_mmd_file.name.lastIndexOf('.') + 1);
+            filename = selected_mmd_file.name.substring( 0, selected_mmd_file.name.lastIndexOf('.') + 1 );
           } else if (selected_mmd_url_file) {
-            filename = selected_mmd_url_file.substring(selected_mmd_url_file.lastIndexOf('/') + 1, selected_mmd_url_file.lastIndexOf('.') + 1);
+            filename = selected_mmd_url_file.substring( selected_mmd_url_file.lastIndexOf('/') + 1, selected_mmd_url_file.lastIndexOf('.') + 1 );
           } else {
-            filename = selected_url_file.substring(selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1);
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
           let options = {	binary: true, maxTextureSize: 4096 || Infinity };
@@ -506,6 +515,120 @@
             link.click();
           }, function( error ) { console.log( error ); }, options );
         }
+      }
+
+      async function export_animated_gif() {
+        document.getElementById('export_names').selectedIndex = 0;
+
+        if (selected_mmd_file) {
+          filename = selected_mmd_file.name.substring( 0, selected_mmd_file.name.lastIndexOf('.') + 1 );
+        } else if (selected_mmd_url_file) {
+          filename = selected_mmd_url_file.substring( selected_mmd_url_file.lastIndexOf('/') + 1, selected_mmd_url_file.lastIndexOf('.') + 1 );
+        } else {
+          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
+        }
+
+        // Generate
+
+        let fx = Math.ceil( ( renderer.domElement.width - 500 ) / 2 );
+        let fy = Math.ceil( ( renderer.domElement.height - 500 ) / 2 );
+
+        let frames = 318;
+        let buffer = new Uint8Array( 500 * 500 * 150 * 5 );
+        let pixels = new Uint8Array( 500 * 500 );
+        let writer = new GifWriter( buffer, 500, 500, { loop: 0 } );
+
+        await generateGIF( render, frames, fx, fy, buffer, pixels, writer );
+      }
+
+      function generateGIF( renderFunction, frames = 100, frame_x, frame_y, buffer, pixels, writer ) {
+        let canvas = document.createElement( 'canvas' );
+        canvas.width = 500;
+        canvas.height = 500;
+
+        let context = canvas.getContext( '2d', { willReadFrequently: true } );
+
+        let current = 0;
+
+        function addFrame() {
+          context.clearRect( 0, 0, 500, 500 );
+
+          renderFunction();
+
+          context.drawImage( renderer.domElement, frame_x, frame_y, 500, 500, 0, 0, 500, 500 );
+          let data = context.getImageData( 0, 0, 500, 500 ).data;
+
+          let palette = [];
+
+          for ( var j = 0, k = 0, jl = data.length; j < jl; j += 4, k ++ ) {
+            let r = Math.floor( data[ j + 0 ] * 0.1 ) * 10;
+            let g = Math.floor( data[ j + 1 ] * 0.1 ) * 10;
+            let b = Math.floor( data[ j + 2 ] * 0.1 ) * 10;
+            let color = r << 16 | g << 8 | b << 0;
+
+            let index = palette.indexOf( color );
+
+            if (index === -1) {
+              pixels[ k ] = palette.length;
+              palette.push( color );
+            } else {
+              pixels[ k ] = index;
+            }
+          }
+
+          // Force palette to be power of 2
+          let powof2 = 1;
+          while ( powof2 < palette.length ) powof2 <<= 1;
+          if (powof2 > 256) powof2 = 256;
+          palette.length = powof2;
+
+          let options = { palette: new Uint32Array( palette ), delay: 8 };
+
+          current ++;
+
+          if ( current < frames ) {
+            if (current > 2) {
+              writer.addFrame( 0, 0, 500, 500, pixels, options );
+            } else {
+              enable_disable( true );
+              document.getElementById('gizmo').style.display = 'none';
+              document.getElementById('btn_url').disabled = true;
+              document.getElementById('file_input').disabled = true;
+              document.getElementById('btn_poses').disabled = true;
+              document.getElementById('btn_extras').disabled = true;
+              document.getElementById('btn_reflective').disabled = true;
+              document.getElementById('gif_progress').style.display = '';
+              document.getElementById('btn_full_screen').disabled = true;
+              document.getElementById('div_gif_rectangle').style.display = 'block';
+            }
+
+            progress.value = current / frames;
+            setTimeout( addFrame, 0 );
+          } else {
+            progress.value = 0;
+            enable_disable( false );
+            document.getElementById('gizmo').style.display = '';
+            document.getElementById('btn_url').disabled = false;
+            document.getElementById('file_input').disabled = false;
+            document.getElementById('btn_full_screen').disabled = false;
+            document.getElementById('gif_progress').style.display = 'none';
+            document.getElementById('div_gif_rectangle').style.display = 'none';
+            if (extras.length > 0) document.getElementById('btn_extras').disabled = false;
+            if (document.getElementById('equi').checked) document.getElementById('btn_reflective').disabled = false;
+            if (selected_vpd_files.length > 0 || selected_vpd_url_files.length > 0) document.getElementById('btn_poses').disabled = false;
+
+            // Download
+
+            let blob = new Blob( [ buffer.subarray( 0, writer.end() ) ], { type: 'image/gif' } );
+            link.href = URL.createObjectURL( blob );
+            link.download = filename + 'gif';
+            link.click();
+
+            if (render_requested) render();
+          }
+        }
+
+        addFrame();
       }
 
       function set_back_color() {
@@ -931,21 +1054,6 @@
         if (sound === undefined) sound = new THREE.Audio( listener );
         if (audio_loader === undefined) audio_loader = new THREE.AudioLoader();
 
-        selected_mmd_file = null;
-        selected_vmd_file = null;
-        selected_vmd_camera_file = null;
-        selected_audio_file = null;
-        selected_vpd_files = [];
-        selected_mmd_url_file = null;
-        selected_vmd_url_file = null;
-        selected_vmd_camera_url_file = null;
-        selected_audio_url_file = null;
-        texture_files_png = [];
-        texture_files_jpg = [];
-        texture_files_bmp = [];
-        texture_files_gif = [];
-        texture_files_tga = [];
-        texture_files_sph = [];
         extras = [];
         extra_running = false;
         poses = [];
@@ -964,6 +1072,7 @@
         polar_grid_visible = false;
         render_requested = false;
         ready = false;
+        initial_rotation = new THREE.Vector3();
         bounding_box = new THREE.Box3();
 
         document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
@@ -973,6 +1082,19 @@
         document.getElementById('btn_extras').disabled = true;
 
         if (!url_loading) {
+          selected_mmd_file = null;
+          selected_vmd_file = null;
+          selected_vmd_camera_file = null;
+          selected_audio_file = null;
+          selected_vpd_files = [];
+
+          texture_files_png = [];
+          texture_files_jpg = [];
+          texture_files_bmp = [];
+          texture_files_gif = [];
+          texture_files_tga = [];
+          texture_files_sph = [];
+
           // Loaded file
           var fi = document.getElementById('file_input');
 
@@ -985,7 +1107,8 @@
               if (fi.files[ i ].name.toUpperCase().includes('CAMERA')) {
                 selected_vmd_camera_file = fi.files[ i ];
               } else {
-                selected_vmd_file = fi.files[ i ]; }
+                selected_vmd_file = fi.files[ i ];
+              }
             }
             else if (fi.files[ i ].name.toUpperCase().endsWith('.VPD')) { selected_vpd_files.push( fi.files[ i ] ); }
             else if (fi.files[ i ].name.toUpperCase().endsWith('.MP3') || fi.files[ i ].name.toUpperCase().endsWith('.OGG')) { selected_audio_file = fi.files[ i ]; }
@@ -1053,6 +1176,11 @@
 
           selected_url_file = '';
         } else {
+          selected_mmd_url_file = null;
+          selected_vmd_url_file = null;
+          selected_vmd_camera_url_file = null;
+          selected_audio_url_file = null;
+
           // Reset the file input
           document.getElementById('file_input').value = '';
           mmd_loader.setResourcePath( '' );
@@ -1287,6 +1415,8 @@
           mmd_obj.name = 'local_pose_model';
           if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
+          initial_rotation = mmd_obj.rotation;
+
           scene.add( mmd_obj );
           camera.lookAt( mmd_obj.position );
 
@@ -1428,6 +1558,8 @@
             mmd_obj.name = 'local_motion_model';
             if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
+            initial_rotation = mmd_obj.rotation;
+
             scene.add( mmd_obj );
             camera.lookAt( mmd_obj.position );
 
@@ -1539,6 +1671,8 @@
             mmd_obj = mmd.mesh;
             mmd_obj.name = 'local_motion_model';
             if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
+
+            initial_rotation = mmd_obj.rotation;
 
             scene.add( mmd_obj );
             camera.lookAt( mmd_obj.position );
@@ -1710,6 +1844,8 @@
           mmd_obj.name = 'local_model';
           if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
+          initial_rotation = mmd_obj.rotation;
+
           // Add mmd model to scene
           scene.add( mmd_obj );
           camera.lookAt( mmd_obj.position );
@@ -1846,6 +1982,8 @@
                 mmd_obj = mesh;
                 mmd_obj.name = 'url_model';
                 if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
+
+                initial_rotation = mmd_obj.rotation;
 
                 // Add mmd model to scene
                 scene.add( mmd_obj );
@@ -2014,6 +2152,8 @@
           mmd_obj.name = 'url_pose_model';
           if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
+          initial_rotation = mmd_obj.rotation;
+
           scene.add( mmd_obj );
           camera.lookAt( mmd_obj.position );
 
@@ -2154,6 +2294,8 @@
             mmd_obj.name = 'url_motion_model';
             if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
 
+            initial_rotation = mmd_obj.rotation;
+
             scene.add( mmd_obj );
             camera.lookAt( mmd_obj.position );
 
@@ -2267,6 +2409,8 @@
             mmd_obj = mmd.mesh;
             mmd_obj.name = 'url_motion_model';
             if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
+
+            initial_rotation = mmd_obj.rotation;
 
             scene.add( mmd_obj );
             camera.lookAt( mmd_obj.position );
@@ -2392,6 +2536,8 @@
           mmd_obj = mesh;
           mmd_obj.name = 'url_model';
           if (mmd_obj.geometry && mmd_obj.geometry.attributes && mmd_obj.geometry.attributes.position) edges[ mmd_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mmd_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
+
+          initial_rotation = mmd_obj.rotation;
 
           // Add mmd model to scene
           scene.add( mmd_obj );
@@ -2618,24 +2764,29 @@
       }
 
       function render() {
-        if (render_requested) { requestAnimationFrame( render ); }
+        if (document.getElementById('gif_progress').style.display === 'none') {
+          if (render_requested) requestAnimationFrame( render );
+        }
 
         if (mmd_obj && ready) {
           // Reset mmd_obj rotational values
           if (reset_rotation) {
-            mmd_obj.rotation.set( 0, 0, 0 );
+            mmd_obj.rotation.set( initial_rotation.x, initial_rotation.y, initial_rotation.z );
             reset_rotation = false;
           }
 
           // Rotate the mmd_obj
-          if (!mouse_rotation && (rot_x != 0 || rot_y != 0 || rot_z != 0)) {
-            mmd_obj.rotation.x += rot_x;
-            mmd_obj.rotation.y += rot_y;
-            mmd_obj.rotation.z += rot_z;
-
-            if (Math.abs(mmd_obj.rotation.x) > 2 * Math.PI ) { mmd_obj.rotation.x = 0; }
-            if (Math.abs(mmd_obj.rotation.y) > 2 * Math.PI ) { mmd_obj.rotation.y = 0; }
-            if (Math.abs(mmd_obj.rotation.z) > 2 * Math.PI ) { mmd_obj.rotation.z = 0; }
+          if (mouse_rotation === false) {
+            if (rot_x === 0 && rot_y === 0 && rot_z === 0) {
+              // Animated GIF generation
+              if (progress.value > 0.01 && selected_vmd_file === undefined && selected_vmd_url_file === undefined) {
+                initial_rotation.x !== 0 ? mmd_obj.rotation.z += 0.02 : mmd_obj.rotation.y += 0.02;
+              }
+            } else {
+              if (rot_x !== 0) mmd_obj.rotation.x += rot_x;
+              if (rot_y !== 0) initial_rotation.x !== 0 ? mmd_obj.rotation.z += rot_y : mmd_obj.rotation.y += rot_y;
+              if (rot_z !== 0) initial_rotation.x !== 0 ? mmd_obj.rotation.y += rot_z : mmd_obj.rotation.z += rot_z;
+            }
           }
 
           controls.update();
