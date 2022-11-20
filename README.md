@@ -97,7 +97,7 @@ Main Menu Page
   - experiment with all exporters available by exporting the original model as well as its exported versions
   - large resolution textures should be scaled down before loading, as an example download [`Bedroom`](https://casual-effects.com/data/index.html) with 8k images and try it as is and then scale them down to 2k (which seems to be optimal for browsers)
   - `Lambert` material does not have flatShading functionality
-  - you could also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) converters
+  - you could also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) and [Online 3D Viewer](https://3dviewer.net) exporters/converters
 
 PLY Viewer
 ![PLY Viewer](images/PLY%20Viewer.png?raw=true)
