@@ -26,7 +26,8 @@ Main Menu Page
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
 - Export formats, where applicable:
-  - DAE, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL
+  - 3DM, DAE, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL
+- 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
 - JSON import/export is actually three.js created format:
   - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry
   - JSON Viewer is using r135 of three.js
