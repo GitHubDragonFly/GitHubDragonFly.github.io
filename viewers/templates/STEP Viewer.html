@@ -17,6 +17,7 @@
     <script src="../static/js/exporters/GLTFExporter.js" defer></script>
     <script src="../static/js/exporters/ColladaExporter.js" defer></script>
     <script src="../static/occt-import-js/dist/occt-import-js.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@7.15.0/rhino3dm.min.js" defer></script>
 
     <style>
       body,html{
@@ -205,6 +206,7 @@
         <select name="export_names" title="Export" id="export_names" disabled>
           <option value="" selected disabled>Export</option>
           <option value="gif" onclick="export_animated_gif()">GIF</option>
+          <option value="3dm" onclick="export_3dm()">3DM</option>
           <option value="ply" onclick="export_ply()">PLY</option>
           <option value="stl" onclick="export_stl()">STL</option>
           <option value="obj" onclick="export_obj()">OBJ</option>
@@ -501,6 +503,90 @@
           link.href = URL.createObjectURL( blob );
           link.download = filename + 'json';
           link.click();
+        }
+      }
+
+      function export_3dm() {
+        document.getElementById('export_names').selectedIndex = 0;
+
+        if (mesh) {
+          if (selected_step_file) {
+            filename = selected_step_file.name.substring( 0, selected_step_file.name.lastIndexOf('.') + 1 );
+          } else {
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
+          }
+
+          let json = JSON.stringify( mesh.toJSON() );
+          let result = JSON.parse( json );
+
+          let count = 0;
+
+          rhino3dm().then( ( Module ) => {
+            let rhino_file = new Module.File3dm();
+
+            result.geometries.forEach( ( child ) => {
+              let rhino_mesh = new Module.Mesh.createFromThreejsJSON( child );
+
+              let rhino_material = new Module.Material();
+              rhino_material.default();
+              rhino_material.name = 'mesh_' + count + '_material';
+
+              // Add Vertex Colors as red / green / blue Uint8 values 0 - 255
+              if (child.data.attributes.color) {
+                let dataAsUint8Array = new Uint8Array( child.data.attributes.color.array.length );
+
+                for ( let i = 0; i < dataAsUint8Array.length; i ++ ) {
+                  let tmp = Math.max( -1, Math.min( 1, child.data.attributes.color.array[ i ] ) );
+                  tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
+                  tmp = tmp / 256;
+                  dataAsUint8Array[ i ] = tmp + 128;
+                }
+
+                for ( let j = 0; j < dataAsUint8Array.length; j += 3 ) {
+                  rhino_mesh.vertexColors().add( dataAsUint8Array[ j ], dataAsUint8Array[ j + 1 ], dataAsUint8Array[ j + 2 ] );
+                }
+              }
+
+              if (result.materials[ count ]) {
+                if (result.materials[ count ].name && result.materials[ count ].name !== '') rhino_material.name = result.materials[ count ].name;
+
+                if (result.materials[ count ].color) {
+                  let d_c = '#' + result.materials[ count ].color.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                  rhino_material.diffuseColor = { r: parseInt( d_c.substring( 1, 3 ), 16 ), g: parseInt( d_c.substring( 3, 5 ), 16 ), b: parseInt( d_c.substring( 5 ), 16 ), a: 255 };
+                }
+
+                if (result.materials[ count ].emissive) {
+                  let e_c = '#' + result.materials[ count ].emissive.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                  rhino_material.emissionColor = { r: parseInt( e_c.substring( 1, 3 ), 16 ), g: parseInt( e_c.substring( 3, 5 ), 16 ), b: parseInt( e_c.substring( 5 ), 16 ), a: 255 };
+                }
+
+                if (result.materials[ count ].specular) {
+                  let s_c = '#' + result.materials[ count ].specular.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                  rhino_material.specularColor = { r: parseInt( s_c.substring( 1, 3 ), 16 ), g: parseInt( s_c.substring( 3, 5 ), 16 ), b: parseInt( s_c.substring( 5 ), 16 ), a: 255 };
+                }
+
+                if (result.materials[ count ].metalness || result.materials[ count ].reflectivity) rhino_material.reflectivity = result.materials[ count ].metalness || result.materials[ count ].reflectivity;
+                if (result.materials[ count ].shininess) rhino_material.shine = result.materials[ count ].shininess;
+              }
+
+              rhino_material.transparency = 1.0 - parseFloat( document.getElementById('step_opacity').value );
+
+              rhino_file.materials().add( rhino_material );
+
+              let rhino_attributes = new Module.ObjectAttributes();
+              rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
+              rhino_attributes.materialIndex = count;
+
+              count ++;
+
+              rhino_file.objects().add( rhino_mesh, rhino_attributes );
+            });
+
+            let blob = new Blob( [ rhino_file.toByteArray() ], { type: 'application/octet-stream' } );
+            link.href = URL.createObjectURL( blob );
+            link.download = filename + '3dm';
+            link.click();
+          });
         }
       }
 
