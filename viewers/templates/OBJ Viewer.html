@@ -22,6 +22,7 @@
     <script src="../static/js/utils/BufferGeometryUtils.js" defer></script>
     <script src="../static/three-gif-loader/lib/gif-texture.js" defer></script>
     <script src="../static/three-gif-loader/lib/gif-loader.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@7.15.0/rhino3dm.min.js" defer></script>
 
     <style>
       body,html {
@@ -256,6 +257,7 @@
         <select id="export_names" title="Export" name="export_names" disabled>
           <option value="" selected disabled>Export</option>
           <option value="gif" onclick="export_animated_gif()">GIF</option>
+          <option value="3dm" onclick="export_3dm()">3DM</option>
           <option value="ply" onclick="export_ply()">PLY</option>
           <option value="stl" onclick="export_stl()">STL</option>
           <option value="obj" onclick="export_obj()">OBJ</option>
@@ -543,6 +545,92 @@
         }
       }
 
+      function export_3dm() {
+        document.getElementById('export_names').selectedIndex = 0;
+
+        if (Obj) {
+          if (selected_obj_file) {
+            filename = selected_obj_file.name.substring( 0, selected_obj_file.name.lastIndexOf('.') + 1 );
+          } else if (selected_obj_url_file) {
+            filename = selected_obj_url_file.substring( selected_obj_url_file.lastIndexOf('/') + 1, selected_obj_url_file.lastIndexOf('.') + 1 );
+          } else {
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
+          }
+
+          let json = JSON.stringify( Obj.toJSON() );
+          let result = JSON.parse( json );
+
+          let count = 0;
+
+          rhino3dm().then( ( Module ) => {
+            let rhino_file = new Module.File3dm();
+
+            result.geometries.forEach( ( child ) => {
+              let rhino_mesh = new Module.Mesh.createFromThreejsJSON( child );
+
+              let rhino_material = new Module.Material();
+              rhino_material.default();
+              rhino_material.name = 'mesh_' + count + '_material';
+
+              // Add Vertex Colors as red / green / blue Uint8 values 0 - 255
+              if (child.data.attributes.color) {
+                let dataAsUint8Array = new Uint8Array( child.data.attributes.color.array.length );
+
+                for ( let i = 0; i < dataAsUint8Array.length; i ++ ) {
+                  let tmp = Math.max( -1, Math.min( 1, child.data.attributes.color.array[ i ] ) );
+                  tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
+                  tmp = tmp / 256;
+                  dataAsUint8Array[ i ] = tmp + 128;
+                }
+
+                for ( let j = 0; j < dataAsUint8Array.length; j += 3 ) {
+                  rhino_mesh.vertexColors().add( dataAsUint8Array[ j ], dataAsUint8Array[ j + 1 ], dataAsUint8Array[ j + 2 ] );
+                }
+              }
+
+              if (result.materials[ count ]) {
+                if (result.materials[ count ].name !== '') rhino_material.name = result.materials[ count ].name;
+
+                if (result.materials[ count ].color) {
+                  let d_c = '#' + result.materials[ count ].color.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                  rhino_material.diffuseColor = { r: parseInt( d_c.substring( 1, 3 ), 16 ), g: parseInt( d_c.substring( 3, 5 ), 16 ), b: parseInt( d_c.substring( 5 ), 16 ), a: 255 };
+                }
+
+                if (result.materials[ count ].emissive) {
+                  let e_c = '#' + result.materials[ count ].emissive.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                  rhino_material.emissionColor = { r: parseInt( e_c.substring( 1, 3 ), 16 ), g: parseInt( e_c.substring( 3, 5 ), 16 ), b: parseInt( e_c.substring( 5 ), 16 ), a: 255 };
+                }
+
+                if (result.materials[ count ].specular) {
+                  let s_c = '#' + result.materials[ count ].specular.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                  rhino_material.specularColor = { r: parseInt( s_c.substring( 1, 3 ), 16 ), g: parseInt( s_c.substring( 3, 5 ), 16 ), b: parseInt( s_c.substring( 5 ), 16 ), a: 255 };
+                }
+
+                if (result.materials[ count ].metalness || result.materials[ count ].reflectivity) rhino_material.reflectivity = result.materials[ count ].metalness || result.materials[ count ].reflectivity;
+                if (result.materials[ count ].shininess) rhino_material.shine = result.materials[ count ].shininess;
+              }
+
+              rhino_material.transparency = 1.0 - parseFloat( document.getElementById('obj_opacity').value );
+
+              rhino_file.materials().add( rhino_material );
+
+              let rhino_attributes = new Module.ObjectAttributes();
+              rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
+              rhino_attributes.materialIndex = count;
+
+              count ++;
+
+              rhino_file.objects().add( rhino_mesh, rhino_attributes );
+            });
+
+            let blob = new Blob( [ rhino_file.toByteArray() ], { type: 'application/octet-stream' } );
+            link.href = URL.createObjectURL( blob );
+            link.download = filename + '3dm';
+            link.click();
+          });
+        }
+      }
+
       async function export_animated_gif() {
         document.getElementById('export_names').selectedIndex = 0;
 
@@ -677,21 +765,21 @@
                     if (original_color_array[ child.name ][ child_count_array ]) mtl.color.setRGB( original_color_array[ child.name ][ child_count_array ].r, original_color_array[ child.name ][ child_count_array ].g, original_color_array[ child.name ][ child_count_array ].b );
                     child_count_array += 1;
                   } else {
-                    mtl.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 250, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 250, parseInt( obj_colors.substring( 5 ), 16 ) / 250 ); // hex format '#rrggbb'
+                    mtl.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 255.0, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 255.0, parseInt( obj_colors.substring( 5 ), 16 ) / 255.0 );
                   }
                 });
               } else {
                 if (obj_colors === '#000000') {
                   if (original_color[ child.name ]) child.material.color.setRGB( original_color[ child.name ].r, original_color[ child.name ].g, original_color[ child.name ].b );
                 } else {
-                  child.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 250, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 250, parseInt( obj_colors.substring( 5 ), 16 ) / 250 ); // hex format '#rrggbb'
+                  child.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 255.0, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 255.0, parseInt( obj_colors.substring( 5 ), 16 ) / 255.0 );
                 }
               }
             } else if (child instanceof THREE.LineSegments) {
               if (obj_colors === '#000000') {
                 child.material.color.setRGB( 0, 0, 0 );
               } else {
-                child.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 250, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 250, parseInt( obj_colors.substring( 5 ), 16 ) / 250 ); // hex format '#rrggbb'
+                child.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 255.0, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 255.0, parseInt( obj_colors.substring( 5 ), 16 ) / 255.0 );
               }
             }
           });
@@ -872,19 +960,19 @@
 
       function set_ambient_light_color() {
         let al_colors = document.getElementById('ambient_light_color').value; // hex format '#rrggbb'
-        ambientLight.color.setRGB( parseInt( al_colors.substring( 1, 3 ), 16 ) / 10, parseInt( al_colors.substring( 3, 5 ), 16 ) / 10, parseInt( al_colors.substring( 5 ), 16 ) / 10 );
+        ambientLight.color.setRGB( parseInt( al_colors.substring( 1, 3 ), 16 ) / 10.0, parseInt( al_colors.substring( 3, 5 ), 16 ) / 10.0, parseInt( al_colors.substring( 5 ), 16 ) / 10.0 );
       }
 
       function set_hemisphere_light_color() {
         let hl_colors = document.getElementById('hemisphere_light_color').value; // hex format '#rrggbb'
-        hemisphereLight.color.setRGB( parseInt( hl_colors.substring( 1, 3 ), 16 ) / 10, parseInt( hl_colors.substring( 3, 5 ), 16 ) / 10, parseInt( hl_colors.substring( 5 ), 16 ) / 10 );
+        hemisphereLight.color.setRGB( parseInt( hl_colors.substring( 1, 3 ), 16 ) / 10.0, parseInt( hl_colors.substring( 3, 5 ), 16 ) / 10.0, parseInt( hl_colors.substring( 5 ), 16 ) / 10.0 );
 
         (hl_colors === '#000000') ? hemisphereLight.groundColor.setRGB( 0, 0, 0 ) : hemisphereLight.groundColor.setRGB( 9.2, 9.2, 9.2 );
       }
 
       function set_directional_light_color() {
         let dl_colors = document.getElementById('directional_light_color').value; // hex format '#rrggbb'
-        (dl_colors === '#000000') ? directionalLight.color.setRGB( 1, 1, 1 ) : directionalLight.color.setRGB( parseInt( dl_colors.substring( 1, 3 ), 16 ) / 250, parseInt( dl_colors.substring( 3, 5 ), 16 ) / 250, parseInt( dl_colors.substring( 5 ), 16 ) / 250 );
+        (dl_colors === '#000000') ? directionalLight.color.setRGB( 1, 1, 1 ) : directionalLight.color.setRGB( parseInt( dl_colors.substring( 1, 3 ), 16 ) / 255.0, parseInt( dl_colors.substring( 3, 5 ), 16 ) / 255.0, parseInt( dl_colors.substring( 5 ), 16 ) / 255.0 );
       }
 
       function set_directional_light_intensity() {

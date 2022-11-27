@@ -541,32 +541,68 @@
           let json = JSON.stringify( mesh.toJSON() );
           let result = JSON.parse( json );
 
+          let count = 0;
+
           rhino3dm().then( ( Module ) => {
             let rhino_file = new Module.File3dm();
 
-            let rhino_mesh = new Module.Mesh.createFromThreejsJSON( result.geometries[ 0 ] );
+            result.geometries.forEach( ( child ) => {
+              let rhino_mesh = new Module.Mesh.createFromThreejsJSON( child );
 
-            let rhino_material = new Module.Material();
+              let rhino_material = new Module.Material();
+              rhino_material.default();
+              rhino_material.name = 'mesh_' + count + '_material';
 
-            rhino_material.name = result.materials[ 0 ].name || 'model_material';
+              // Add Vertex Colors as red / green / blue Uint8 values 0 - 255
+              if (child.data.attributes.color) {
+                let dataAsUint8Array = new Uint8Array( child.data.attributes.color.array.length );
 
-            if (result.materials[ 0 ].color) {
-              let d_c = '#' + result.materials[ 0 ].color.toString( 16 ).toUpperCase().padStart( 6, '0' );
-              rhino_material.diffuseColor = { r: parseInt( d_c.substring( 1, 3 ), 16 ), g: parseInt( d_c.substring( 3, 5 ), 16 ), b: parseInt( d_c.substring( 5 ), 16 ), a: 255 };
-            }
+                for ( let i = 0; i < dataAsUint8Array.length; i ++ ) {
+                  let tmp = Math.max( -1, Math.min( 1, child.data.attributes.color.array[ i ] ) );
+                  tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
+                  tmp = tmp / 256;
+                  dataAsUint8Array[ i ] = tmp + 128;
+                }
 
-            if (result.materials[ 0 ].metalness || result.materials[ 0 ].reflectivity) rhino_material.reflectivity = result.materials[ 0 ].metalness || result.materials[ 0 ].reflectivity;
-            if (result.materials[ 0 ].shininess) rhino_material.shine = result.materials[ 0 ].shininess;
+                for ( let j = 0; j < dataAsUint8Array.length; j += 3 ) {
+                  rhino_mesh.vertexColors().add( dataAsUint8Array[ j ], dataAsUint8Array[ j + 1 ], dataAsUint8Array[ j + 2 ] );
+                }
+              }
 
-            rhino_material.transparency = 1.0 - parseFloat( document.getElementById('prwm_opacity').value );
+              if (result.materials[ count ]) {
+                if (result.materials[ count ].name !== '') rhino_material.name = result.materials[ count ].name;
 
-            rhino_file.materials().add( rhino_material );
+                if (result.materials[ count ].color) {
+                  let d_c = '#' + result.materials[ count ].color.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                  rhino_material.diffuseColor = { r: parseInt( d_c.substring( 1, 3 ), 16 ), g: parseInt( d_c.substring( 3, 5 ), 16 ), b: parseInt( d_c.substring( 5 ), 16 ), a: 255 };
+                }
 
-            let rhino_attributes = new Module.ObjectAttributes();
-            rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
-            rhino_attributes.materialIndex = 0;
+                if (result.materials[ count ].emissive) {
+                  let e_c = '#' + result.materials[ count ].emissive.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                  rhino_material.emissionColor = { r: parseInt( e_c.substring( 1, 3 ), 16 ), g: parseInt( e_c.substring( 3, 5 ), 16 ), b: parseInt( e_c.substring( 5 ), 16 ), a: 255 };
+                }
 
-            rhino_file.objects().add( rhino_mesh, rhino_attributes );
+                if (result.materials[ count ].specular) {
+                  let s_c = '#' + result.materials[ count ].specular.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                  rhino_material.specularColor = { r: parseInt( s_c.substring( 1, 3 ), 16 ), g: parseInt( s_c.substring( 3, 5 ), 16 ), b: parseInt( s_c.substring( 5 ), 16 ), a: 255 };
+                }
+
+                if (result.materials[ count ].metalness || result.materials[ count ].reflectivity) rhino_material.reflectivity = result.materials[ count ].metalness || result.materials[ count ].reflectivity;
+                if (result.materials[ count ].shininess) rhino_material.shine = result.materials[ count ].shininess;
+              }
+
+              rhino_material.transparency = 1.0 - parseFloat( document.getElementById('prwm_opacity').value );
+
+              rhino_file.materials().add( rhino_material );
+
+              let rhino_attributes = new Module.ObjectAttributes();
+              rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
+              rhino_attributes.materialIndex = count;
+
+              count ++;
+
+              rhino_file.objects().add( rhino_mesh, rhino_attributes );
+            });
 
             let blob = new Blob( [ rhino_file.toByteArray() ], { type: 'application/octet-stream' } );
             link.href = URL.createObjectURL( blob );
@@ -700,7 +736,7 @@
 
           if (obj_colors === '#000000') obj_colors = '#FFFFFF';
 
-          mesh.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 255, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 255, parseInt( obj_colors.substring( 5 ), 16 ) / 255 ); // hex format '#rrggbb'
+          mesh.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 255.0, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 255.0, parseInt( obj_colors.substring( 5 ), 16 ) / 255.0 );
 
           if (enable_opacity) set_prwm_opacity();
         }
@@ -766,19 +802,19 @@
 
       function set_ambient_light_color() {
         let al_colors = document.getElementById('ambient_light_color').value; // hex format '#rrggbb'
-        ambientLight.color.setRGB( parseInt( al_colors.substring( 1, 3 ), 16 ) / 10, parseInt( al_colors.substring( 3, 5 ), 16 ) / 10, parseInt( al_colors.substring( 5 ), 16 ) / 10 );
+        ambientLight.color.setRGB( parseInt( al_colors.substring( 1, 3 ), 16 ) / 10.0, parseInt( al_colors.substring( 3, 5 ), 16 ) / 10.0, parseInt( al_colors.substring( 5 ), 16 ) / 10.0 );
       }
 
       function set_hemisphere_light_color() {
         let hl_colors = document.getElementById('hemisphere_light_color').value; // hex format '#rrggbb'
-        hemisphereLight.color.setRGB( parseInt( hl_colors.substring( 1, 3 ), 16 ) / 10, parseInt( hl_colors.substring( 3, 5 ), 16 ) / 10, parseInt( hl_colors.substring( 5 ), 16 ) / 10 );
+        hemisphereLight.color.setRGB( parseInt( hl_colors.substring( 1, 3 ), 16 ) / 10.0, parseInt( hl_colors.substring( 3, 5 ), 16 ) / 10.0, parseInt( hl_colors.substring( 5 ), 16 ) / 10.0 );
 
         (hl_colors === '#000000') ? hemisphereLight.groundColor.setRGB( 0, 0, 0 ) : hemisphereLight.groundColor.setRGB( 9.2, 9.2, 9.2 );
       }
 
       function set_directional_light_color() {
         let dl_colors = document.getElementById('directional_light_color').value; // hex format '#rrggbb'
-        (dl_colors === '#000000') ? directionalLight.color.setRGB( 1, 1, 1 ) : directionalLight.color.setRGB( parseInt( dl_colors.substring( 1, 3 ), 16 ) / 255, parseInt( dl_colors.substring( 3, 5 ), 16 ) / 255, parseInt( dl_colors.substring( 5 ), 16 ) / 255 );
+        (dl_colors === '#000000') ? directionalLight.color.setRGB( 1, 1, 1 ) : directionalLight.color.setRGB( parseInt( dl_colors.substring( 1, 3 ), 16 ) / 255.0, parseInt( dl_colors.substring( 3, 5 ), 16 ) / 255.0, parseInt( dl_colors.substring( 5 ), 16 ) / 255.0 );
       }
 
       function set_directional_light_intensity() {
