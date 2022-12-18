@@ -17,13 +17,16 @@
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
     <script src="../static/js/exporters/GLTFExporter.js" defer></script>
     <script src="../static/js/exporters/ColladaExporter.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@7.15.0/rhino3dm.min.js" defer></script>
 
     <style>
       body,html{
         position: relative;
         display: block;
         background-color: black;
-        background-image: url('../../images/DragonFly.webp');
+        background-image: url( '../../images/DragonFly.webp' );
+        background-image: -webkit-image-set( url( '../../images/DragonFly.webp' ), url( '../../images/DragonFly.png' ) );
+        background-image: image-set( '../../images/DragonFly.webp', '../../images/DragonFly.png' );
         background-position: calc(50vw - 115px) calc(50vh - 115px);
         background-repeat: no-repeat;
         width: 100%;
@@ -162,7 +165,8 @@
         height: 15px;
       }
 
-      .fm { color: navy; width: 99%; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+      .fm { color: navy; width: calc(100% - 86px); border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+      .fm_gizmo { width: 63px; height: 63px; padding: 4px; margin: 2px; }
 
       .fixed-menu {
         position: fixed;
@@ -185,7 +189,7 @@
   </head>
   <body onload="reset_all(); document_ready();" onresize="resize();">
     <div class="fixed-menu">
-      <div class="fm" id="gizmo" style="width: 63px; height: 63px; float: right; background-color: black; margin-right: 3px;"></div>
+      <div class="fm_gizmo" id="gizmo" style="float: right; background-color: black;"></div>
       <div class="fm">
         <label for="file" title="WRL" style="color: #553801; margin: 2px 2px 2px 3px;">VRML</label>
         <button id="btn_url" onclick="show_url()" style="padding: 1px 3px 1px 3px;">URL</button>
@@ -206,7 +210,7 @@
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" style="margin: 2px 2px 2px 5px;">URL:</label>
-        <input type="text" id="url_entry" name="url_entry" size="90" value="" />
+        <input type="text" id="url_entry" name="url_entry" value="" style="width: 75%;" />
         <button onclick="load_url_file()" style="width: 50px;">Load</button>
         <button onclick="clear_url()" style="width: 50px;">Clear</button>
       </div>
@@ -234,6 +238,7 @@
         <select name="export_names" title="Export" id="export_names" disabled>
           <option value="" selected disabled>Export</option>
           <option value="gif" onclick="export_animated_gif()">GIF</option>
+          <option value="3dm" onclick="export_3dm()">3DM</option>
           <option value="ply" onclick="export_ply()">PLY</option>
           <option value="stl" onclick="export_stl()">STL</option>
           <option value="obj" onclick="export_obj()">OBJ</option>
@@ -512,6 +517,111 @@
         }
       }
 
+      function export_3dm() {
+        document.getElementById('export_names').selectedIndex = 0;
+
+        if (vrml_obj) {
+          if (selected_vrml_file) {
+            filename = selected_vrml_file.name.substring( 0, selected_vrml_file.name.lastIndexOf('.') + 1 );
+          } else if (selected_url_vrml_file) {
+            filename = selected_url_vrml_file.substring( selected_url_vrml_file.lastIndexOf('/') + 1, selected_url_vrml_file.lastIndexOf('.') + 1 );
+          } else {
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
+          }
+
+          let uuid_array = [], mesh_geometry_uuid, mesh_material_uuid;
+
+          vrml_obj.traverse( ( child ) => {
+            if (child.isMesh) {
+              mesh_geometry_uuid = child.geometry.uuid;
+
+              if (Array.isArray( child.material)) {
+                child.material.forEach( mtl => {
+                  uuid_array.push( { mesh_geometry_uuid: mesh_geometry_uuid, mesh_material_uuid: mtl.uuid } );
+                });
+              } else {
+                uuid_array.push( { mesh_geometry_uuid: mesh_geometry_uuid, mesh_material_uuid: child.material.uuid } );
+              }
+            }
+          });
+
+          let json = JSON.stringify( vrml_obj.toJSON() );
+          let result = JSON.parse( json );
+
+          let count = 0;
+
+          rhino3dm().then( ( Module ) => {
+            let rhino_file = new Module.File3dm();
+
+            result.geometries.forEach( ( child_geo ) => {
+              let rhino_mesh = new Module.Mesh.createFromThreejsJSON( child_geo );
+
+              // Add Vertex Colors as red / green / blue Uint8 values 0 - 255
+              if (child_geo.data.attributes.color) {
+                let dataAsUint8Array = new Uint8Array( child_geo.data.attributes.color.array.length );
+
+                for ( let i = 0; i < dataAsUint8Array.length; i ++ ) {
+                  let tmp = Math.max( -1, Math.min( 1, child_geo.data.attributes.color.array[ i ] ) );
+                  tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
+                  tmp = tmp / 256;
+                  dataAsUint8Array[ i ] = tmp + 128;
+                }
+
+                for ( let j = 0; j < dataAsUint8Array.length; j += child_geo.data.attributes.color.itemSize ) {
+                  rhino_mesh.vertexColors().add( dataAsUint8Array[ j ], dataAsUint8Array[ j + 1 ], dataAsUint8Array[ j + 2 ] );
+                }
+              }
+
+              let rhino_material = new Module.Material();
+              rhino_material.default();
+              rhino_material.name = 'mesh_' + count + '_material';
+
+              result.materials.forEach( ( child_mtl ) => {
+                uuid_array.forEach( ( key_value_pair ) => {
+                  if (key_value_pair.mesh_geometry_uuid === child_geo.uuid && key_value_pair.mesh_material_uuid === child_mtl.uuid) {
+                    if (child_mtl.name && child_mtl.name !== '') rhino_material.name = child_mtl.name;
+
+                    if (child_mtl.color) {
+                      let d_c = '#' + child_mtl.color.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                      rhino_material.diffuseColor = { r: parseInt( d_c.substring( 1, 3 ), 16 ), g: parseInt( d_c.substring( 3, 5 ), 16 ), b: parseInt( d_c.substring( 5 ), 16 ), a: 255 };
+                    }
+
+                    if (child_mtl.emissive) {
+                      let e_c = '#' + child_mtl.emissive.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                      rhino_material.emissionColor = { r: parseInt( e_c.substring( 1, 3 ), 16 ), g: parseInt( e_c.substring( 3, 5 ), 16 ), b: parseInt( e_c.substring( 5 ), 16 ), a: 255 };
+                    }
+
+                    if (child_mtl.specular) {
+                      let s_c = '#' + child_mtl.specular.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                      rhino_material.specularColor = { r: parseInt( s_c.substring( 1, 3 ), 16 ), g: parseInt( s_c.substring( 3, 5 ), 16 ), b: parseInt( s_c.substring( 5 ), 16 ), a: 255 };
+                    }
+
+                    if (child_mtl.metalness || child_mtl.reflectivity) rhino_material.reflectivity = child_mtl.metalness || child_mtl.reflectivity;
+                    if (child_mtl.shininess) rhino_material.shine = child_mtl.shininess;
+                    (child_mtl.opacity) ? (rhino_material.transparency = 1.0 - child_mtl.opacity) : rhino_material.transparency = 0.0;
+                  }
+                });
+              });
+
+              rhino_file.materials().add( rhino_material );
+
+              let rhino_attributes = new Module.ObjectAttributes();
+              rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
+              rhino_attributes.materialIndex = count;
+
+              count ++;
+
+              rhino_file.objects().add( rhino_mesh, rhino_attributes );
+            });
+
+            let blob = new Blob( [ rhino_file.toByteArray() ], { type: 'application/octet-stream' } );
+            link.href = URL.createObjectURL( blob );
+            link.download = filename + '3dm';
+            link.click();
+          });
+        }
+      }
+
       async function export_animated_gif() {
         document.getElementById('export_names').selectedIndex = 0;
 
@@ -537,9 +647,7 @@
       }
 
       function generateGIF( renderFunction, frames, frame_x, frame_y, buffer, pixels, writer ) {
-        let canvas = document.createElement( 'canvas' );
-        canvas.width = 500;
-        canvas.height = 500;
+        let canvas = new OffscreenCanvas( 500, 500 );
 
         let context = canvas.getContext( '2d', { willReadFrequently: true } );
 
