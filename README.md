@@ -34,6 +34,7 @@ Main Menu Page
 - GIF export is actually Animated GIF based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
   - currently set to 500 x 500 size in the centre of the window
   - the approximate GIF area rectangle will be shown during the GIF generation
+  - if the model leaves this area during the GIF generation, due to its motion, the process might error out
   - the larger the model and/or the more colors in the model will affect the size/quality of the resulting GIF file
   - it disregards the background color but does observe the background image with simple color palette
   - consider changing Directional Light color and/or using Ambient Light to avoid poor quality GIF for some models
