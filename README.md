@@ -44,9 +44,10 @@ Main Menu Page
 - Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
 - Lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
-- All files have to be in the same folder when loading files locally from a hard drive
-- Some viewers might have some limitations when loading files locally from a hard drive
-- Possibly update your models to look for textures in the same folder when loading files locally from a hard drive
+- When loading files locally from a hard drive:
+  - All files have to be in the same folder
+  - Some viewers might have some limitations
+  - Possibly update your models to look for textures in the same folder
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
