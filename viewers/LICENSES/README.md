@@ -4,13 +4,13 @@ The included MIT license is for three.js files in any of the folders. Notes abou
 
 License for three.js extensions is in the `viewers/static/jsm/extensions` folder
 
-See `viewers/static/js/omggif` folder for Animated GIF export info, related to mrdoob's [example](https://github.com/mrdoob/omggif-example) and [omggif](https://github.com/deanm/omggif) library
+See `viewers/static/js/omggif` folder for licenses and Animated GIF export info, related to mrdoob's [example](https://github.com/mrdoob/omggif-example) and [omggif](https://github.com/deanm/omggif) library
 
 jQuery license can be seen [here](https://jquery.org/license/)
 
 OrbitControlsGizmo MIT license can be seen [here](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo/blob/master/LICENSE)
 
-TIF/TIFF image file support powered by [UTIF.js](https://github.com/photopea/UTIF.js) whose license is included in `viewers/static/js/utif` folder
+TIF/TIFF image file support is powered by [UTIF.js](https://github.com/photopea/UTIF.js) whose license is included in the `viewers/static/js/utif` folder
 
 [OCCT](https://github.com/kovacsv/occt-import-js) licenses are in the `viewers/static/occt-import-js/dist` folder
 
