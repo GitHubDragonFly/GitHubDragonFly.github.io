@@ -10,7 +10,7 @@ jQuery license can be seen [here](https://jquery.org/license/)
 
 OrbitControlsGizmo MIT license can be seen [here](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo/blob/master/LICENSE)
 
-TIF/TIFF image file support provided by [geotiffjs](https://github.com/geotiffjs/geotiff.js) whose license can be seen [here](https://github.com/geotiffjs/geotiff.js/blob/master/LICENSE)
+TIF/TIFF image file support powered by [UTIF.js](https://github.com/photopea/UTIF.js) whose license is included in `viewers/static/js/utif` folder
 
 [OCCT](https://github.com/kovacsv/occt-import-js) licenses are in the `viewers/static/occt-import-js/dist` folder
 
