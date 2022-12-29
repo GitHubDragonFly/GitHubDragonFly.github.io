@@ -11,6 +11,7 @@ jQuery license can be seen [here](https://jquery.org/license/)
 OrbitControlsGizmo MIT license can be seen [here](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo/blob/master/LICENSE)
 
 TIF/TIFF image file support is powered by [UTIF.js](https://github.com/photopea/UTIF.js) whose license is included in the `viewers/static/js/utif` folder
+
 APNG image file support is powered in part by [UPNG.js](https://github.com/photopea/UPNG.js) whose license is included in the `viewers/static/js/upng` folder
 
 [OCCT](https://github.com/kovacsv/occt-import-js) licenses are in the `viewers/static/occt-import-js/dist` folder
