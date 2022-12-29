@@ -112,7 +112,7 @@ PLY Viewer
 - Animated PNG file support is powered in part by [UPNG.js](https://github.com/photopea/UPNG.js) and displayed with [THREE.CSS2DRenderer](https://threejs.org/docs/#examples/en/renderers/CSS2DRenderer)
 - TIF / TIFF image file support is powered by [UTIF.js](https://github.com/photopea/UTIF.js)
 - Use the `T` button to switch between textures
-- Texture is displayed on a rotatable plane (rotation is not applicable to APNG files)
+- Texture is displayed on a rotatable plane (rotation and zoom are not applicable to APNG files)
 
 ![Texture Viewer](images/Texture%20Viewer.png?raw=true)
 
