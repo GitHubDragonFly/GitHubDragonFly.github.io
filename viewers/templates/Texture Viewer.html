@@ -15,8 +15,10 @@
     <script src="../static/js/OrbitControls.js" defer></script>
     <script src="../static/js/OrbitControlsGizmo.js" defer></script>
     <script src="../static/js/utils/WorkerPool.js" defer></script>
+    <script src="../static/js/upng/UPNG.js" defer></script>
     <script src="../static/js/utif/UTIF.js" defer></script>
     <script src="../static/js/omggif/omggif.js" defer></script>
+    <script src="../static/js/renderers/CSS2DRenderer.js" defer></script>
     <script src="../static/three-gif-loader/lib/gif-texture.js" defer></script>
     <script src="../static/three-gif-loader/lib/gif-loader.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/bodymovin/5.7.3/lottie.min.js" defer></script>
@@ -139,8 +141,9 @@
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/ThreeOrbitControlsGizmo -->
     <!-- TIF/TIFF image file support powered by https://github.com/photopea/UTIF.js -->
-    <!-- Modified Animated GIF loader -->
-    <!--   from: https://github.com/movableink/three-gif-loader -->
+    <!-- APNG image file support powered in part by https://github.com/photopea/UPNG.js -->
+    <!-- Modified Animated GIF loader: -->
+    <!--   original from: https://github.com/movableink/three-gif-loader -->
     <!--   using: https://github.com/deanm/omggif -->
 
     <title>Texture Viewer</title>
@@ -152,7 +155,7 @@
         <label for="file" title="JPEG, PNG, BMP, GIF, SVG, TIFF, JSON, KTX2, BASIS, TGA, DDS" style="color: #553801; margin: 2px 2px 2px 3px;">Image</label>
         <button onclick="show_url()" style="padding: 1px 3px 1px 3px;">URL</button>
         <label for="file_input" title="File Input" style="margin: 0;"></label>
-        <input type="file" id="file_input" name="file" accept=".webp, .ktx, .ktx2, .basis, .tga, .dds, .json, .dib, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/tiff" onchange="init()" multiple />
+        <input type="file" id="file_input" name="file" accept=".webp, .ktx, .ktx2, .basis, .tga, .dds, .json, .dib, image/png, image/apng, image/jpeg, image/bmp, image/gif, image/svg+xml, image/tiff" onchange="init()" multiple />
         <label for="file_image_input" title="Background Image" style="color: #553801; margin: 2px 2px 2px 0;">BGND</label>
         <input type="file" id="file_image_input" name="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" onchange="set_scene_image()" disabled />
         <button id="btn_img_opacity" title="Opacity" onclick="set_opacity()" style="background-color: #d1cefc; width: 20px;" disabled>O</button>
@@ -228,10 +231,11 @@
         }
 
         if (scene) {
-          renderer.setSize( window.innerWidth, window.innerHeight );
-
           camera.aspect = window.innerWidth / window.innerHeight;
           camera.updateProjectionMatrix();
+
+          renderer.setSize( window.innerWidth, window.innerHeight );
+          css_renderer.setSize( window.innerWidth, window.innerHeight );
 
           ww = window.innerWidth;
           wh = window.innerHeight;
@@ -256,14 +260,14 @@
     <script>
       var manager, file_loader, texture_loader, basis_loader, gif_loader;
       var ktx_loader, ktx2_loader, lottie_loader, tga_loader, dds_loader;
-      var renderer, scene, camera, mesh, render_requested;
+      var renderer, css_renderer, scene, camera, mesh, render_requested;
       var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, spotLight, directionalLight;
       var ww = window.innerWidth,	wh = window.innerHeight;
       var events_initialized, enable_opacity, mesh_flipped;
       var previous_img_scale = '1', bounding_box;
-      var texture_files, current_texture, tiff, tiff_loaded;
       var selected_url_file = '', url_loading, url_displayed;
+      var texture_files, current_texture, tiff, tiff_loaded, apng, css_object, img_element;
 
       function set_back_color() {
         scene.background = null;
@@ -482,6 +486,9 @@
 
         enable_disable( true );
 
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_spinner').style.display = 'none';
+
         // Manager from ThreeJs to track a loader and its status
         if (manager === undefined) manager = new THREE.LoadingManager();
 
@@ -525,6 +532,8 @@
 
         tiff = null;
         tiff_loaded = false;
+        apng = null;
+        css_object_in_scene = false;
         texture_files = [];
         current_texture = -1;
         mesh_flipped = false;
@@ -545,6 +554,18 @@
           renderer.setSize( ww, wh );
           renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
           renderer.autoClear = false;
+
+          document.body.appendChild( renderer.domElement );
+        }
+
+        if (scene === undefined) scene = new THREE.Scene();
+
+        if (css_renderer === undefined) {
+          css_renderer = new THREE.CSS2DRenderer();
+          css_renderer.setSize( ww, wh );
+          css_renderer.domElement.style.position = 'absolute';
+          css_renderer.domElement.style.top = '0px';
+          css_renderer.domElement.style.pointerEvents = 'none';
         }
 
         ktx2_loader.detectSupport( renderer );
@@ -555,8 +576,7 @@
 
           // Include check for JPG/PNG/BMP/GIF/SVG/TIFF/WEBP, Lottie JSON, KTX2, BASIS, TGA and DDS (DirectDraw Surface container file format)
           for (let i = 0; i < fi.files.length; i++) {
-            if (fi.files[ i ].name.toUpperCase().endsWith('.PNG')) { texture_files.push( texture_loader.load( URL.createObjectURL( fi.files[ i ] ) )); URL.revokeObjectURL( fi.files[ i ] ); }
-            else if (fi.files[ i ].name.toUpperCase().endsWith('.JPG') || fi.files[ i ].name.toUpperCase().endsWith('.JPEG') || fi.files[ i ].name.toUpperCase().endsWith('.JFIF') || fi.files[ i ].name.toUpperCase().endsWith('.PJPEG') || fi.files[ i ].name.toUpperCase().endsWith('.PJP')) { texture_files.push( texture_loader.load( URL.createObjectURL( fi.files[ i ] ) )); URL.revokeObjectURL( fi.files[ i ] ); }
+            if (fi.files[ i ].name.toUpperCase().endsWith('.JPG') || fi.files[ i ].name.toUpperCase().endsWith('.JPEG') || fi.files[ i ].name.toUpperCase().endsWith('.JFIF') || fi.files[ i ].name.toUpperCase().endsWith('.PJPEG') || fi.files[ i ].name.toUpperCase().endsWith('.PJP')) { texture_files.push( texture_loader.load( URL.createObjectURL( fi.files[ i ] ) )); URL.revokeObjectURL( fi.files[ i ] ); }
             else if (fi.files[ i ].name.toUpperCase().endsWith('.BMP') || fi.files[ i ].name.toUpperCase().endsWith('.DIB')) { texture_files.push( texture_loader.load( URL.createObjectURL( fi.files[ i ] ) )); URL.revokeObjectURL( fi.files[ i ] ); }
             else if (fi.files[ i ].name.toUpperCase().endsWith('.GIF')) { texture_files.push( gif_loader.load( URL.createObjectURL( fi.files[ i ] ) )); URL.revokeObjectURL( fi.files[ i ] ); }
             else if (fi.files[ i ].name.toUpperCase().endsWith('.SVG')) { texture_files.push( texture_loader.load( URL.createObjectURL( fi.files[ i ] ) )); URL.revokeObjectURL( fi.files[ i ] ); }
@@ -567,6 +587,71 @@
             else if (fi.files[ i ].name.toUpperCase().endsWith('.BASIS')) { texture_files.push( { flip: true, tex: basis_loader.load( URL.createObjectURL( fi.files[ i ] ) ) }); URL.revokeObjectURL( fi.files[ i ] ); }
             else if (fi.files[ i ].name.toUpperCase().endsWith('.DDS')) { texture_files.push( { flip: true, tex: dds_loader.load( URL.createObjectURL( fi.files[ i ] ) ) }); URL.revokeObjectURL( fi.files[ i ] ); }
             else if (fi.files[ i ].name.toUpperCase().endsWith('.TGA')) { texture_files.push( tga_loader.load( URL.createObjectURL( fi.files[ i ] ), function( tex ) { tex.generateMipmaps = true; tex.flipY = true; } )); URL.revokeObjectURL( fi.files[ i ] ); }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.PNG') || fi.files[ i ].name.toUpperCase().endsWith('.APNG')) {
+              file_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( file_data ) {
+                URL.revokeObjectURL( fi.files[ i ] );
+
+                // Use UPNG to detect number of frames - multiple frames reflect APNG
+                apng = await UPNG.decode( file_data );
+
+                if (apng.frames.length > 1) {
+                  img_element = document.createElement( 'img' );
+
+                  img_element.onload = () => {
+                    // Scale the image up/down so it fits better on the screen
+
+                    let x = 0.5 * ww, y = 0.5 * wh;
+
+                    if (img_element.width > x || img_element.height > y) {
+                      while (img_element.width > x || img_element.height > y) {
+                        img_element.width = img_element.width * 0.75;
+                        img_element.height = img_element.height * 0.75;
+                      }
+                    } else {
+                      x = 0.2 * ww, y = 0.2 * wh;
+
+                      while (img_element.width < x || img_element.height < y) {
+                        img_element.width = img_element.width * 1.25;
+                        img_element.height = img_element.height * 1.25;
+                      }
+                    }
+                  }
+
+                  img_element.src = URL.createObjectURL( fi.files[ i ] );
+                  URL.revokeObjectURL( fi.files[ i ] );
+
+                  css_object = new THREE.CSS2DObject( img_element );
+                  css_object.position.set( 0, 0, 0 );
+
+                  texture_files.push( { animation: true, tex: css_object } );
+                } else {
+                  // Option 1 - use texture_loader to load the file directly
+
+                  texture_files.push( texture_loader.load( URL.createObjectURL( fi.files[ i ] ) ) );
+                  URL.revokeObjectURL( fi.files[ i ] );
+
+                  // Option 2 - 'apng.data' is a Uint8Array with RGBA pixels so use canvas and texture_loader to load it
+                  // Functional but is a long way around for this viewer
+
+                  //let canvas = document.createElement('canvas');
+                  //canvas.width = apng.width;
+                  //canvas.height = apng.height;
+                  //let context = canvas.getContext( '2d' );
+                  //let data = context.getImageData( 0, 0, apng.width, apng.height );
+
+                  //for (let i = 0; i < apng.data.length; i += 4) {
+                  //  data.data[ i ] = apng.data[ i ];
+                  //  data.data[ i + 1 ] = apng.data[ i + 1 ];
+                  //  data.data[ i + 2 ] = apng.data[ i + 2 ];
+                  //  data.data[ i + 3 ] = apng.data[ i + 3 ];
+                  //}
+
+                  //context.putImageData( data, 0, 0 );
+
+                  //texture_files.push( texture_loader.load( canvas.toDataURL() ) );
+                }
+              });
+            }
             else if (fi.files[ i ].name.toUpperCase().endsWith('.TIF') || fi.files[i].name.toUpperCase().endsWith('.TIFF')) {
               tiff_loaded = true;
 
@@ -620,10 +705,6 @@
         document.getElementById('div_spinner').style.display = 'none';
         document.getElementById('div_error').style.display = 'none';
         enable_disable( false );
-
-        document.body.appendChild( renderer.domElement );
-
-        if (scene === undefined) scene = new THREE.Scene();
 
         // Create a grid helper for use with Orbit Controls
         if (polar_grid === undefined) polar_grid = new THREE.PolarGridHelper( 100, 10 );
@@ -701,7 +782,7 @@
       function loadPlane() {
         let geometry = new THREE.PlaneGeometry();
 
-        let material = new THREE.MeshPhysicalMaterial( { side: THREE.DoubleSide, color: 0xFFFFFF, opacity: 1, transparent: true, map: '../../images/Load Image.png' } );
+        let material = new THREE.MeshPhysicalMaterial( { side: THREE.DoubleSide, color: 0xFFFFFF, opacity: 1, transparent: true } );
 
         mesh = new THREE.Mesh( geometry, material );
 
@@ -709,7 +790,8 @@
         scene.add( mesh );
         camera.lookAt( mesh.position );
 
-        set_plane_scale( material.map );
+        set_initial_scale();
+        resize();
       }
 
       async function loadURLFile() {
@@ -758,6 +840,69 @@
                 console.log( 'Error loading URL TIF!' );
                 console.log( error );
                 render_requested = false;
+              });
+            } else if (url.toUpperCase().endsWith('.PNG') || url.toUpperCase().endsWith('.APNG')) {
+              file_loader.load( url, async function( file_data ) {
+                // Use UPNG to detect number of frames - multiple frames reflect APNG
+                apng = await UPNG.decode( file_data );
+
+                if (apng.frames.length > 1) {
+                  img_element = document.createElement( 'img' );
+
+                  img_element.onload = () => {
+                    // Scale the image up/down so it fits better on the screen
+
+                    let x = 0.5 * ww, y = 0.5 * wh;
+
+                    if (img_element.width > x || img_element.height > y) {
+                      while (img_element.width > x || img_element.height > y) {
+                        img_element.width = img_element.width * 0.75;
+                        img_element.height = img_element.height * 0.75;
+                      }
+                    } else {
+                      x = 0.2 * ww, y = 0.2 * wh;
+
+                      while (img_element.width < x || img_element.height < y) {
+                        img_element.width = img_element.width * 1.25;
+                        img_element.height = img_element.height * 1.25;
+                      }
+                    }
+                  }
+
+                  img_element.src = url;
+
+                  css_object = new THREE.CSS2DObject( img_element );
+                  css_object.position.set( 0, 0, 0 );
+
+                  texture_files.push( { animation: true, tex: css_object } );
+                  document.getElementById('btn_textures').disabled = false;
+                } else {
+                  // Option 1 - use texture_loader to load the file directly
+
+                  texture_files.push( texture_loader.load( url ) );
+                  document.getElementById('btn_textures').disabled = false;
+
+                  // Option 2 - 'apng.data' is a Uint8Array with RGBA pixels so use canvas and texture_loader to load it
+                  // Functional but is a long way around for this viewer
+
+                  //let canvas = document.createElement('canvas');
+                  //canvas.width = apng.width;
+                  //canvas.height = apng.height;
+                  //let context = canvas.getContext( '2d' );
+                  //let data = context.getImageData( 0, 0, apng.width, apng.height );
+
+                  //for (let i = 0; i < apng.data.length; i += 4) {
+                  //  data.data[ i ] = apng.data[ i ];
+                  //  data.data[ i + 1 ] = apng.data[ i + 1 ];
+                  //  data.data[ i + 2 ] = apng.data[ i + 2 ];
+                  //  data.data[ i + 3 ] = apng.data[ i + 3 ];
+                  //}
+
+                  //context.putImageData( data, 0, 0 );
+
+                  //texture_files.push( texture_loader.load( canvas.toDataURL() ) );
+                  //document.getElementById('btn_textures').disabled = false;
+                }
               });
             } else if (url.toUpperCase().endsWith('.KTX')) {
               ktx_loader.load( url, function( texture ) {
@@ -872,7 +1017,7 @@
             } else if (url.toUpperCase().endsWith('.GIF')) {
               texture_files.push( gif_loader.load( url ) );
               document.getElementById('btn_textures').disabled = false;
-            } else if (url.toUpperCase().endsWith('.JPG') || url.toUpperCase().endsWith('.JPEG') || url.toUpperCase().endsWith('.JFIF') || url.toUpperCase().endsWith('.PJPEG') || url.toUpperCase().endsWith('.PJP') || url.toUpperCase().endsWith('.PNG') || url.toUpperCase().endsWith('.BMP') || url.toUpperCase().endsWith('.DIB') || url.toUpperCase().endsWith('.SVG') || url.toUpperCase().endsWith('.WEBP')) {
+            } else if (url.toUpperCase().endsWith('.JPG') || url.toUpperCase().endsWith('.JPEG') || url.toUpperCase().endsWith('.JFIF') || url.toUpperCase().endsWith('.PJPEG') || url.toUpperCase().endsWith('.PJP') || url.toUpperCase().endsWith('.BMP') || url.toUpperCase().endsWith('.DIB') || url.toUpperCase().endsWith('.SVG') || url.toUpperCase().endsWith('.WEBP')) {
               texture_loader.load( url, function( texture ) {
                 texture_files.push( texture );
                 document.getElementById('btn_textures').disabled = false;
@@ -932,6 +1077,69 @@
               console.log( 'Error loading URL TIF!' );
               console.log( error );
               render_requested = false;
+            });
+          } else if (selected_url_file.toUpperCase().endsWith('.PNG') || selected_url_file.toUpperCase().endsWith('.APNG')) {
+            file_loader.load( selected_url_file, async function( file_data ) {
+              // Use UPNG to detect number of frames - multiple frames reflect APNG
+              apng = await UPNG.decode( file_data );
+
+              if (apng.frames.length > 1) {
+                img_element = document.createElement( 'img' );
+
+                img_element.onload = () => {
+                  // Scale the image up/down so it fits better on the screen
+
+                  let x = 0.5 * ww, y = 0.5 * wh;
+
+                  if (img_element.width > x || img_element.height > y) {
+                    while (img_element.width > x || img_element.height > y) {
+                      img_element.width = img_element.width * 0.75;
+                      img_element.height = img_element.height * 0.75;
+                    }
+                  } else {
+                    x = 0.2 * ww, y = 0.2 * wh;
+
+                    while (img_element.width < x || img_element.height < y) {
+                      img_element.width = img_element.width * 1.25;
+                      img_element.height = img_element.height * 1.25;
+                    }
+                  }
+                }
+
+                img_element.src = selected_url_file;
+
+                css_object = new THREE.CSS2DObject( img_element );
+                css_object.position.set( 0, 0, 0 );
+
+                texture_files.push( { animation: true, tex: css_object } );
+                document.getElementById('btn_textures').disabled = false;
+              } else {
+                // Option 1 - use texture_loader to load the file directly
+
+                texture_files.push( texture_loader.load( selected_url_file ) );
+                document.getElementById('btn_textures').disabled = false;
+
+                // Option 2 - 'apng.data' is a Uint8Array with RGBA pixels so use canvas and texture_loader to load it
+                // Functional but is a long way around for this viewer
+
+                //let canvas = document.createElement('canvas');
+                //canvas.width = apng.width;
+                //canvas.height = apng.height;
+                //let context = canvas.getContext( '2d' );
+                //let data = context.getImageData( 0, 0, apng.width, apng.height );
+
+                //for (let i = 0; i < apng.data.length; i += 4) {
+                //  data.data[ i ] = apng.data[ i ];
+                //  data.data[ i + 1 ] = apng.data[ i + 1 ];
+                //  data.data[ i + 2 ] = apng.data[ i + 2 ];
+                //  data.data[ i + 3 ] = apng.data[ i + 3 ];
+                //}
+
+                //context.putImageData( data, 0, 0 );
+
+                //texture_files.push( texture_loader.load( canvas.toDataURL() ) );
+                //document.getElementById('btn_textures').disabled = false;
+              }
             });
           } else if (selected_url_file.toUpperCase().endsWith('.KTX')) {
             ktx_loader.load( selected_url_file, function( texture ) {
@@ -1046,7 +1254,7 @@
           } else if (selected_url_file.toUpperCase().endsWith('.GIF')) {
             texture_files.push( gif_loader.load( selected_url_file ) );
             document.getElementById('btn_textures').disabled = false;
-          } else if (selected_url_file.toUpperCase().endsWith('.JPG') || selected_url_file.toUpperCase().endsWith('.JPEG') || selected_url_file.toUpperCase().endsWith('.JFIF') || selected_url_file.toUpperCase().endsWith('.PJPEG') || selected_url_file.toUpperCase().endsWith('.PJP') || selected_url_file.toUpperCase().endsWith('.PNG') || selected_url_file.toUpperCase().endsWith('.BMP') || selected_url_file.toUpperCase().endsWith('.DIB') || selected_url_file.toUpperCase().endsWith('.SVG') || selected_url_file.toUpperCase().endsWith('.WEBP')) {
+          } else if (selected_url_file.toUpperCase().endsWith('.JPG') || selected_url_file.toUpperCase().endsWith('.JPEG') || selected_url_file.toUpperCase().endsWith('.JFIF') || selected_url_file.toUpperCase().endsWith('.PJPEG') || selected_url_file.toUpperCase().endsWith('.PJP') || selected_url_file.toUpperCase().endsWith('.BMP') || selected_url_file.toUpperCase().endsWith('.DIB') || selected_url_file.toUpperCase().endsWith('.SVG') || selected_url_file.toUpperCase().endsWith('.WEBP')) {
             texture_loader.load( selected_url_file, function( texture ) {
               texture_files.push( texture );
               document.getElementById('btn_textures').disabled = false;
@@ -1126,6 +1334,8 @@
 
       function set_texture() {
         if (mesh) {
+          let previous_texture = current_texture;
+
           if (current_texture === texture_files.length - 1) {
             document.getElementById('btn_textures').innerHTML = 'T0';
             current_texture = 0;
@@ -1136,57 +1346,91 @@
 
           document.getElementById('btn_textures').style.backgroundColor = 'lightgreen';
 
-          mesh.traverse( function( child ) {
-            if (child instanceof THREE.Mesh) {
-              if (texture_files[ current_texture ].flip) {
-                if (!mesh_flipped) { mesh.rotation.x += Math.PI; mesh_flipped = true; }
+          if (texture_files[ current_texture ].animation) {
+            document.body.appendChild( css_renderer.domElement );
 
-                texture_files[ current_texture ].tex.encoding = THREE.sRGBEncoding;
-                texture_files[ current_texture ].tex.wrapS = THREE.RepeatWrapping;
-                texture_files[ current_texture ].tex.wrapT = THREE.RepeatWrapping;
-                texture_files[ current_texture ].tex.minFilter = texture_files[ current_texture ].tex.maxFilter = THREE.LinearFilter;
+            set_plane_scale( texture_files[ current_texture ].tex );
 
-                if (texture_files[ current_texture ].tex.image.length > 0 && !texture_files[ current_texture ].tex.mipmaps) {
-                  texture_files[ current_texture ].tex.mipmaps = texture_files[ current_texture ].tex.image[ 0 ].mipmaps;
-                }
+            if (css_object_in_scene) {
+              mesh.remove( texture_files[ previous_texture ].tex );
+              mesh.add( texture_files[ current_texture ].tex );
+            } else {
+              css_object_in_scene = true;
+              if (mesh.material.map) { mesh.material.map.dispose(); mesh.material.map = null; }
+              mesh.material.opacity = 0;
+              document.getElementById('img_opacity').value = 1;
+              document.getElementById('img_opacity').disabled = true;
+              document.getElementById('btn_img_opacity').disabled = true;
+              document.getElementById('btn_img_opacity').style.backgroundColor = '#d1cefc';
 
-                // Apply texture
-                child.material.map = texture_files[ current_texture ].tex;
-              } else {
-                if (mesh_flipped) { mesh.rotation.x += Math.PI; mesh_flipped = false; }
-
-                texture_files[ current_texture ].encoding = THREE.sRGBEncoding;
-                texture_files[ current_texture ].wrapS = THREE.RepeatWrapping;
-                texture_files[ current_texture ].wrapT = THREE.RepeatWrapping;
-                texture_files[ current_texture ].minFilter = texture_files[ current_texture ].maxFilter = THREE.LinearFilter;
-
-                if (texture_files[ current_texture ].image && texture_files[ current_texture ].image.length > 0 && !texture_files[ current_texture ].mipmaps) {
-                  texture_files[ current_texture ].mipmaps = texture_files[ current_texture ].image[ 0 ].mipmaps;
-                }
-
-                // Apply texture
-                child.material.map = texture_files[ current_texture ];
-              }
-
-              child.material.needsUpdate = true;
-
-              set_plane_scale( child.material.map );
+              mesh.add( texture_files[ current_texture ].tex );
             }
-          });
+          } else {
+            mesh.traverse( function( child ) {
+              if (child instanceof THREE.Mesh) {
+                if (css_object_in_scene) {
+                  css_object_in_scene = false;
+
+                  document.body.removeChild( css_renderer.domElement );
+
+                  mesh.material.opacity = 1;
+                  document.getElementById('btn_img_opacity').disabled = false;
+
+                  (current_texture === 0) ? mesh.remove( texture_files[ texture_files.length - 1 ].tex ) : mesh.remove( texture_files[ current_texture - 1 ].tex );
+                }
+
+                if (texture_files[ current_texture ].flip) {
+                  if (!mesh_flipped) { mesh.rotation.x += Math.PI; mesh_flipped = true; }
+
+                  texture_files[ current_texture ].tex.encoding = THREE.sRGBEncoding;
+                  texture_files[ current_texture ].tex.wrapS = THREE.RepeatWrapping;
+                  texture_files[ current_texture ].tex.wrapT = THREE.RepeatWrapping;
+                  texture_files[ current_texture ].tex.minFilter = texture_files[ current_texture ].tex.maxFilter = THREE.LinearFilter;
+
+                  if (texture_files[ current_texture ].tex.image.length > 0 && !texture_files[ current_texture ].tex.mipmaps) {
+                    texture_files[ current_texture ].tex.mipmaps = texture_files[ current_texture ].tex.image[ 0 ].mipmaps;
+                  }
+
+                  // Apply texture
+                  child.material.map = texture_files[ current_texture ].tex;
+                } else {
+                  if (mesh_flipped) { mesh.rotation.x += Math.PI; mesh_flipped = false; }
+
+                  texture_files[ current_texture ].encoding = THREE.sRGBEncoding;
+                  texture_files[ current_texture ].wrapS = THREE.RepeatWrapping;
+                  texture_files[ current_texture ].wrapT = THREE.RepeatWrapping;
+                  texture_files[ current_texture ].minFilter = texture_files[ current_texture ].maxFilter = THREE.LinearFilter;
+
+                  if (texture_files[ current_texture ].image && texture_files[ current_texture ].image.length > 0 && !texture_files[ current_texture ].mipmaps) {
+                    texture_files[ current_texture ].mipmaps = texture_files[ current_texture ].image[ 0 ].mipmaps;
+                  }
+
+                  // Apply texture
+                  child.material.map = texture_files[ current_texture ];
+                }
+
+                child.material.needsUpdate = true;
+
+                set_plane_scale( child.material.map );
+              }
+            });
+          }
         }
       }
 
       function set_plane_scale( map ) {
-        if (map.image) {
-          if (Array.isArray( map.image )) {
-            mesh.scale.set( map.image[ 0 ].width, map.image[ 0 ].height, 1 );
-          } else {
-            mesh.scale.set( map.image.width, map.image.height, 1 );
-          }
-        }
+        if (map.image || map.element) {
+          let obj = map.image ? map.image : map.element;
 
-        set_initial_scale();
-        resize();
+          if (Array.isArray( obj )) {
+            mesh.scale.set( obj[ 0 ].width, obj[ 0 ].height, 1 );
+          } else {
+            mesh.scale.set( obj.width, obj.height, 1 );
+          }
+
+          set_initial_scale();
+          resize();
+        }
       }
 
       function render() {
@@ -1195,6 +1439,8 @@
         if (mesh) {
           controls.update();
           if (gizmo) gizmo.update();
+
+          if (css_object_in_scene) css_renderer.render( scene, camera );
 
           renderer.clear();
         	renderer.render( scene, camera );
