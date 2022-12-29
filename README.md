@@ -110,9 +110,10 @@ PLY Viewer
 - Supporting PNG, APNG, JPG, JPEG, JFIF, PJPEG, PJP, BMP, DIB, GIF, TIF, TIFF, WEBP, TGA, SVG, DDS, KTX, KTX2, BASIS and Lottie JSON texture files
 - Animated GIF file support provided by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
 - Animated PNG file support is powered in part by [UPNG.js](https://github.com/photopea/UPNG.js) and displayed with [THREE.CSS2DRenderer](https://threejs.org/docs/#examples/en/renderers/CSS2DRenderer)
+  - This is currently "view only" so the viewer controls will not have any effect
 - TIF / TIFF image file support is powered by [UTIF.js](https://github.com/photopea/UTIF.js)
 - Use the `T` button to switch between textures
-- Texture is displayed on a rotatable plane (rotation and zoom are not applicable to APNG files)
+- Texture is displayed on a rotatable plane (rotation/zoom are not applicable to APNG files but you can still move it around)
 
 ![Texture Viewer](images/Texture%20Viewer.png?raw=true)
 
