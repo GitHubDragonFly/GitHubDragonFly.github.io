@@ -58,3 +58,4 @@ Use the `Raw` button in any of the GitHub repositories to get the correct URL or
  - `https://github.com/thecooltool/example-gcode`
  - `http://www.oyonale.com/modeles.php?lang=en&format=OBJ`
  - for STEP / IGES file downloads visit [novotechnik](https://www.novotechnik.de/en/downloads/cad-data)
+ - some APNG example files at `https://github.com/onevcat/APNGKit/tree/master/Tests/APNGKitTests/Resources/General`
