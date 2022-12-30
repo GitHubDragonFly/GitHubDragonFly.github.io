@@ -12,7 +12,7 @@ OrbitControlsGizmo MIT license can be seen [here](https://github.com/Fennec-hub/
 
 TIF/TIFF image file support is powered by [UTIF.js](https://github.com/photopea/UTIF.js) whose license is included in the `viewers/static/js/utif` folder
 
-APNG image file support is powered in part by [UPNG.js](https://github.com/photopea/UPNG.js) whose license is included in the `viewers/static/js/upng` folder
+APNG image file support is, apart from three.js, also powered by [UPNG.js](https://github.com/photopea/UPNG.js) and [Pako.js](https://github.com/nodeca/pako) whose licenses can be seen in their respective folders: `viewers/static/js/upng` and `viewers/static/js/pako`
 
 [OCCT](https://github.com/kovacsv/occt-import-js) licenses are in the `viewers/static/occt-import-js/dist` folder
 
