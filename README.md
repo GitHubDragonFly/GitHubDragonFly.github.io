@@ -26,8 +26,14 @@ Main Menu Page
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
 - Export formats, where applicable:
-  - 3DM, DAE, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL
+  - 3DM, DAE, APNG, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL
 - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
+- APNG exports are powered by [UPNG.js](https://github.com/photopea/UPNG.js) and [Pako.js](https://github.com/nodeca/pako)
+  - it is using the adapted code from the Animated GIF export
+  - it disregards the background color but does observe the background image
+  - use some simple background image to avoid visual anomalies in the resulting file
+  - see the `legobrick` generated APNG example in the `images` folder
+  - this approach could probably use some more fine tuning
 - JSON import/export is actually three.js created format:
   - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry
   - JSON Viewer is using r135 of three.js
