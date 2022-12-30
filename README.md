@@ -32,7 +32,7 @@ Main Menu Page
   - it is using the adapted code from the Animated GIF export
   - it disregards the background color but does observe the background image
   - use some simple background image to avoid visual anomalies in the resulting file
-  - see the `legobrick` generated APNG example in the `images` folder
+  - see the `legobrick` generated APNG example and its optimized/resized PNG version in the `images` folder
   - this approach could probably use some more fine tuning
 - JSON import/export is actually three.js created format:
   - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry
