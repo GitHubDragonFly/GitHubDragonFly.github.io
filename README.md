@@ -29,14 +29,9 @@ Main Menu Page
   - 3DM, DAE, APNG, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL
 - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
 - APNG exports are powered by [UPNG.js](https://github.com/photopea/UPNG.js) and [Pako.js](https://github.com/nodeca/pako)
-  - it is using adapted code from the Animated GIF export
-  - it disregards the background color but does observe the background image
-  - use some background image to avoid visual anomalies in the resulting file due to transparency
-  - see the `legobrick` generated (A)PNG example and its optimized/resized version in the `images` folder
-  - this approach could probably use some more fine tuning
-- JSON import/export is actually three.js created format:
-  - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry
-  - JSON Viewer is using r135 of three.js
+  - features just like in the Animated GIF export, see below
+  - use some background image to avoid visual anomalies (artifacts) in the resulting file due to transparency
+  - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
 - GIF export is actually Animated GIF based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
   - currently set to 500 x 500 size in the centre of the window
   - the approximate GIF area rectangle will be shown during the GIF generation
@@ -46,6 +41,9 @@ Main Menu Page
   - consider changing Directional Light color and/or using Ambient Light to avoid poor quality GIF for some models
   - non-animated / non-rotating models will spin 360 degrees
   - see the `legobrick` generated GIF examples and their optimized / resized version in the `images` folder
+- JSON import/export is actually three.js created format:
+  - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry
+  - JSON Viewer is using r135 of three.js
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
 - Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
