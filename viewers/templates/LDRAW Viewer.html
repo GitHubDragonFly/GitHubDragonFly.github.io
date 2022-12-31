@@ -8,6 +8,8 @@
     <script src="../static/js/jquery-3.6.1.slim.min.js" defer></script>
     <script src="../static/build/r135/three.min.js" defer></script>
     <script src="../static/js/LDrawLoader.js" defer></script>
+    <script src="../static/js/upng/UPNG.js" defer></script>
+    <script src="../static/js/pako/dist/pako.min.js" defer></script>
     <script src="../static/js/omggif/omggif.js" defer></script>
     <script src="../static/js/OrbitControls.js" defer></script>
     <script src="../static/js/OrbitControlsGizmo.js" defer></script>
@@ -178,6 +180,9 @@
     <!-- Animated GIF export is based on the following example and library: -->
     <!--   https://github.com/mrdoob/omggif-example  -->
     <!--   https://github.com/deanm/omggif  -->
+    <!-- Animated PNG file export support powered by: -->
+    <!--   https://github.com/photopea/UPNG.js -->
+    <!--   https://github.com/nodeca/pako -->
 
     <title>LDRAW Viewer</title>
   </head>
@@ -238,6 +243,7 @@
           <option value="dae" onclick="export_dae()">DAE</option>
           <option value="gltf" onclick="export_gltf()">GLTF</option>
           <option value="json" onclick="export_json()">JSON</option>
+          <option value="apng" onclick="export_animated_png()">APNG</option>
         </select>
         <button id="reset" title="Reset" onclick="reset_only()" style="color: maroon; width: 40px;" disabled>RST</button>
         <button id="btn_full_screen" title="Full Screen" onclick="full_screen()" style="width: 22px;"><p class="full_screen"></p></button>
@@ -588,6 +594,105 @@
         addFrame();
       }
 
+      async function export_animated_png() {
+        document.getElementById('export_names').selectedIndex = 0;
+
+        if (selected_ldraw_file) {
+          filename = selected_ldraw_file.name.substring( 0, selected_ldraw_file.name.lastIndexOf('.') + 1 );
+        } else {
+          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
+        }
+
+        // Generate
+
+        let fx = Math.ceil( ( renderer.domElement.width - 500 ) / 2.0 );
+        let fy = Math.ceil( ( renderer.domElement.height - 500 ) / 2.0 );
+
+        let frames_count = 318;
+        let delay = 50;
+        let png_frames = [];
+
+        await generateAPNG( render, frames_count, fx, fy, png_frames, delay );
+      }
+
+      function generateAPNG( renderFunction, frames, frame_x, frame_y, png_frames, delay ) {
+        let canvas = new OffscreenCanvas( 500, 500 );
+        let context = canvas.getContext( '2d', { willReadFrequently: true } );
+
+        let frame_delay = [];
+        let current = 0;
+
+        async function addFrame() {
+          context.clearRect( 0, 0, 500, 500 );
+
+          renderFunction();
+
+          context.drawImage( renderer.domElement, frame_x, frame_y, 500, 500, 0, 0, 500, 500 );
+
+          if (current < frames) {
+            let data = context.getImageData( 0, 0, 500, 500 ).data;
+
+            if (current > 0) {
+              png_frames.push( data );
+              frame_delay.push( delay );
+            } else {
+              enable_disable( true );
+              document.getElementById('gizmo').style.display = 'none';
+              document.getElementById('btn_url').disabled = true;
+              document.getElementById('btn_lines').disabled = true;
+              document.getElementById('file_input').disabled = true;
+              document.getElementById('gif_progress').style.display = '';
+              document.getElementById('btn_full_screen').disabled = true;
+              document.getElementById('div_gif_rectangle').style.display = 'block';
+              document.getElementById('btn_construction_steps').disabled = true;
+              document.getElementById('btn_construction_steps_direction').disabled = true;
+            }
+
+            progress.value = current / frames;
+
+            if (current === frames - 1) {
+              document.getElementById('div_loading').innerHTML = 'Please wait ...';
+              document.getElementById('div_loading').style.display = 'block';
+            }
+
+            setTimeout( addFrame, 0 );
+          } else {
+            progress.value = 0;
+            enable_disable( false );
+            document.getElementById('gizmo').style.display = '';
+            document.getElementById('btn_url').disabled = false;
+            document.getElementById('btn_lines').disabled = false;
+            document.getElementById('file_input').disabled = false;
+            document.getElementById('btn_full_screen').disabled = false;
+            document.getElementById('gif_progress').style.display = 'none';
+            document.getElementById('div_gif_rectangle').style.display = 'none';
+
+            if (construction_steps_present) {
+              document.getElementById('btn_construction_steps').disabled = false;
+              document.getElementById('btn_construction_steps_direction').disabled = false;
+            }
+
+            // Download
+
+            let apng = await UPNG.encode( png_frames, 500, 500, 0, frame_delay );
+
+            document.getElementById('div_loading').innerHTML = '';
+            document.getElementById('div_loading').style.display = 'none';
+
+            let blob = new Blob( [ new Uint8Array( apng ) ], { type: 'image/png' } );
+            link.href = URL.createObjectURL( blob );
+            link.download = filename + 'png';
+            link.click();
+
+            if (render_requested) render();
+          }
+
+          current ++;
+        }
+
+        addFrame();
+      }
+
       function set_back_color() {
         scene.background = null;
         document.getElementById('file_image_input').value = '';
@@ -678,6 +783,22 @@
 
       function set_directional_light_intensity() {
         directionalLight.intensity = parseFloat( document.getElementById('directional_light_intensity').value );
+      }
+
+      function set_initial_scale() {
+        // Set the initial scale of the object so it comes to view
+        bounding_box.setFromObject( ldraw_obj );
+        let y;
+
+        if (bounding_box.max.y < 0) {
+          y = Math.abs( bounding_box.min.y ) - Math.abs( bounding_box.max.y );
+        } else if (bounding_box.max.y >= 0 && bounding_box.min.y <= 0) {
+          y = Math.abs( bounding_box.max.y ) + Math.abs( bounding_box.min.y );
+        } else {
+          y = Math.abs( bounding_box.max.y ) - Math.abs( bounding_box.min.y );
+        }
+
+        ldraw_obj.scale.multiplyScalar( 50 / y );
       }
 
       function set_ldraw_scale() {
@@ -876,12 +997,12 @@
         if (grid === undefined) grid = new THREE.GridHelper( 200, 200, 'yellow' );
 
         camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 2000 );
-        camera.position.set( 0, 0, 20 );
+        camera.position.set( 0, 0, 250 );
         scene.add( camera );
 
         // Add AmbientLight to the scene
         ambientLight = new THREE.AmbientLight( 0x000000, 0.05 );
-        ambientLight.position.set( 0, 0, 20 );
+        ambientLight.position.set( 0, 0, 250 );
         scene.add( ambientLight );
 
         // Add HemisphereLight to the scene
@@ -980,18 +1101,14 @@
             ldraw_obj.rotation.x = Math.PI;
           }
 
-          bounding_box.setFromObject( ldraw_obj );
-          let size = bounding_box.getSize( new THREE.Vector3() );
-          let radius = Math.max( size.x, Math.max( size.y, size.z ) ) * 0.5;
-
-          controls.target0.copy( bounding_box.getCenter( new THREE.Vector3() ) );
-          controls.position0.set( 0, 0, 3 ).multiplyScalar( radius ).add( controls.target0 );
-          controls.reset();
-
           update_line_visibility();
 
           // Add ldraw_obj to the scene
           scene.add( ldraw_obj );
+          camera.lookAt( ldraw_obj.position );
+
+          set_initial_scale();
+          resize();
 
           document.getElementById('div_loading').style.display = 'none';
         }, function ( xhr ) {
@@ -1075,18 +1192,14 @@
                 ldraw_obj.rotation.x = Math.PI;
               }
 
-              bounding_box.setFromObject( ldraw_obj );
-              let size = bounding_box.getSize( new THREE.Vector3() );
-              let radius = Math.max( size.x, Math.max( size.y, size.z ) ) * 0.5;
-
-              controls.target0.copy( bounding_box.getCenter( new THREE.Vector3() ) );
-              controls.position0.set( 0, 0, 3 ).multiplyScalar( radius ).add( controls.target0 );
-              controls.reset();
-
               update_line_visibility();
 
               // Add ldraw_obj to the scene
               scene.add( ldraw_obj );
+              camera.lookAt( ldraw_obj.position );
+
+              set_initial_scale();
+              resize();
 
               document.getElementById('div_loading').style.display = 'none';
             }, function ( xhr ) {
