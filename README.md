@@ -30,7 +30,7 @@ Main Menu Page
 - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
 - APNG exports are powered by [UPNG.js](https://github.com/photopea/UPNG.js) and [Pako.js](https://github.com/nodeca/pako)
   - features just like in the Animated GIF export, see below
-  - use some background image to avoid visual anomalies (artifacts) in the resulting file due to transparency - there are `black.gif` `white.gif` `dark_blue.png` files available in the `images` folder
+  - use some background image to avoid visual anomalies (artifacts) in the resulting file due to transparency - there are `black.gif` `white.gif` `dark_blue.png` files available in the `images` folder as a simple choice for background image
   - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
 - GIF export is actually Animated GIF based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
   - currently set to 500 x 500 size in the centre of the window
