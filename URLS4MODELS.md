@@ -14,7 +14,7 @@ Copy any of the following links and then paste it within the `URL` option of the
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3mf/truck.3mf`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/amf/rook.amf`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vtk/liver.vtk`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pcd/binary/Zaghetto.pcd`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pcd/binary_compressed/pcl_logo.pcd`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/json/lightmap/lightmap.json`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/prwm/smooth-suzanne.le.prwm`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ifc/rac_advanced_sample_project.ifc`
