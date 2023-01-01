@@ -2,7 +2,7 @@
 GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 
 Designed to serve as a hub with links to repositories and FREE online [three.js](https://threejs.org) based 3D model viewers.
-Fit for a desktop but should be functional on mobile devices in spite of its tiny look. 
+Fit for a desktop but should be functional on mobile devices in spite of its tiny or bulky appearance. 
 
 GitHub servers are providing correct access to files, so cloning or downloading this repository will not have the same functionality if run locally without some server.
 
