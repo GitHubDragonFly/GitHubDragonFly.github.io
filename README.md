@@ -18,6 +18,7 @@ Main Menu Page
 # Notes about three.js 3D Model Viewers
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model
+- Most viewers, if not all, have been tested as functional in Firefox / Chrome / Edge / Safari browsers
 - Import files locally from a file browser dialog or specify remote URL
 - Import formats, where applicable, with any optional/required textures:
   - 3DS, 3DM, 3MF, AMF, BRP, BREP, DAE, FBX, IFC, IGES, IGS, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
