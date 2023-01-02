@@ -117,9 +117,12 @@ PLY Viewer
 - Animated GIF file support provided by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
 - Animated PNG file support is powered in part by [UPNG.js](https://github.com/photopea/UPNG.js) and displayed with [THREE.CSS2DRenderer](https://threejs.org/docs/#examples/en/renderers/CSS2DRenderer)
   - This is currently "view only" so most viewer controls will not have any effect and will be disabled
+- Animated WEBP file support is powered in part by [is-webp-extended](https://github.com/mooyoul/is-webp-extended) and displayed with [THREE.CSS2DRenderer](https://threejs.org/docs/#examples/en/renderers/CSS2DRenderer)
+  - This is currently "view only" so most viewer controls will not have any effect and will be disabled
 - TIF / TIFF image file support is powered by [UTIF.js](https://github.com/photopea/UTIF.js)
 - Use the `T` button to switch between textures
-- Texture is displayed on a rotatable plane (rotation/zoom are not applicable to APNG files but you can still move it around)
+- Texture is displayed on a rotatable plane (rotation/zoom are not applicable to Animated PNG / WEBP files but you can still move it around)
+- An easy alternative to this viewer, for certain formats and their manipulation, would be `https://ezgif.com`
 
 ![Texture Viewer](images/Texture%20Viewer.png?raw=true)
 
