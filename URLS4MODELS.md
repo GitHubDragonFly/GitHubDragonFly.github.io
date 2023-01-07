@@ -35,6 +35,7 @@ Copy any of the following links and then paste it within the `URL` option of the
   - `https://raw.githubusercontent.com/mhalle/spl-brain-atlas/master/slicer/models/Model_1000_left_insula.vtk`
 - example for JSON Legacy viewer (its skeleton position is a bit off):
   - `https://raw.githubusercontent.com/leapmotion/leapjs-rigged-hand/master/models/Game%20Quality%20Hand/Handsolo/Leapmotion_Handsolo_Rig_Left.json`
+  - `https://raw.githubusercontent.com/leapmotion/leapjs-rigged-hand/master/models/Game%20Quality%20Hand/Handsolo/Leapmotion_Handsolo_Rig_Right.json`
 - other examples:
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.obj`
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/male02_dds.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/male02.obj`
