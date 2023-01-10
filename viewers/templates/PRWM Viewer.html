@@ -11,6 +11,7 @@
     <script src="../static/js/TGALoader.js" defer></script>
     <script src="../static/js/DDSLoader.js" defer></script>
     <script src="../static/js/RGBELoader.js" defer></script>
+    <script src="../static/js/objects/Reflector.js" defer></script>
     <script src="../static/js/upng/UPNG.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
     <script src="../static/js/omggif/omggif.js" defer></script>
@@ -193,6 +194,9 @@
     <!-- Animated PNG file export support powered by: -->
     <!--   https://github.com/photopea/UPNG.js -->
     <!--   https://github.com/nodeca/pako -->
+    <!-- Modified Animated GIF loader: -->
+    <!--   original from: https://github.com/movableink/three-gif-loader -->
+    <!--   using: https://github.com/deanm/omggif -->
 
     <title>PRWM Viewer</title>
   </head>
@@ -209,10 +213,10 @@
         <input type="file" id="file_image_input" name="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" onchange="set_scene_image()" disabled />
         <button id="btn_prwm_opacity" title="Opacity" onclick="set_opacity()" disabled>O</button>
         <input type="number" id="prwm_opacity" name="prwm_opacity" role="none" min="0" max="1" step="0.05" value="1" onkeydown="return_false()" oninput="set_prwm_opacity()" style="width: 48px;" disabled />
-        <label for="prwm_scale" style="margin: 2px 2px 2px 0;">Scale</label>
+        <label for="prwm_scale" style="margin: 2px 0 2px 0;">Scale</label>
         <input type="number" id="prwm_scale" name="prwm_scale" onkeydown="return_false()" oninput="set_prwm_scale()" min="0.25" max="2" value="1" step="0.25" style="width: 48px;" disabled />
-        <label title="Scale 0.1x" style="margin: 2px 2px 2px 0;"><input type="checkbox" id="scale_01x" onchange="scale_01x_set();" disabled />0.1x</label>
-        <label title="Scale 10x" style="margin: 2px 5px 2px 0;"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
+        <label title="Scale 10x" style="margin: 2px 0 2px 0;"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
+        <label title="Wireframe" style="margin: 2px 0 2px 0;"><input type="checkbox" id="wireframe" name="wireframe" onchange="show_wireframe()" disabled />Wire</label>
         <select name="export_names" title="Export" id="export_names" disabled>
           <option value="" selected disabled>Export</option>
           <option value="gif" onclick="export_animated_gif()">GIF</option>
@@ -245,7 +249,6 @@
         <input type="number" id="rotation_y" onchange="rot_y_changed()" min="-20" max="20" value="0" step="1" style="width: 50px;" disabled />
         <label for="rotation_z" style="color: blue;">Z</label>
         <input type="number" id="rotation_z" onchange="rot_z_changed()" min="-20" max="20" value="0" step="1" style="width: 50px;" disabled />
-        <label title="Wireframe" style="margin: 2px 2px 2px 2px;">Wire<input type="checkbox" id="wireframe" name="wireframe" onchange="show_wireframe()" disabled /></label>
         <label for="directional_light_intensity" title="Directional Light Intensity" style="margin: 2px 2px 2px 0;">DLi</label>
         <input type="number" id="directional_light_intensity" name="directional_light_intensity" min="0" max="2" step="0.05" value="1" onkeydown="return_false()" oninput="set_directional_light_intensity()" style="width: 50px;" disabled />
         <label for="directional_light_color" title="Directional Light Color" style="margin: 2px 0 2px 0;">DL</label>
@@ -263,6 +266,7 @@
         <button id="btn_material" title="Material" onclick="set_material()" style="min-width: 28px; margin-right: 0px;" disabled>MP</button>
         <button id="btn_material_extra" title="Material Xtra" onclick="set_material_extra()" style="min-width: 14px; margin-left: 0px;" disabled>*</button>
         <button id="btn_textures" title="Textures" onclick="set_texture()" style="min-width: 28px;" disabled>T</button>
+        <button id="btn_mirror" title="Mirror" onclick="show_mirror()" style="min-width: 28px;" disabled>o|o</button>
         <button id="btn_grid" title="Grid" onclick="show_grid()" disabled>#</button>
         <button id="btn_polar_grid" title="Polar Grid" onclick="show_polar_grid()" disabled><p class="polar"></p></button>
       </div>
@@ -335,8 +339,8 @@
     </script>
 
     <script>
-      var manager, texture_loader, prwm_loader, tga_loader, dds_loader, rgbe_loader, gif_loader;
-      var renderer, scene, camera, mesh, edges, edges_visible, render_requested;
+      var manager, file_loader, texture_loader, prwm_loader, tga_loader, dds_loader, rgbe_loader, gif_loader;
+      var renderer, scene, camera, mesh, ground_mirror, mirror_visible, edges, edges_visible, render_requested;
       var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth,	wh = window.innerHeight;
@@ -1020,13 +1024,6 @@
         set_grid_y();
       }
 
-      function scale_01x_set() {
-        document.getElementById('scale_01x').checked ? mesh.scale.multiplyScalar( 0.1 ) : mesh.scale.multiplyScalar( 10 );
-
-        set_polar_grid_y();
-        set_grid_y();
-      }
-
       function scale_10x_set() {
         document.getElementById('scale_10x').checked ? mesh.scale.multiplyScalar( 10 ) : mesh.scale.multiplyScalar( 0.1 );
 
@@ -1121,6 +1118,11 @@
         // Manager from ThreeJs to track a loader and its status
         if (manager === undefined) manager = new THREE.LoadingManager();
 
+        if (file_loader === undefined) {
+          file_loader = new THREE.FileLoader( manager );
+          file_loader.setResponseType( 'arraybuffer' );
+        }
+
         if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
 
         if (prwm_loader === undefined) {
@@ -1157,6 +1159,7 @@
         textures = [];
         current_texture = -1;
         gif_export = false;
+        mirror_visible = false;
         animated_gif_texture = false;
         bounding_box = new THREE.Box3();
 
@@ -1241,6 +1244,18 @@
         directionalLight.position.set( 0, 0, 250 );
         directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
         camera.add( directionalLight );
+
+        if (ground_mirror === undefined) {
+          ground_mirror = new THREE.Reflector( new THREE.PlaneGeometry( 500, 750 ), {
+            color: new THREE.Color( 0x7F7F7F ),
+            textureWidth: window.innerWidth * window.devicePixelRatio,
+            textureHeight: window.innerHeight * window.devicePixelRatio,
+          });
+
+          ground_mirror.position.y = -40;
+          ground_mirror.rotateX( -Math.PI / 2 );
+          ground_mirror.layers.set( 0 );
+        }
 
         controls = new THREE.OrbitControls( camera, renderer.domElement );
         controls.enableDamping = true;
@@ -1487,6 +1502,18 @@
         grid.position.y = bounding_box.min.y;
       }
 
+      function show_mirror() {
+        if (mirror_visible) {
+          scene.remove( ground_mirror );
+          mirror_visible = false;
+          document.getElementById('btn_mirror').style.backgroundColor = '#d1cefc';
+        } else {
+          scene.add( ground_mirror );
+          mirror_visible = true;
+          document.getElementById('btn_mirror').style.backgroundColor = 'lightgreen';
+        }
+      }
+
       function show_edges() {
         if (edges_visible) {
           mesh.remove( edges );
@@ -1681,6 +1708,54 @@
                 mesh.material.needsUpdate = true;
 
                 tex.dispose();
+              } else if (textures[ current_texture ].name.toUpperCase().endsWith('.PNG') || textures[ current_texture ].name.toUpperCase().endsWith('.APNG')) {
+                file_loader.setMimeType( 'image/png' );
+                file_loader.load( URL.createObjectURL( textures[ current_texture ] ), async function( file_data ) {
+                  URL.revokeObjectURL( textures[ current_texture ] );
+
+                  // Use UPNG to detect number of frames - multiple frames reflect APNG
+                  let apng = await UPNG.decode( file_data );
+
+                  if (apng.frames.length > 1) {
+                    let ctx = document.createElement('canvas').getContext('2d');
+
+
+                    let tex = new THREE.CanvasTexture(ctx.canvas);
+
+                    // Apply texture
+                    mesh.material.map = tex;
+                    mesh.material.needsUpdate = true;
+
+                    tex.dispose();
+                  } else {
+                    let tex = texture_loader.load( URL.createObjectURL( textures[ current_texture ] ) );
+                    URL.revokeObjectURL( textures[ current_texture ] );
+
+                    tex.encoding = THREE.sRGBEncoding;
+                    tex.wrapS = THREE.RepeatWrapping;
+                    tex.wrapT = THREE.RepeatWrapping;
+
+                    // Apply texture
+                    mesh.material.map = tex;
+                    mesh.material.needsUpdate = true;
+
+                    tex.dispose();
+                  }
+                });
+                let tex = await  gif_loader.load( URL.createObjectURL( textures[ current_texture ] ) );
+                tex.encoding = THREE.sRGBEncoding;
+                tex.wrapS = THREE.RepeatWrapping;
+                tex.wrapT = THREE.RepeatWrapping;
+
+                await new Promise(resolve => setTimeout( resolve, 500 )); // adjust timing if necessary
+
+                if (tex.num_frames > 1) animated_gif_texture = true;
+
+                // Apply texture
+                mesh.material.map = tex;
+                mesh.material.needsUpdate = true;
+
+                tex.dispose();
               } else {
                 texture_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
                   URL.revokeObjectURL( textures[ current_texture ] );
@@ -1737,6 +1812,8 @@
         if (polar_grid_visible) show_polar_grid();
         if (grid_visible) show_grid();
 
+        if (mirror_visible) show_mirror();
+
         if (mesh) {
           if (mesh.material && mesh.material.map) mesh.material.map.dispose();
           if (mesh.material) mesh.material.dispose();
@@ -1784,10 +1861,10 @@
 
         // Reset the wireframe and scale checkboxes
         document.getElementById('wireframe').checked = false;
-        document.getElementById('scale_01x').checked = false;
         document.getElementById('scale_10x').checked = false;
 
-        // Reset flat, edges, textures and material related values
+        // Reset mirror, flat, edges, textures and material related values
+        mirror_visible = false;
         flat_shading_enabled = false;
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         edges_visible = false;
@@ -1847,7 +1924,6 @@
         document.getElementById('rotation_y').disabled = disable;
         document.getElementById('rotation_z').disabled = disable;
         document.getElementById('wireframe').disabled = disable;
-        document.getElementById('scale_01x').disabled = disable;
         document.getElementById('scale_10x').disabled = disable;
         document.getElementById('prwm_scale').disabled = disable;
         document.getElementById('ambient_light_color').disabled = disable;
@@ -1858,6 +1934,7 @@
         document.getElementById('object_color').disabled = disable;
         document.getElementById('btn_edges').disabled = disable;
         document.getElementById('btn_flat').disabled = disable;
+        document.getElementById('btn_mirror').disabled = disable;
         document.getElementById('btn_material').disabled = disable;
         document.getElementById('btn_prwm_opacity').disabled = disable;
         document.getElementById('btn_polar_grid').disabled = disable;
