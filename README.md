@@ -40,7 +40,7 @@ Main Menu Page
   - non-animated / non-rotating models will spin 360 degrees
   - see the `legobrick` generated GIF examples and their optimized / resized version in the `images` folder
 - APNG exports are powered by [UPNG.js](https://github.com/photopea/UPNG.js) and [Pako.js](https://github.com/nodeca/pako)
-  - the same features as in the Animated GIF export, see above
+  - almost the same features as in the Animated GIF export, see above
   - use some background image to avoid visual anomalies (artifacts) in the resulting file due to transparency - there are `black.gif` `white.gif` `dark_blue.png` files available in the `images` folder as a simple choice for background image
   - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
 - JSON import/export is actually three.js created format:
@@ -85,8 +85,7 @@ Main Menu Page
   - `C` - object color
   - `BG` - background color
   - `Eq` - equirectangular
-    - `R` - reflectivity
-  - `Shdw` - shadow
+    - `R` - reflectivity (envMap + metalness)
 - STEP / IGES / BREP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
 - JSON Viewer has timeouts which might need to be adjusted when loading large files
 - GLTF / FBX / DAE viewers will also export animations to JSON format
