@@ -28,8 +28,9 @@ Main Menu Page
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
 - Export formats, where applicable:
-  - 3DM, DAE, APNG, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL
+  - 3DM, DAE, APNG, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, PRWM
 - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
+- PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
 - GIF export is actually Animated GIF based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
   - currently set to 500 x 500 size in the centre of the window
   - the approximate GIF area rectangle will be shown during the GIF generation
