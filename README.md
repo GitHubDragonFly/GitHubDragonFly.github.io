@@ -8,7 +8,7 @@ GitHub servers are providing correct access to files, so cloning or downloading 
 
 Repositories do contain projects in several different programming languages or a mix of: `Java` `VB.Net` `C#` `python` `JavaScript` `jQuery` `HTML/CSS` `shell`.
 
-There is a lot of information and descriptions, some intended for Industrial Automation and some for general/personal use.
+There is a lot of information and descriptions, some intended for Industrial Automation and some for general/personal use. All is good as educational resource as well.
 
 # Mozilla Firefox screenshot
 
