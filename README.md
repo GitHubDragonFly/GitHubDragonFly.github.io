@@ -122,7 +122,7 @@ PLY Viewer
   - This is currently "view only" so most viewer controls will not have any effect and will be disabled
 - TIF / TIFF image file support is powered by [UTIF.js](https://github.com/photopea/UTIF.js)
 - Use the `T` button to switch between textures
-- Texture is displayed on a rotatable plane (rotation/move/zoom are not applicable to Animated PNG / WEBP files)
+- Texture is displayed on a rotatable plane - rotation / move / zoom are not applicable to Animated GIF / PNG / WEBP files
 - URL text box also allows entering a single base64 string of the image data, see the `URLS4MODELS.md` file for an example
 - For certain formats and their manipulation an easy alternative to this viewer would be `https://ezgif.com`
 
