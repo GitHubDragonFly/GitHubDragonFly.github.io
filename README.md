@@ -94,7 +94,7 @@ Main Menu Page
 - DAE (Collada) exporter appears to brighten up the original model as well as the exported model
 - MMD / GLTF viewers can export to DAE (Collada) / OBJ formats but all exported textures seem to need to be flipped vertically afterwards (use some paint program for this)
 - GLTF / GLB exporter has a limitation related to shader material, seen when exporting MMD models
-- Using Animated GIF as a texture is experimental and currently available only in FBX / OBJ / PLY+STL / PRWM viewers and should be tried on simple models, see the Animated GIF of a cube using Animated GIF as a texture in the `images` folder
+- Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library, currently available only in FBX / OBJ / PLY+STL / PRWM viewers and should be tried on simple models, see the Animated GIF of a cube using Animated GIF as a texture in the `images` folder
 - Tips:
   - if the model is correctly loaded but you cannot see it then try any or all of the following:
     - apply `edges`
@@ -117,7 +117,7 @@ PLY Viewer
 - Supporting PNG, APNG, JPG, JPEG, JFIF, PJPEG, PJP, BMP, DIB, GIF, TIF, TIFF, WEBP, TGA, SVG, DDS, KTX, KTX2, BASIS and Lottie JSON texture files
 - Animated GIF file support is powered in part by [omggif](https://github.com/deanm/omggif) and displayed with [THREE.CSS2DRenderer](https://threejs.org/docs/#examples/en/renderers/CSS2DRenderer)
 - Animated PNG file support is powered in part by [UPNG.js](https://github.com/photopea/UPNG.js) and displayed with [THREE.CSS2DRenderer](https://threejs.org/docs/#examples/en/renderers/CSS2DRenderer)
-- Animated WEBP file id displayed with [THREE.CSS2DRenderer](https://threejs.org/docs/#examples/en/renderers/CSS2DRenderer)
+- Animated WEBP file is displayed with [THREE.CSS2DRenderer](https://threejs.org/docs/#examples/en/renderers/CSS2DRenderer)
 - All of the above animated files are "view only" so most viewer controls will not have any effect and will be disabled
 - TIF / TIFF image file support is powered by [UTIF.js](https://github.com/photopea/UTIF.js)
 - Use the `T` button to switch between textures
