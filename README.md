@@ -124,6 +124,7 @@ PLY Viewer
 - Texture is displayed on a rotatable plane - rotation / move / zoom are not applicable to video or Animated GIF / PNG / WEBP files
 - URL text box also allows entering a single base64 string of the image data, see the `URLS4MODELS.md` file for an example
 - For certain formats and their manipulation an easy alternative to this viewer would be `https://ezgif.com`
+- Just remember that most of these files can easily be viewed with some operating system applications or by the browsers themselves (like animated GIF/PNG/WEBP or MP4/WEBM/OGV videos), all it takes in Windows, for example, is to right-click the file itself and choose `Open With` and select `Firefox` browser 
 
 ![Texture Viewer](images/Texture%20Viewer.png?raw=true)
 
