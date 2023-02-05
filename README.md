@@ -19,6 +19,7 @@ Main Menu Page
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model
 - Menu with controls can be located either on top or on the bottom of the page
+- All viewers include [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
 - Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers - do note that Safari might be finicky about certain features
 - Import files locally from a file browser dialog or specify remote URL (make any necessary changes on your device to allow local file browsing)
 - Import formats, where applicable, with any optional/required textures:
