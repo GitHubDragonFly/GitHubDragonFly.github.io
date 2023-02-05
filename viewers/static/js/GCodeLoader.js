@@ -19,7 +19,7 @@
 
 		}
 
-		load( url, onLoad,onProgress, onError ) {
+		load( url, onLoad, onProgress, onError ) {
 
 			const scope = this;
 
@@ -59,15 +59,15 @@
 
 		parse( data ) {
 
-			let state = { x: 0, y: 0, z: 0, e: 0, f: 0,i:0,j:0, extruding: false, relative: false };
+			let state = { x: 0, y: 0, z: 0, e: 0, f: 0, i: 0, j: 0, extruding: false, relative: false };
 			const layers = [];
 
 			let currentLayer = undefined;
 
-			const pathMaterial = new THREE.LineBasicMaterial( { color: 0xF50505 } );
+			const pathMaterial = new THREE.LineBasicMaterial( { color: 0xA51515 } );
 			pathMaterial.name = 'path';
 
-			const extrudingMaterial = new THREE.LineBasicMaterial( { color: 0x05F505 } );
+			const extrudingMaterial = new THREE.LineBasicMaterial( { color: 0x15A515 } );
 			extrudingMaterial.name = 'extruded';
 
 			function newLayer( line ) {
@@ -77,7 +77,7 @@
 
 			}
 
-			//Create lie segment between p1 and p2
+			//Create line segment between p1 and p2
 			function addSegment( p1, p2 ) {
 
 				if ( currentLayer === undefined ) {
@@ -134,7 +134,7 @@
 				} );
 				//Process commands
 				//G0/G1 – Linear Movement
-				if (cmd === 'G00' || cmd === 'G0' || cmd === 'G01' || cmd==='G1' || /(([XxYyZz]) *(-?\d+.?\d*)) *(([XxYyZz]) *(-?\d+.?\d*))? *(([XxYyZz]) *(-?\d+.?\d*))?/g.test(cmd)) {
+				if ( cmd === 'G00' || cmd === 'G0' || cmd === 'G01' || cmd==='G1' || /(([XxYyZz]) *(-?\d+.?\d*)) *(([XxYyZz]) *(-?\d+.?\d*))? *(([XxYyZz]) *(-?\d+.?\d*))?/g.test(cmd) ) {
 
 					const line = {
 						x: args.x !== undefined ? absolute( state.x, args.x ) : state.x,
@@ -159,7 +159,7 @@
 
 					addSegment( state, line );
 					state = line;
-				} else if ( cmd==='G02' || cmd === 'G2' || cmd==='G03' || cmd === 'G3' ) {
+				} else if ( cmd === 'G02' || cmd === 'G2' || cmd === 'G03' || cmd === 'G3' ) {
 
 						const line = {
 							x: args.x !== undefined ? absolute( state.x, args.x ) : state.x,
@@ -178,16 +178,15 @@
 							if ( currentLayer == undefined || line.z != currentLayer.z ) {
 	
 								newLayer( line );
-	
+
 							}
-	
+
 						}
 
 
+					addSegment( state, line );
+					state = line;
 
-					addSegment(state,line)
-					state=line
-					
 				} else if ( cmd === 'G90' ) {
 
 					//G90: Set to Absolute Positioning
@@ -216,9 +215,9 @@
 
 			}
 
-			function addObject( vertex, extruding, i ,cmd) {
-			
-				if(cmd!='G02' || cmd != 'G03' || cmd !='G2' || cmd != 'G3'){
+			function addObject( vertex, extruding, i, cmd ) {
+
+				if ( cmd != 'G02' || cmd != 'G03' || cmd != 'G2' || cmd != 'G3') {
 
 					const geometry = new THREE.BufferGeometry();
 					geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( vertex, 3 ) );
@@ -226,18 +225,20 @@
 					segments.name = 'layer' + i;
 					object.add( segments );
 
-				}else{
+				} else {
+
 					const curve = new THREE.SplineCurve( [
 						new THREE.Vector2( state.x, state.y ),
-						new THREE.Vector2( args.x,args.y )
-					
+						new THREE.Vector2( args.x, args.y )
+
 					] );
-				
+
 					const points = curve.getPoints( 50 );
 					const geometry = new THREE.BufferGeometry().setFromPoints( points );
 					const ellipse = new THREE.Line( geometry, extruding ? extrudingMaterial : pathMaterial );
 					ellipse.name = 'layer' + i;
-					object.add(ellipse);
+					object.add( ellipse );
+
 				}
 
 			}
@@ -250,8 +251,8 @@
 				for ( let i = 0; i < layers.length; i ++ ) {
 
 					const layer = layers[ i ];
-					addObject( layer.vertex, true, i ,cmd);
-					addObject( layer.pathVertex, false, i ,cmd);
+					addObject( layer.vertex, true, i, cmd );
+					addObject( layer.pathVertex, false, i, cmd );
 
 				}
 
@@ -280,8 +281,8 @@
 
 				}
 
-				addObject( vertex, true, layers.length ,cmd);
-				addObject( pathVertex, false, layers.length ,cmd);
+				addObject( vertex, true, layers.length, cmd );
+				addObject( pathVertex, false, layers.length, cmd );
 
 			}
 
