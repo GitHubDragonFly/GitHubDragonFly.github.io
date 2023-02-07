@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
-    <meta name="description" content="JSON Viewer.">
+    <meta name="description" content="JSON Viewer">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="../static/js/jquery-3.6.1.slim.min.js" defer></script>
@@ -21,7 +21,7 @@
     <script src="https://cdn.jsdelivr.net/npm/rhino3dm@7.15.0/rhino3dm.min.js" defer></script>
 
     <style>
-      body,html{
+      body, html {
         position: relative;
         display: block;
         background-color: black;
@@ -213,6 +213,7 @@
         <button id="btn_skeleton" title="Skeleton" onclick="show_skeleton()" disabled>S</button>
         <button id="btn_animate" title="Animations" onclick="animate_json()" style="min-width: 28px;" disabled>A</button>
         <button id="btn_vertex_colors" title="Vertex Colors" onclick="set_vertex_colors()" style="min-width: 28px;" disabled>VC</button>
+        <button id="btn_random_vertex_colors" title="Random Vertex Colors" onclick="set_random_vertex_colors()" style="min-width: 12px;" disabled>!</button>
         <button id="btn_mtl_side" title="Material Side" onclick="switch_mtl_side()" style="min-width: 28px;" disabled>OS</button>
       </div>
       <div class="fm" id="url" style="display: none;">
@@ -263,7 +264,8 @@
       </div>
     </div>
     <div id="gif_progress" style="display: none; background-color: transparent; border: none; height: 1px;">
-      <progress id="progress" value="0" max="1" style="width: 99.5%; margin-left: 3px; margin-right: 3px;"></progress>
+      <progress id="progress" value="0" max="1" style="width: 96%; margin-left: 3px; margin-right: 3px;"></progress>
+      <label id="progress_label" style="display: inline-block; color: lightblue;"></label>
     </div>
 
     <div id="div_spinner" class="spinner"></div>
@@ -357,7 +359,8 @@
       var mouse_rotation, reset_rotation, events_initialized, reflect;
       var selected_json_file, selected_url_file = '', selected_json_url_file;
       var previous_json_scale = '1', bounding_box, gif_export;
-      var vertex_colors_enabled, flat_shading_enabled, menu_location_bottom = false;
+      var vertex_colors_enabled, random_vertex_colors_enabled, original_vertex_color_array, random_vertex_color_array;
+      var flat_shading_enabled, menu_location_bottom = false;
       var loader, fd, material, textures, buffer_geometry, url_displayed, url_loading;
       var animations, animation_mixer, current_animation, clock;
       var initial_opacity, initial_opacity_array, enable_opacity;
@@ -758,6 +761,8 @@
 
         let context = canvas.getContext( '2d', { willReadFrequently: true } );
 
+        let pl = document.getElementById( 'progress_label' );
+
         let current = 0;
 
         function addFrame() {
@@ -804,9 +809,11 @@
             }
 
             progress.value = current / frames;
+            pl.innerHTML = parseInt( progress.value * 100 ) + '%';
             setTimeout( addFrame, 0 );
           } else {
             progress.value = 0;
+            pl.innerHTML = '0%';
             document.getElementById('fixed_menu').style.display = 'block';
             document.getElementById('gif_progress').style.display = 'none';
             document.getElementById('div_gif_rectangle').style.display = 'none';
@@ -865,6 +872,8 @@
 
         let context = canvas.getContext( '2d', { willReadFrequently: true } );
 
+        let pl = document.getElementById( 'progress_label' );
+
         let frame_delay = [];
         let before_last = frames - 2;
         let current = 0;
@@ -886,6 +895,7 @@
             }
 
             progress.value = current / frames;
+            pl.innerHTML = parseInt( progress.value * 100 ) + '%';
 
             if (current === before_last) {
               document.getElementById('div_loading').innerHTML = 'Please wait ...';
@@ -895,6 +905,7 @@
             setTimeout( addFrame, 0 );
           } else {
             progress.value = 0;
+            pl.innerHTML = '0%';
             document.getElementById('fixed_menu').style.display = 'block';
             document.getElementById('gif_progress').style.display = 'none';
             document.getElementById('div_gif_rectangle').style.display = 'none';
@@ -1190,6 +1201,11 @@
       function set_initial_scale() {
         // Set the initial scale of the object so it comes to view
         bounding_box.setFromObject( mesh );
+
+        let center = new THREE.Vector3();
+        bounding_box.getCenter( center );
+        mesh.position.sub( center );
+
         let y;
 
         if (bounding_box.max.y < 0) {
@@ -1383,6 +1399,9 @@
         render_requested = false;
         flat_shading_enabled = false;
         vertex_colors_enabled = false;
+        random_vertex_colors_enabled = false;
+        original_vertex_color_array = {};
+        random_vertex_color_array = {};
         textures = {};
         gif_export = false;
         initial_rotation = new THREE.Vector3();
@@ -1587,12 +1606,20 @@
         let child_count = 1;
         let child_count_array = 1;
 
-        if (buffer_geometry) {
+        if (buffer_geometry || (mesh.material && mesh.isPoints === false)) {
           mesh.name = 'mesh_0';
           initial_opacity_array[ mesh.name ] = {};
           initial_transparency_array[ mesh.name ] = {};
           original_color_array[ mesh.name ] = {};
           original_side_array[ mesh.name ] = {};
+
+          random_vertex_color_array[ 'mesh_0' ] = new Float32Array( Array.from( { length: mesh.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+
+          if (mesh.geometry.attributes.color && mesh.geometry.attributes.color.array.length > 0) {
+            original_vertex_color_array[ 'mesh_0' ] = new Float32Array( Array.from( mesh.geometry.attributes.color.array ) );
+          } else {
+            original_vertex_color_array[ 'mesh_0' ] = new Float32Array( mesh.geometry.attributes.position.array.length );
+          }
 
           if (Object.getOwnPropertyNames( textures ).length !== 0) {
             mesh.material.forEach( mtl => {
@@ -1604,10 +1631,12 @@
               mtl.format = THREE.RGBAFormat;
               mtl.flatShading = false;
               mtl.skinning = true;
-              if (mesh.geometry.attributes.color && mesh.geometry.attributes.color.length > 0) {
+              if (mesh.geometry.attributes.color && mesh.geometry.attributes.color.array.length > 0) {
                 mtl.vertexColors = true;
                 vertex_colors_enabled = true;
                 document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                document.getElementById('btn_random_vertex_colors').disabled = false;
+                random_vertex_changed();
               }
 
               for (const [ key, value ] of Object.entries( textures )) {
@@ -1645,10 +1674,12 @@
             mesh.material.format = THREE.RGBAFormat;
             mesh.material.flatShading = false;
             mesh.material.skinning = true;
-            if (mesh.geometry.attributes.color && mesh.geometry.attributes.color.length > 0) {
+            if (mesh.geometry.attributes.color && mesh.geometry.attributes.color.array.length > 0) {
               mesh.material.vertexColors = true;
               vertex_colors_enabled = true;
               document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+              random_vertex_changed();
             }
 
             initial_opacity[ mesh.name ] = mesh.material.opacity;
@@ -1677,6 +1708,25 @@
             }
 
             if (child.isMesh || child.isPoints) {
+              random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+
+              if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                original_vertex_color_array[ child.name ] = new Float32Array( Array.from( child.geometry.attributes.color.array ) );
+              } else {
+                original_vertex_color_array[ child.name ] = new Float32Array( child.geometry.attributes.position.array.length );
+              }
+
+              if (child.isMesh) {
+                if (child.isSkinnedMesh) child.frustumCulled = false;
+                if (child.geometry.attributes && !child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                if (child.geometry.attributes && child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
+              } else {
+                document.getElementById('wireframe').disabled = true;
+                document.getElementById('btn_flat').disabled = true;
+                document.getElementById('btn_edges').disabled = true;
+                document.getElementById('btn_mtl_side').disabled = true;
+              }
+
               if (child.material) {
                 if (Array.isArray( child.material )) {
                   initial_opacity_array[ child.name ] = {};
@@ -1693,10 +1743,13 @@
                     mtl.format = THREE.RGBAFormat;
                     mtl.flatShading = false;
                     mtl.skinning = true;
-                    if (child.geometry.attributes.color && child.geometry.attributes.color.length > 0) {
+
+                    if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
                       mtl.vertexColors = true;
                       vertex_colors_enabled = true;
                       document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                      document.getElementById('btn_random_vertex_colors').disabled = false;
+                      random_vertex_changed();
                     }
 
                     initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
@@ -1716,10 +1769,13 @@
                   child.material.format = THREE.RGBAFormat;
                   child.material.flatShading = false;
                   child.material.skinning = true;
-                  if (child.geometry.attributes.color && child.geometry.attributes.color.length > 0) {
+
+                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
                     child.material.vertexColors = true;
                     vertex_colors_enabled = true;
                     document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                    document.getElementById('btn_random_vertex_colors').disabled = false;
+                    random_vertex_changed();
                   }
 
                   initial_opacity[ child.name ] = child.material.opacity;
@@ -1730,8 +1786,6 @@
                   child.material.needsUpdate = true;
                 }
               }
-
-              if (child.geometry.attributes && child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
             }
           });
         }
@@ -1921,12 +1975,20 @@
         let child_count = 1;
         let child_count_array = 1;
 
-        if (buffer_geometry) {
+        if (buffer_geometry || (mesh.material && mesh.isPoints === false)) {
           mesh.name = 'mesh_0';
           initial_opacity_array[ mesh.name ] = {};
           initial_transparency_array[ mesh.name ] = {};
           original_color_array[ mesh.name ] = {};
           original_side_array[ mesh.name ] = {};
+
+          random_vertex_color_array[ 'mesh_0' ] = new Float32Array( Array.from( { length: mesh.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+
+          if (mesh.geometry.attributes.color && mesh.geometry.attributes.color.array.length > 0) {
+            original_vertex_color_array[ 'mesh_0' ] = new Float32Array( Array.from( mesh.geometry.attributes.color.array ) );
+          } else {
+            original_vertex_color_array[ 'mesh_0' ] = new Float32Array( mesh.geometry.attributes.position.array.length );
+          }
 
           if (Array.isArray( mesh.material )) {
             mesh.material.forEach( mtl => {
@@ -1938,10 +2000,13 @@
               mtl.format = THREE.RGBAFormat;
               mtl.flatShading = false;
               mtl.skinning = true;
-              if (mesh.geometry.attributes.color && mesh.geometry.attributes.color.length > 0) {
+
+              if (mesh.geometry.attributes.color && mesh.geometry.attributes.color.array.length > 0) {
                 mtl.vertexColors = true;
                 vertex_colors_enabled = true;
                 document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                document.getElementById('btn_random_vertex_colors').disabled = false;
+                random_vertex_changed();
               }
 
               initial_opacity_array[ mesh.name ][ child_count_array ] = mtl.opacity;
@@ -1961,10 +2026,13 @@
             mesh.material.format = THREE.RGBAFormat;
             mesh.material.flatShading = false;
             mesh.material.skinning = true;
-            if (mesh.geometry.attributes.color && mesh.geometry.attributes.color.length > 0) {
+
+            if (mesh.geometry.attributes.color && mesh.geometry.attributes.color.array.length > 0) {
               mesh.material.vertexColors = true;
               vertex_colors_enabled = true;
               document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+              random_vertex_changed();
             }
 
             initial_opacity[ mesh.name ] = mesh.material.opacity;
@@ -1993,6 +2061,25 @@
             }
 
             if (child.isMesh || child.isPoints) {
+              random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+
+              if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                original_vertex_color_array[ child.name ] = new Float32Array( Array.from( child.geometry.attributes.color.array ) );
+              } else {
+                original_vertex_color_array[ child.name ] = new Float32Array( child.geometry.attributes.position.array.length );
+              }
+
+              if (child.isMesh) {
+                if (child.isSkinnedMesh) child.frustumCulled = false;
+                if (child.geometry.attributes && !child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                if (child.geometry.attributes && child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
+              } else {
+                document.getElementById('wireframe').disabled = true;
+                document.getElementById('btn_flat').disabled = true;
+                document.getElementById('btn_edges').disabled = true;
+                document.getElementById('btn_mtl_side').disabled = true;
+              }
+
               if (Array.isArray( child.material )) {
                 initial_opacity_array[ child.name ] = {};
                 initial_transparency_array[ child.name ] = {};
@@ -2008,10 +2095,13 @@
                   mtl.format = THREE.RGBAFormat;
                   mtl.flatShading = false;
                   mtl.skinning = true;
-                  if (child.geometry.attributes.color && child.geometry.attributes.color.length > 0) {
+
+                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
                     mtl.vertexColors = true;
                     vertex_colors_enabled = true;
                     document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                    document.getElementById('btn_random_vertex_colors').disabled = false;
+                    random_vertex_changed();
                   }
 
                   initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
@@ -2031,10 +2121,13 @@
                 child.material.format = THREE.RGBAFormat;
                 child.material.flatShading = false;
                 child.material.skinning = true;
-                if (child.geometry.attributes.color && child.geometry.attributes.color.length > 0) {
+
+                if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
                   child.material.vertexColors = true;
                   vertex_colors_enabled = true;
                   document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                  document.getElementById('btn_random_vertex_colors').disabled = false;
+                  random_vertex_changed();
                 }
 
                 initial_opacity[ child.name ] = child.material.opacity;
@@ -2044,8 +2137,6 @@
 
                 child.material.needsUpdate = true;
               }
-
-              if (child.geometry.attributes && child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
             }
           });
         }
@@ -2305,11 +2396,19 @@
       function set_vertex_colors() {
         if (vertex_colors_enabled) {
           document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_random_vertex_colors').disabled = true;
+          random_vertex_colors_enabled = true;
+          set_random_vertex_colors();
           vertex_colors_enabled = false;
         } else {
           document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_random_vertex_colors').disabled = false;
           vertex_colors_enabled = true;
         }
+
+        random_vertex_changed();
 
         mesh.traverse( function( child ) {
     	    if (child.isMesh || child.isPoints) {
@@ -2320,6 +2419,30 @@
               });
             } else {
               child.material.vertexColors = vertex_colors_enabled;
+              child.material.needsUpdate = true;
+            }
+    		  }
+    	  });
+      }
+
+      function set_random_vertex_colors() {
+        if (random_vertex_colors_enabled) {
+          document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
+          random_vertex_colors_enabled = false;
+        } else {
+          document.getElementById('btn_random_vertex_colors').style.backgroundColor = 'lightgreen';
+          random_vertex_colors_enabled = true;
+        }
+
+        mesh.traverse( function( child ) {
+    	    if (child.isMesh || child.isPoints) {
+            child.geometry.setAttribute( 'color', random_vertex_colors_enabled ? new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3, false ) : new THREE.BufferAttribute( original_vertex_color_array[ child.name ], 3, false ) );
+
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtl => {
+                mtl.needsUpdate = true;
+              });
+            } else {
               child.material.needsUpdate = true;
             }
     		  }
@@ -2452,6 +2575,10 @@
         document.getElementById('btn_reflective').style.backgroundColor = '#d1cefc';
         vertex_colors_enabled = false;
         document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
+        random_vertex_colors_enabled = false;
+        document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_random_vertex_colors').disabled = true;
+        random_vertex_changed();
 
         gif_export = false;
         reset_rotation = true;
@@ -2506,9 +2633,9 @@
         document.getElementById('object_color').disabled = disable;
         document.getElementById('btn_edges').disabled = disable;
         document.getElementById('btn_flat').disabled = disable;
+        document.getElementById('btn_mtl_side').disabled = disable;
         document.getElementById('btn_json_opacity').disabled = disable;
         document.getElementById('btn_vertex_colors').disabled = disable;
-        document.getElementById('btn_mtl_side').disabled = disable;
         document.getElementById('btn_polar_grid').disabled = disable;
         document.getElementById('btn_grid').disabled = disable;
         document.getElementById('reset').disabled = disable;
@@ -2570,6 +2697,16 @@
           $('#btn_animate').unbind('mouseenter mouseleave');
         } else {
           $('#btn_animate').hover(
+          function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+          function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+        }
+      }
+
+      function random_vertex_changed() {
+        if ($('#btn_random_vertex_colors')[ 0 ].disabled === true) {
+          $('#btn_random_vertex_colors').unbind('mouseenter mouseleave');
+        } else {
+          $('#btn_random_vertex_colors').hover(
           function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
           function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
         }
