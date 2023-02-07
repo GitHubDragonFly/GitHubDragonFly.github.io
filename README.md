@@ -74,6 +74,7 @@ Main Menu Page
     - `*` - envMap + metalness (vtk / prwm)
   - `OS` - material side (Original / Front / Back / Double)
   - `VC` - vertex colors
+    - `!` - random vertex colors
   - `XS` - xtra smooth
   - `RST` - reset
   - `#` - grid
