@@ -42,10 +42,11 @@ Main Menu Page
   - consider changing Directional Light color and/or using Ambient Light to avoid poor quality GIF for some models
   - non-animated / non-rotating models will spin 360 degrees
   - see the `legobrick` generated GIF examples and their optimized / resized version in the `images` folder
-- APNG exports are powered by [UPNG.js](https://github.com/photopea/UPNG.js) and [Pako.js](https://github.com/nodeca/pako)
+- Animated PNG (APNG) exports are powered by [UPNG.js](https://github.com/photopea/UPNG.js) and [Pako.js](https://github.com/nodeca/pako)
   - almost the same features as in the Animated GIF export, see above
   - use some background image to avoid visual anomalies (artifacts) in the resulting file due to transparency - there are `black.gif` `white.gif` `dark_blue.png` files available in the `images` folder as a simple choice for background image
   - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
+  - currently set for Lossy PNG to speed up processing but with comment on how to change it to full color if required
 - JSON import/export is actually three.js created format:
   - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry
   - JSON Viewer is using r135 of three.js
