@@ -15,6 +15,11 @@ There is a lot of information and descriptions, some intended for Industrial Aut
 Main Menu Page
 ![Start Page](images/screenshot.png?raw=true)
 
+# Notes about Number Type Converter
+
+- Currently work in progress and is only partially functional
+- Online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion)
+
 # Notes about three.js 3D Model Viewers
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model
