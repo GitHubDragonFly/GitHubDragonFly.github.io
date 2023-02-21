@@ -17,8 +17,8 @@ Main Menu Page
 
 # Notes about Number Type Converter
 
-- Currently work in progress and is only partially functional
-- Online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion)
+- Currently work in progress and is only partially functional and might be inaccurate
+- This will be an online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion)
 
 # Notes about three.js 3D Model Viewers
 
