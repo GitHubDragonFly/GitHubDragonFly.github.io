@@ -17,8 +17,9 @@ Main Menu Page
 
 # Notes about Number Type Converter
 
-- Currently work in progress and is partially functional (binary, hex, octal and signed integers)
+- Currently work in progress and is partially functional (binary, hex, octal and signed/unsigned integers)
 - This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion)
+- An open mind and some knowledge of number systems, hopefully binary, is required in order to understand the displayed values
 
 # Notes about three.js 3D Model Viewers
 
