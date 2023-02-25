@@ -17,7 +17,7 @@ Main Menu Page
 
 # Notes about Number Type Converter
 
-- Currently work in progress and is partially functional (binary, hex, octal and signed/unsigned integers)
+- Appears to be fully functional (binary, hex, octal, signed/unsigned integers, float 32/64-bit)
 - This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion)
 - An open mind and some knowledge of number systems, hopefully binary, is required in order to understand the displayed values
 
