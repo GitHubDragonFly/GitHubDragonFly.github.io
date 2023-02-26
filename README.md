@@ -1,14 +1,14 @@
 # GitHubDragonFly.github.io
 GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 
-Designed to serve as a hub with links to repositories and FREE online [three.js](https://threejs.org) based 3D model viewers.
+Designed to serve as a hub with links to repositories, Number Type Converter and FREE online [three.js](https://threejs.org) based 3D model viewers.
 Fit for a desktop but should be functional on mobile devices in spite of its tiny or bulky appearance. 
 
 GitHub servers are providing correct access to files, so cloning or downloading this repository will not have the same functionality if run locally without some server.
 
 Repositories do contain projects in several different programming languages or a mix of: `Java` `VB.Net` `C#` `python` `JavaScript` `jQuery` `HTML/CSS` `shell`.
 
-There is a lot of information and descriptions, some intended for Industrial Automation and some for general/personal use. All is good as educational resource as well.
+There is a lot of information and descriptions, some intended for Industrial Automation and some for general/personal use. All is good as an educational resource as well.
 
 # Mozilla Firefox screenshot
 
