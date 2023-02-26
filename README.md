@@ -21,6 +21,9 @@ Main Menu Page
 - This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion)
 - An open mind and some knowledge of number systems, hopefully binary, is required in order to understand the displayed values
 
+Number Type Converter
+![Number Type Converter](images/Number%20Type%20Converter.png?raw=true)
+
 # Notes about three.js 3D Model Viewers
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model
