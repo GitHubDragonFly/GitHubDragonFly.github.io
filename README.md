@@ -18,8 +18,8 @@ Main Menu Page
 # Notes about Number Type Converter
 
 - Appears to be fully functional (binary, hex, octal, signed/unsigned integers, float 32/64-bit)
-- This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion)
-- An open mind and some knowledge of number systems, hopefully binary, is required in order to understand the displayed values
+- This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion) so check its description
+- An open mind and some knowledge of number systems, hopefully binary, will help understand the displayed values
 
 Number Type Converter
 ![Number Type Converter](images/Number%20Type%20Converter.png?raw=true)
