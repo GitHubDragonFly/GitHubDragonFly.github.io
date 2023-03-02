@@ -20,6 +20,7 @@ Main Menu Page
 - Appears to be fully functional (binary, hex, octal, signed/unsigned integers, float 32/64-bit)
 - This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion) so check its description
 - An open mind and some knowledge of number systems, hopefully binary, will help understand the displayed values
+- Possibly of good use for those who deal with Programmable Logic Controllers (PLC) and students
 
 Number Type Converter
 ![Number Type Converter](images/Number%20Type%20Converter.png?raw=true)
