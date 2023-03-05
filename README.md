@@ -75,7 +75,7 @@ Number Type Converter
   - `A` - animations
   - `E` - edges
   - `F` - flatShading
-  - `G` - linear gradient background (OBJ)
+  - `G` - linear gradient background (OBJ, PLY+STL)
   - `K` - kinematics (DAE Collada)
   - `L` - lines (LDRAW)
   - `O` - opacity
