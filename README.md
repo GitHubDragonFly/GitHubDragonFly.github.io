@@ -55,8 +55,9 @@ Number Type Converter
 - Animated PNG (APNG) exports are powered by [UPNG.js](https://github.com/photopea/UPNG.js) and [Pako.js](https://github.com/nodeca/pako)
   - almost the same features as in the Animated GIF export, see above
   - use some background image to avoid visual anomalies (artifacts) in the resulting file due to transparency:
-    - where applicable, use button `G` to add grayish linear gradient as a scene background
-    - there are `black.gif` `white.gif` `dark_blue.png` files available in the `images` folder as a simple choice for background image
+    - where applicable, use the `Eq` checkbox to apply equirectangular scene background
+    - where applicable, use the `G` button to add grayish linear gradient as a scene background
+    - use `black.gif` `white.gif` `dark_blue.png` files found in the `images` folder as a simple choice for background image
   - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
   - currently set for Lossy PNG to speed up processing but with comment on how to change it to full color if required
 - JSON import/export is actually three.js created format:
