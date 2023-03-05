@@ -42,7 +42,7 @@ Number Type Converter
   - 3DM, DAE, APNG, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, PRWM
 - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
 - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
-  - as per the author OBJ -> PRWM conversion is limited to OBJ containing a single model made of triangles
+  - as per the author: OBJ -> PRWM conversion is limited to OBJ containing a single model made of triangles
 - GIF export is actually Animated GIF based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
   - currently set to 500 x 500 size in the centre of the window
   - the approximate GIF area rectangle will be shown during the GIF generation
@@ -59,7 +59,7 @@ Number Type Converter
     - where applicable, use the `G` button to add grayish linear gradient as a scene background
     - use `black.gif` `white.gif` `dark_blue.png` files found in the `images` folder as a simple choice for background image
   - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
-  - currently set for Lossy PNG to speed up processing but with comment on how to change it to full color if required
+  - currently set for Lossy PNG to speed up processing but with a comment on how to change it to full color if required
 - JSON import/export is actually three.js created format:
   - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry
   - JSON Viewer is using r135 of three.js
@@ -75,19 +75,19 @@ Number Type Converter
   - `A` - animations
   - `E` - edges
   - `F` - flatShading
-  - `G` - linear gradient background (obj)
-  - `K` - kinematics (collada)
-  - `L` - lines (ldraw)
+  - `G` - linear gradient background (OBJ)
+  - `K` - kinematics (DAE Collada)
+  - `L` - lines (LDRAW)
   - `O` - opacity
-  - `P` - poses (mmd)
+  - `P` - poses (MMD)
   - `S` - skeleton
   - `T` - textures
-  - `V` - variants (gltf)
+  - `V` - variants (GLTF)
   - `X` - morphs
-  - `CS` - construction step (ldraw)
-  - `MP` - material (Phong / Standard / Lambert)
-    - `*` - envMap + metalness (vtk / prwm)
-  - `OS` - material side (Original / Front / Back / Double)
+  - `CS` - construction step (LDRAW)
+  - `MP` - material - Phong (MP) / Standard (MS) / Lambert (ML)
+    - `*` - applicable to MS to provide envMap + metalness (VTK / PRWM)
+  - `OS` - material side - Original (OS) / Front (FS) / Back (BS) / Double (DS)
   - `VC` - vertex colors
     - `!` - random vertex colors
   - `XS` - xtra smooth
@@ -103,7 +103,7 @@ Number Type Converter
 - Other controls, where applicable:
   - `C` - object color
   - `BG` - background color
-  - `Eq` - equirectangular
+  - `Eq` - equirectangular background
     - `R` - reflectivity (envMap + metalness)
 - STEP / IGES / BREP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
 - JSON Viewer has timeouts which might need to be adjusted when loading large files
@@ -111,7 +111,9 @@ Number Type Converter
 - DAE (Collada) exporter appears to brighten up the original model as well as the exported model
 - MMD / GLTF viewers can export to DAE (Collada) / OBJ formats but all exported textures seem to need to be flipped vertically afterwards (use some paint program for this)
 - GLTF / GLB exporter has a limitation related to shader material, seen when exporting MMD models
-- Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library, currently available only in FBX / OBJ / PLY+STL / PRWM viewers and should be tried on simple models, see the Animated GIF of a cube using Animated GIF as a texture in the `images` folder
+- Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
+    - currently available only in `FBX` `OBJ` `PLY+STL` `PRWM` viewers and should be tried on simple models
+    - see the Animated GIF of a cube using Animated GIF as a texture in the `images` folder
 - Tips:
   - if the model is correctly loaded but you cannot see it then try any or all of the following:
     - apply `edges`
