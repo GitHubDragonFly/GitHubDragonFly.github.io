@@ -75,19 +75,19 @@ Number Type Converter
   - `A` - animations
   - `E` - edges
   - `F` - flatShading
-  - `G` - linear gradient background (OBJ, PLY+STL)
-  - `K` - kinematics (DAE Collada)
-  - `L` - lines (LDRAW)
+  - `G` - linear gradient background (OBJ, PLY+STL viewers)
+  - `K` - kinematics (DAE viewer)
+  - `L` - lines (LDRAW and its exports in GLTF, OBJ, JSON viewers)
   - `O` - opacity
-  - `P` - poses (MMD)
+  - `P` - poses (MMD viewer)
   - `S` - skeleton
   - `T` - textures
-  - `V` - variants (GLTF)
+  - `V` - variants (GLTF viewer)
   - `X` - morphs
-  - `CS` - construction step (LDRAW)
-  - `MP` - material - Phong (MP) / Standard (MS) / Lambert (ML)
-    - `*` - applicable to MS to provide envMap + metalness (VTK / PRWM)
-  - `OS` - material side - Original (OS) / Front (FS) / Back (BS) / Double (DS)
+  - `CS` - construction step (LDRAW viewer)
+  - `MP` - material - Phong (MP), Standard (MS), Lambert (ML)
+    - `*` - applicable to MS to provide envMap + metalness (VTK, PRWM viewers)
+  - `OS` - material side - Original (OS), Front (FS), Back (BS), Double (DS)
   - `VC` - vertex colors
     - `!` - random vertex colors
   - `XS` - xtra smooth
