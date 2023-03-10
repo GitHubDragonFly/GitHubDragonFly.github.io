@@ -21,6 +21,7 @@ Main Menu Page
 - This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion) so check its description
 - An open mind and some knowledge of number systems, hopefully binary, will help understand the displayed values
 - Possibly of good use to those who deal with Programmable Logic Controllers (PLC) and students
+- Note about float parser: it will complete parsing the string as a number if it encounters an invalid character as per standard number rules
 
 Number Type Converter
 ![Number Type Converter](images/Number%20Type%20Converter.png?raw=true)
