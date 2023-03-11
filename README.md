@@ -64,6 +64,9 @@ Number Type Converter
 - JSON import/export is actually three.js created format:
   - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry
   - JSON Viewer is using r135 of three.js
+- OBJ exporter might currently, along with the exported MTL file, export multiple copies of the same texture but under different names:
+  - Keep 1 copy of the texture and update the corresponding MTL file entries to point to that texture
+  - Delete all other copies of that same texture
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
 - Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
