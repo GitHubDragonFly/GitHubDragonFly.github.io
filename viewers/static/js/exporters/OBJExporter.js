@@ -346,7 +346,7 @@
 			if (Object.keys( materials ).length !== 0) {
 				// mtl output (Ref: https://stackoverflow.com/questions/35070048/export-a-three-js-textured-model-to-a-obj-with-mtl-file)
 
-				let mtlOutput = '';
+				let mtlOutput = '# MTL file - created by a modified three.js OBJExporter' + '\n';
 				let textures = [];
 				let names = [];
 				const ext = 'png';
@@ -362,14 +362,14 @@
 
 							let name = ( mat.name && mat.name !== '' ) ? ( ( mat.name.toUpperCase().endsWith( '.PNG' ) || mat.name.toUpperCase().endsWith( '.JPG' ) ) ? mat.name.substring(0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : 'material' + mat.id;
 
-							if ( !names.includes( name ) ) {
+							if ( names.includes( name ) === false ) {
 
 								names.push( name );
 
 								let transparency = ( mat.opacity < 1 ) ? ( 1 - mat.opacity ) : '0.0000';
 
-								mtlOutput += 'newmtl ' + name + '\n';
-	
+								mtlOutput += '\n' + 'newmtl ' + name + '\n';
+
 								mtlOutput += 'Ns 15.0000\n';
 								mtlOutput += 'Ni 1.5000\n';
 								mtlOutput += 'd 1.0000\n';
@@ -380,151 +380,151 @@
 								mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + ' ' + '\n';
 								mtlOutput += mat.specular ? 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + ' ' + '\n' : 'Ks 0.2500 0.2500 0.2500\n';
 								mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + ' ' + '\n' : 'Ke 0.0000 0.0000 0.0000\n';
-	
+
 								if ( mat.map && mat.map.type === 1009 && mat.map.image ) {
 
 									if ( mat.map.image.src || mat.map.image.data ) {
-										
+
 										textures.push( {
 											name,
 											ext,
 											data: imageToData( mat.map.image, ext )
 										});
-		
+
 										mtlOutput += 'map_Kd ' + name + '.png' + '\n';
-		
+
 									}
-	
+
 								}
-	
+
 								if ( mat.specularMap && mat.specularMap.type === 1009 && mat.specularMap.image ) {
-	
+
 									if ( mat.specularMap.image.src || mat.specularMap.image.data ) {
-										
+
 										name = 'specularMap' + count;
-	
+
 										textures.push( {
 											name,
 											ext,
 											data: imageToData( mat.specularMap.image, ext )
 										});
-		
+
 										mtlOutput += 'map_Ks ' + name + '.png' + '\n';
-		
+
 									}
-	
+
 								}
-	
+
 								if ( mat.emissiveMap && mat.emissiveMap.type === 1009 && mat.emissiveMap.image ) {
-	
+
 									if ( mat.emissiveMap.image.src || mat.emissiveMap.image.data ) {
-										
+
 										name = 'emissiveMap' + count;
-	
+
 										textures.push( {
 											name,
 											ext,
 											data: imageToData( mat.emissiveMap.image, ext )
 										});
-		
+
 										mtlOutput += 'map_Ke ' + name + '.png' + '\n';
-		
+
 									}
-	
+
 								}
-	
+
 								if ( mat.bumpMap && mat.bumpMap.type === 1009 && mat.bumpMap.image ) {
-	
+
 									if ( mat.bumpMap.image.src || mat.bumpMap.image.data ) {
-										
+
 										name = 'bumpMap' + count;
-	
+
 										textures.push( {
 											name,
 											ext,
 											data: imageToData( mat.bumpMap.image, ext )
 										});
-		
+
 										mtlOutput += 'map_bump ' + name + '.png' + '\n';
-		
+
 									}
-	
+
 								}
-	
+
 								if ( mat.roughnessMap && mat.roughnessMap.type === 1009 && mat.roughnessMap.image ) {
-	
+
 									if ( mat.roughnessMap.image.src || mat.roughnessMap.image.data ) {
-										
+
 										name = 'bumpMap' + count;
-	
+
 										textures.push( {
 											name,
 											ext,
 											data: imageToData( mat.roughnessMap.image, ext )
 										});
-		
+
 										mtlOutput += 'map_bump ' + name + '.png' + '\n';
-		
+
 									}
-	
+
 								}
-	
+
 								if ( mat.normalMap && mat.normalMap.type === 1009 && mat.normalMap.image ) {
-	
+
 									if ( mat.normalMap.image.src || mat.normalMap.image.data ) {
-										
+
 										name = 'normalMap' + count;
-	
+
 										textures.push( {
 											name,
 											ext,
 											data: imageToData( mat.normalMap.image, ext )
 										});
-		
+
 										mtlOutput += 'norm ' + name + '.png' + '\n';
-		
+
 									}
-	
+
 								}
-	
+
 								if ( mat.alphaMap && mat.alphaMap.type === 1009 && mat.alphaMap.image ) {
-	
+
 									if ( mat.alphaMap.image.src || mat.alphaMap.image.data ) {
-										
+
 										name = 'alphaMap' + count;
-	
+
 										textures.push( {
 											name,
 											ext,
 											data: imageToData( mat.alphaMap.image, ext )
 										});
-		
+
 										mtlOutput += 'map_d ' + name + '.png' + '\n';
-		
+
 									}
-	
+
 								}
-	
+
 								if ( mat.aoMap && mat.aoMap.type === 1009 && mat.aoMap.image ) {
-	
+
 									if ( mat.aoMap.image.src || mat.aoMap.image.data ) {
-	
+
 										name = 'ambientMap' + count;
-	
+
 										textures.push( {
 											name,
 											ext,
 											data: imageToData( mat.aoMap.image, ext )
 										});
-		
+
 										mtlOutput += 'map_Ka ' + name + '.png' + '\n';
-		
+
 									}
-	
+
 								}
-		
+
 								count += 1;
-	
+
 							}
 
 						});
@@ -535,13 +535,13 @@
 
 						let name = ( mat.name && mat.name !== '' ) ? ( ( mat.name.toUpperCase().endsWith( '.PNG' ) || mat.name.toUpperCase().endsWith( '.JPG' ) ) ? mat.name.substring(0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : 'material' + mat.id;
 
-						if ( !names.includes( name ) ) {
+						if ( names.includes( name ) === false ) {
 
 							names.push( name );
 
 							let transparency = ( mat.opacity < 1 ) ? ( 1 - mat.opacity ) : '0.0000';
 
-							mtlOutput += 'newmtl ' + name + '\n';
+							mtlOutput += '\n' + 'newmtl ' + name + '\n';
 
 							mtlOutput += 'Ns 15.0000\n';
 							mtlOutput += 'Ni 1.5000\n';
@@ -557,15 +557,15 @@
 							if ( mat.map && mat.map.type === 1009 && mat.map.image ) {
 
 								if ( mat.map.image.src || mat.map.image.data ) {
-									
+
 									textures.push( {
 										name,
 										ext,
 										data: imageToData( mat.map.image, ext )
 									});
-	
+
 									mtlOutput += 'map_Kd ' + name + '.png' + '\n';
-	
+
 								}
 
 							}
@@ -573,7 +573,7 @@
 							if ( mat.specularMap && mat.specularMap.type === 1009 && mat.specularMap.image ) {
 
 								if ( mat.specularMap.image.src || mat.specularMap.image.data ) {
-									
+
 									name = 'specularMap' + count;
 
 									textures.push( {
@@ -581,9 +581,9 @@
 										ext,
 										data: imageToData( mat.specularMap.image, ext )
 									});
-	
+
 									mtlOutput += 'map_Ks ' + name + '.png' + '\n';
-	
+
 								}
 
 							}
@@ -591,7 +591,7 @@
 							if ( mat.emissiveMap && mat.emissiveMap.type === 1009 && mat.emissiveMap.image ) {
 
 								if ( mat.emissiveMap.image.src || mat.emissiveMap.image.data ) {
-									
+
 									name = 'emissiveMap' + count;
 
 									textures.push( {
@@ -599,9 +599,9 @@
 										ext,
 										data: imageToData( mat.emissiveMap.image, ext )
 									});
-	
+
 									mtlOutput += 'map_Ke ' + name + '.png' + '\n';
-	
+
 								}
 
 							}
@@ -609,7 +609,7 @@
 							if ( mat.bumpMap && mat.bumpMap.type === 1009 && mat.bumpMap.image ) {
 
 								if ( mat.bumpMap.image.src || mat.bumpMap.image.data ) {
-									
+
 									name = 'bumpMap' + count;
 
 									textures.push( {
@@ -617,9 +617,9 @@
 										ext,
 										data: imageToData( mat.bumpMap.image, ext )
 									});
-	
+
 									mtlOutput += 'map_bump ' + name + '.png' + '\n';
-	
+
 								}
 
 							}
@@ -627,7 +627,7 @@
 							if ( mat.roughnessMap && mat.roughnessMap.type === 1009 && mat.roughnessMap.image ) {
 
 								if ( mat.roughnessMap.image.src || mat.roughnessMap.image.data ) {
-									
+
 									name = 'bumpMap' + count;
 
 									textures.push( {
@@ -635,9 +635,9 @@
 										ext,
 										data: imageToData( mat.roughnessMap.image, ext )
 									});
-	
+
 									mtlOutput += 'map_bump ' + name + '.png' + '\n';
-	
+
 								}
 
 							}
@@ -645,7 +645,7 @@
 							if ( mat.normalMap && mat.normalMap.type === 1009 && mat.normalMap.image ) {
 
 								if ( mat.normalMap.image.src || mat.normalMap.image.data ) {
-									
+
 									name = 'normalMap' + count;
 
 									textures.push( {
@@ -653,9 +653,9 @@
 										ext,
 										data: imageToData( mat.normalMap.image, ext )
 									});
-	
+
 									mtlOutput += 'norm ' + name + '.png' + '\n';
-	
+
 								}
 
 							}
@@ -663,7 +663,7 @@
 							if ( mat.alphaMap && mat.alphaMap.type === 1009 && mat.alphaMap.image ) {
 
 								if ( mat.alphaMap.image.src || mat.alphaMap.image.data ) {
-									
+
 									name = 'alphaMap' + count;
 
 									textures.push( {
@@ -671,9 +671,9 @@
 										ext,
 										data: imageToData( mat.alphaMap.image, ext )
 									});
-	
+
 									mtlOutput += 'map_d ' + name + '.png' + '\n';
-	
+
 								}
 
 							}
@@ -689,9 +689,9 @@
 										ext,
 										data: imageToData( mat.aoMap.image, ext )
 									});
-	
+
 									mtlOutput += 'map_Ka ' + name + '.png' + '\n';
-	
+
 								}
 
 							}
