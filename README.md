@@ -65,9 +65,13 @@ Number Type Converter
   - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry
   - JSON Viewer is using r135 of three.js
 - OBJ exporter might currently, along with the exported MTL file, export multiple copies of the same texture but under different names:
-  - Keep 1 copy of the texture and update the corresponding MTL file entries to point to that texture
+  - Keep 1 copy of the texture and rename it if you wish, then update the corresponding MTL file entries to point to that texture
   - Delete all other copies of that same texture
   - Some models look better in OBJ format and this bug might eventually get fixed
+- DAE (Collada) exporter might currently export multiple copies of the same texture but under different names:
+  - Keep 1 copy of the texture and rename it if you wish, then update the `<init_from>` line inside the `<library_images>` section of the DAE file to point to that texture
+  - Delete all other copies of that same texture
+  - This bug might eventually get fixed
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
 - Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
