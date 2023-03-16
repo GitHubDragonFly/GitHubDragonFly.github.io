@@ -85,7 +85,7 @@ Number Type Converter
   - `A` - animations
   - `E` - edges
   - `F` - flatShading
-  - `G` - linear gradient background (OBJ, PLY+STL viewers)
+  - `G` - linear gradient background
   - `K` - kinematics (DAE viewer)
   - `L` - lines (LDRAW and its exports in GLTF, OBJ, JSON viewers)
   - `O` - opacity
