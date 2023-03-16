@@ -21,7 +21,7 @@ Main Menu Page
 - This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion) so check its description
 - An open mind and some knowledge of number systems, hopefully binary, will help understand the displayed values
 - Possibly of good use to those who deal with Programmable Logic Controllers (PLC) and students
-- Note about float parser: it will complete parsing the string as a valid number if it encounters an invalid character as per standard number rules
+- Note about float parser: if it encounters an invalid character, as per standard number rules, then it will stop and complete parsing of the string as a valid number which was present up to that point (ex. if you would enter `-75-88.5` under Float32 then it will be parsed as `-75`)
 
 Number Type Converter
 ![Number Type Converter](images/Number%20Type%20Converter.png?raw=true)
@@ -49,9 +49,9 @@ Number Type Converter
   - currently set to 500 x 500 size in the centre of the window
   - the approximate GIF area rectangle will be shown during the GIF generation
   - if the model leaves this area during the GIF generation, due to its motion, the process might error out
-  - the larger the model and/or the more colors in the model will affect the size/quality of the resulting GIF file
+  - the larger the model and / or the more colors in the model will affect the size / quality of the resulting GIF file
   - it disregards the background color but does observe the background image with simple color palette
-  - consider changing Directional Light color and/or using Ambient Light to avoid poor quality GIF for some models
+  - consider changing Directional Light color and / or using Ambient Light to avoid poor quality GIF for some models
   - non-animated / non-rotating models will spin 360 degrees
   - see the `legobrick` generated GIF examples and their optimized / resized version in the `images` folder
 - Animated PNG (APNG) exports are powered by [UPNG.js](https://github.com/photopea/UPNG.js) and [Pako.js](https://github.com/nodeca/pako)
@@ -134,7 +134,7 @@ Number Type Converter
   - experiment with all exporters available by exporting the original model as well as its exported versions
   - large resolution textures should be scaled down before loading, as an example download [`Bedroom`](https://casual-effects.com/data/index.html) with 8k images and try it as is and then scale them down to 2k (which seems to be optimal for browsers)
   - `Lambert` material does not have flatShading functionality
-  - you could also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) and [Online 3D Viewer](https://3dviewer.net) exporters/converters
+  - you could also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) and [Online 3D Viewer](https://3dviewer.net) exporters / converters
 
 PLY Viewer
 ![PLY Viewer](images/PLY%20Viewer.png?raw=true)
