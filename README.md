@@ -8,7 +8,7 @@ GitHub servers are providing correct access to files, so cloning or downloading 
 
 Repositories do contain projects in several different programming languages or a mix of: `Java` `VB.Net` `C#` `python` `JavaScript` `jQuery` `HTML/CSS` `shell`.
 
-There is a lot of information and descriptions, some intended for Industrial Automation and some for general/personal use. All is good as an educational resource as well.
+There is a lot of information and descriptions, some intended for Industrial Automation and some for general / personal use. All is good as an educational resource as well.
 
 # Mozilla Firefox screenshot
 
@@ -17,22 +17,23 @@ Main Menu Page
 
 # Notes about Number Type Converter
 
-- Appears to be fully functional (binary, hex, octal, signed/unsigned integers 8/16/32/64/128-bit, float 32/64-bit)
+- Appears to be fully functional (binary, hex, octal, signed and unsigned 8 / 16 / 32 / 64 / 128-bit integers, float 32 / 64-bit)
 - This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion) so check its description
 - An open mind and some knowledge of number systems, hopefully binary, will help understand the displayed values
 - Possibly of good use to those who deal with Programmable Logic Controllers (PLC) and students
-- Note about float parser: it will complete parsing the string as a number if it encounters an invalid character as per standard number rules
+- Note about float parser: it will complete parsing the string as a valid number if it encounters an invalid character as per standard number rules
 
 Number Type Converter
 ![Number Type Converter](images/Number%20Type%20Converter.png?raw=true)
 
 # Notes about three.js 3D Model Viewers
 
-- They are functional `AS THEY ARE` and intended for viewing a single 3D model
+- They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
 - Menu with controls can be located either on top or on the bottom of the page
 - All viewers include [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
 - Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers - do note that Safari might be finicky about certain features
-- Import files locally from a file browser dialog or specify remote URL (make any necessary changes on your device to allow local file browsing)
+- Import files locally from a file browser dialog, make any necessary changes on your device to allow local file browsing
+- Import files via remote URL, multiple comma separated URLs are allowed in some viewers and can be from mixed websites
 - Import formats, where applicable, with any optional/required textures:
   - 3DS, 3DM, 3MF, AMF, BRP, BREP, DAE, FBX, IFC, IGES, IGS, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
   - GLTF supported formats: GLB, GLTF + BIN, DRC
@@ -44,7 +45,7 @@ Number Type Converter
 - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
 - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
   - as per the author: OBJ -> PRWM conversion is limited to OBJ containing a single model made of triangles
-- GIF export is actually Animated GIF based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
+- Animated GIF export is based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
   - currently set to 500 x 500 size in the centre of the window
   - the approximate GIF area rectangle will be shown during the GIF generation
   - if the model leaves this area during the GIF generation, due to its motion, the process might error out
@@ -61,7 +62,7 @@ Number Type Converter
     - use `black.gif` `white.gif` `dark_blue.png` files found in the `images` folder as a simple choice for background image
   - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
   - currently set for Lossy PNG to speed up processing but with a comment on how to change it to full color if required
-- JSON import/export is actually three.js created format:
+- JSON import / export is actually three.js created format:
   - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry
   - JSON Viewer is using r135 of three.js
 - OBJ exporter might currently, along with the exported MTL file, export multiple copies of the same texture but under different names:
@@ -69,11 +70,10 @@ Number Type Converter
   - Delete all other copies of that same texture
   - Some models look better in OBJ format and this bug might eventually get fixed
 - DAE (Collada) exporter might currently export multiple copies of the same texture but under different names:
-  - Keep 1 copy of the texture and rename it if you wish, then update the `<init_from>` line inside the `<library_images>` section of the DAE file to point to that texture
+  - Keep 1 copy of the texture and rename it if you wish, then update the corresponding `<init_from>` lines inside the `<library_images>` section of the DAE file to point to that texture
   - Delete all other copies of that same texture
   - This bug might eventually get fixed
 - The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
-- Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
 - Lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
 - When loading files locally from a hard drive:
@@ -152,7 +152,8 @@ PLY Viewer
 - Video player has its own controls for playback and full-screen switching
 - URL text box also allows entering a single base64 string of the image data, see the `URLS4MODELS.md` file for an example
 - For certain formats and their manipulation an easy alternative to this viewer would be `https://ezgif.com`
-- Just remember that most of these files can easily be viewed with some operating system applications or by the browsers themselves (like animated GIF/PNG/WEBP or MP4/WEBM/OGV videos), all it takes in Windows, for example, is to right-click the file itself and choose `Open With` and select `Firefox` browser 
+- Most of these files can easily be viewed with some operating system applications or by the browsers themselves (like animated GIF / PNG / WEBP or MP4 / WEBM / OGV videos):
+  - all it takes in Windows, for example, is to right-click the file itself then choose `Open With` and select `Firefox` browser 
 
 ![Texture Viewer](images/Texture%20Viewer.png?raw=true)
 
