@@ -64,8 +64,8 @@ Number Type Converter
   - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
   - currently set for Lossy PNG to speed up processing but with a comment on how to change it to full color if required
 - JSON import / export is actually three.js created format:
-  - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry
-  - JSON Viewer is using r135 of three.js
+  - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry and can export to current JSON format
+  - JSON Viewer is using r135 of three.js and cannot open legacy format
 - OBJ exporter might currently, along with the exported MTL file, export multiple copies of the same texture but under different names:
   - Keep 1 copy of the texture and rename it if you wish, then update the corresponding MTL file entries to point to that texture
   - Delete all other copies of that same texture
