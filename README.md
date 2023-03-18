@@ -8,7 +8,7 @@ GitHub servers are providing correct access to files, so cloning or downloading 
 
 Repositories do contain projects in several different programming languages or a mix of: `Java` `VB.Net` `C#` `python` `JavaScript` `jQuery` `HTML/CSS` `shell`.
 
-There is a lot of information and descriptions, some intended for Industrial Automation and some for general / personal use. All is good as an educational resource as well.
+There is a lot of information and descriptions, some intended for Industrial Automation and some for general or personal use. All is good as an educational resource as well.
 
 # Mozilla Firefox screenshot
 
@@ -33,8 +33,14 @@ Number Type Converter
 - Menu with controls can be located either on top or on the bottom of the page
 - All viewers include [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
 - Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers - do note that Safari might be finicky about certain features
+- See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
+- Lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
 - Import files locally from a file browser dialog, make any necessary changes on your device to allow local file browsing
+  - All files have to be in the same folder
+  - Some viewers might have some limitations
+  - Possibly update your models to look for textures in the same folder
 - Import files via remote URL, multiple comma separated URLs are allowed in some viewers and can be from mixed websites
+  - URLs should be with no CORS restrictions
 - Import formats, where applicable, with any optional/required textures:
   - 3DS, 3DM, 3MF, AMF, BRP, BREP, DAE, FBX, IFC, IGES, IGS, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
   - GLTF supported formats: GLB, GLTF + BIN, DRC
@@ -74,13 +80,6 @@ Number Type Converter
   - Keep 1 copy of the texture and rename it if you wish, then update the corresponding `<init_from>` lines inside the `<library_images>` section of the DAE file to point to that texture
   - Delete all other copies of that same texture
   - This bug might eventually get fixed
-- The best choice of loading 3D models is via the viewers `URL` option (for URLs with no CORS restrictions)
-- See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
-- Lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
-- When loading files locally from a hard drive:
-  - All files have to be in the same folder
-  - Some viewers might have some limitations
-  - Possibly update your models to look for textures in the same folder
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
