@@ -136,8 +136,8 @@ Number Type Converter
   - `Lambert` material does not have flatShading functionality
   - you could also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) and [Online 3D Viewer](https://3dviewer.net) exporters / converters
 
-PLY Viewer
-![PLY Viewer](images/PLY%20Viewer.png?raw=true)
+PLY+STL Viewer
+![PLY+STL Viewer](images/PLY%20Viewer.png?raw=true)
 
 # Notes about three.js Texture Viewer
 
