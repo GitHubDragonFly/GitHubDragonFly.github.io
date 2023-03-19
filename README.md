@@ -10,6 +10,8 @@ Repositories do contain projects in several different programming languages or a
 
 There is a lot of information and descriptions, some intended for Industrial Automation and some for general or personal use. All is good as an educational resource as well.
 
+Intro video shows how to start using 3D viewers and also how to load model files from a hard drive. It was captured by using the free and open source [OBS Studio](https://github.com/obsproject/obs-studio) software.
+
 # Mozilla Firefox screenshot
 
 Main Menu Page
