@@ -69,6 +69,7 @@ Use the `Raw` button in any of the GitHub repositories to get the correct URL or
  - `https://github.com/josdirksen/learning-threejs/tree/master/assets/models`
  - `https://github.com/buildingsmart-private/IfcDoc/tree/master/IfcKit/examples`
  - `https://github.com/mikelovesrobots/mmmm`
+ - `https://github.com/xeolabs/xeogl/tree/master/examples/models`
  - `https://github.com/joewalnes/gcode-viewer/tree/master/web/examples`
  - `https://github.com/thecooltool/example-gcode`
  - `http://www.oyonale.com/modeles.php?lang=en&format=OBJ`
