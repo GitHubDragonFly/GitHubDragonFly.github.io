@@ -117,7 +117,7 @@ Number Type Converter
   - `BG` - background color
   - `Eq` - equirectangular background
     - `R` - reflectivity (envMap + metalness)
-- STEP / IGES / BREP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
+- STEP+IGES+BREP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
 - JSON Viewer has timeouts which might need to be adjusted when loading large files
 - GLTF / FBX / DAE viewers will also export animations to JSON format
 - DAE (Collada) exporter appears to brighten up the original model as well as the exported model
