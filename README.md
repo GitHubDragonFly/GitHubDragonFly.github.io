@@ -19,7 +19,7 @@ Main Menu Page
 
 # Notes about Number Type Converter
 
-- Appears to be fully functional (binary, hex, octal, signed and unsigned 8 / 16 / 32 / 64 / 128-bit integers, float 32 / 64-bit)
+- Appears to be fully functional for binary, hex, octal, signed and unsigned 8 / 16 / 32 / 64 / 128-bit integers and 32 / 64-bit floating-point numbers
 - This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion) so check its description
 - An open mind and some knowledge of number systems, hopefully binary, will help understand the displayed values
 - Possibly of good use to those who deal with Programmable Logic Controllers (PLC) and students
@@ -34,7 +34,8 @@ Number Type Converter
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
 - Menu with controls can be located either on top or on the bottom of the page
 - All viewers include [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
-- Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers - do note that Safari might be finicky about certain features
+- Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers
+  - do note that Safari might be finicky about certain features
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
 - Lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
 - Import files locally from a file browser dialog, make any necessary changes on your device to allow local file browsing
