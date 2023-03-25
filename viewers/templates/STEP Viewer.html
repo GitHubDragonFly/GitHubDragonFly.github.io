@@ -214,7 +214,7 @@
         <label title="Scale 10x"><input type="checkbox" id="scale_10x" onchange="scale_10x_set();" disabled />10x</label>
         <button id="btn_edges" title="Edges" onclick="show_edges()" disabled>E</button>
         <button id="btn_flat" title="Flat Shading" onclick="set_flat()" disabled>F</button>
-        <button id="btn_material" title="Material" onclick="set_material()" style="min-width: 28px; margin-right: 0px;" disabled>MP</button>
+        <button id="btn_material" title="Switch Material" onclick="set_material()" style="min-width: 28px; margin-right: 0px;" disabled>MP</button>
         <button id="btn_material_extra" title="Standard Material Xtra" onclick="set_material_extra()" style="min-width: 14px; margin-left: 0px;" disabled>*</button>
         <button id="btn_grid" title="Grid" onclick="show_grid()" disabled>#</button>
         <button id="btn_polar_grid" title="Polar Grid" onclick="show_polar_grid()" style="min-width: 24px;" disabled><p class="polar"></p></button>
@@ -569,11 +569,11 @@
 
           let uuid_array = [], mesh_geometry_uuid, mesh_material_uuid;
 
-          mesh.traverse( ( child ) => {
+          mesh.traverse( function( child ) {
             if (child.isMesh) {
               mesh_geometry_uuid = child.geometry.uuid;
 
-              if (Array.isArray( child.material)) {
+              if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
                   uuid_array.push( { mesh_geometry_uuid: mesh_geometry_uuid, mesh_material_uuid: mtl.uuid } );
                 });
@@ -867,8 +867,14 @@
       function set_step_opacity() {
         if (mesh) {
           mesh.traverse( function( child ) {
-            if (child.isMesh){
-              child.material.opacity = document.getElementById('step_opacity').value;
+            if (child.isMesh) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.opacity = document.getElementById('step_opacity').value;
+                });
+              } else {
+                child.material.opacity = document.getElementById('step_opacity').value;
+              }
             }
           });
         }
@@ -1083,11 +1089,22 @@
           if (gizmo) gizmo.dispose();
 
           if (mesh) {
-            mesh.traverse( ( child ) => {
+            mesh.traverse( function( child ) {
               if (child.isMesh) {
-                if (child.material && child.material.envMap) child.material.envMap.dispose();
-                if (child.material && child.material.map) child.material.map.dispose();
-                if (child.material) child.material.dispose();
+                if (child.material) {
+                  if (Array.isArray( child.material )) {
+                    child.material.forEach( mtl => {
+                      if (mtl.map) mtl.map.dispose();
+                      if (mtl.envMap) mtl.envMap.dispose();
+                      mtl.dispose();
+                    });
+                  } else {
+                    if (child.material.map) child.material.map.dispose();
+                    if (child.material.envMap) child.material.envMap.dispose();
+                    child.material.dispose();
+                  }
+                }
+
                 if (child.geometry) child.geometry.dispose();
               }
             });
@@ -1282,39 +1299,89 @@
             if (result.success && result.meshes.length > 0) {
               let mesh_count = 1;
 
-              result.meshes.forEach( msh => {
+              // Modified version of the original example code at https://github.com/kovacsv/occt-import-js/blob/main/examples/three_viewer.html#L42-L89
+              for (let resultMesh of result.meshes) {
                 let geometry = new THREE.BufferGeometry();
-                let mtl = material.clone();
 
-                indices = Uint32Array.from( msh.index.array );
-                geometry.setIndex( new THREE.BufferAttribute( indices, 1 ) );
-                geometry.setDrawRange( 0, indices.length );
-                vertices = Float32Array.from( msh.attributes.position.array );
-                geometry.setAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
-                normals = Float32Array.from( msh.attributes.normal.array );
-                geometry.setAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
-                geometry.normalizeNormals();
+                geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( resultMesh.attributes.position.array, 3 ) );
 
-                if (msh.color) {
-                  mtl.color.setRGB( msh.color[ 0 ], msh.color[ 1 ], msh.color[ 2 ] );
-                } else if (msh.face_colors) {
-                  mtl.color.setRGB( msh.face_colors[ 0 ].color[ 0 ], msh.face_colors[ 0 ].color[ 1 ], msh.face_colors[ 0 ].color[ 2 ] );
+                if (resultMesh.attributes.normal) {
+                  geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( resultMesh.attributes.normal.array, 3 ) );
+                }
+
+                let index = Uint32Array.from( resultMesh.index.array );
+                geometry.setIndex( new THREE.BufferAttribute( index, 1 ) );
+            
+                let defaultMaterial;
+
+                if (resultMesh.color) {
+                  let color = new THREE.Color( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
+                  defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, transparent: true, flatShading: false, color: color } );
+                } else {
+                  defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, transparent: true, flatShading: false, color: 0xFFFFFF } );
+                }
+
+                let materials = defaultMaterial;
+
+                if (resultMesh.face_colors && resultMesh.face_colors.length > 0) {
+                  materials = [ defaultMaterial ];
+
+                  for (let faceColor of resultMesh.face_colors) {
+                    let color = new THREE.Color( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] );
+                    materials.push( new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, transparent: true, flatShading: false, color: color } ) );
+                  }
+
+                  let triangleCount = resultMesh.index.array.length / 3;
+                  let triangleIndex = 0;
+                  let faceColorGroupIndex = 0;
+
+                  while (triangleIndex < triangleCount) {
+                    let firstIndex = triangleIndex;
+                    let lastIndex = null;
+                    let materialIndex = null;
+
+                    if (faceColorGroupIndex >= resultMesh.face_colors.length) {
+                      lastIndex = triangleCount;
+                      materialIndex = 0;
+                    } else if (triangleIndex < resultMesh.face_colors[faceColorGroupIndex].first) {
+                      lastIndex = resultMesh.face_colors[faceColorGroupIndex].first;
+                      materialIndex = 0;
+                    } else {
+                      lastIndex = resultMesh.face_colors[faceColorGroupIndex].last + 1;
+                      materialIndex = faceColorGroupIndex + 1;
+                      faceColorGroupIndex++;
+                    }
+
+                    geometry.addGroup( firstIndex * 3, (lastIndex - firstIndex) * 3, materialIndex );
+                    triangleIndex = lastIndex;
+                  }
                 }
 
                 if (result.meshes.length === 1) geometry.center();
 
-                let new_mesh = new THREE.Mesh( geometry, mtl );
+                let new_mesh = new THREE.Mesh( geometry, materials );
                 new_mesh.name = 'mesh_' + mesh_count;
                 edges[ new_mesh.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( new_mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
                 mesh_count += 1;
 
                 mesh.add( new_mesh );
 
-                mtl.dispose();
+                if (Array.isArray( materials )) {
+                  materials.forEach( mtl => {
+                    mtl.dispose();
+                  });
+
+                  new_mesh.material.forEach( mtrl => {
+                    mtrl.dispose();
+                  });
+                } else {
+                  materials.dispose();
+                  new_mesh.material.dispose();
+                }
+
                 geometry.dispose();
                 new_mesh.geometry.dispose();
-                new_mesh.material.dispose();
-              });
+              }
 
               await addFileInScene();
             } else {
@@ -1371,39 +1438,89 @@
               if (result.success && result.meshes.length > 0) {
                 let mesh_count = 1;
 
-                result.meshes.forEach( msh => {
+                // Modified version of the original example code at https://github.com/kovacsv/occt-import-js/blob/main/examples/three_viewer.html#L42-L89
+                for (let resultMesh of result.meshes) {
                   let geometry = new THREE.BufferGeometry();
-                  let mtl = material.clone();
 
-                  indices = Uint32Array.from( msh.index.array );
-                  geometry.setIndex( new THREE.BufferAttribute( indices, 1 ) );
-                  geometry.setDrawRange( 0, indices.length );
-                  vertices = Float32Array.from( msh.attributes.position.array );
-                  geometry.setAttribute( 'position', new THREE.BufferAttribute( vertices, 3 ) );
-                  normals = Float32Array.from( msh.attributes.normal.array );
-                  geometry.setAttribute( 'normal', new THREE.BufferAttribute( normals, 3 ) );
-                  geometry.normalizeNormals();
+                  geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( resultMesh.attributes.position.array, 3 ) );
 
-                  if (msh.color) {
-                    mtl.color.setRGB( msh.color[ 0 ], msh.color[ 1 ], msh.color[ 2 ] );
-                  } else if (msh.face_colors) {
-                    mtl.color.setRGB( msh.face_colors[ 0 ].color[ 0 ], msh.face_colors[ 0 ].color[ 1 ], msh.face_colors[ 0 ].color[ 2 ] );
+                  if (resultMesh.attributes.normal) {
+                    geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( resultMesh.attributes.normal.array, 3 ) );
+                  }
+
+                  let index = Uint32Array.from( resultMesh.index.array );
+                  geometry.setIndex( new THREE.BufferAttribute( index, 1 ) );
+
+                  let defaultMaterial;
+
+                  if (resultMesh.color) {
+                    let color = new THREE.Color( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
+                    defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, transparent: true, flatShading: false, color: color } );
+                  } else {
+                    defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, transparent: true, flatShading: false, color: 0xFFFFFF } );
+                  }
+
+                  let materials = defaultMaterial;
+
+                  if (resultMesh.face_colors && resultMesh.face_colors.length > 0) {
+                    materials = [ defaultMaterial ];
+
+                    for (let faceColor of resultMesh.face_colors) {
+                      let color = new THREE.Color( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] );
+                      materials.push( new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, transparent: true, flatShading: false, color: color } ) );
+                    }
+
+                    let triangleCount = resultMesh.index.array.length / 3;
+                    let triangleIndex = 0;
+                    let faceColorGroupIndex = 0;
+
+                    while (triangleIndex < triangleCount) {
+                      let firstIndex = triangleIndex;
+                      let lastIndex = null;
+                      let materialIndex = null;
+
+                      if (faceColorGroupIndex >= resultMesh.face_colors.length) {
+                        lastIndex = triangleCount;
+                        materialIndex = 0;
+                      } else if (triangleIndex < resultMesh.face_colors[faceColorGroupIndex].first) {
+                        lastIndex = resultMesh.face_colors[faceColorGroupIndex].first;
+                        materialIndex = 0;
+                      } else {
+                        lastIndex = resultMesh.face_colors[faceColorGroupIndex].last + 1;
+                        materialIndex = faceColorGroupIndex + 1;
+                        faceColorGroupIndex++;
+                      }
+
+                      geometry.addGroup( firstIndex * 3, (lastIndex - firstIndex) * 3, materialIndex );
+                      triangleIndex = lastIndex;
+                    }
                   }
 
                   if (result.meshes.length === 1) geometry.center();
 
-                  let new_mesh = new THREE.Mesh( geometry, mtl );
+                  let new_mesh = new THREE.Mesh( geometry, materials );
                   new_mesh.name = 'mesh_' + mesh_count;
                   edges[ new_mesh.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( new_mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFFD700 } ) );
                   mesh_count += 1;
 
                   mesh.add( new_mesh );
 
-                  mtl.dispose();
+                  if (Array.isArray( materials )) {
+                    materials.forEach( mtl => {
+                      mtl.dispose();
+                    });
+
+                    new_mesh.material.forEach( mtrl => {
+                      mtrl.dispose();
+                    });
+                  } else {
+                    materials.dispose();
+                    new_mesh.material.dispose();
+                  }
+
                   geometry.dispose();
                   new_mesh.geometry.dispose();
-                  new_mesh.material.dispose();
-                });
+                }
 
                 await addURLFileInScene();
               } else {
@@ -1489,7 +1606,7 @@
       }
 
       function show_edges() {
-        if (Object.getOwnPropertyNames(edges).length !== 0) {
+        if (Object.getOwnPropertyNames( edges ).length !== 0) {
           if (edges_visible) {
             mesh.traverse( function( child ) { if (child.isMesh) child.remove( edges[ child.name ] ); });
             edges_visible = false;
@@ -1506,7 +1623,13 @@
         if (mesh) {
           mesh.traverse( function( child ) {
             if (child.isMesh) {
-              child.material.wireframe = document.getElementById('wireframe').checked;
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.wireframe = document.getElementById('wireframe').checked;
+                });
+              } else {
+                child.material.wireframe = document.getElementById('wireframe').checked;
+              }
             }
           });
         }
@@ -1524,8 +1647,15 @@
 
           mesh.traverse( function( child ) {
       	    if (child.isMesh) {
-              child.material.flatShading = flat_shading_enabled;
-              child.material.needsUpdate = true;
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.flatShading = flat_shading_enabled;
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                child.material.flatShading = flat_shading_enabled;
+                child.material.needsUpdate = true;
+              }
       		  }
       	  });
         }
@@ -1540,26 +1670,44 @@
             document.getElementById('btn_material').style.backgroundColor = 'lightgreen';
 
             document.getElementById('btn_material_extra').disabled = false;
-            material_extra_changed();
 
             mesh.traverse( function( child ) {
               if (child.isMesh) {
-                let mtrl = new THREE.MeshStandardMaterial( {
-                  side: THREE.DoubleSide,
-                  metalness: 0.5,
-                  roughness: 0.1,
-                  transparent: true,
-                  envMapIntensity: 1.0,
-                  flatShading: flat_shading_enabled
-                });
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( ( mtl, index ) => {
+                    let mtrl = new THREE.MeshStandardMaterial( {
+                      side: THREE.DoubleSide,
+                      metalness: 0.5,
+                      roughness: 0.1,
+                      transparent: true,
+                      envMapIntensity: 1.0,
+                      flatShading: flat_shading_enabled
+                    });
 
-                if (child.material.map) { mtrl.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
-                child.material.dispose();
-                child[ 'material' ] = mtrl;
-                if (child.geometry.attributes.color) { child.material.color.setRGB( child.geometry.attributes.color.array[0], child.geometry.attributes.color.array[1], child.geometry.attributes.color.array[2]) }
-                child.material.needsUpdate = true;
+                    if (mtl.color) { mtrl.color.setRGB( mtl.color.r, mtl.color.g, mtl.color.b ); }
+                    if (mtl.map) { mtrl.map = mtl.map; mtl.map.dispose(); mtl.map = null; }
 
-                mtrl.dispose();
+                    mtl.dispose();
+                    child.material[ index ] = mtrl;
+                    child.material[ index ].needsUpdate = true;
+                  });
+                } else {
+                  let mtrl = new THREE.MeshStandardMaterial( {
+                    side: THREE.DoubleSide,
+                    metalness: 0.5,
+                    roughness: 0.1,
+                    transparent: true,
+                    envMapIntensity: 1.0,
+                    flatShading: flat_shading_enabled
+                  });
+
+                  if (child.material.color) { mtrl.color.setRGB( child.material.color.r, child.material.color.g, child.material.color.b ); }
+                  if (child.material.map) { mtrl.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
+
+                  child.material.dispose();
+                  child[ 'material' ] = mtrl;
+                  child.material.needsUpdate = true;
+                }
               }
             });
           } else if (current_material === 'MS') {
@@ -1568,32 +1716,55 @@
 
             document.getElementById('btn_material_extra').style.backgroundColor = '#d1cefc';
             document.getElementById('btn_material_extra').disabled = true;
-            material_extra_changed();
+            material_extra_enabled = false;
 
             mesh.traverse( function( child ) {
               if (child.isMesh) {
-                if (child.material.envMap) {
-                  child.material.envMap.dispose();
-                  child.material.envMap = null;
-                  material_extra_enabled = false;
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    if (mtl.envMap) {
+                      mtl.envMap.dispose();
+                      mtl.envMap = null;
+                    }
+                  });
+                } else {
+                  if (child.material.envMap) {
+                    child.material.envMap.dispose();
+                    child.material.envMap = null;
+                  }
                 }
               }
             });
 
             mesh.traverse( function( child ) {
               if (child.isMesh) {
-                let mtrl = new THREE.MeshLambertMaterial( {
-                  side: THREE.DoubleSide,
-                  transparent: true
-                });
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( ( mtl, index ) => {
+                    let mtrl = new THREE.MeshLambertMaterial( {
+                      side: THREE.DoubleSide,
+                      transparent: true,
+                    });
 
-                if (child.material.map) { mtrl.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
-                child.material.dispose();
-                child[ 'material' ] = mtrl;
-                if (child.geometry.attributes.color) { child.material.color.setRGB( child.geometry.attributes.color.array[ 0 ], child.geometry.attributes.color.array[ 1 ], child.geometry.attributes.color.array[ 2 ] ) }
-                child.material.needsUpdate = true;
+                    if (mtl.color) { mtrl.color.setRGB( mtl.color.r, mtl.color.g, mtl.color.b ); }
+                    if (mtl.map) { mtrl.map = mtl.map; mtl.map.dispose(); mtl.map = null; }
 
-                mtrl.dispose();
+                    mtl.dispose();
+                    child.material[ index ] = mtrl;
+                    child.material[ index ].needsUpdate = true;
+                  });
+                } else {
+                  let mtrl = new THREE.MeshLambertMaterial( {
+                    side: THREE.DoubleSide,
+                    transparent: true
+                  });
+
+                  if (child.material.color) { mtrl.color.setRGB( child.material.color.r, child.material.color.g, child.material.color.b ); }
+                  if (child.material.map) { mtrl.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
+
+                  child.material.dispose();
+                  child[ 'material' ] = mtrl;
+                  child.material.needsUpdate = true;
+                }
               }
             });
           } else {
@@ -1602,21 +1773,39 @@
 
             mesh.traverse( function( child ) {
               if (child.isMesh) {
-                let mtrl = new THREE.MeshPhongMaterial( {
-                  side: THREE.DoubleSide,
-                  shininess: 50,
-                  opacity: 1,
-                  transparent: true,
-                  flatShading: flat_shading_enabled
-                });
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( ( mtl, index ) => {
+                    let mtrl = new THREE.MeshPhongMaterial( {
+                      side: THREE.DoubleSide,
+                      shininess: 50,
+                      opacity: 1,
+                      transparent: true,
+                      flatShading: flat_shading_enabled
+                    });
 
-                if (child.material.map) { mtrl.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
-                child.material.dispose();
-                child[ 'material' ] = mtrl;
-                if (child.geometry.attributes.color) { child.material.color.setRGB( child.geometry.attributes.color.array[ 0 ], child.geometry.attributes.color.array[ 1 ], child.geometry.attributes.color.array[ 2 ] ) }
-                child.material.needsUpdate = true;
+                    if (mtl.color) { mtrl.color.setRGB( mtl.color.r, mtl.color.g, mtl.color.b ); }
+                    if (mtl.map) { mtrl.map = mtl.map; mtl.map.dispose(); mtl.map = null; }
 
-                mtrl.dispose();
+                    mtl.dispose();
+                    child.material[ index ] = mtrl;
+                    child.material[ index ].needsUpdate = true;
+                  });
+                } else {
+                  let mtrl = new THREE.MeshPhongMaterial( {
+                    side: THREE.DoubleSide,
+                    shininess: 50,
+                    opacity: 1,
+                    transparent: true,
+                    flatShading: flat_shading_enabled
+                  });
+
+                  if (child.material.color) { mtrl.color.setRGB( child.material.color.r, child.material.color.g, child.material.color.b ); }
+                  if (child.material.map) { mtrl.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
+
+                  child.material.dispose();
+                  child[ 'material' ] = mtrl;
+                  child.material.needsUpdate = true;
+                }
               }
             });
           }
@@ -1633,10 +1822,20 @@
 
           mesh.traverse( function( child ) {
             if (child.isMesh) {
-              if (child.material.envMap) {
-                child.material.envMap.dispose();
-                child.material.envMap = null;
-                child.material.needsUpdate = true;
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  if (mtl.envMap) {
+                    mtl.envMap.dispose();
+                    mtl.envMap = null;
+                    mtl.needsUpdate = true;
+                  }
+                });
+              } else {
+                if (child.material.envMap) {
+                  child.material.envMap.dispose();
+                  child.material.envMap = null;
+                  child.material.needsUpdate = true;
+                }
               }
             }
           });
@@ -1646,8 +1845,15 @@
 
           mesh.traverse( function( child ) {
             if (child.isMesh) {
-              child.material.envMap = tex;
-              child.material.needsUpdate = true;
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.envMap = tex;
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                child.material.envMap = tex;
+                child.material.needsUpdate = true;
+              }
             }
           });
         }
@@ -1691,18 +1897,29 @@
         if (grid_visible) show_grid();
 
         if (mesh) {
-          mesh.traverse( ( child ) => {
+          mesh.traverse( function( child ) {
             if (child.isMesh) {
-              if (child.material && child.material.envMap) child.material.envMap.dispose();
-              if (child.material && child.material.map) child.material.map.dispose();
-              if (child.material) child.material.dispose();
+              if (child.material) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    if (mtl.map) mtl.map.dispose();
+                    if (mtl.envMap) mtl.envMap.dispose();
+                    mtl.dispose();
+                  });
+                } else {
+                  if (child.material.map) child.material.map.dispose();
+                  if (child.material.envMap) child.material.envMap.dispose();
+                  child.material.dispose();
+                }
+              }
+
               if (child.geometry) child.geometry.dispose();
             }
           });
 
           scene.remove( mesh );
 
-          mesh = new THREE.Group();
+          mesh = new THREE.Object3D();
         }
 
         reset_all( true );
