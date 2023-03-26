@@ -356,9 +356,10 @@
       var ww = window.innerWidth, wh = window.innerHeight;
       var mouse_rotation, reset_rotation, events_initialized;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation, gif_export;
-      var previous_step_scale = '1', bounding_box, filename, menu_location_bottom = false;
+      var previous_step_scale = '1', bounding_box;
       var selected_step_file, selected_url_file = '';
       var iges, brep, material, tex, url_displayed, url_loading;
+      var multi_mesh_model, merged_geometries, filename, menu_location_bottom = false;
       var response, result, buffer, fileBuffer, indices, vertices, normals, model_colors;
       var pmremGenerator, flat_shading_enabled, material_extra_enabled, enable_opacity;
 
@@ -538,7 +539,7 @@
         }
       }
 
-      function export_prwm() {
+      async function export_prwm() {
         document.getElementById('export_names').selectedIndex = 0;
 
         if (mesh) {
@@ -549,7 +550,15 @@
           }
 
           let bigEndian = false;
-          let arrayBuffer = threeBuffergeometryToPrwm( mesh.geometry, bigEndian);
+          let arrayBuffer;
+
+          if (multi_mesh_model) {
+            let meshes_merged = await merge_meshes();
+            arrayBuffer = threeBuffergeometryToPrwm( merged_geometries, bigEndian);
+          } else {
+            arrayBuffer = threeBuffergeometryToPrwm( mesh.geometry, bigEndian);
+          }
+
           let blob = new Blob( [ arrayBuffer ], { type: 'application/binary' } );
           link.href = URL.createObjectURL( blob );
           link.download = filename + 'prwm';
@@ -1150,6 +1159,8 @@
         render_requested = false;
         flat_shading_enabled = false;
         material_extra_enabled = false;
+        multi_mesh_model = false;
+        merged_geometries = null;
         initial_rotation = new THREE.Vector3();
         bounding_box = new THREE.Box3();
 
@@ -1559,6 +1570,32 @@
         document.getElementById('div_loading').style.display = 'none';
 
         disabled_changed();
+      }
+
+      // Used for PRWM exports
+      // Merge multiple meshes into a single mesh, thanks to manthrax:
+      // https://discourse.threejs.org/t/merge-multiple-mesh-into-a-single-one/35971/6
+
+      function merge_meshes() {
+        let geometries = [];
+        let meshes = [];
+
+        m_meshes = mesh.clone();
+        m_meshes.updateMatrixWorld( true, true );
+
+        m_meshes.traverse( function( child ) {
+          if (child.isMesh) {
+            meshes.push( child );
+            geometries.push( ( child.geometry.index ) ? child.geometry.toNonIndexed() : child.geometry().clone() );
+          }
+        });
+
+        geometries.forEach( ( geo, index ) => geo.applyMatrix4( meshes[ index ].matrixWorld ) );
+        merged_geometries = THREE.BufferGeometryUtils.mergeBufferGeometries( geometries, true );
+        merged_geometries.applyMatrix4( m_meshes.matrix.clone().invert() );
+        merged_geometries.userData.materials = meshes.map( m => m.material );
+
+        return true;
       }
 
       function show_polar_grid() {
