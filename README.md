@@ -33,7 +33,7 @@ Number Type Converter
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
 - Menu with controls can be located either on top or on the bottom of the page
-- All viewers include [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
+- All viewers include the interactive [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
 - Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers
   - do note that Safari might be finicky about certain features
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
@@ -44,12 +44,14 @@ Number Type Converter
   - Possibly update your models to look for textures in the same folder
 - Import files via remote URL, multiple comma separated URLs are allowed in some viewers and can be from mixed websites
   - URLs should be with no CORS restrictions
-- Import formats, where applicable, with any optional/required textures:
-  - 3DS, 3DM, 3MF, AMF, BRP, BREP, DAE, FBX, IFC, IGES, IGS, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, STEP, STP, PRWM, WRL
+- Import formats, where applicable, with any optional or required textures:
+  - 3DS, 3DM, 3MF, AMF, DAE, FBX, IFC, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, PRWM, WRL
   - GLTF supported formats: GLB, GLTF + BIN, DRC
   - GCODE supported formats: GCODE, NCC, NGC
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
+  - OCCT supported formats: STEP, STP, IGES, IGS, BREP, BRP
+    - STEP+IGES+BREP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
 - Export formats, where applicable:
   - 3DM, DAE, APNG, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, PRWM
 - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
@@ -117,7 +119,6 @@ Number Type Converter
   - `BG` - background color
   - `Eq` - equirectangular background
     - `R` - reflectivity (envMap + metalness)
-- STEP+IGES+BREP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
 - JSON Viewer has timeouts which might need to be adjusted when loading large files
 - GLTF / FBX / DAE viewers will also export animations to JSON format
 - DAE (Collada) exporter appears to brighten up the original model as well as the exported model
