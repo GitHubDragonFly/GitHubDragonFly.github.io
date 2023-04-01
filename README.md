@@ -29,21 +29,23 @@ Main Menu Page
 Number Type Converter
 ![Number Type Converter](images/Number%20Type%20Converter.png?raw=true)
 
-# Notes about three.js 3D Model Viewers
+# Notes about three.js based 3D Model Viewers
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
 - Menu with controls can be located either on top or on the bottom of the page
 - All viewers include the interactive [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
 - Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers
-  - do note that Safari might be finicky about certain features
+  - do note that mobile Safari might be finicky about certain features
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
 - Lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
-- Import files locally from a file browser dialog, make any necessary changes on your device to allow local file browsing
+- Import files locally from a file browser dialog:
   - All files have to be in the same folder
   - Some viewers might have some limitations
   - Possibly update your models to look for textures in the same folder
-- Import files via remote URL, multiple comma separated URLs are allowed in some viewers and can be from mixed websites
-  - URLs should be with no CORS restrictions
+  - Make any necessary changes on your device to allow local file browsing
+- Import files via remote URL:
+  - Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
+  - URLs should have no CORS restrictions
 - Import formats, where applicable, with any optional or required textures:
   - 3DS, 3DM, 3MF, AMF, DAE, FBX, IFC, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, PRWM, WRL
   - GLTF supported formats: GLB, GLTF + BIN, DRC
@@ -54,37 +56,36 @@ Number Type Converter
     - STEP+IGES+BREP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
 - Export formats, where applicable:
   - 3DM, DAE, APNG, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, PRWM
-- 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
-- PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
-  - as per the author: OBJ -> PRWM conversion is limited to OBJ containing a single model made of triangles
-- Animated GIF export is based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
-  - currently set to 500 x 500 size in the centre of the window
-  - the approximate GIF area rectangle will be shown during the GIF generation
-  - if the model leaves this area during the GIF generation, due to its motion, the process might error out
-  - the larger the model and / or the more colors in the model will affect the size / quality of the resulting GIF file
-  - it disregards the background color but does observe the background image with simple color palette
-  - consider changing Directional Light color and / or using Ambient Light to avoid poor quality GIF for some models
-  - non-animated / non-rotating models will spin 360 degrees
-  - see the `legobrick` generated GIF examples and their optimized / resized version in the `images` folder
-- Animated PNG (APNG) exports are powered by [UPNG.js](https://github.com/photopea/UPNG.js) and [Pako.js](https://github.com/nodeca/pako)
-  - almost the same features as in the Animated GIF export, see above
-  - use some background image to avoid visual anomalies (artifacts) in the resulting file due to transparency:
-    - where applicable, use the `Eq` checkbox to apply equirectangular scene background
-    - where applicable, use the `G` button to add grayish linear gradient as a scene background
-    - use `black.gif` `white.gif` `dark_blue.png` files found in the `images` folder as a simple choice for background image
-  - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
-  - currently set for Lossy PNG to speed up processing but with a comment on how to change it to full color if required
-- JSON import / export is actually three.js created format:
-  - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry and can export to current JSON format
-  - JSON Viewer is using r135 of three.js and cannot open legacy format
-- OBJ exporter might currently, along with the exported MTL file, export multiple copies of the same texture but under different names:
-  - Keep 1 copy of the texture and rename it if you wish, then update the corresponding MTL file entries to point to that texture
-  - Delete all other copies of that same texture
-  - Some models look better in OBJ format and this bug might eventually get fixed
-- DAE (Collada) exporter might currently export multiple copies of the same texture but under different names:
-  - Keep 1 copy of the texture and rename it if you wish, then update the corresponding `<init_from>` lines inside the `<library_images>` section of the DAE file to point to that texture
-  - Delete all other copies of that same texture
-  - This bug might eventually get fixed
+    - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
+    - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
+    - Animated GIF export is based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
+      - currently set to 500 x 500 size in the centre of the window
+      - the approximate GIF area rectangle will be shown during the GIF generation
+      - if the model leaves this area during the GIF generation, due to its motion, the process might error out
+      - the larger the model and / or the more colors in the model will affect the size / quality of the resulting GIF file
+      - it disregards the background color but does observe the background image with simple color palette
+      - consider changing Directional Light color and / or using Ambient Light to avoid poor quality GIF for some models
+      - non-animated models will spin 360 degrees
+      - see the `legobrick` generated GIF examples and their optimized / resized version in the `images` folder
+    - Animated PNG (APNG) exports are powered by [UPNG.js](https://github.com/photopea/UPNG.js) and [Pako.js](https://github.com/nodeca/pako)
+      - almost the same features as in the Animated GIF export, see above
+      - use some background image to avoid visual anomalies (artifacts) in the resulting file due to transparency:
+        - where applicable, use the `Eq` checkbox to apply equirectangular scene background
+        - where applicable, use the `G` button to add grayish linear gradient as a scene background
+        - use `black.gif` `white.gif` `dark_blue.png` files found in the `images` folder as a simple choice for background image
+      - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
+      - currently set for Lossy PNG to speed up processing but with a comment on how to change it to full color if required
+    - JSON import / export is actually three.js created format:
+      - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry and can export to current JSON format
+      - JSON Viewer is using r135 of three.js and cannot open legacy format
+    - OBJ exporter might currently, along with the exported MTL file, export multiple copies of the same texture but under different names:
+      - Keep 1 copy of the texture and rename it if you wish, then update the corresponding MTL file entries to point to that texture
+      - Delete all other copies of that same texture
+      - Some models look better in OBJ format and this bug might eventually get fixed
+    - DAE (Collada) exporter might currently export multiple copies of the same texture but under different names:
+      - Keep 1 copy of the texture and rename it if you wish, then update the corresponding `<init_from>` lines inside the `<library_images>` section of the DAE file to point to that texture
+      - Delete all other copies of that same texture
+      - This bug might eventually get fixed
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
