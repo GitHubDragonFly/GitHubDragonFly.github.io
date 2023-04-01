@@ -4,7 +4,7 @@ GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 Designed to serve as a hub with links to repositories, Number Type Converter and FREE online [three.js](https://threejs.org) based 3D model viewers.
 Fit for a desktop but should be functional on mobile devices in spite of its tiny or bulky appearance. 
 
-GitHub servers are providing correct access to files, so cloning or downloading this repository will not have the same functionality if run locally without some server. It appears that these servers for GitHub pages set `CacheControl` to last only for 10 minutes so you might need to refresh the current page as needed.
+GitHub servers are providing correct access to files, so cloning or downloading this repository will not have the same functionality if run locally without some server. It appears that these servers are setting `CacheControl` to last only for 10 minutes so you might need to refresh the current page as needed.
 
 Repositories do contain projects in several different programming languages or a mix of: `Java` `VB.Net` `C#` `python` `JavaScript` `jQuery` `HTML/CSS` `shell`.
 
