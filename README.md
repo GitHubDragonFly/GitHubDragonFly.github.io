@@ -32,9 +32,10 @@ Number Type Converter
 # Notes about three.js based 3D Model Viewers
 
 - `Quick Viewer` is an experimental viewer using [`Online 3D Viewer`](https://github.com/kovacsv/Online3DViewer) library:
-  - It is rather simple and might have bugs and limitations
+  - It is rather simple and might have bugs and limitations (occt-import-js is not functional for STEP / IGES / BREP models)
   - It would be better to use the actual Online 3D Viewer for proper viewing
-  - The following notes do not apply to Quick Viewer
+  - It will initially load `legobrick.dae` model from the examples folder
+  - The following notes in general do not apply to Quick Viewer
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
 - Menu with controls can be located either on top or on the bottom of the page
