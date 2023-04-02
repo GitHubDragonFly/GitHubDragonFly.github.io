@@ -31,6 +31,11 @@ Number Type Converter
 
 # Notes about three.js based 3D Model Viewers
 
+- `Quick Viewer` is an experimental viewer using [`Online 3D Viewer`](https://github.com/kovacsv/Online3DViewer) library:
+  - It is rather simple and might have bugs and limitations
+  - It would be better to use the actual Online 3D Viewer for proper viewing
+  - The following notes do not apply to Quick Viewer
+
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
 - Menu with controls can be located either on top or on the bottom of the page
 - All viewers include the interactive [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
