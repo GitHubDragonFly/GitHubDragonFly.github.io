@@ -33,8 +33,8 @@ Number Type Converter
 
 - Special note about `Quick Viewer` which is an experimental viewer using [`Online 3D Viewer`](https://github.com/kovacsv/Online3DViewer) library:
   - It is rather simple and might have bugs and limitations (occt-import-js is not functional for STEP / IGES / BREP models)
-  - It would be better to use the actual Online 3D Viewer for proper viewing
-  - It will initially load `legobrick.dae` model from the examples folder
+  - It will initially load the `legobrick.dae` model from the examples folder
+  - It would be better to use the actual Online 3D Viewer for proper viewing and additional features
   - Most of the following notes in general do not apply to Quick Viewer
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
