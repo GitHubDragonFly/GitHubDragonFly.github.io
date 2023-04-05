@@ -6,6 +6,7 @@
     <meta name="viewport" content="width=device-width, user-scalable=no">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
+    <script src="../static/occt-import-js/dist/occt-import-js.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/online-3d-viewer@0.8.22/build/o3dv.min.js"></script>
     <script>
       // Set the external libraries location
@@ -49,6 +50,13 @@
       }
 
       input[type=text] { vertical-align: middle; margin: 2px 2px 2px 0; }
+
+      .loading_msg {
+        display: none;
+        background-color: transparent;
+        color: green;
+        text-align: center;
+      }
 
       p.full_screen {
         text-align: center;
@@ -98,6 +106,7 @@
         <button onclick="load_url_file()" style="width: 50px;">Load</button>
         <button onclick="clear_url()" style="width: 50px;">Clear</button>
       </div>
+      <div id="div_loading" class="loading_msg">Loading</div>
       <div class="online_3d_viewer" id="o3dv_element" style="width: 99.75%; height: 95vh;"
         defaultColor="new OV.RGBAColor( 174, 174, 190, 255 )"
         backgroundColor="new OV.RGBAColor( 5, 5, 25, 255 )"
@@ -114,6 +123,7 @@
 
     <script>
       const model_extensions = [ '.3DM', '.3DS', '.3MF', '.BIM', '.BREP', '.BRP', '.DAE', '.FBX', '.FCSTD', '.GLB', '.GLTF', '.IFC', '.IGES', '.IGS', '.MTL', '.OBJ', '.OFF', '.PLY', '.STL', '.STEP', '.STP', '.WRL' ];
+      const occt_extensions = [ '.BREP', '.BRP', '.IGES', '.IGS', '.STEP', '.STP' ];
       const image_extensions = [ '.PNG', '.JPEG', '.JPG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF' ];
       const textureNames = [
         'https://cdn.jsdelivr.net/npm/online-3d-viewer@0.8.22/website/assets/envmaps/ice_river/posx.jpg',
@@ -172,7 +182,8 @@
     </script>
 
     <script>
-      var local_files, url_files, selected_model_file, selected_url_file = '', selected_url_model_file, url_displayed = false, url_loading = false;
+      var mesh, bounding_box, local_files, url_files, selected_model_file, selected_url_model_file;
+      var selected_url_file = '', url_displayed = false, url_loading = false;
 
       function init() {
         if (url_loading === false) {
@@ -214,7 +225,139 @@
         let element = document.getElementById('o3dv_element');
         element.innerHTML = '';
         let o3dv_embedded_viewer = new OV.EmbeddedViewer( element, { defaultColor: new OV.RGBAColor( 174, 174, 190, 255 ), backgroundColor: new OV.RGBAColor( 5, 5, 25, 255 ), environmentSettings: new OV.EnvironmentSettings( textureNames, backgroundIsEnvMap ) } );
-        o3dv_embedded_viewer.LoadModelFromFileList( local_files );
+
+        let ext = selected_model_file.name.toUpperCase().substring( selected_model_file.name.lastIndexOf( '.' ) );
+
+        if (occt_extensions.includes( ext )) {
+          document.getElementById('div_loading').innerHTML = 'Loading OCCT ... Please wait';
+          document.getElementById('div_loading').style.display = 'block';
+
+          bounding_box = new THREE.Box3();
+          mesh = new THREE.Object3D();
+
+          occtimportjs().then ( async function( occt ) {
+            response = await fetch( URL.createObjectURL( selected_model_file ) );
+            URL.revokeObjectURL( selected_model_file );
+
+            buffer = await response.arrayBuffer();
+            fileBuffer = new Uint8Array( buffer );
+
+            let result;
+
+            ext.startsWith( '.I' ) ? result = await occt.ReadIgesFile( fileBuffer, null ) : ( ext.startsWith( '.B' ) ? result = await occt.ReadBrepFile( fileBuffer, null ) : result = await occt.ReadStepFile( fileBuffer, null ));
+
+            if (result.success && result.meshes.length > 0) {
+              let mesh_count = 1;
+
+              // Modified version of the original example code at https://github.com/kovacsv/occt-import-js/blob/main/examples/three_viewer.html#L42-L89
+              for (let resultMesh of result.meshes) {
+                let geometry = new THREE.BufferGeometry();
+
+                geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( resultMesh.attributes.position.array, 3 ) );
+
+                if (resultMesh.attributes.normal) {
+                  geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( resultMesh.attributes.normal.array, 3 ) );
+                }
+
+                let index = Uint32Array.from( resultMesh.index.array );
+                geometry.setIndex( new THREE.BufferAttribute( index, 1 ) );
+            
+                let defaultMaterial;
+
+                if (resultMesh.color) {
+                  let color = new THREE.Color( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
+                  defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, flatShading: false, color: color } );
+                } else {
+                  defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, flatShading: false, color: 0xFFFFFF } );
+                }
+
+                let materials = defaultMaterial;
+
+                if (resultMesh.face_colors && resultMesh.face_colors.length > 0) {
+                  materials = [ defaultMaterial ];
+
+                  for (let faceColor of resultMesh.face_colors) {
+                    let color = new THREE.Color( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] );
+                    materials.push( new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, flatShading: false, color: color } ) );
+                  }
+
+                  let triangleCount = resultMesh.index.array.length / 3;
+                  let triangleIndex = 0;
+                  let faceColorGroupIndex = 0;
+
+                  while (triangleIndex < triangleCount) {
+                    let firstIndex = triangleIndex;
+                    let lastIndex = null;
+                    let materialIndex = null;
+
+                    if (faceColorGroupIndex >= resultMesh.face_colors.length) {
+                      lastIndex = triangleCount;
+                      materialIndex = 0;
+                    } else if (triangleIndex < resultMesh.face_colors[faceColorGroupIndex].first) {
+                      lastIndex = resultMesh.face_colors[faceColorGroupIndex].first;
+                      materialIndex = 0;
+                    } else {
+                      lastIndex = resultMesh.face_colors[faceColorGroupIndex].last + 1;
+                      materialIndex = faceColorGroupIndex + 1;
+                      faceColorGroupIndex++;
+                    }
+
+                    geometry.addGroup( firstIndex * 3, (lastIndex - firstIndex) * 3, materialIndex );
+                    triangleIndex = lastIndex;
+                  }
+                }
+
+                if (result.meshes.length === 1) geometry.center();
+
+                let new_mesh = new THREE.Mesh( geometry, materials );
+
+                mesh.add( new_mesh );
+
+                if (Array.isArray( materials )) {
+                  materials.forEach( mtl => {
+                    mtl.dispose();
+                  });
+
+                  new_mesh.material.forEach( mtrl => {
+                    mtrl.dispose();
+                  });
+                } else {
+                  materials.dispose();
+                  new_mesh.material.dispose();
+                }
+
+                geometry.dispose();
+                new_mesh.geometry.dispose();
+              }
+
+              // Set the initial scale of the object so it comes to view
+              bounding_box.setFromObject( mesh );
+              let y;
+
+              if (bounding_box.max.y < 0) {
+                y = Math.abs( bounding_box.min.y ) - Math.abs( bounding_box.max.y );
+              } else if (bounding_box.max.y >= 0 && bounding_box.min.y <= 0) {
+                y = Math.abs( bounding_box.max.y ) + Math.abs( bounding_box.min.y );
+              } else {
+                y = Math.abs( bounding_box.max.y ) - Math.abs( bounding_box.min.y );
+              }
+
+              mesh.position.set( 0, 0, 0 );
+              mesh.scale.multiplyScalar( 50 / y * 0.015 );
+
+              o3dv_embedded_viewer.viewer.scene.add( mesh );
+              o3dv_embedded_viewer.viewer.renderer.render( o3dv_embedded_viewer.viewer.scene, o3dv_embedded_viewer.viewer.camera );
+            } else {
+              console.log( 'No mesh detected!' );
+              return;
+            }
+
+            document.getElementById('div_loading').innerHTML = '';
+            document.getElementById('div_loading').style.display = 'none';
+          });
+        } else {
+          o3dv_embedded_viewer.LoadModelFromFileList( local_files );
+        }
       }
 
       function loadURLFile() {
@@ -249,7 +392,143 @@
             let element = document.getElementById('o3dv_element');
             element.innerHTML = '';
             let o3dv_embedded_viewer = new OV.EmbeddedViewer( element, { defaultColor: new OV.RGBAColor( 174, 174, 190, 255 ), backgroundColor: new OV.RGBAColor( 5, 5, 25, 255 ), environmentSettings: new OV.EnvironmentSettings( textureNames, backgroundIsEnvMap ) } );
-            o3dv_embedded_viewer.LoadModelFromUrlList( url_files );
+
+            let ext;
+
+            if (selected_url_model_file === null) {
+              ext = selected_url_file.toUpperCase().substring( selected_url_file.lastIndexOf( '.' ) );
+            } else {
+              ext = selected_url_model_file.toUpperCase().substring( selected_url_model_file.lastIndexOf( '.' ) );
+            }
+
+            if (occt_extensions.includes( ext )) {
+              document.getElementById('div_loading').innerHTML = 'Loading OCCT ... Please wait';
+              document.getElementById('div_loading').style.display = 'block';
+
+              bounding_box = new THREE.Box3();
+              mesh = new THREE.Object3D();
+
+              occtimportjs().then ( async function( occt ) {
+                response = (selected_url_model_file === null) ? await fetch( selected_url_file ) : await fetch( selected_url_model_file );
+
+                buffer = await response.arrayBuffer();
+                fileBuffer = new Uint8Array( buffer );
+
+                let result;
+
+                ext.startsWith( '.I' ) ? result = await occt.ReadIgesFile( fileBuffer, null ) : ( ext.startsWith( '.B' ) ? result = await occt.ReadBrepFile( fileBuffer, null ) : result = await occt.ReadStepFile( fileBuffer, null ));
+
+                if (result.success && result.meshes.length > 0) {
+                  let mesh_count = 1;
+
+                  // Modified version of the original example code at https://github.com/kovacsv/occt-import-js/blob/main/examples/three_viewer.html#L42-L89
+                  for (let resultMesh of result.meshes) {
+                    let geometry = new THREE.BufferGeometry();
+
+                    geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( resultMesh.attributes.position.array, 3 ) );
+
+                    if (resultMesh.attributes.normal) {
+                      geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( resultMesh.attributes.normal.array, 3 ) );
+                    }
+
+                    let index = Uint32Array.from( resultMesh.index.array );
+                    geometry.setIndex( new THREE.BufferAttribute( index, 1 ) );
+    
+                    let defaultMaterial;
+
+                    if (resultMesh.color) {
+                      let color = new THREE.Color( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
+                      defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, flatShading: false, color: color } );
+                    } else {
+                      defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, flatShading: false, color: 0xFFFFFF } );
+                    }
+
+                    let materials = defaultMaterial;
+
+                    if (resultMesh.face_colors && resultMesh.face_colors.length > 0) {
+                      materials = [ defaultMaterial ];
+
+                      for (let faceColor of resultMesh.face_colors) {
+                        let color = new THREE.Color( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] );
+                        materials.push( new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, flatShading: false, color: color } ) );
+                      }
+
+                      let triangleCount = resultMesh.index.array.length / 3;
+                      let triangleIndex = 0;
+                      let faceColorGroupIndex = 0;
+
+                      while (triangleIndex < triangleCount) {
+                        let firstIndex = triangleIndex;
+                        let lastIndex = null;
+                        let materialIndex = null;
+
+                        if (faceColorGroupIndex >= resultMesh.face_colors.length) {
+                          lastIndex = triangleCount;
+                          materialIndex = 0;
+                        } else if (triangleIndex < resultMesh.face_colors[faceColorGroupIndex].first) {
+                          lastIndex = resultMesh.face_colors[faceColorGroupIndex].first;
+                          materialIndex = 0;
+                        } else {
+                          lastIndex = resultMesh.face_colors[faceColorGroupIndex].last + 1;
+                          materialIndex = faceColorGroupIndex + 1;
+                          faceColorGroupIndex++;
+                        }
+
+                        geometry.addGroup( firstIndex * 3, (lastIndex - firstIndex) * 3, materialIndex );
+                        triangleIndex = lastIndex;
+                      }
+                    }
+
+                    if (result.meshes.length === 1) geometry.center();
+
+                    let new_mesh = new THREE.Mesh( geometry, materials );
+
+                    mesh.add( new_mesh );
+
+                    if (Array.isArray( materials )) {
+                      materials.forEach( mtl => {
+                        mtl.dispose();
+                      });
+
+                      new_mesh.material.forEach( mtrl => {
+                        mtrl.dispose();
+                      });
+                    } else {
+                      materials.dispose();
+                      new_mesh.material.dispose();
+                    }
+
+                    geometry.dispose();
+                    new_mesh.geometry.dispose();
+                  }
+
+                  // Set the initial scale of the object so it comes to view
+                  bounding_box.setFromObject( mesh );
+                  let y;
+
+                  if (bounding_box.max.y < 0) {
+                    y = Math.abs( bounding_box.min.y ) - Math.abs( bounding_box.max.y );
+                  } else if (bounding_box.max.y >= 0 && bounding_box.min.y <= 0) {
+                    y = Math.abs( bounding_box.max.y ) + Math.abs( bounding_box.min.y );
+                  } else {
+                    y = Math.abs( bounding_box.max.y ) - Math.abs( bounding_box.min.y );
+                  }
+
+                  mesh.position.set( 0, 0, 0 );
+                  mesh.scale.multiplyScalar( 50 / y * 0.015 );
+
+                  o3dv_embedded_viewer.viewer.scene.add( mesh );
+                  o3dv_embedded_viewer.viewer.renderer.render( o3dv_embedded_viewer.viewer.scene, o3dv_embedded_viewer.viewer.camera );
+                } else {
+                  console.log( 'No mesh detected!' );
+                }
+
+                document.getElementById('div_loading').innerHTML = '';
+                document.getElementById('div_loading').style.display = 'none';
+              });
+            } else {
+              o3dv_embedded_viewer.LoadModelFromUrlList( url_files );
+            }
           }
         }
       }
