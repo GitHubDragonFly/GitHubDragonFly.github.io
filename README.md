@@ -35,6 +35,7 @@ Number Type Converter
   - It is rather simple and might have bugs and limitations
   - It will initially load the `legobrick.dae` model from the examples folder
   - It would be better to use the actual Online 3D Viewer for proper viewing and additional features
+  - Supports: 3DM, 3DS, 3MF, BIM, BREP, BRP, DAE, FBX, FCSTD, GLB, GLTF, IFC, IGES, IGS, MTL, OBJ, OFF, PLY, STL, STEP, STP, WRL models
   - Most of the following notes in general do not apply to Quick Viewer
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
