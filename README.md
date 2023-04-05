@@ -31,7 +31,7 @@ Number Type Converter
 
 # Notes about three.js based 3D Model Viewers
 
-- Special note about `Quick Viewer` which is an experimental viewer using [`Online 3D Viewer`](https://github.com/kovacsv/Online3DViewer) engine and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
+- Special note about `Quick Viewer` which is an experimental viewer using [Online 3D Viewer](https://github.com/kovacsv/Online3DViewer) engine and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
   - It is rather simple and might have bugs and limitations
   - It will initially load the `legobrick.dae` model from the examples folder
   - It would be better to use the actual Online 3D Viewer for proper viewing and additional features
