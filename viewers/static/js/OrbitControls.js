@@ -97,7 +97,63 @@
 
 			this._domElementKeyEvents = null; //
 			// public methods
+
+			// ZOOM-TO-CURSOR
+			this.cursorScreen = new THREE.Vector3();
+			this.cursorWorld = new THREE.Vector3();
+			this.enableZoomToCursor = false;
+			this.adjustmentAfterZoomNeeded = false;
+			this.maxTargetDistanceFromOrigin = Infinity;
+
 			//
+
+			// ZOOM-TO-CURSOR
+			this.adjustAfterZoom = function () {
+
+				const lastTarget = scope.target.clone();
+				const newCursorWorld = new THREE.Vector3( scope.cursorScreen.x, scope.cursorScreen.y, scope.target.clone().project( scope.object ).z ).clone().unproject( scope.object );
+				const delta = new THREE.Vector3().subVectors( scope.cursorWorld, newCursorWorld );
+
+				let target = null;
+
+				if ( !scope.screenSpacePanning ) {
+
+					const plane = new THREE.Plane( scope.object.up.clone() );
+					const ray = new THREE.Ray( scope.object.position.clone(), new THREE.Vector3().subVectors( scope.target.clone().add( delta ), scope.object.position ).normalize());
+					target = ray.intersectPlane( plane, new THREE.Vector3() );
+
+					if ( target === null || new THREE.Vector3().subVectors( scope.object.position, scope.target ).normalize().multiply( scope.object.up.clone().normalize() ).length() < 0.00001 ) {
+
+						scope.target.add( delta );
+						if ( scope.target.length() > this.maxTargetDistanceFromOrigin ) scope.target.setLength( this.maxTargetDistanceFromOrigin );
+						scope.object.position.add( new THREE.Vector3().subVectors( scope.target, lastTarget ) );
+
+						const mulVector = new THREE.Vector3( 1 - scope.object.up.x, 1 - scope.object.up.y, 1 - scope.object.up.z );
+						scope.target.multiply( mulVector );
+						scope.object.position.multiply( mulVector );
+
+					} else {
+
+						if ( target.length() > this.maxTargetDistanceFromOrigin ) target.setLength( this.maxTargetDistanceFromOrigin );
+						scope.target.copy( target );
+						scope.object.position.add( new THREE.Vector3().subVectors( scope.target, lastTarget ) );
+
+					}
+
+				} else {
+
+					scope.target.add( delta );
+					scope.object.position.add( delta );
+
+				}
+
+			}
+
+			this.setCursorWorld = function () {
+
+				scope.cursorWorld.copy( new THREE.Vector3( scope.cursorScreen.x, scope.cursorScreen.y, scope.target.clone().project( scope.object ).z ).unproject( scope.object ) );
+
+			}
 
 			this.getPolarAngle = function () {
 
@@ -236,9 +292,27 @@
 					// min(camera displacement, camera rotation in radians)^2 > EPS
 					// using small-angle approximation cos(x/2) = 1 - x^2 / 8
 
+					// ZOOM-TO-CURSOR
+					if ( scope.target.length() > this.maxTargetDistanceFromOrigin ) {
+
+						const lastTarget = scope.target.clone();
+						scope.target.setLength( this.maxTargetDistanceFromOrigin );
+						scope.object.position.add( new THREE.Vector3().subVectors( scope.target, lastTarget ) );
+
+					}
+
 					if ( zoomChanged || lastPosition.distanceToSquared( scope.object.position ) > EPS || 8 * ( 1 - lastQuaternion.dot( scope.object.quaternion ) ) > EPS ) {
 
 						scope.dispatchEvent( _changeEvent );
+
+						// ZOOM-TO-CURSOR
+						if ( scope.enableZoomToCursor && scope.adjustmentAfterZoomNeeded ) {
+
+							scope.adjustmentAfterZoomNeeded = false;
+							this.adjustAfterZoom();
+
+						}
+
 						lastPosition.copy( scope.object.position );
 						lastQuaternion.copy( scope.object.quaternion );
 						zoomChanged = false;
@@ -408,6 +482,9 @@
 
 			function dollyOut( dollyScale ) {
 
+				// ZOOM-TO-CURSOR
+				if ( scope.enableZoomToCursor ) scope.setCursorWorld();
+
 				if ( scope.object.isPerspectiveCamera ) {
 
 					scale /= dollyScale;
@@ -425,9 +502,20 @@
 
 				}
 
+				// ZOOM-TO-CURSOR
+				if ( scope.enableZoomToCursor ) {
+
+					if ( scope.object.isOrthographicCamera ) scope.adjustAfterZoom();
+					else if ( scope.object.isPerspectiveCamera ) scope.adjustmentAfterZoomNeeded = true;
+
+				}
+
 			}
 
 			function dollyIn( dollyScale ) {
+
+				// ZOOM-TO-CURSOR
+				if ( scope.enableZoomToCursor ) scope.setCursorWorld();
 
 				if ( scope.object.isPerspectiveCamera ) {
 
@@ -443,6 +531,14 @@
 
 					console.warn( 'WARNING: OrbitControls.js encountered an unknown camera type - dolly/zoom disabled.' );
 					scope.enableZoom = false;
+
+				}
+
+				// ZOOM-TO-CURSOR
+				if ( scope.enableZoomToCursor ) {
+
+					if ( scope.object.isOrthographicCamera ) scope.adjustAfterZoom();
+					else if ( scope.object.isPerspectiveCamera ) scope.adjustmentAfterZoomNeeded = true;
 
 				}
 
@@ -1065,10 +1161,56 @@
 			scope.domElement.addEventListener( 'contextmenu', onContextMenu );
 			scope.domElement.addEventListener( 'pointerdown', onPointerDown );
 			scope.domElement.addEventListener( 'pointercancel', onPointerCancel );
-			scope.domElement.addEventListener( 'wheel', onMouseWheel, {
-				passive: false
-			} ); // force an update at start
+			scope.domElement.addEventListener( 'wheel', onMouseWheel, { passive: false } );
 
+			// ZOOM-TO-CURSOR
+			scope.domElement.addEventListener( 'mousemove', event => {
+
+				if ( !scope.enableZoomToCursor ) return;
+
+				scope.cursorScreen.copy(
+					new THREE.Vector3(
+						( ( event.clientX - scope.domElement.getBoundingClientRect().left ) / scope.domElement.clientWidth) * 2 - 1,
+						- ( (event.clientY - scope.domElement.getBoundingClientRect().top ) / scope.domElement.clientHeight) * 2 + 1,
+						scope.target.clone().project( scope.object ).z
+					)
+				);
+
+			});
+
+			const handleTouch = event => {
+
+				const touches = event.touches;
+				let touch;
+
+				if ( touches.length === 1 ) {
+
+					touch = new THREE.Vector2( touches[ 0 ].clientX, touches[ 0 ].clientY );
+
+				} else if ( touches.length === 2 ) {
+
+					touch = new THREE.Vector2( ( touches[ 0 ].clientX + touches[ 1 ].clientX ) / 2, ( touches[ 0 ].clientY + touches[ 1 ].clientY ) / 2 );
+
+				}
+
+				if ( touch !== undefined ) {
+
+					scope.cursorScreen.copy(
+						new THREE.Vector3(
+							( (touch.x - scope.domElement.getBoundingClientRect().left ) / scope.domElement.clientWidth ) * 2 - 1,
+							- ( ( touch.y - scope.domElement.getBoundingClientRect().top ) / scope.domElement.clientHeight ) * 2 + 1,
+							scope.target.clone().project( scope.object ).z
+						)
+					);
+
+				}
+
+			};
+
+			scope.domElement.addEventListener( 'touchstart', handleTouch);
+			scope.domElement.addEventListener( 'touchmove', handleTouch);
+
+			// force an update at start
 			this.update();
 
 		}
