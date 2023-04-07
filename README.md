@@ -31,14 +31,13 @@ Number Type Converter
 
 # Notes about three.js based 3D Model Viewers
 
+- They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
 - Special note about `Quick Viewer` which is an experimental viewer using [Online 3D Viewer](https://github.com/kovacsv/Online3DViewer) engine and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
   - It is rather simple and might have bugs and limitations
   - It will initially load the `legobrick.dae` model from the examples folder
   - It would be better to use the actual Online 3D Viewer for proper viewing and additional features
   - Supports: 3DM, 3DS, 3MF, BIM, BREP, BRP, DAE, FBX, FCSTD, GLB, GLTF, IFC, IGES, IGS, MTL, OBJ, OFF, PLY, STL, STEP, STP, WRL models
   - Most of the following notes in general do not apply to Quick Viewer
-
-- They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
 - Menu with controls can be located either on top or on the bottom of the page
 - All viewers include the interactive [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
 - Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers
