@@ -66,6 +66,7 @@ https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/sinte
 Use the `Raw` button in any of the GitHub repositories to get the correct URL or just download the file to a hard drive and load it with the `Browse` option of the corresponding viewer:
  - check the `viewers/examples` folder for different formats of the Lego Brick model
  - `https://github.com/gkjohnson/3d-demo-data/tree/main/models`
+ - `https://github.com/ue4plugins/GLTFWebViewer/tree/main/public/assets`
  - `https://github.com/josdirksen/learning-threejs/tree/master/assets/models`
  - `https://github.com/buildingsmart-private/IfcDoc/tree/master/IfcKit/examples`
  - `https://github.com/mikelovesrobots/mmmm`
