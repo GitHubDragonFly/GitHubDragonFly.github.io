@@ -62,6 +62,7 @@ Number Type Converter
     - STEP+IGES+BREP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
 - Export formats, where applicable:
   - 3DM, DAE, APNG, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, PRWM
+    - Try not to change file names when saving files during initial export
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
     - Animated GIF export is based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
