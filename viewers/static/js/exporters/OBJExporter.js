@@ -2,7 +2,7 @@
 
 	class OBJExporter {
 
-		parse( object ) {
+		parse( object, filename ) {
 
 			let output = '';
 			let indexVertex = 0;
@@ -41,6 +41,9 @@
 				if (mesh.name === '') {
 					mesh[ 'name' ] = 'mesh_' + mesh_count;
 					mesh_count += 1;
+				} else {
+					mesh.name = mesh.name.replace( '#', '' );
+					mesh.name = mesh.name.replace( ' ', '_' );
 				}
 
 				output += 'o ' + mesh.name + '\n'; // name of the mesh material
@@ -54,6 +57,8 @@
 						mesh.material[ 'name' ] = mesh.material.name.substring( 0, mesh.material.name.lastIndexOf( '.' ) );
 					}
 
+					mesh.material.name = mesh.material.name.replace( '#', '' );
+					mesh.material.name = mesh.material.name.replace( ' ', '_' );
 					output += 'usemtl ' + mesh.material.name + '\n';
 					materials[ mesh.material.id ] = mesh.material;
 
@@ -72,6 +77,8 @@
 								mesh.material[ groups[ i ].materialIndex ][ 'name' ] = mesh.material[ groups[ i ].materialIndex ].name.substring( 0, mesh.material[ groups[ i ].materialIndex ].name.lastIndexOf( '.' ) );
 							}
 
+							mesh.material[ groups[ i ].materialIndex ].name = mesh.material[ groups[ i ].materialIndex ].name.replace( '#', '' );
+							mesh.material[ groups[ i ].materialIndex ].name = mesh.material[ groups[ i ].materialIndex ].name.replace( ' ', '_' );
 							multi_materials[ groups[ i ].start ] = mesh.material[ groups[ i ].materialIndex ].name;
 
 						}
@@ -346,6 +353,8 @@
 			if (Object.keys( materials ).length !== 0) {
 				// mtl output (Ref: https://stackoverflow.com/questions/35070048/export-a-three-js-textured-model-to-a-obj-with-mtl-file)
 
+				output = 'mtllib ' + filename + 'mtl' + '\n' + output; // add name of the material library
+
 				let mtlOutput = '# MTL file - created by a modified three.js OBJExporter' + '\n';
 				let textures = [];
 				let names = [];
@@ -361,6 +370,8 @@
 							let mat = mtl;
 
 							let name = ( mat.name && mat.name !== '' ) ? ( ( mat.name.toUpperCase().endsWith( '.PNG' ) || mat.name.toUpperCase().endsWith( '.JPG' ) ) ? mat.name.substring(0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : 'material' + mat.id;
+							name = name.replace( '#', '' );
+							name = name.replace( ' ', '_' );
 
 							if ( names.includes( name ) === false ) {
 
@@ -534,6 +545,8 @@
 						let mat = materials[ key ];
 
 						let name = ( mat.name && mat.name !== '' ) ? ( ( mat.name.toUpperCase().endsWith( '.PNG' ) || mat.name.toUpperCase().endsWith( '.JPG' ) ) ? mat.name.substring(0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : 'material' + mat.id;
+						name = name.replace( '#', '' );
+						name = name.replace( ' ', '_' );
 
 						if ( names.includes( name ) === false ) {
 
