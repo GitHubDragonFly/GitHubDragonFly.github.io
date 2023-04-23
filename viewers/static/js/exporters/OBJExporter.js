@@ -11,6 +11,8 @@
 			let mesh_count = 0;
 			let materials = {};
 			let multi_materials = {};
+			let material_names = [];
+			let material_colors = {};
 			const vertex = new THREE.Vector3();
 			const color = new THREE.Color();
 			const normal = new THREE.Vector3();
@@ -59,6 +61,16 @@
 
 					mesh.material.name = mesh.material.name.replace( '#', '' );
 					mesh.material.name = mesh.material.name.replace( ' ', '_' );
+
+					let temp_name = mesh.material.name;
+
+					if (material_names.includes( temp_name ) === false || material_colors.temp_name !== mesh.material.color) {
+						if (material_colors.temp_name !== mesh.material.color) mesh.material.name = temp_name + '_' + mesh.material.id;
+
+						material_names.push( mesh.material.name );
+						material_colors[ mesh.material.name ] = mesh.material.color;
+					}
+
 					output += 'usemtl ' + mesh.material.name + '\n';
 					materials[ mesh.material.id ] = mesh.material;
 
