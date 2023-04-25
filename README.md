@@ -32,10 +32,10 @@ Number Type Converter
 # Notes about three.js based 3D Model Viewers
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
-- Special note about `Quick Viewer` which is an experimental viewer using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
+- Special notes about `Quick Viewer` which is an experimental viewer using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
   - It is rather simple and might have bugs and limitations
   - Supported formats: 3DM, 3DS, 3MF, BIM, BREP, BRP, DAE, FBX, GLB, GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
-  - Unsupported formats: FCSTD (requires workers)
+  - Unsupported formats: FCSTD (requires worker)
   - It might be better to use the actual [Online 3D Viewer](https://3dviewer.net/) for proper viewing and additional features
   - Most of the following notes do not apply to Quick Viewer in general
 - Menu with controls can be located either on top or on the bottom of the page
@@ -86,11 +86,11 @@ Number Type Converter
       - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry and can export to current JSON format
       - JSON Viewer is using r135 of three.js and cannot open legacy format
     - OBJ exporter might currently, along with the exported MTL file, export multiple copies of the same texture but under different names:
-      - Keep 1 copy of the texture and rename it if you wish, then update the corresponding MTL file entries to point to that texture
+      - Select 1 copy of the texture and rename it if you wish, then update the corresponding MTL file entries to point to that texture
       - Delete all other copies of that same texture
       - Some models look better in OBJ format and this bug might eventually get fixed
     - DAE (Collada) exporter might currently export multiple copies of the same texture but under different names:
-      - Keep 1 copy of the texture and rename it if you wish, then update the corresponding `<init_from>` lines inside the `<library_images>` section of the DAE file to point to that texture
+      - Select 1 copy of the texture and rename it if you wish, then update the corresponding `<init_from>` lines inside the `<library_images>` section of the DAE file to point to that texture
       - Delete all other copies of that same texture
       - This bug might eventually get fixed
 - Buttons, where applicable:
