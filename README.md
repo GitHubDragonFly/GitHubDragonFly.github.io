@@ -96,6 +96,7 @@ Number Type Converter
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
+    - `EC` - edge color (STEP+IGES+BREP viewer)
   - `F` - flatShading
   - `G` - linear gradient background
   - `K` - kinematics (DAE viewer)
