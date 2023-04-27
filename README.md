@@ -33,7 +33,8 @@ Number Type Converter
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
 - Special notes about `Quick Viewer` which is an experimental viewer using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
-  - It is rather simple and might have bugs and limitations
+  - Seems to have a rather good fit on mobile devices
+  - It is relatively simple and might have bugs and limitations
   - Supported formats: 3DM, 3DS, 3MF, BIM, BREP, BRP, DAE, FBX, GLB, GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
   - Unsupported formats: FCSTD (requires worker)
   - It might be better to use the actual [Online 3D Viewer](https://3dviewer.net/) for proper viewing and additional features
