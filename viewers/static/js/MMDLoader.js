@@ -176,7 +176,16 @@
 
 			this.loader.setMimeType( undefined ).setPath( this.path ).setResponseType( 'arraybuffer' ).setRequestHeader( this.requestHeader ).setWithCredentials( this.withCredentials ).load( url, function ( buffer ) {
 
-				onLoad( parser.parsePmd( buffer, true ) );
+				try {
+
+					onLoad( parser.parsePmd( buffer, true ) );
+
+				} catch ( e ) {
+
+					if ( onError ) onError( e );
+
+				}
+
 
 			}, onProgress, onError );
 
@@ -197,7 +206,16 @@
 
 			this.loader.setMimeType( undefined ).setPath( this.path ).setResponseType( 'arraybuffer' ).setRequestHeader( this.requestHeader ).setWithCredentials( this.withCredentials ).load( url, function ( buffer ) {
 
-				onLoad( parser.parsePmx( buffer, true ) );
+				try {
+
+					onLoad( parser.parsePmx( buffer, true ) );
+
+				} catch ( e ) {
+
+					if ( onError ) onError( e );
+
+				}
+
 
 			}, onProgress, onError );
 
@@ -227,9 +245,19 @@
 
 				this.loader.load( urls[ i ], function ( buffer ) {
 
-					vmds.push( parser.parseVmd( buffer, true ) );
-					if ( vmds.length === vmdNum ) onLoad( parser.mergeVmds( vmds ) );
+					try {
 
+						vmds.push( parser.parseVmd( buffer, true ) );
+		
+						if ( vmds.length === vmdNum ) onLoad( parser.mergeVmds( vmds ) );
+		
+					} catch ( e ) {
+		
+						if ( onError ) onError( e );
+		
+					}
+		
+		
 				}, onProgress, onError );
 
 			}
@@ -252,7 +280,16 @@
 
 			this.loader.setMimeType( isUnicode ? undefined : 'text/plain; charset=shift_jis' ).setPath( this.animationPath ).setResponseType( 'text' ).setRequestHeader( this.requestHeader ).setWithCredentials( this.withCredentials ).load( url, function ( text ) {
 
-				onLoad( parser.parseVpd( text, true ) );
+				try {
+
+					onLoad( parser.parseVpd( text, true ) );
+
+				} catch ( e ) {
+
+					if ( onError ) onError( e );
+
+				}
+
 
 			}, onProgress, onError );
 
