@@ -25,7 +25,7 @@
     <script src="../static/js/utils/BufferGeometryUtils.js" defer></script>
     <script src="../static/three-gif-loader/lib/gif-texture.js" defer></script>
     <script src="../static/three-gif-loader/lib/gif-loader.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@7.15.0/rhino3dm.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/rhino3dm.js" defer></script>
 
     <style>
       body, html {
@@ -515,6 +515,7 @@
             URL.revokeObjectURL( blob );
             link.download = filename + 'mtl';
             link.click();
+
             exported[ 'tex' ].forEach( tex => {
               blob = new Blob( [ tex.data ], { type: 'image/png' } );
               link.href = URL.createObjectURL( blob );
@@ -721,28 +722,24 @@
             filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
-          let uuid_array = [], uuid_array_points = [], mesh_geometry_uuid, points_geometry_uuid, material_uuid;
+          let uuid_array = [], uuid_array_points = [];
 
           Obj.traverse( ( child ) => {
             if (child.isMesh) {
-              mesh_geometry_uuid = child.geometry.uuid;
-
               if (Array.isArray( child.material)) {
                 child.material.forEach( mtl => {
-                  uuid_array.push( { mesh_geometry_uuid: mesh_geometry_uuid, material_uuid: mtl.uuid } );
+                  uuid_array.push( { mesh_geometry_uuid: child.geometry.uuid, material_uuid: mtl.uuid } );
                 });
               } else {
-                uuid_array.push( { mesh_geometry_uuid: mesh_geometry_uuid, material_uuid: child.material.uuid } );
+                uuid_array.push( { mesh_geometry_uuid: child.geometry.uuid, material_uuid: child.material.uuid } );
               }
             } else if (child.isPoints) {
-              points_geometry_uuid = child.geometry.uuid;
-
               if (Array.isArray( child.material)) {
                 child.material.forEach( mtl => {
-                  uuid_array_points.push( { points_geometry_uuid: points_geometry_uuid, material_uuid: mtl.uuid } );
+                  uuid_array_points.push( { points_geometry_uuid: child.geometry.uuid, material_uuid: mtl.uuid } );
                 });
               } else {
-                uuid_array_points.push( { points_geometry_uuid: points_geometry_uuid, material_uuid: child.material.uuid } );
+                uuid_array_points.push( { points_geometry_uuid: child.geometry.uuid, material_uuid: child.material.uuid } );
               }
             }
           });
@@ -754,13 +751,11 @@
 
           rhino3dm().then( ( Module ) => {
             let rhino_file = new Module.File3dm();
-
             let rhino_mesh;
 
-            result.geometries.forEach( ( child_geo ) => {
-              let rhino_material = new Module.Material();
-              rhino_material.default();
-              rhino_material.name = 'material_' + count;
+            result.geometries.forEach( child_geo => {
+              let rhino_material;
+              let rhino_attributes = new Module.ObjectAttributes();
 
               if (uuid_array.some( e => e.mesh_geometry_uuid === child_geo.uuid)) {
                 rhino_mesh = new Module.Mesh.createFromThreejsJSON( child_geo );
@@ -781,9 +776,13 @@
                   }
                 }
 
-                result.materials.forEach( ( child_mtl ) => {
+                result.materials.forEach( child_mtl => {
                   uuid_array.forEach( ( key_value_pair ) => {
                     if (key_value_pair.mesh_geometry_uuid === child_geo.uuid && key_value_pair.material_uuid === child_mtl.uuid) {
+                      rhino_material = new Module.Material();
+                      rhino_material.default();
+                      rhino_material.name = 'material_' + count;
+
                       if (child_mtl.name && child_mtl.name !== '') rhino_material.name = child_mtl.name;
 
                       if (child_mtl.color) {
@@ -804,11 +803,16 @@
                       if (child_mtl.metalness || child_mtl.reflectivity) rhino_material.reflectivity = child_mtl.metalness || child_mtl.reflectivity;
                       if (child_mtl.shininess) rhino_material.shine = child_mtl.shininess;
                       (child_mtl.opacity) ? (rhino_material.transparency = 1.0 - child_mtl.opacity) : rhino_material.transparency = 0.0;
+
+                      rhino_file.materials().add( rhino_material );
+
+                      rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
+                      rhino_attributes.materialIndex = count;
+
+                      count ++;
                     }
                   });
                 });
-
-                rhino_file.materials().add( rhino_material );
               } else if (uuid_array_points.some( e => e.points_geometry_uuid === child_geo.uuid)) {
                 let points_count = 0;
 
@@ -837,6 +841,10 @@
                   result.materials.forEach( ( child_mtl ) => {
                     uuid_array_points.forEach( ( key_value_pair ) => {
                       if (key_value_pair.points_geometry_uuid === child_geo.uuid && key_value_pair.material_uuid === child_mtl.uuid) {
+                        rhino_material = new Module.Material();
+                        rhino_material.default();
+                        rhino_material.name = 'material_' + count;
+
                         if (child_mtl.name && child_mtl.name !== '') rhino_material.name = child_mtl.name;
 
                         if (child_mtl.color) {
@@ -855,19 +863,18 @@
                         }
 
                         (child_mtl.opacity) ? (rhino_material.transparency = 1.0 - child_mtl.opacity) : rhino_material.transparency = 0.0;
+
+                        rhino_file.materials().add( rhino_material );
+
+                        rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
+                        rhino_attributes.materialIndex = count;
+
+                        count ++;
                       }
                     });
                   });
-
-                  rhino_file.materials().add( rhino_material );
                 }
               }
-
-              let rhino_attributes = new Module.ObjectAttributes();
-              rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
-              rhino_attributes.materialIndex = count;
-
-              count ++;
 
               rhino_file.objects().add( rhino_mesh, rhino_attributes );
             });
@@ -1865,6 +1872,7 @@
 
               // Add 3D object to scene
               scene.add( Obj );
+              Obj.position.set( 0, 0, 0 );
               camera.lookAt( Obj.position );
 
               set_initial_scale();
@@ -2038,6 +2046,7 @@
 
             // Add 3D object to scene
             scene.add( Obj );
+            Obj.position.set( 0, 0, 0 );
             camera.lookAt( Obj.position );
 
             set_initial_scale();
@@ -2273,6 +2282,7 @@
 
                     // Add 3D object to scene
                     scene.add( Obj );
+                    Obj.position.set( 0, 0, 0 );
                     camera.lookAt( Obj.position );
 
                     set_initial_scale();
@@ -2434,6 +2444,7 @@
 
                   // Add 3D object to scene
                   scene.add( Obj );
+                  Obj.position.set( 0, 0, 0 );
                   camera.lookAt( Obj.position );
 
                   set_initial_scale();

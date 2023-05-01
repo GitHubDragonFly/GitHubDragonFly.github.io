@@ -22,7 +22,7 @@
     <script src="../static/js/exporters/STLExporter.js" defer></script>
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
     <script src="../static/js/exporters/ColladaExporter.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@7.15.0/rhino3dm.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/rhino3dm.js" defer></script>
 
     <style>
       body, html {
@@ -599,6 +599,14 @@
         document.getElementById('export_names').selectedIndex = 0;
 
         if (gltf_obj) {
+          gltf_obj.traverse( function( child ) {
+      	    if (child.isMesh) {
+              if (child.geometry && !(child.geometry instanceof THREE.BufferGeometry)) {
+                child.geometry = new THREE.BufferGeometry().fromGeometry( child.geometry );
+              }
+            }
+          });
+
           if (selected_gltf_file) {
             filename = selected_gltf_file.name.substring( 0, selected_gltf_file.name.lastIndexOf('.') + 1 );
           } else if (selected_draco_file) {
@@ -609,28 +617,24 @@
             filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
-          let uuid_array = [], uuid_array_points = [], mesh_geometry_uuid, points_geometry_uuid, material_uuid;
+          let uuid_array = [], uuid_array_points = [];
 
           gltf_obj.traverse( ( child ) => {
             if (child.isMesh) {
-              mesh_geometry_uuid = child.geometry.uuid;
-
               if (Array.isArray( child.material)) {
                 child.material.forEach( mtl => {
-                  uuid_array.push( { mesh_geometry_uuid: mesh_geometry_uuid, material_uuid: mtl.uuid } );
+                  uuid_array.push( { mesh_geometry_uuid: child.geometry.uuid, material_uuid: mtl.uuid } );
                 });
               } else {
-                uuid_array.push( { mesh_geometry_uuid: mesh_geometry_uuid, material_uuid: child.material.uuid } );
+                uuid_array.push( { mesh_geometry_uuid: child.geometry.uuid, material_uuid: child.material.uuid } );
               }
             } else if (child.isPoints) {
-              points_geometry_uuid = child.geometry.uuid;
-
               if (Array.isArray( child.material)) {
                 child.material.forEach( mtl => {
-                  uuid_array_points.push( { points_geometry_uuid: points_geometry_uuid, material_uuid: mtl.uuid } );
+                  uuid_array_points.push( { points_geometry_uuid: child.geometry.uuid, material_uuid: mtl.uuid } );
                 });
               } else {
-                uuid_array_points.push( { points_geometry_uuid: points_geometry_uuid, material_uuid: child.material.uuid } );
+                uuid_array_points.push( { points_geometry_uuid: child.geometry.uuid, material_uuid: child.material.uuid } );
               }
             }
           });
@@ -642,19 +646,17 @@
 
           rhino3dm().then( ( Module ) => {
             let rhino_file = new Module.File3dm();
-
             let rhino_mesh;
 
-            result.geometries.forEach( ( child_geo ) => {
-              let rhino_material = new Module.Material();
-              rhino_material.default();
-              rhino_material.name = 'material_' + count;
+            result.geometries.forEach( child_geo => {
+              let rhino_material;
+              let rhino_attributes = new Module.ObjectAttributes();
 
-              if(uuid_array.some( e => e.mesh_geometry_uuid === child_geo.uuid)) {
+              if (uuid_array.some( e => e.mesh_geometry_uuid === child_geo.uuid)) {
                 rhino_mesh = new Module.Mesh.createFromThreejsJSON( child_geo );
 
                 // Add Vertex Colors as red / green / blue Uint8 values 0 - 255
-                if (child_geo.data && child_geo.data.attributes.color) {
+                if (child_geo.data && child_geo.data.attributes.color && child_geo.data.attributes.color.array.length > 0) {
                   let dataAsUint8Array = new Uint8Array( child_geo.data.attributes.color.array.length );
 
                   for ( let i = 0; i < dataAsUint8Array.length; i ++ ) {
@@ -669,9 +671,13 @@
                   }
                 }
 
-                result.materials.forEach( ( child_mtl ) => {
+                result.materials.forEach( child_mtl => {
                   uuid_array.forEach( ( key_value_pair ) => {
                     if (key_value_pair.mesh_geometry_uuid === child_geo.uuid && key_value_pair.material_uuid === child_mtl.uuid) {
+                      rhino_material = new Module.Material();
+                      rhino_material.default();
+                      rhino_material.name = 'material_' + count;
+
                       if (child_mtl.name && child_mtl.name !== '') rhino_material.name = child_mtl.name;
 
                       if (child_mtl.color) {
@@ -692,12 +698,17 @@
                       if (child_mtl.metalness || child_mtl.reflectivity) rhino_material.reflectivity = child_mtl.metalness || child_mtl.reflectivity;
                       if (child_mtl.shininess) rhino_material.shine = child_mtl.shininess;
                       (child_mtl.opacity) ? (rhino_material.transparency = 1.0 - child_mtl.opacity) : rhino_material.transparency = 0.0;
+
+                      rhino_file.materials().add( rhino_material );
+
+                      rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
+                      rhino_attributes.materialIndex = count;
+
+                      count ++;
                     }
                   });
                 });
-
-                rhino_file.materials().add( rhino_material );
-              } else if(uuid_array_points.some( e => e.points_geometry_uuid === child_geo.uuid)) {
+              } else if (uuid_array_points.some( e => e.points_geometry_uuid === child_geo.uuid)) {
                 let points_count = 0;
 
                 rhino_mesh = new Module.PointCloud();
@@ -725,6 +736,10 @@
                   result.materials.forEach( ( child_mtl ) => {
                     uuid_array_points.forEach( ( key_value_pair ) => {
                       if (key_value_pair.points_geometry_uuid === child_geo.uuid && key_value_pair.material_uuid === child_mtl.uuid) {
+                        rhino_material = new Module.Material();
+                        rhino_material.default();
+                        rhino_material.name = 'material_' + count;
+
                         if (child_mtl.name && child_mtl.name !== '') rhino_material.name = child_mtl.name;
 
                         if (child_mtl.color) {
@@ -743,19 +758,18 @@
                         }
 
                         (child_mtl.opacity) ? (rhino_material.transparency = 1.0 - child_mtl.opacity) : rhino_material.transparency = 0.0;
+
+                        rhino_file.materials().add( rhino_material );
+
+                        rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
+                        rhino_attributes.materialIndex = count;
+
+                        count ++;
                       }
                     });
                   });
-
-                  rhino_file.materials().add( rhino_material );
                 }
               }
-
-              let rhino_attributes = new Module.ObjectAttributes();
-              rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
-              rhino_attributes.materialIndex = count;
-
-              count ++;
 
               rhino_file.objects().add( rhino_mesh, rhino_attributes );
             });

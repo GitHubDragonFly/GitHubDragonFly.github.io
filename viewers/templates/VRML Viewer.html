@@ -19,7 +19,7 @@
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
     <script src="../static/js/exporters/GLTFExporter.js" defer></script>
     <script src="../static/js/exporters/ColladaExporter.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@7.15.0/rhino3dm.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/rhino3dm.min.js" defer></script>
 
     <style>
       body, html {
@@ -387,6 +387,7 @@
             URL.revokeObjectURL( blob );
             link.download = filename + 'mtl';
             link.click();
+
             exported[ 'tex' ].forEach( tex => {
               blob = new Blob( [ tex.data ], { type: 'image/png' } );
               link.href = URL.createObjectURL( blob );
@@ -556,18 +557,16 @@
             filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
           }
 
-          let uuid_array = [], mesh_geometry_uuid, mesh_material_uuid;
+          let uuid_array = [];
 
           vrml_obj.traverse( ( child ) => {
-            if (child.isMesh) {
-              mesh_geometry_uuid = child.geometry.uuid;
-
-              if (Array.isArray( child.material)) {
+            if (child.isMesh || child.isLineSegments) {
+              if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
-                  uuid_array.push( { mesh_geometry_uuid: mesh_geometry_uuid, mesh_material_uuid: mtl.uuid } );
+                  uuid_array.push( { type: 'Mesh', mesh_geometry_uuid: child.geometry.uuid, mesh_material_uuid: mtl.uuid } );
                 });
               } else {
-                uuid_array.push( { mesh_geometry_uuid: mesh_geometry_uuid, mesh_material_uuid: child.material.uuid } );
+                uuid_array.push( { type: 'Mesh', mesh_geometry_uuid: child.geometry.uuid, mesh_material_uuid: child.material.uuid } );
               }
             }
           });
@@ -579,12 +578,33 @@
 
           rhino3dm().then( ( Module ) => {
             let rhino_file = new Module.File3dm();
+            let rhino_mesh;
 
-            result.geometries.forEach( ( child_geo ) => {
-              let rhino_mesh = new Module.Mesh.createFromThreejsJSON( child_geo );
+            result.geometries.forEach( child_geo => {
+              let geo_isMesh = false, geo_isSphere = false;
+              let geo_isBox = false, geo_isCylinder = false;
+
+              if (child_geo.type === 'BufferGeometry') {
+                geo_isMesh = true;
+                rhino_mesh = new Module.Mesh.createFromThreejsJSON( child_geo );
+              } else if (child_geo.type === 'SphereGeometry') {
+                geo_isSphere = true;
+                let center = [ 0.0, 0.0, 0.0 ];
+                rhino_mesh = new Module.Sphere( center, child_geo.radius );
+              } else if (child_geo.type === 'BoxGeometry') {
+                geo_isBox = true;
+                //let min = [ 0.0, 0.0, 0.0 ];
+                //let max = [ 1.0, 1.0, 1.0 ];
+                //let bbox = new Module.BoundingBox( min, max );
+                //rhino_mesh = new Module.Box( bbox );
+              } else if (child_geo.type === 'CylinderGeometry') {
+                geo_isCylinder = true;
+                let circle = new Module.Circle( child_geo.radiusTop );
+                rhino_mesh = new Module.Cylinder( circle, child_geo.height );
+              }
 
               // Add Vertex Colors as red / green / blue Uint8 values 0 - 255
-              if (child_geo.data.attributes.color) {
+              if (child_geo.data && child_geo.data.attributes.color && child_geo.data.attributes.color.array.length > 0) {
                 let dataAsUint8Array = new Uint8Array( child_geo.data.attributes.color.array.length );
 
                 for ( let i = 0; i < dataAsUint8Array.length; i ++ ) {
@@ -599,13 +619,16 @@
                 }
               }
 
-              let rhino_material = new Module.Material();
-              rhino_material.default();
-              rhino_material.name = 'mesh_' + count + '_material';
+              let rhino_material;
+              let rhino_attributes = new Module.ObjectAttributes();
 
-              result.materials.forEach( ( child_mtl ) => {
-                uuid_array.forEach( ( key_value_pair ) => {
+              result.materials.forEach( child_mtl => {
+                uuid_array.forEach( key_value_pair => {
                   if (key_value_pair.mesh_geometry_uuid === child_geo.uuid && key_value_pair.mesh_material_uuid === child_mtl.uuid) {
+                    rhino_material = new Module.Material();
+                    rhino_material.default();
+                    rhino_material.name = 'material_' + count;
+
                     if (child_mtl.name && child_mtl.name !== '') rhino_material.name = child_mtl.name;
 
                     if (child_mtl.color) {
@@ -626,19 +649,22 @@
                     if (child_mtl.metalness || child_mtl.reflectivity) rhino_material.reflectivity = child_mtl.metalness || child_mtl.reflectivity;
                     if (child_mtl.shininess) rhino_material.shine = child_mtl.shininess;
                     (child_mtl.opacity) ? (rhino_material.transparency = 1.0 - child_mtl.opacity) : rhino_material.transparency = 0.0;
+
+                    rhino_file.materials().add( rhino_material );
+
+                    rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
+                    rhino_attributes.materialIndex = count;
+
+                    count ++;
                   }
                 });
               });
 
-              rhino_file.materials().add( rhino_material );
-
-              let rhino_attributes = new Module.ObjectAttributes();
-              rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
-              rhino_attributes.materialIndex = count;
-
-              count ++;
-
-              rhino_file.objects().add( rhino_mesh, rhino_attributes );
+              if (geo_isMesh === true) {
+                rhino_file.objects().add( rhino_mesh, rhino_attributes );
+              } else if (geo_isSphere === true) {
+                rhino_file.objects().addSphere( rhino_mesh, rhino_attributes );
+              }
             });
 
             let blob = new Blob( [ rhino_file.toByteArray() ], { type: 'application/octet-stream' } );
