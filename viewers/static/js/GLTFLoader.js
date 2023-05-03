@@ -5,10 +5,12 @@
 		constructor( manager ) {
 
 			super( manager );
+
 			this.dracoLoader = null;
 			this.ktx2Loader = null;
 			this.meshoptDecoder = null;
 			this.pluginCallbacks = [];
+
 			this.register( function ( parser ) {
 
 				return new GLTFMaterialsClearcoatExtension( parser );
@@ -1657,8 +1659,9 @@
 
 	function createPrimitiveKey( primitiveDef ) {
 
-		const dracoExtension = primitiveDef.extensions && primitiveDef.extensions[ EXTENSIONS.KHR_DRACO_MESH_COMPRESSION ];
 		let geometryKey;
+
+		const dracoExtension = primitiveDef.extensions && primitiveDef.extensions[ EXTENSIONS.KHR_DRACO_MESH_COMPRESSION ];
 
 		if ( dracoExtension ) {
 
@@ -1668,6 +1671,16 @@
 
 			geometryKey = primitiveDef.indices + ':' + createAttributesKey( primitiveDef.attributes ) + ':' + primitiveDef.mode;
 
+		}
+
+		if ( primitiveDef.targets !== undefined ) {
+
+			for ( let i = 0, il = primitiveDef.targets.length; i < il; i ++ ) {
+	
+				geometryKey += ':' + createAttributesKey( primitiveDef.targets[ i ] );
+	
+			}
+	
 		}
 
 		return geometryKey;
@@ -2280,24 +2293,28 @@
 			const source = json.images[ textureDef.source ];
 			let loader = this.textureLoader;
 
-			if (options.path.indexOf(',') > -1) {
+			if ( options.path.indexOf( ',' ) > -1 ) {
+
 				let temp_name = '';
 				let texture_set = false;
-				let blobs = options.path.split(',');
+				let blobs = options.path.split( ',' );
 
-				if (source.uri.indexOf('/') > -1) temp_name = source.uri.substring(source.uri.lastIndexOf('/') + 1);
+				if ( source.uri.indexOf( '/' ) > -1 ) temp_name = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
 
 				blobs.forEach( ( blob_name, index ) => {
-					if (blob_name === source.uri || blob_name === source.name || (temp_name !== '' && temp_name === blob_name)) {
-						if (!texture_set) {
-							if (!source.name) source.name = source.uri;
+
+					if ( blob_name === source.uri || blob_name === source.name || ( temp_name !== '' && temp_name === blob_name ) ) {
+
+						if ( texture_set === false ) {
+
+							if ( !source.name ) source.name = source.uri;
 							source.uri = blobs[ index + 1 ];
 							texture_set = true;
 						}
 					}
 				});
 
-				if (!texture_set && !options.path.includes('.bin')) options.path = '';
+				if ( texture_set === false && options.path.includes( '.bin' ) === false ) options.path = '';
 			}
 
 			if ( source.uri ) {
@@ -2331,6 +2348,7 @@
 			let isObjectURL = false;
 			let hasAlpha = true;
 			const isJPEG = sourceURI.search( /\.jpe?g($|\?)/i ) > 0 || sourceURI.search( /^data\:image\/jpeg/ ) === 0;
+
 			if ( source.mimeType === 'image/jpeg' || isJPEG ) hasAlpha = false;
 
 			if ( source.bufferView !== undefined ) {
@@ -2398,19 +2416,24 @@
 				}
 
 				texture.flipY = false;
-				if ( textureDef.name ) texture.name = textureDef.name; // When there is definitely no alpha channel in the texture, set THREE.RGBFormat to save space.
+				if ( textureDef.name ) texture.name = textureDef.name;
 
+				// When there is definitely no alpha channel in the texture, set THREE.RGBFormat to save space.
 				if ( ! hasAlpha ) texture.format = THREE.RGBFormat;
+
 				const samplers = json.samplers || {};
 				const sampler = samplers[ textureDef.sampler ] || {};
+
 				texture.magFilter = WEBGL_FILTERS[ sampler.magFilter ] || THREE.LinearFilter;
 				texture.minFilter = WEBGL_FILTERS[ sampler.minFilter ] || THREE.LinearMipmapLinearFilter;
 				texture.wrapS = WEBGL_WRAPPINGS[ sampler.wrapS ] || THREE.RepeatWrapping;
 				texture.wrapT = WEBGL_WRAPPINGS[ sampler.wrapT ] || THREE.RepeatWrapping;
+
 				parser.associations.set( texture, {
 					type: 'textures',
 					index: textureIndex
 				} );
+
 				return texture;
 
 			} ).catch( function () {
@@ -2419,7 +2442,9 @@
 				return null;
 
 			} );
+
 			this.textureCache[ cacheKey ] = promise;
+
 			return promise;
 
 		}
@@ -2435,7 +2460,10 @@
 		assignTexture( materialParams, mapName, mapDef ) {
 
 			const parser = this;
+
 			return this.getDependency( 'texture', mapDef.index ).then( function ( texture ) {
+
+				if ( ! texture ) return null;
 
 				// Materials sample aoMap from UV set 1 and other maps from UV set 0 - this can't be configured
 				// However, we will copy UV set 0 to UV set 1 on demand for aoMap
@@ -2922,7 +2950,10 @@
 
 					mesh.name = parser.createUniqueName( meshDef.name || 'mesh_' + meshIndex );
 					assignExtrasToUserData( mesh, meshDef );
+
 					if ( primitive.extensions ) addUnknownExtensionsToUserData( extensions, mesh, primitive );
+					if ( meshDef.extensions ) addUnknownExtensionsToUserData( extensions, mesh, meshDef );
+
 					parser.assignFinalMaterial( mesh );
 					meshes.push( mesh );
 
