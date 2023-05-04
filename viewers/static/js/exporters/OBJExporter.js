@@ -65,14 +65,14 @@
 					let temp_name = mesh.material.name;
 
 					if (material_names.includes( temp_name ) === false || material_colors.temp_name !== mesh.material.color) {
-						if (material_colors.temp_name !== mesh.material.color) mesh.material.name = temp_name + '_' + mesh.material.id;
+						if (material_colors.temp_name !== mesh.material.color) mesh.material.name = temp_name;
 
 						material_names.push( mesh.material.name );
 						material_colors[ mesh.material.name ] = mesh.material.color;
 					}
 
 					output += 'usemtl ' + mesh.material.name + '\n';
-					materials[ mesh.material.id ] = mesh.material;
+					materials[ mesh.material.name ] = mesh.material;
 
 				} else if ( mesh.material && Array.isArray( mesh.material ) ) {
 
@@ -104,7 +104,7 @@
 				} else if ( mesh.material && vertex_colors === undefined ) {
 
 					output += 'usemtl material' + mesh.material.id + '\n';
-					materials[ mesh.material.id ] = mesh.material;
+					materials[ 'material' + mesh.material.id ] = mesh.material;
 
 				} // vertices
 
