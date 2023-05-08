@@ -54,12 +54,7 @@ Copy the following base64 string, which represents the `Load Image.png` file fou
 
 Copy any or all of the following and then paste it within the `URL` option of the Texture Viewer (mind the `comma` if selecting a single link):
 
-- `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/compressed/canestra_di_frutta_caravaggio.basis, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/floors/FloorsCheckerboard_S_Diffuse.jpg, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/lottie/24017-lottie-logo-animation.json, 
-https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/memorial.exr, 
-https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/kandao3.jpg, 
-https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/pano.webm, 
-https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/sintel.mp4, 
-https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/sintel.ogv`
+- `https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/compressed/canestra_di_frutta_caravaggio.basis, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/floors/FloorsCheckerboard_S_Diffuse.jpg, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/lottie/24017-lottie-logo-animation.json, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/memorial.exr, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/kandao3.jpg, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/pano.webm, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/sintel.mp4, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/sintel.ogv, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/royal_esplanade_1k.hdr`
 
 # Additional Resources
 
