@@ -6,6 +6,8 @@ License for three.js extensions is in the `viewers/static/jsm/extensions` folder
 
 See `viewers/static/js/omggif` folder for licenses and Animated GIF export info, related to mrdoob's [example](https://github.com/mrdoob/omggif-example) and [omggif](https://github.com/deanm/omggif) library
 
+See `viewers/static/js/model-tag` folder for license related to mrdoob's [model-tag](https://github.com/mrdoob/model-tag) used in `GLTF Legacy` viewer
+
 jQuery license can be seen [here](https://jquery.org/license/)
 
 OrbitControlsGizmo MIT license can be seen [here](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo/blob/master/LICENSE)
