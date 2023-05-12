@@ -20725,7 +20725,7 @@ function WebGLRenderer( parameters ) {
 
 		}
 
-		if (scene.rotate === true) scene.rotation.y += 0.00125;
+		if (scene.rotate === true) scene.rotation.y += 0.00175;
 
 		// Ensure depth buffer writing is enabled so it can be cleared on next render
 
@@ -42600,23 +42600,15 @@ class GLTFModelElement extends ModelElement {
 
 	attributeChangedCallback( attribute, oldValue, newValue ) {
 
-		// Clear the loader cache
-		if (this.cache) {
-
-			this.cache.removeAll();
-			this.cache = new GLTFRegistry();
-
-		}
-
 		var scope = this;
 
 		if ( attribute === 'src' ) {
 
-			if ( this.scene.children.length > 1 ) {
+			if ( scope.scene.children.length > 1 ) {
 
-				for ( var i = 0, l = this.scene.children.length; i < l; i++ ) {
+				for ( var i = 0, l = scope.scene.children.length; i < l; i++ ) {
 
-					this.scene.remove( this.scene.children[ i ] );
+					scope.scene.remove( scope.scene.children[ i ] );
 
 				}
 
@@ -42633,17 +42625,16 @@ class GLTFModelElement extends ModelElement {
 
 					if (data.cameras.length > 1) {
 
-						scope.camera = data.cameras[ 1 ]
+						// This is currently used for VC.gltf model
+						scope.camera = data.cameras[ 1 ];
 
 					} else {
 
 						scope.camera = data.cameras[ 0 ];
+
 					}
 
 				}
-
-				scope.camera.position.set( 0, 0, 25 );
-				scope.camera.lookAt( new Vector3( 0, 0, 0 ) );
 
 				if ( data.animations ) {
 
