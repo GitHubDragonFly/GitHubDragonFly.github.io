@@ -20725,6 +20725,8 @@ function WebGLRenderer( parameters ) {
 
 		}
 
+		if (scene.rotate === true) scene.rotation.y += 0.00125;
+
 		// Ensure depth buffer writing is enabled so it can be cleared on next render
 
 		state.setDepthTest( true );
@@ -40788,15 +40790,17 @@ class ModelElement extends HTMLElement {
 		scope.camera = new PerspectiveCamera();
 
 		scope.scene = new Scene();
+		scope.scene[ 'rotate' ] = false;
 		scope.scene.background = new Color().setRGB( 0.961, 0.961, 0.961 );
 		scope.scene.add( scope.camera );
 		scope.camera.position.set( 0, 0, 25 );
 		scope.camera.lookAt( new Vector3( 0, 0, 0 ) );
 
-		scope.renderer = new WebGLRenderer( { antialias: true } );
+		scope.renderer = new WebGLRenderer( { antialias: true, alpha: true } );
+		scope.renderer.setSize( this.width, this.height );
 		scope.renderer.outputEncoding = sRGBEncoding;
 		scope.renderer.shadowMap.enabled = true;
-		scope.renderer.setSize( this.width, this.height );
+		scope.renderer.setClearColor( 0xFFFFFF, 0 );
 
 		var shadow = this.attachShadow( { mode: 'open' } );
 		shadow.appendChild( scope.renderer.domElement );
@@ -42596,15 +42600,21 @@ class GLTFModelElement extends ModelElement {
 
 	attributeChangedCallback( attribute, oldValue, newValue ) {
 
+		// Clear the loader cache
+		if (this.cache) {
+
+			this.cache.removeAll();
+			this.cache = new GLTFRegistry();
+
+		}
+
 		var scope = this;
 
 		if ( attribute === 'src' ) {
 
-			if (newValue === '#') return;
-
 			if ( this.scene.children.length > 1 ) {
 
-				for ( var i = 1, l = this.scene.children.length; i < l; i++ ) {
+				for ( var i = 0, l = this.scene.children.length; i < l; i++ ) {
 
 					this.scene.remove( this.scene.children[ i ] );
 
@@ -42612,7 +42622,28 @@ class GLTFModelElement extends ModelElement {
 
 			}
 
+			if (newValue === '#') return;
+
 			new GLTFLoader().load( newValue, function ( data ) {
+
+				scope.scene = data.scene;
+				scope.scene[ 'rotate' ] = false;
+
+				if (data.cameras.length > 0) {
+
+					if (data.cameras.length > 1) {
+
+						scope.camera = data.cameras[ 1 ]
+
+					} else {
+
+						scope.camera = data.cameras[ 0 ];
+					}
+
+				}
+
+				scope.camera.position.set( 0, 0, 25 );
+				scope.camera.lookAt( new Vector3( 0, 0, 0 ) );
 
 				if ( data.animations ) {
 
@@ -42625,21 +42656,6 @@ class GLTFModelElement extends ModelElement {
 						animation.loop = true;
 						animation.play();
 
-					}
-
-				}
-
-				scope.scene = data.scene;
-
-				if (data.cameras.length > 0) {
-
-					if (data.cameras.length > 1) {
-
-						scope.camera = data.cameras[ 1 ]
-
-					} else {
-
-						scope.camera = data.cameras[ 0 ];
 					}
 
 				}
