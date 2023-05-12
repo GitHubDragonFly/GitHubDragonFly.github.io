@@ -40,7 +40,7 @@ Number Type Converter
   - It might be better to use the actual [Online 3D Viewer](https://3dviewer.net/) for proper viewing and additional features
   - Most of the following notes do not apply to Quick Viewer in general
 - Special notes about `GLTF Legacy` viewer which is using modified version of mrdoob's [model-tag](https://github.com/mrdoob/model-tag):
-  - Seems to have a good fit on mobile devices
+  - Set in 500 x 500 viewport and seems to have a good fit on mobile devices
   - It is relatively simple and might have bugs and limitations
   - Supported formats: GLTF v1.0
   - Unsupported formats: GLB
