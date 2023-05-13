@@ -1,10 +1,9 @@
 # GitHubDragonFly.github.io
 GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 
-Designed to serve as a hub with links to repositories, Number Type Converter and FREE online [three.js](https://threejs.org) based 3D model viewers.
-Fit for a desktop but should be functional on mobile devices in spite of its tiny or bulky appearance. 
+Designed to serve as a hub with links to repositories, Number Type Converter and FREE online [three.js](https://threejs.org) based `3D Model` and `Texture` viewers. Fit for a desktop but should be functional on mobile devices in spite of its tiny or bulky appearance. 
 
-GitHub servers are providing correct access to files, so cloning or downloading this repository will not have the same functionality if run locally without some server. It appears that these servers are setting `CacheControl` to last only for 10 minutes so you might need to refresh the current page as needed.
+GitHub servers are providing correct access to files, so cloning or downloading this repository will not have the same functionality if run locally without some server. These servers are setting `CacheControl` to last only for 10 minutes so you might need to refresh the current page as needed.
 
 Repositories do contain projects in several different programming languages or a mix of: `Java` `VB.Net` `C#` `python` `JavaScript` `jQuery` `HTML/CSS` `shell`.
 
@@ -34,7 +33,7 @@ Number Type Converter
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
 - Special notes about `Quick Viewer` which is using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
   - Seems to have a rather good fit on mobile devices
-  - It is relatively simple and might have bugs and limitations
+  - It is relatively simple and might have bugs and library related limitations
   - Supported formats: GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
   - Unsupported formats: FCSTD (requires worker)
   - It might be better to use the actual [Online 3D Viewer](https://3dviewer.net/) for proper viewing and additional features
@@ -148,10 +147,10 @@ Number Type Converter
     - apply `edges`
     - zoom `in/out` or apply `Scale`
     - apply `flatShading`
-    - apply `Vertex Colors`
+    - apply `Vertex Colors` and `Random Vertex Colors`
     - change `ambient light` to white
     - change `background color` to white
-  - exporting some models might be better done using multiple viewers, for example MMD -> OBJ and then OBJ -> JSON might be better than straight MMD -> JSON export
+  - exporting some models might be better with multiple viewers, ex. MMD -> OBJ and then OBJ -> JSON might be better than straight MMD -> JSON export
   - experiment with all exporters available by exporting the original model as well as its exported versions
   - large resolution textures should be scaled down before loading, as an example download [`Bedroom`](https://casual-effects.com/data/index.html) with 8k images and try it as is and then scale them down to 2k (which seems to be optimal for browsers)
   - `Lambert` material does not have flatShading functionality
