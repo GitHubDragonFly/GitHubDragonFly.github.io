@@ -42384,7 +42384,7 @@ GLTFParser.prototype.loadNodes = function() {
 							}
 
 							// Replace Mesh with SkinnedMesh in library
-							if (skinEntry) {
+							if ( skinEntry ) {
 
 								var geometry = originalGeometry;
 								var material = originalMaterial;
@@ -42398,19 +42398,31 @@ GLTFParser.prototype.loadNodes = function() {
 
 								_each( skinEntry.jointNames, function( jointId, i ) {
 
-									var jointNode = __nodes[ jointId ];
+									var jointNode;
+
+									_each( __nodes, function( child ) {
+
+										if ( child.name === jointId ) {
+
+											jointNode = child;
+
+										}
+
+									});
 
 									if ( jointNode ) {
 
 										jointNode.skin = mesh;
-										bones.push(jointNode);
+										bones.push( jointNode );
 
 										var m = skinEntry.inverseBindMatrices.array;
 										var mat = new Matrix4().fromArray( m, i * 16 );
-										boneInverses.push(mat);
+										boneInverses.push( mat );
 
 									} else {
+
 										console.warn( "WARNING: joint: ''" + jointId + "' could not be found" );
+
 									}
 
 								});
