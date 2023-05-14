@@ -20725,7 +20725,7 @@ function WebGLRenderer( parameters ) {
 
 		}
 
-		if (scene.rotate === true) scene.rotation.y += 0.00175;
+		if (scene.rotate === true) scene.rotation.y += 0.01;
 
 		// Ensure depth buffer writing is enabled so it can be cleared on next render
 
@@ -42400,15 +42400,23 @@ GLTFParser.prototype.loadNodes = function() {
 
 									var jointNode;
 
-									_each( __nodes, function( child ) {
+									if ( __nodes[ jointId ] ) {
+	
+										jointNode = __nodes[ jointId ];
+	
+									} else {
 
-										if ( child.name === jointId ) {
+										_each( __nodes, function( child ) {
 
-											jointNode = child;
+											if ( child.name === jointId ) {
+	
+												jointNode = child;
+	
+											}
+	
+										});
 
-										}
-
-									});
+									}
 
 									if ( jointNode ) {
 
@@ -42635,38 +42643,31 @@ class GLTFModelElement extends ModelElement {
 
 				if (data.cameras.length > 0) {
 
-					if (data.cameras.length > 1) {
-
-						// This is currently used for VC.gltf model
-						scope.camera = data.cameras[ 1 ];
-
-					} else {
-
-						scope.camera = data.cameras[ 0 ];
-
-					}
+					scope[ 'cameras' ] = data.cameras;
+					scope.camera = data.cameras[ 0 ];
 
 				}
 
 				if ( data.animations ) {
 
-					var animations = data.animations;
+					scope[ 'animations' ] = data.animations;
 
-					for ( var i = 0, l = animations.length; i < l; i++ ) {
+					let animations = data.animations;
 
-						var animation = animations[ i ];
+					for ( let i = 0, l = animations.length; i < l; i++ ) {
 
-						animation.loop = true;
-						animation.play();
+						animations[ i ].loop = true;
+						animations[ i ].play();
 
 					}
 
 				}
 
-			} );
+				return scope.onLoad( data );
+
+			});
 
 		}
-
 	}
 
 }
