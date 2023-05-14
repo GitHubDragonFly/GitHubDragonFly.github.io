@@ -393,12 +393,11 @@
 
 								mtlOutput += '\n' + 'newmtl ' + name + '\n';
 
-								mtlOutput += 'Ns 15.0000\n';
+								mtlOutput += 'Ns 25.0000\n';
 								mtlOutput += 'Ni 1.5000\n';
-								mtlOutput += 'd 1.0000\n';
 								mtlOutput += 'Tr ' + transparency + '\n';
 								mtlOutput += 'Tf 1.0000 1.0000 1.0000\n';
-								mtlOutput += 'illum 2\n';
+								mtlOutput += 'illum 1\n';
 								mtlOutput += 'Ka 0.7500 0.7500 0.7500\n';
 								mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + ' ' + '\n';
 								mtlOutput += mat.specular ? 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + ' ' + '\n' : 'Ks 0.2500 0.2500 0.2500\n';
@@ -478,7 +477,7 @@
 
 									if ( mat.roughnessMap.image.src || mat.roughnessMap.image.data ) {
 
-										name = 'bumpMap' + count;
+										name = 'specularMap' + count;
 
 										textures.push( {
 											name,
@@ -486,7 +485,7 @@
 											data: imageToData( mat.roughnessMap.image, ext )
 										});
 
-										mtlOutput += 'map_bump ' + name + '.png' + '\n';
+										mtlOutput += 'map_Ks ' + name + '.png' + '\n';
 
 									}
 
@@ -568,12 +567,11 @@
 
 							mtlOutput += '\n' + 'newmtl ' + name + '\n';
 
-							mtlOutput += 'Ns 15.0000\n';
+							mtlOutput += 'Ns 25.0000\n';
 							mtlOutput += 'Ni 1.5000\n';
-							mtlOutput += 'd 1.0000\n';
 							mtlOutput += 'Tr ' + transparency + '\n';
 							mtlOutput += 'Tf 1.0000 1.0000 1.0000\n';
-							mtlOutput += 'illum 2\n';
+							mtlOutput += 'illum 1\n';
 							mtlOutput += 'Ka 0.7500 0.7500 0.7500\n';
 							mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + ' ' + '\n';
 							mtlOutput += mat.specular ? 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + ' ' + '\n' : 'Ks 0.2500 0.2500 0.2500\n';
@@ -653,7 +651,7 @@
 
 								if ( mat.roughnessMap.image.src || mat.roughnessMap.image.data ) {
 
-									name = 'bumpMap' + count;
+									name = 'specularMap' + count;
 
 									textures.push( {
 										name,
@@ -661,7 +659,7 @@
 										data: imageToData( mat.roughnessMap.image, ext )
 									});
 
-									mtlOutput += 'map_bump ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ks ' + name + '.png' + '\n';
 
 								}
 
