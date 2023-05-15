@@ -21,6 +21,7 @@
     <script src="../static/js/exporters/PLYExporter.js" defer></script>
     <script src="../static/js/exporters/STLExporter.js" defer></script>
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
+    <script src="../static/js/exporters/GLTFExporter.js" defer></script>
     <script src="../static/js/exporters/ColladaExporter.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/rhino3dm.js" defer></script>
 
@@ -265,6 +266,8 @@
           <option value="stl" onclick="export_stl();">STL</option>
           <option value="obj" onclick="export_obj();">OBJ</option>
           <option value="dae" onclick="export_dae();">DAE</option>
+          <option value="glb" onclick="export_glb();">GLB</option>
+          <option value="gltf" onclick="export_gltf();">GLTF</option>
           <option value="json" onclick="export_json();">JSON</option>
           <option value="apng" onclick="export_animated_png();">APNG</option>
         </select>
@@ -326,6 +329,7 @@
         <button id="btn_flat" title="Flat Shading" onclick="set_flat();" disabled>F</button>
         <button id="btn_lines" title="Lines" onclick="update_line_visibility();" disabled>L</button>
         <button id="btn_variants" title="Variants" onclick="switch_variant();" style="min-width: 28px;" disabled>V</button>
+        <button id="btn_cameras" title="Cameras" onclick="switch_camera();" style="min-width: 28px;" disabled>C0</button>
         <button id="btn_animate" title="Animations" onclick="animate_gltf();" style="min-width: 28px;" disabled>A</button>
         <button id="btn_extras" title="Morphs" onclick="animate_extra();" style="min-width: 28px;" disabled>X</button>
         <button id="btn_mtl_side" title="Material Side" onclick="switch_mtl_side();" style="min-width: 28px;" disabled>DS</button>
@@ -555,9 +559,10 @@
 
     <script>
       var gltfInstancingExtension, gltfMaterialsVariantsExtension, gltfTextureDDSExtension, gltfVideoTextureExtension;
-      var manager, texture_loader, gltf_loader, draco_loader, tga_loader, dds_loader, rgbe_loader;
+      var texture_loader, gltf_loader, draco_loader, tga_loader, dds_loader, rgbe_loader;
       var animations, animation_mixer, current_animation, extras, current_extra, clock;
-      var renderer, scene, camera, gltf_obj, current_side, resource_path, edges, edges_visible;
+      var manager, renderer, scene, scenes, default_camera, camera, cameras, cam_id;
+      var gltf_obj, current_side, resource_path, edges, edges_visible;
       var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
       var variants, current_variant, variants_available, draco_material;
@@ -739,6 +744,73 @@
               URL.revokeObjectURL( blob );
             });
           }
+        }
+      }
+
+      function export_gltf() {
+        document.getElementById('export_names').selectedIndex = 0;
+
+        const gltf_exporter = new THREE.GLTFExporter( manager );
+
+        if (gltf_obj) {
+          if (selected_gltf_file) {
+            filename = selected_gltf_file.name.substring( 0, selected_gltf_file.name.lastIndexOf('.') + 1 );
+          } else if (selected_draco_file) {
+            filename = selected_draco_file.name.substring( 0, selected_draco_file.name.lastIndexOf('.') + 1 );
+          } else if (selected_gltf_url_file) {
+            filename = selected_gltf_url_file.substring( selected_gltf_url_file.lastIndexOf('/') + 1, selected_gltf_url_file.lastIndexOf('.') + 1 );
+          } else {
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
+          }
+
+          let options;
+
+          if (animations.length > 0) {
+            options = {	binary: false, maxTextureSize: 4096 || Infinity, animations: animations };
+          } else {
+            options = {	binary: false, maxTextureSize: 4096 || Infinity };
+          }
+
+          gltf_exporter.parse( gltf_obj, ( json ) => {
+            let string = JSON.stringify( json, null, 2 );
+            let blob = new Blob( [ string ], { type: 'text/plain' } );
+            link.href = URL.createObjectURL( blob );
+            link.download = filename + 'gltf';
+            link.click();
+          }, function( error ) { console.log( error ); }, options );
+        }
+      }
+
+      function export_glb() {
+        document.getElementById('export_names').selectedIndex = 0;
+
+        const gltf_exporter = new THREE.GLTFExporter( manager );
+
+        if (gltf_obj) {
+          if (selected_gltf_file) {
+            filename = selected_gltf_file.name.substring( 0, selected_gltf_file.name.lastIndexOf('.') + 1 );
+          } else if (selected_draco_file) {
+            filename = selected_draco_file.name.substring( 0, selected_draco_file.name.lastIndexOf('.') + 1 );
+          } else if (selected_gltf_url_file) {
+            filename = selected_gltf_url_file.substring( selected_gltf_url_file.lastIndexOf('/') + 1, selected_gltf_url_file.lastIndexOf('.') + 1 );
+          } else {
+            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
+          }
+
+          let options;
+
+          if (animations.length > 0) {
+            options = {	binary: true, maxTextureSize: 4096 || Infinity, animations: animations };
+          } else {
+            options = {	binary: true, maxTextureSize: 4096 || Infinity };
+          }
+
+          gltf_exporter.parse( gltf_obj, ( json ) => {
+            let blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+            link.href = URL.createObjectURL( blob );
+            link.download = filename + 'glb';
+            link.click();
+          }, function( error ) { console.log( error ); }, options );
         }
       }
 
@@ -1520,6 +1592,22 @@
         }
       }
 
+      function switch_camera() {
+        render_requested = false;
+
+        if (cam_id === cameras.length) {
+          cam_id = 0;
+          default_camera = camera;
+        } else {
+          default_camera = cameras[ cam_id ];
+          cam_id ++;
+        }
+
+        document.getElementById('btn_cameras').innerHTML = 'C' + cam_id;
+
+        render_requested = true;
+      }
+
       function switch_variant() {
         if (variants_available === true) {
           if (current_variant === variants.length - 1) {
@@ -1704,6 +1792,9 @@
         texture_files_ktx2 = [];
         resource_path = '';
         variants = null;
+        cameras = null;
+        cam_id = 0;
+        scenes = null;
         animations = [];
         animation_mixer = null;
         animation_running = false;
@@ -1933,6 +2024,17 @@
 
         gltf_loader.load( URL.createObjectURL( selected_gltf_file ), async function( gltf ) {
           URL.revokeObjectURL( selected_gltf_file );
+
+          scenes = gltf.scenes;
+
+          cameras = gltf.cameras;
+
+          if (cameras && cameras.length > 0) {
+            document.getElementById('btn_cameras').disabled = false;
+            document.getElementById('btn_cameras').style.backgroundColor = 'lightgreen';
+          } else {
+            document.getElementById('btn_cameras').disabled = true;
+          }
 
           animations = gltf.animations;
 
@@ -2354,6 +2456,17 @@
             });
           } else {
             gltf_loader.load( selected_gltf_url_file, async gltf => {
+              scenes = gltf.scenes;
+
+              cameras = gltf.cameras;
+
+              if (cameras && cameras.length > 0) {
+                document.getElementById('btn_cameras').disabled = false;
+                document.getElementById('btn_cameras').style.backgroundColor = 'lightgreen';
+              } else {
+                document.getElementById('btn_cameras').disabled = true;
+              }
+
               animations = gltf.animations;
 
               if (animations.length > 0) {
@@ -2896,7 +3009,7 @@
         document.getElementById('scale_01x').checked = false;
         document.getElementById('scale_10x').checked = false;
 
-        // Reset flaatShading, edges, lines, material side, animation, variant, extras, reflectivity and vertex_colors related values
+        // Reset flatShading, edges, lines, material side, animation, variant, extras and reflectivity related values
         flat_shading_enabled = false;
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         edges_visible = false;
@@ -2914,6 +3027,13 @@
         reflect = false;
         document.getElementById('btn_reflective').disabled = true;
         document.getElementById('btn_reflective').style.backgroundColor = '#d1cefc';
+
+        // Reset camera and vertex colors related values
+        if (cameras) {
+          cam_id = cameras.length;
+          switch_camera();
+          document.getElementById('btn_cameras').style.backgroundColor = '#d1cefc';
+        }
         vertex_colors_enabled = false;
         document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
         random_vertex_colors_enabled = false;
@@ -2945,13 +3065,14 @@
         }
 
         if (reset === false) {
-          // Page (re)loading so reset the file input, URL entry, spinner, error, lines / animate / variants / extras buttons and disable controls
+          // Page (re)loading
           document.getElementById('file_input').value = '';
           document.getElementById('div_spinner').style.display = 'block';
           document.getElementById('div_error').style.display = 'none';
           document.getElementById('btn_lines').disabled = true;
           document.getElementById('btn_animate').disabled = true;
           document.getElementById('btn_extras').disabled = true;
+          document.getElementById('btn_cameras').disabled = true;
           document.getElementById('btn_variants').disabled = true;
           document.getElementById('btn_variants').style.backgroundColor = '#d1cefc';
           document.getElementById('edge_color').disabled = true;
