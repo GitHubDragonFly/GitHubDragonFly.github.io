@@ -3,9 +3,9 @@
 Copy any of the following links and then paste it within the `URL` option of the corresponding viewer:
 
 - access to [three.js](https://github.com/mrdoob/three.js/tree/master/examples) examples can be achieved with the following URL format, mind the correct path after `models`:
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/LittlestTokyo.glb`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/RobotExpressive/RobotExpressive.glb`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/collada/abb_irb52_7_120.dae`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vrml/house.wrl`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vrml/extrusion3.wrl`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/fbx/stanford-bunny.fbx`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pdb/diamond.pdb`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ply/binary/Lucy100k.ply`
@@ -21,10 +21,10 @@ Copy any of the following links and then paste it within the `URL` option of the
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ifc/rac_advanced_sample_project.ifc`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.mtl, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.obj`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_v2.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_camera.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/audios/wavefile_short.mp3`
-- access to [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) v1.0 GLTF examples (GLTF Legacy viewer), mind the correct path after `1.0`:
-  - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/1.0/2CylinderEngine/glTF/2CylinderEngine.gltf`
+- access to [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF v1.0 examples for GLTF Legacy viewer, mind the correct path after `1.0`:
+  - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/1.0/VC/glTF-Embedded/VC.gltf`
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/1.0/Avocado/glTF-Embedded/Avocado.gltf`
-- access to [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) v2.0 GLTF examples (GLTF Viewer), mind the correct path after `2.0`:
+- access to [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF v2.0 examples for GLTF Viewer, mind the correct path after `2.0`:
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Sponza/glTF/Sponza.gltf`
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf`
 - access to some PCD example files at [Point Cloud Library (PCL)](https://github.com/PointCloudLibrary):
@@ -51,11 +51,11 @@ Copy any of the following links and then paste it within the `URL` option of the
   - `https://raw.githubusercontent.com/antlafarge/ALLoader/master/examples/textures/, https://raw.githubusercontent.com/antlafarge/ALLoader/master/examples/fbx/crate.fbx`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3ds/portalgun/textures/, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3ds/portalgun/portalgun.3ds`
 
-Copy the following base64 string, which represents the `Load Image.png` file found in the `images` folder, and then paste it within the `URL` option of the Texture Viewer:
+For base64 string testing - copy the following, which represents the `Load Image.png` file found in the `images` folder, and then paste it within the `URL` option of the Texture Viewer:
 
 - `iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAACXBIWXMAAA7DAAAOwwHHb6hkAAADK0lEQVR4nO2b0ZWrMAwFqYuCqIdqaIZi/BIgCQE7K4F1JnmXj/nZE5vBsmxvrDQppeaCAxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxdQBxf4HYbU3YarG1L6gQCMqW+b1My2XzB4FRi622i1qR9/IQBjn9pb1+1syw9eBca+vY1Wl+YE+PYABM0WjriMDhEeuubcbJkC2Kxw9LVr2/gnw7aPtg3L6K+bLfvgLf21fRoNQbgvFduB8kyI7GeXgNTegIMCMJ8WDs2W0tJ1dkmb2hsCUHhO1PofE4DDs+VD5iyburXPeRZv+DODys+f+jNmIB6Aw7Pl0yAbM+A58G+DaFwSi8+f20ed6Cp36FuvrYM8BfWvPovtjUtiKXOd2QcH4MT6X3xRW5/FjXbq17B/lAIQfKSu2+Gp2ZLLnnnwLSeqeel7H6j5b9YT0P5Zz/ZB63/1ALxeOIdlFi1BWLWzB3Pf9p41rg10e/7v+vCvVEI6vbgC8DPgAurgAurgAurgAurgAurgAurgAurgAurgAurgAurgAurgAuo4Prz/ujfye3IV3A0iKwQUcTY4ced7USMA/jvfx43U8HZbtmTQcoW5vsEy9RtR/eZ1eFxhHrq9OxoAd83Pa994vdhKfJVJnuq1OtVvm4A53u1x9br+bO5OunoA3Ot/9pI+X6dzem85Wf3ma3+8euNUANwVYtmXzf/Qwds3U/32aQ8MD4C9RORBtqAqGxR7QW9k9Zu1fbnyw78P2APgrvnxLDXGn/9EVb9Znx9QJWf+oH+TyQ/KNIO3M81V+wlWvwX88sf8wZrr//YFrBtwRPXb8zhqerfHqS5fwn4kMMaZ7z9vZwe1kMLZrPg4AGz127EDwMkM+G8Jrn6+ArDinpWW/0muAISQ+TYXnPmCAfhOcAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1cAF1/gExuzI67FxMYAAAAABJRU5ErkJggg==`
 
-Copy any or all of the following and then paste it within the `URL` option of the Texture Viewer (mind the `comma` if selecting a single link):
+For multiple image format testing - copy all of the following and then paste it within the `URL` option of the Texture Viewer:
 
 - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/compressed/canestra_di_frutta_caravaggio.basis, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/floors/FloorsCheckerboard_S_Diffuse.jpg, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/lottie/24017-lottie-logo-animation.json, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/memorial.exr, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/kandao3.jpg, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/pano.webm, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/sintel.mp4, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/sintel.ogv, https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/textures/equirectangular/royal_esplanade_1k.hdr`
 
