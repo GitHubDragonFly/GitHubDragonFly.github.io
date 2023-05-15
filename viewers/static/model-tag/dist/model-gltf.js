@@ -40836,7 +40836,16 @@ GLTFLoader.prototype = {
 		var loader = new FileLoader( scope.manager );
 		loader.load( url, function( text ) {
 
-			scope.parse( JSON.parse( text ), onLoad, path );
+			try {
+				
+				scope.parse( JSON.parse( text ), onLoad, path );
+
+			} catch (error) {
+
+				console.log( error );
+				if ( onError ) onError();
+
+			}
 
 		}, onProgress, onError );
 
@@ -42665,7 +42674,7 @@ class GLTFModelElement extends ModelElement {
 
 				return scope.onLoad( data );
 
-			});
+			}, () => { console.log( 'Loading Model' ) }, () => { return scope.onError( 'Error parsing the model!' ) });
 
 		}
 	}
