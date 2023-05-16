@@ -28951,9 +28951,9 @@ Object.assign( FileLoader.prototype, {
 
 		} else {
 
-			if ( url.startsWith( 'blob:null' ) ) {
-					
-				let url_stripped = url.substring( 10 );
+			if ( url.startsWith( 'blob:' ) ) {
+
+				let url_stripped = url.substring( url.lastIndexOf( '/' ) + 1 );
 
 				if ( local_blobs ) {
 
@@ -29562,9 +29562,9 @@ Object.assign( TextureLoader.prototype, {
 		loader.setPath( this.path );
 
 
-		if ( url.startsWith( 'blob:null' ) ) {
+		if ( url.startsWith( 'blob:' ) ) {
 					
-			let url_stripped = url.substring( 10 );
+			let url_stripped = url.substring( url.lastIndexOf( '/' ) + 1 );
 
 			if ( local_blobs ) {
 
