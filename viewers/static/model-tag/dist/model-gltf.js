@@ -28945,7 +28945,25 @@ Object.assign( FileLoader.prototype, {
 
 		if ( url === undefined ) url = '';
 
-		if ( this.path !== undefined ) url = this.path + url;
+		if ( this.path !== undefined ) {
+
+			url = this.path + url;
+
+		} else {
+
+			if ( url.startsWith( 'blob:null' ) ) {
+					
+				let url_stripped = url.substring( 10 );
+
+				if ( local_blobs ) {
+
+					if ( local_blobs[ url_stripped ] ) url = local_blobs[ url_stripped ];
+
+				}
+
+			}
+
+		}
 
 		var scope = this;
 
@@ -29542,6 +29560,20 @@ Object.assign( TextureLoader.prototype, {
 		loader.setCrossOrigin( this.crossOrigin );
 		loader.setWithCredentials( this.withCredentials );
 		loader.setPath( this.path );
+
+
+		if ( url.startsWith( 'blob:null' ) ) {
+					
+			let url_stripped = url.substring( 10 );
+
+			if ( local_blobs ) {
+
+				if ( local_blobs[ url_stripped ] ) url = local_blobs[ url_stripped ];
+
+			}
+
+		}
+
 		loader.load( url, function ( image ) {
 
 			// JPEGs can't have an alpha channel, so memory can be saved by storing them as RGB.
@@ -40840,7 +40872,7 @@ GLTFLoader.prototype = {
 				
 				scope.parse( JSON.parse( text ), onLoad, path );
 
-			} catch (error) {
+			} catch ( error ) {
 
 				console.log( error );
 				if ( onError ) onError();
@@ -41563,7 +41595,7 @@ DeferredShaderMaterial.prototype.create = function() {
 
 /* GLTF PARSER */
 
-var GLTFParser = function(json, options) {
+var GLTFParser = function( json, options ) {
 
 	this.json = json || {};
 	this.options = options || {};
@@ -42606,6 +42638,9 @@ class GLTFModelElement extends ModelElement {
 
 		super();
 
+		const file_extensions = [ '.BIN', '.GLSL', '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP' ];
+		var local_blobs;
+
 		var scope = this;
 
 		scope.data = {};
@@ -42625,7 +42660,7 @@ class GLTFModelElement extends ModelElement {
 
 	}
 
-	static get observedAttributes() { return [ 'src' ]; }
+	static get observedAttributes() { return [ 'src', 'blobs' ]; }
 
 	attributeChangedCallback( attribute, oldValue, newValue ) {
 
@@ -42676,7 +42711,22 @@ class GLTFModelElement extends ModelElement {
 
 			}, () => { console.log( 'Loading Model' ) }, () => { return scope.onError( 'Error parsing the model!' ) });
 
+		} else if ( attribute === 'blobs' ) {
+
+			if (newValue === '#') return;
+
+			local_blobs = {};
+
+			let blobs = newValue.split( ',' );
+
+			for ( let i = 0, l = blobs.length; i < l; i += 2 ) {
+
+				local_blobs[ blobs[ i ] ] = blobs[ i + 1 ];
+
+			}
+
 		}
+
 	}
 
 }
