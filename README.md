@@ -115,6 +115,7 @@ Number Type Converter
   - `T` - textures
   - `V` - variants (GLTF viewer)
   - `X` - morphs
+  - `C0` - camera index with 0 being default (GLTF viewer)
   - `CS` - construction step (LDRAW viewer)
   - `MP` - material - Phong (MP), Standard (MS), Lambert (ML)
     - `*` - applicable to MS to provide envMap + metalness (VTK, PRWM viewers)
