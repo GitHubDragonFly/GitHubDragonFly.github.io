@@ -42,7 +42,7 @@ Number Type Converter
 - Special notes about `GLTF Legacy` viewer which is using modified version of mrdoob's [model-tag](https://github.com/mrdoob/model-tag):
   - Set in 500 x 500 viewport and seems to have a good fit on mobile devices
   - It is relatively simple and might have bugs and limitations
-  - Supported formats: GLTF v1.0
+  - Supported formats: GLTF v1.0 + BIN
   - Unsupported formats: GLB
   - It can export to GLTF / GLB v2.0 and OBJ formats (animations are not currently supported)
   - Most of the following notes do not apply to GLTF Legacy viewer in general
