@@ -10,7 +10,6 @@
 			let indexNormals = 0;
 			let mesh_count = 0;
 			let materials = {};
-			let multi_materials = {};
 			let material_names = [];
 			let material_colors = {};
 			const vertex = new THREE.Vector3();
@@ -24,6 +23,7 @@
 				let nbVertex = 0;
 				let nbNormals = 0;
 				let nbVertexUvs = 0;
+				let multi_materials = {};
 				const geometry = mesh.geometry;
 				const normalMatrixWorld = new THREE.Matrix3();
 
@@ -42,7 +42,6 @@
 
 				if (mesh.name === '') {
 					mesh[ 'name' ] = 'mesh_' + mesh_count;
-					mesh_count += 1;
 				} else {
 					mesh.name = mesh.name.replace( '#', '' );
 					mesh.name = mesh.name.replace( ' ', '_' );
@@ -54,7 +53,6 @@
 
 					if (mesh.material.name === '') {
 						mesh.material[ 'name' ] = 'mesh_material_' + mesh_count;
-						mesh_count += 1;
 					} else if ( mesh.material.name.toUpperCase().endsWith( '.PNG' ) || mesh.material.name.toUpperCase().endsWith( '.JPG' ) ) {
 						mesh.material[ 'name' ] = mesh.material.name.substring( 0, mesh.material.name.lastIndexOf( '.' ) );
 					}
@@ -64,8 +62,8 @@
 
 					let temp_name = mesh.material.name;
 
-					if (material_names.includes( temp_name ) === false || material_colors.temp_name !== mesh.material.color) {
-						if (material_colors.temp_name !== mesh.material.color) mesh.material.name = temp_name;
+					if (material_names.includes( temp_name ) === false || material_colors[ temp_name ] !== mesh.material.color) {
+						if (material_colors[ temp_name ] !== mesh.material.color) mesh.material.name = temp_name;
 
 						material_names.push( mesh.material.name );
 						material_colors[ mesh.material.name ] = mesh.material.color;
@@ -80,11 +78,13 @@
 
 					if ( groups !== undefined ) {
 
+						let mesh_group_material_count = 0;
+
 						for ( let i = 0, l = groups.length; i < l; i ++ ) {
 
 							if (mesh.material[ groups[ i ].materialIndex ].name === '') {
-								mesh.material[ groups[ i ].materialIndex ][ 'name' ] = 'mesh_group_material_' + mesh_count;
-								mesh_count += 1;
+								mesh.material[ groups[ i ].materialIndex ][ 'name' ] = 'mesh_group_material_' + mesh_group_material_count;
+								mesh_group_material_count += 1;
 							} else if ( mesh.material[ groups[ i ].materialIndex ].name.toUpperCase().endsWith( '.PNG' ) || mesh.material[ groups[ i ].materialIndex ].name.toUpperCase().endsWith( '.JPG' ) ) {
 								mesh.material[ groups[ i ].materialIndex ][ 'name' ] = mesh.material[ groups[ i ].materialIndex ].name.substring( 0, mesh.material[ groups[ i ].materialIndex ].name.lastIndexOf( '.' ) );
 							}
@@ -225,6 +225,8 @@
 				indexVertex += nbVertex;
 				indexVertexUvs += nbVertexUvs;
 				indexNormals += nbNormals;
+
+				mesh_count += 1;
 
 			}
 
