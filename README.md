@@ -111,7 +111,7 @@ Number Type Converter
   - `L` - lines (LDRAW and its exports in GLTF, OBJ, JSON viewers)
   - `O` - opacity
   - `P` - poses (MMD viewer)
-  - `S` - skeleton (JSON viewers)
+  - `S` - skeleton with demo (JSON viewers)
   - `T` - textures
   - `V` - variants (GLTF viewer)
   - `X` - morphs
