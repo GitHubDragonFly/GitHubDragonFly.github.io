@@ -140,7 +140,6 @@ Number Type Converter
 - JSON Viewer has timeouts which might need to be adjusted when loading large files
 - GLTF / FBX / DAE viewers will also export animations to JSON format
 - DAE (Collada) exporter appears to brighten up the original model as well as the exported model
-- GLTF / GLB exporter has a limitation related to shader material, seen when exporting MMD models
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
     - currently available only in `FBX` `OBJ` `PLY+STL` `PRWM` viewers and should be tried on simple models
     - see the Animated GIF of a cube using Animated GIF as a texture in the `images` folder
