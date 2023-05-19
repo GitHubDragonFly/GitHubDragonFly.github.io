@@ -973,17 +973,37 @@
 
 				}
 
-				const data = new Uint8ClampedArray( image.height * image.width * 4 );
-				for ( let i = 0; i < data.length; i += 4 ) {
+				// this seems to work fine for processing TGA images
+				if ( image.data && image.data.constructor === Uint8Array ) {
 
-					data[ i + 0 ] = image.data[ i + 0 ];
-					data[ i + 1 ] = image.data[ i + 1 ];
-					data[ i + 2 ] = image.data[ i + 2 ];
-					data[ i + 3 ] = image.data[ i + 3 ];
+					let imgData = ctx.createImageData( image.width, image.height );
 
+					for (let i = 0; i < imgData.data.length; i += 4) {
+
+						imgData.data[ i ] = image.data[ i ];
+					  	imgData.data[ i + 1 ] = image.data[ i + 1 ];
+					  	imgData.data[ i + 2 ] = image.data[ i + 2 ];
+					  	imgData.data[ i + 3 ] = image.data[ i + 3 ];
+
+					}
+
+					ctx.putImageData( imgData, 0, 0 );
+
+				} else {
+
+					const data = new Uint8ClampedArray( image.height * image.width * 4 );
+					for ( let i = 0; i < data.length; i += 4 ) {
+	
+						data[ i ] = image.data[ i ];
+						data[ i + 1 ] = image.data[ i + 1 ];
+						data[ i + 2 ] = image.data[ i + 2 ];
+						data[ i + 3 ] = image.data[ i + 3 ];
+	
+					}
+	
+					ctx.putImageData( new ImageData( data, image.width, image.height ), 0, 0 );
+	
 				}
-
-				ctx.putImageData( new ImageData( data, image.width, image.height ), 0, 0 );
 
 			} else {
 
@@ -1083,8 +1103,9 @@
 			if ( cache.materials.has( material ) ) return cache.materials.get( material );
 			if ( material.isShaderMaterial ) {
 
-				console.warn( 'GLTFExporter: THREE.ShaderMaterial not supported.' );
-				return null;
+				console.warn( 'GLTFExporter: THREE.ShaderMaterial not officially supported.' );
+				console.warn( 'GLTFExporter: Will attempt processing with modified code.' );
+				//return null;
 
 			}
 
