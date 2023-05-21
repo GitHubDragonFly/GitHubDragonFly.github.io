@@ -37,7 +37,7 @@ Number Type Converter
   - Might have bugs and library related limitations
   - Supported formats: GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
   - Unsupported formats: FCSTD (requires worker)
-  - It might be better to use the actual [Online 3D Viewer](https://3dviewer.net/) for proper viewing and additional features
+  - For proper viewing and additional features use the actual [Online 3D Viewer](https://3dviewer.net/) website
   - Most of the following notes do not apply to Quick Viewer in general
 - Special notes about `GLTF Legacy` viewer which is using modified version of mrdoob's [model-tag](https://github.com/mrdoob/model-tag):
   - Set in 500 x 500 viewport and seems to have a good fit on mobile devices
