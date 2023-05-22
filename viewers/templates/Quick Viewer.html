@@ -113,7 +113,7 @@
 
       .loading_msg {
         display: none;
-        color: lightcoral;
+        color: #B43232;
         text-align: center;
         background-color: transparent;
       }
@@ -424,6 +424,18 @@
           document.getElementById('edge_color').disabled = true;
           document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
         } else {
+          if (edges_added === false) {
+            o3dv_embedded_viewer.viewer.scene.traverse( child => {
+              if (child.isMesh) {
+                let innerEdgesGeometry = new THREE.EdgesGeometry( child.geometry, 30 );
+                let edge = new THREE.LineSegments( innerEdgesGeometry, outline_material );
+                edge.applyMatrix4( child.matrixWorld );
+                edges.add( edge );
+                edges_added = true;
+              }
+            });
+          }
+
           edges_visible = true;
 
           mesh !== undefined ? mesh.add( edges ) : o3dv_embedded_viewer.viewer.scene.add( edges );
@@ -441,14 +453,13 @@
       var local_files, url_files, selected_model_file;
       var selected_url_model_file, selected_url_file = '';
       var url_displayed = false, url_loading = false;
-      var edges, edges_visible, outline_material;
-      var filename = 'Model';
+      var edges, edges_added, edges_visible, outline_material;
 
       function init() {
         if (o3dv_embedded_viewer !== undefined) {
           o3dv_embedded_viewer.viewer.Clear();
 
-          if (edges !== undefined && edges.children.length > 0) {
+          if (edges_added && edges.children.length > 0) {
             edges.traverse( child => {
               if (child.type === 'LineSegments') {
                 if (child.material && child.material.map) child.material.map.dispose();
@@ -471,6 +482,7 @@
 
         outline_material = new THREE.LineBasicMaterial( { color: 0xFF0000 } );
         edges = new THREE.Group();
+        edges_added = false;
         edges_visible = false;
 
         if (url_loading === false) {
@@ -487,7 +499,6 @@
             } else if (fi.files[ i ].name.indexOf( '.' ) > -1 && model_extensions.includes( fi.files[ i ].name.toUpperCase().substring( fi.files[ i ].name.lastIndexOf( '.' ) ))) {
               selected_model_file = fi.files[ i ];
               local_files.push( fi.files[ i ] );
-              filename = fi.files[ i ].name.toUpperCase().substring( 0, fi.files[ i ].name.lastIndexOf( '.' ) );
             }
           };
 
@@ -541,7 +552,9 @@
             ext.startsWith( '.I' ) === true ? result = await occt.ReadIgesFile( fileBuffer, null ) : ( ext.startsWith( '.B' ) === true ? result = await occt.ReadBrepFile( fileBuffer, null ) : result = await occt.ReadStepFile( fileBuffer, null ));
 
             if (result.success && result.meshes.length > 0) {
-              let mesh_count = 1;
+              o3dv_embedded_viewer.model = new OV.Model();
+
+              let mesh_count = 0;
 
               // Modified version of the original example code at https://github.com/kovacsv/occt-import-js/blob/main/examples/three_viewer.html#L42-L89
               for (let resultMesh of result.meshes) {
@@ -560,9 +573,9 @@
 
                 if (resultMesh.color) {
                   let color = new THREE.Color( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
-                  defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, flatShading: false, color: color } );
+                  defaultMaterial = new THREE.MeshPhongMaterial( { name: 'default_material_' + mesh_count, side: THREE.DoubleSide, shininess: 50, opacity: 1, flatShading: false, color: color } );
                 } else {
-                  defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, flatShading: false, color: 0xFFFFFF } );
+                  defaultMaterial = new THREE.MeshPhongMaterial( { name: 'default_material_' + mesh_count, side: THREE.DoubleSide, shininess: 50, opacity: 1, flatShading: false, color: 0xFFFFFF } );
                 }
 
                 let materials = defaultMaterial;
@@ -572,7 +585,7 @@
 
                   for (let faceColor of resultMesh.brep_faces) {
                     let color = faceColor.color ? new THREE.Color( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] ) : defaultMaterial.color;
-                    materials.push( new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, flatShading: false, color: color } ) );
+                    materials.push( new THREE.MeshPhongMaterial( { name: 'material_' + mesh_count, side: THREE.DoubleSide, shininess: 50, opacity: 1, flatShading: false, color: color } ) );
                   }
 
                   let triangleCount = resultMesh.index.array.length / 3;
@@ -606,12 +619,25 @@
                     let innerEdgesGeometry = new THREE.EdgesGeometry( innerGeometry, 30 );
                     let edge = new THREE.LineSegments( innerEdgesGeometry, outline_material );
                     edges.add( edge );
+                    edges_added = true;
                   }
                 }
 
                 let new_mesh = new THREE.Mesh( geometry, materials );
 
                 mesh.add( new_mesh );
+
+                let ov_material = new OV.PhongMaterial();
+                ov_material.name = materials[ 1 ].name;
+                ov_material.color = new OV.RGBColor( materials[ 1 ].color.r * 100, materials[ 1 ].color.g * 100, materials[ 1 ].color.b * 100 );
+                ov_material.specular = new OV.RGBColor( 17, 17, 17 );
+                ov_material.shininess = 0.05;
+
+                o3dv_embedded_viewer.model.AddMaterial( ov_material );
+
+                let ov_mesh = OV.ConvertThreeGeometryToMesh( new_mesh.geometry, mesh_count, null );
+                ov_mesh.SetName( 'mesh_' + mesh_count );
+                o3dv_embedded_viewer.model.AddMeshToRootNode( ov_mesh );
 
                 if (Array.isArray( materials )) {
                   materials.forEach( mtl => {
@@ -628,6 +654,8 @@
 
                 geometry.dispose();
                 new_mesh.geometry.dispose();
+
+                mesh_count += 1;
               }
 
               // Set the initial scale of the object so it comes to view
@@ -646,6 +674,7 @@
               mesh.scale.multiplyScalar( 0.75 / y );
 
               o3dv_embedded_viewer.viewer.scene.add( mesh );
+              o3dv_embedded_viewer.viewer.mainModel.UpdateWorldMatrix();
               o3dv_embedded_viewer.viewer.Render();
             } else {
               document.getElementById('div_loading').innerHTML = 'No mesh detected!';
@@ -679,6 +708,7 @@
                 let edge = new THREE.LineSegments( innerEdgesGeometry, outline_material );
                 edge.applyMatrix4( child.matrixWorld );
                 edges.add( edge );
+                edges_added = true;
               }
             });
           }
@@ -817,6 +847,7 @@
                         let innerEdgesGeometry = new THREE.EdgesGeometry( innerGeometry, 30 );
                         let edge = new THREE.LineSegments( innerEdgesGeometry, outline_material );
                         edges.add( edge );
+                        edges_added = true;
                       }
                     }
 
@@ -890,6 +921,7 @@
                     let edge = new THREE.LineSegments( innerEdgesGeometry, outline_material );
                     edge.applyMatrix4( child.matrixWorld );
                     edges.add( edge );
+                    edges_added = true;
                   }
                 });
               }
