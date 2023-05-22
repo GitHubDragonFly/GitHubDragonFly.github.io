@@ -115,7 +115,7 @@ Number Type Converter
   - `T` - textures
   - `V` - variants (GLTF viewer)
   - `X` - morphs
-  - `C0` - camera index with 0 being default (GLTF viewer)
+  - `C0` - camera index, with 0 being default (GLTF viewer) (`CAM` + Index in GLTF Legacy viewer)
   - `CS` - construction step (LDRAW viewer)
   - `MP` - material - Phong (MP), Standard (MS), Lambert (ML)
     - `*` - applicable to MS to provide envMap + metalness (VTK, PRWM viewers)
@@ -153,7 +153,7 @@ Number Type Converter
     - change `background color` to white
   - exporting some models might be better with multiple viewers, ex. MMD -> OBJ and then OBJ -> JSON might be better than straight MMD -> JSON export
   - experiment with all exporters available by exporting the original model as well as its exported versions
-  - large resolution textures should be scaled down before loading, as an example download [`Bedroom`](https://casual-effects.com/data/index.html) with 8k images and try it as is and then scale them down to 2k (which seems to be optimal for browsers)
+  - large resolution textures should be scaled down before loading, as an example download [`Bedroom`](https://casual-effects.com/data/index.html) with 8k images and try it as is and then scale them down to 1k or 2k (which will speed up loading in browsers)
   - `Lambert` material does not have flatShading functionality
   - you could also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) and [Online 3D Viewer](https://3dviewer.net) exporters / converters
 
