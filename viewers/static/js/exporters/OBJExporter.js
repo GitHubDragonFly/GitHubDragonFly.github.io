@@ -395,16 +395,21 @@
 
 								mtlOutput += '\n' + 'newmtl ' + name + '\n';
 
-								mtlOutput += 'Ns 25.0000\n';
-								mtlOutput += 'Ni 1.5000\n';
 								mtlOutput += 'Tr ' + transparency + '\n';
 								mtlOutput += 'Tf 1.0000 1.0000 1.0000\n';
 								mtlOutput += 'illum 1\n';
-								mtlOutput += 'Ka 0.7500 0.7500 0.7500\n';
-								mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + ' ' + '\n';
-								mtlOutput += mat.specular ? 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + ' ' + '\n' : 'Ks 0.2500 0.2500 0.2500\n';
-								mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + ' ' + '\n' : 'Ke 0.0000 0.0000 0.0000\n';
-
+								if ( mat.specular ) mtlOutput += 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + '\n';
+								if ( mat.shininess ) mtlOutput += 'Ns ' + mat.shininess + '\n';
+								if ( mat.refractionRatio ) mtlOutput += 'Ni ' + mat.refractionRatio + '\n';
+								if ( mat.metalness ) mtlOutput += 'Pm ' + mat.metalness + '\n';
+								if ( mat.roughness ) mtlOutput += 'Pr ' + mat.roughness + '\n';
+								if ( mat.displacementBias ) mtlOutput += 'Pdb ' + mat.displacementBias + '\n';
+								if ( mat.displacementScale ) mtlOutput += 'Pds ' + mat.displacementScale + '\n';
+								if ( mat.lightMapIntensity ) mtlOutput += 'Pl ' + mat.lightMapIntensity + '\n';
+								mtlOutput += mat.aoMapIntensity ? 'Ka ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + '\n' : 'Ka 1 1 1\n';
+								mtlOutput += mat.color ? 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + '\n' : 'Kd 1 1 1\n';
+								mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + '\n' : 'Ke 0 0 0\n';
+	
 								if ( mat.map && mat.map.type === 1009 && mat.map.image ) {
 
 									if ( mat.map.image.src || mat.map.image.data ) {
@@ -469,7 +474,51 @@
 											data: imageToData( mat.bumpMap.image, ext )
 										});
 
-										mtlOutput += 'map_bump ' + name + '.png' + '\n';
+										if ( mat.bumpScale === 1 ) {
+
+											mtlOutput += 'map_bump ' + name + '.png' + '\n';
+	
+										} else {
+	
+											mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' ' + name + '.png' + '\n';
+	
+										}
+	
+									}
+
+								}
+
+								if ( mat.lightMap && mat.lightMap.type === 1009 && mat.lightMap.image ) {
+
+									if ( mat.lightMap.image.src || mat.lightMap.image.data ) {
+	
+										name = 'lightMap' + count;
+	
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.lightMap.image, ext )
+										});
+	
+										mtlOutput += 'map_Pl ' + name + '.png' + '\n';
+	
+									}
+	
+								}
+	
+								if ( mat.metalnessMap && mat.metalnessMap.type === 1009 && mat.metalnessMap.image ) {
+
+									if ( mat.metalnessMap.image.src || mat.metalnessMap.image.data ) {
+
+										name = 'metalnessMap' + count;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.metalnessMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pm ' + name + '.png' + '\n';
 
 									}
 
@@ -479,7 +528,7 @@
 
 									if ( mat.roughnessMap.image.src || mat.roughnessMap.image.data ) {
 
-										name = 'specularMap' + count;
+										name = 'roughnessMap' + count;
 
 										textures.push( {
 											name,
@@ -487,12 +536,30 @@
 											data: imageToData( mat.roughnessMap.image, ext )
 										});
 
-										mtlOutput += 'map_Ks ' + name + '.png' + '\n';
+										mtlOutput += 'map_Pr ' + name + '.png' + '\n';
 
 									}
 
 								}
 
+								if ( mat.displacementMap && mat.displacementMap.type === 1009 && mat.displacementMap.image ) {
+
+									if ( mat.displacementMap.image.src || mat.displacementMap.image.data ) {
+	
+										name = 'displacementMap' + count;
+	
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.displacementMap.image, ext )
+										});
+	
+										mtlOutput += 'map_Pd ' + name + '.png' + '\n';
+	
+									}
+	
+								}
+	
 								if ( mat.normalMap && mat.normalMap.type === 1009 && mat.normalMap.image ) {
 
 									if ( mat.normalMap.image.src || mat.normalMap.image.data ) {
@@ -569,15 +636,20 @@
 
 							mtlOutput += '\n' + 'newmtl ' + name + '\n';
 
-							mtlOutput += 'Ns 25.0000\n';
-							mtlOutput += 'Ni 1.5000\n';
 							mtlOutput += 'Tr ' + transparency + '\n';
 							mtlOutput += 'Tf 1.0000 1.0000 1.0000\n';
 							mtlOutput += 'illum 1\n';
-							mtlOutput += 'Ka 0.7500 0.7500 0.7500\n';
-							mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + ' ' + '\n';
-							mtlOutput += mat.specular ? 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + ' ' + '\n' : 'Ks 0.2500 0.2500 0.2500\n';
-							mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + ' ' + '\n' : 'Ke 0.0000 0.0000 0.0000\n';
+							if ( mat.specular ) mtlOutput += 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + '\n';
+							if ( mat.shininess ) mtlOutput += 'Ns ' + mat.shininess + '\n';
+							if ( mat.refractionRatio ) mtlOutput += 'Ni ' + mat.refractionRatio + '\n';
+							if ( mat.metalness ) mtlOutput += 'Pm ' + mat.metalness + '\n';
+							if ( mat.roughness ) mtlOutput += 'Pr ' + mat.roughness + '\n';
+							if ( mat.displacementBias ) mtlOutput += 'Pdb ' + mat.displacementBias + '\n';
+							if ( mat.displacementScale ) mtlOutput += 'Pds ' + mat.displacementScale + '\n';
+							if ( mat.lightMapIntensity ) mtlOutput += 'Pl ' + mat.lightMapIntensity + '\n';
+							mtlOutput += mat.aoMapIntensity ? 'Ka ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + '\n' : 'Ka 1 1 1\n';
+							mtlOutput += mat.color ? 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + '\n' : 'Kd 1 1 1\n';
+							mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + '\n' : 'Ke 0 0 0\n';
 
 							if ( mat.map && mat.map.type === 1009 && mat.map.image ) {
 
@@ -643,7 +715,51 @@
 										data: imageToData( mat.bumpMap.image, ext )
 									});
 
-									mtlOutput += 'map_bump ' + name + '.png' + '\n';
+									if ( mat.bumpScale === 1 ) {
+
+										mtlOutput += 'map_bump ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' ' + name + '.png' + '\n';
+
+									}
+
+								}
+
+							}
+
+							if ( mat.lightMap && mat.lightMap.type === 1009 && mat.lightMap.image ) {
+
+								if ( mat.lightMap.image.src || mat.lightMap.image.data ) {
+
+									name = 'lightMap' + count;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.lightMap.image, ext )
+									});
+
+									mtlOutput += 'map_Pl ' + name + '.png' + '\n';
+
+								}
+
+							}
+
+							if ( mat.metalnessMap && mat.metalnessMap.type === 1009 && mat.metalnessMap.image ) {
+
+								if ( mat.metalnessMap.image.src || mat.metalnessMap.image.data ) {
+
+									name = 'metalnessMap' + count;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.metalnessMap.image, ext )
+									});
+
+									mtlOutput += 'map_Pm ' + name + '.png' + '\n';
 
 								}
 
@@ -653,7 +769,7 @@
 
 								if ( mat.roughnessMap.image.src || mat.roughnessMap.image.data ) {
 
-									name = 'specularMap' + count;
+									name = 'roughnessMap' + count;
 
 									textures.push( {
 										name,
@@ -661,7 +777,25 @@
 										data: imageToData( mat.roughnessMap.image, ext )
 									});
 
-									mtlOutput += 'map_Ks ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pr ' + name + '.png' + '\n';
+
+								}
+
+							}
+
+							if ( mat.displacementMap && mat.displacementMap.type === 1009 && mat.displacementMap.image ) {
+
+								if ( mat.displacementMap.image.src || mat.displacementMap.image.data ) {
+
+									name = 'displacementMap' + count;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.displacementMap.image, ext )
+									});
+
+									mtlOutput += 'map_Pd ' + name + '.png' + '\n';
 
 								}
 
