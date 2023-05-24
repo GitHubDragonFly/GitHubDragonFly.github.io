@@ -331,6 +331,8 @@
 
 			}
 
+			let use_phong = true;
+
 			for ( const prop in mat ) {
 
 				const value = mat[ prop ];
@@ -391,7 +393,7 @@
 						params.transparent = true;
 						break;
 
-					case 'pm':
+					case 'pl':
 						// Lightmap intensity
 						params.lightMapIntensity = parseFloat( value );
 						break;
@@ -399,11 +401,13 @@
 					case 'pm':
 						// Metalness
 						params.metalness = parseFloat( value );
+						use_phong = false;
 						break;
 
 					case 'pr':
 						// Roughness
 						params.roughness = parseFloat( value );
+						use_phong = false;
 						break;
 
 					case 'pdb':
@@ -424,11 +428,13 @@
 					case 'map_pm':
 						// Metalness map
 						setMapForType( 'metalnessMap', value );
+						use_phong = false;
 						break;
 
 					case 'map_pr':
 						// Roughness map
 						setMapForType( 'roughnessMap', value );
+						use_phong = false;
 						break;
 
 					case 'map_pd':
@@ -474,13 +480,13 @@
 
 			}
 
-			if ( params.specular || params.specularMap || params.shininess ) {
+			if ( use_phong === true ) {
 
 				this.materials[ materialName ] = new THREE.MeshPhongMaterial( params );
 
 			} else {
 
-				this.materials[ materialName ] = new THREE.MeshStandardMaterial( params );
+				this.materials[ materialName ] = new THREE.MeshPhysicalMaterial( params );
 
 			}
 
