@@ -354,7 +354,12 @@
 						// Emissive using RGB values
 						params.emissive = new THREE.Color().fromArray( value );
 						break;
-
+	
+					case 'map_ka':
+						// Ambient occlusion map
+						setMapForType( 'aoMap', value );
+						break;
+		
 					case 'map_kd':
 						// Diffuse texture map
 						setMapForType( 'map', value );
@@ -384,6 +389,51 @@
 						// Alpha map
 						setMapForType( 'alphaMap', value );
 						params.transparent = true;
+						break;
+
+					case 'pm':
+						// Lightmap intensity
+						params.lightMapIntensity = parseFloat( value );
+						break;
+	
+					case 'pm':
+						// Metalness
+						params.metalness = parseFloat( value );
+						break;
+
+					case 'pr':
+						// Roughness
+						params.roughness = parseFloat( value );
+						break;
+
+					case 'pdb':
+						// Displacement bias
+						params.displacementBias = parseFloat( value );
+						break;
+
+					case 'pds':
+						// Displacement scale
+						params.displacementScale = parseFloat( value );
+						break;
+
+					case 'map_pl':
+						// Light map
+						setMapForType( 'lightMap', value );
+						break;
+	
+					case 'map_pm':
+						// Metalness map
+						setMapForType( 'metalnessMap', value );
+						break;
+
+					case 'map_pr':
+						// Roughness map
+						setMapForType( 'roughnessMap', value );
+						break;
+
+					case 'map_pd':
+						// Displacement map
+						setMapForType( 'displacementMap', value );
 						break;
 
 					case 'ns':
@@ -424,7 +474,16 @@
 
 			}
 
-			this.materials[ materialName ] = new THREE.MeshPhongMaterial( params );
+			if ( params.specular || params.specularMap || params.shininess ) {
+
+				this.materials[ materialName ] = new THREE.MeshPhongMaterial( params );
+
+			} else {
+
+				this.materials[ materialName ] = new THREE.MeshStandardMaterial( params );
+
+			}
+
 			return this.materials[ materialName ];
 
 		}
