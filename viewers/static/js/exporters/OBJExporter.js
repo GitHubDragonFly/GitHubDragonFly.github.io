@@ -409,10 +409,15 @@
 								if ( mat.clearcoat ) mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
 								if ( mat.clearcoatRoughness ) mtlOutput += 'Pccr ' + mat.clearcoatRoughness + '\n';
 								if ( mat.clearcoatNormalScale ) mtlOutput += 'Pccns ' + mat.clearcoatNormalScale.x + ' ' + mat.clearcoatNormalScale.y + '\n';
+								if ( mat.reflectivity ) mtlOutput += 'Pref ' + mat.reflectivity + '\n';
 								if ( mat.ior ) mtlOutput += 'Pior ' + mat.ior + '\n';
 								if ( mat.sheen ) mtlOutput += 'Psh ' + mat.sheen + '\n';
 								if ( mat.sheenColor ) mtlOutput += 'Pshc ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
 								if ( mat.sheenRoughness ) mtlOutput += 'Pshr ' + mat.sheenRoughness + '\n';
+								if ( mat.specularIntensity ) mtlOutput += 'Psi ' + mat.specularIntensity + '\n';
+								if ( mat.specularColor ) mtlOutput += 'Psc ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
+								if ( mat.thickness ) mtlOutput += 'Pth ' + mat.thickness + '\n';
+								if ( mat.transmission ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
 								mtlOutput += mat.aoMapIntensity ? 'Ka ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + '\n' : 'Ka 1 1 1\n';
 								mtlOutput += mat.color ? 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + '\n' : 'Kd 1 1 1\n';
 								mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + '\n' : 'Ke 0 0 0\n';
@@ -711,6 +716,78 @@
 
 								}
 
+								if ( mat.specularIntensityMap && mat.specularIntensityMap.type === 1009 && mat.specularIntensityMap.image ) {
+
+									if ( mat.specularIntensityMap.image.src || mat.specularIntensityMap.image.data ) {
+
+										name = 'specularIntensityMap' + count;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.specularIntensityMap.image, ext )
+										});
+
+										mtlOutput += 'map_Psim ' + name + '.png' + '\n';
+
+									}
+
+								}
+
+								if ( mat.specularColorMap && mat.specularColorMap.type === 1009 && mat.specularColorMap.image ) {
+
+									if ( mat.specularColorMap.image.src || mat.specularColorMap.image.data ) {
+
+										name = 'specularColorMap' + count;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.specularColorMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pscm ' + name + '.png' + '\n';
+
+									}
+
+								}
+
+								if ( mat.thicknessMap && mat.thicknessMap.type === 1009 && mat.thicknessMap.image ) {
+
+									if ( mat.thicknessMap.image.src || mat.thicknessMap.image.data ) {
+
+										name = 'thicknessMap' + count;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.thicknessMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pthm ' + name + '.png' + '\n';
+
+									}
+
+								}
+
+								if ( mat.transmissionMap && mat.transmissionMap.type === 1009 && mat.transmissionMap.image ) {
+
+									if ( mat.transmissionMap.image.src || mat.transmissionMap.image.data ) {
+
+										name = 'transmissionMap' + count;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.transmissionMap.image, ext )
+										});
+
+										mtlOutput += 'map_Ptrm ' + name + '.png' + '\n';
+
+									}
+
+								}
+
 								count += 1;
 
 							}
@@ -747,10 +824,15 @@
 							if ( mat.clearcoat ) mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
 							if ( mat.clearcoatRoughness ) mtlOutput += 'Pccr ' + mat.clearcoatRoughness + '\n';
 							if ( mat.clearcoatNormalScale ) mtlOutput += 'Pccns ' + mat.clearcoatNormalScale.x + mat.clearcoatNormalScale.y + '\n';
+							if ( mat.reflectivity ) mtlOutput += 'Pref ' + mat.reflectivity + '\n';
 							if ( mat.ior ) mtlOutput += 'Pior ' + mat.ior + '\n';
 							if ( mat.sheen ) mtlOutput += 'Psh ' + mat.sheen + '\n';
 							if ( mat.sheenColor ) mtlOutput += 'Pshc ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
 							if ( mat.sheenRoughness ) mtlOutput += 'Pshr ' + mat.sheenRoughness + '\n';
+							if ( mat.specularIntensity ) mtlOutput += 'Psi ' + mat.specularIntensity + '\n';
+							if ( mat.specularColor ) mtlOutput += 'Psc ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
+							if ( mat.thickness ) mtlOutput += 'Pth ' + mat.thickness + '\n';
+							if ( mat.transmission ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
 							mtlOutput += mat.aoMapIntensity ? 'Ka ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + '\n' : 'Ka 1 1 1\n';
 							mtlOutput += mat.color ? 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + '\n' : 'Kd 1 1 1\n';
 							mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + '\n' : 'Ke 0 0 0\n';
@@ -1044,6 +1126,78 @@
 									});
 
 									mtlOutput += 'map_Pshrm ' + name + '.png' + '\n';
+
+								}
+
+							}
+
+							if ( mat.specularIntensityMap && mat.specularIntensityMap.type === 1009 && mat.specularIntensityMap.image ) {
+
+								if ( mat.specularIntensityMap.image.src || mat.specularIntensityMap.image.data ) {
+
+									name = 'specularIntensityMap' + count;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.specularIntensityMap.image, ext )
+									});
+
+									mtlOutput += 'map_Psim ' + name + '.png' + '\n';
+
+								}
+
+							}
+
+							if ( mat.specularColorMap && mat.specularColorMap.type === 1009 && mat.specularColorMap.image ) {
+
+								if ( mat.specularColorMap.image.src || mat.specularColorMap.image.data ) {
+
+									name = 'specularColorMap' + count;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.specularColorMap.image, ext )
+									});
+
+									mtlOutput += 'map_Pscm ' + name + '.png' + '\n';
+
+								}
+
+							}
+
+							if ( mat.thicknessMap && mat.thicknessMap.type === 1009 && mat.thicknessMap.image ) {
+
+								if ( mat.thicknessMap.image.src || mat.thicknessMap.image.data ) {
+
+									name = 'thicknessMap' + count;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.thicknessMap.image, ext )
+									});
+
+									mtlOutput += 'map_Pthm ' + name + '.png' + '\n';
+
+								}
+
+							}
+
+							if ( mat.transmissionMap && mat.transmissionMap.type === 1009 && mat.transmissionMap.image ) {
+
+								if ( mat.transmissionMap.image.src || mat.transmissionMap.image.data ) {
+
+									name = 'transmissionMap' + count;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.transmissionMap.image, ext )
+									});
+
+									mtlOutput += 'map_Ptrm ' + name + '.png' + '\n';
 
 								}
 
