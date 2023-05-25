@@ -444,6 +444,12 @@
 						use_phong = false;
 						break;
 
+					case 'pref':
+						// Reflectivity
+						params.reflectivity = parseFloat( value );
+						use_phong = false;
+						break;
+	
 					case 'psh':
 						// The intensity of the sheen layer
 						params.sheen = parseFloat( value );
@@ -461,7 +467,31 @@
 						params.sheenRoughness = parseFloat( value );
 						use_phong = false;
 						break;
-							
+
+					case 'psi':
+						// Specular intensity
+						params.specularIntensity = parseFloat( value );
+						use_phong = false;
+						break;
+
+					case 'psc':
+						// Specular color
+						params.specularColor = new THREE.Color().fromArray( value );
+						use_phong = false;
+						break;
+
+					case 'pth':
+						// Thickness
+						params.thickness = parseFloat( value );
+						use_phong = false;
+						break;
+
+					case 'ptr':
+						// Transmission
+						params.transmission = parseFloat( value );
+						use_phong = false;
+						break;
+											
 					case 'map_pl':
 						// Light map
 						setMapForType( 'lightMap', value );
@@ -513,7 +543,31 @@
 						setMapForType( 'sheenRoughnessMap', value );
 						use_phong = false;
 						break;
-					
+
+					case 'map_psim':
+						// Specular intensity map
+						setMapForType( 'specularIntensityMap', value );
+						use_phong = false;
+						break;
+
+					case 'map_pscm':
+						// Specular color map
+						setMapForType( 'specularColorMap', value );
+						use_phong = false;
+						break;
+
+					case 'map_pthm':
+						// Thickness map
+						setMapForType( 'thicknessMap', value );
+						use_phong = false;
+						break;
+
+					case 'map_ptrm':
+						// Transmission map
+						setMapForType( 'transmissionMap', value );
+						use_phong = false;
+						break;
+									
 					case 'ns':
 						// The specular exponent (defines the focus of the specular highlight)
 						// A high exponent results in a tight, concentrated highlight. Ns values normally range from 0 to 1000.
