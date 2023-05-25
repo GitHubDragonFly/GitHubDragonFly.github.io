@@ -97,7 +97,7 @@ Number Type Converter
       - Select 1 copy of the texture and rename it if you wish, then update the corresponding MTL file entries to point to that texture
       - Delete all other copies of that same texture
       - Some models look better in OBJ format and this bug might eventually get fixed
-      - Depending on the model, this exporter might even crash your browser due to the number of textures to be exported and overuse of memory
+      - Depending on the model, this exporter might even crash your browser due to the number of textures to be exported and overuse of memory so be mindful of it and try testing it initially with some simple models
     - DAE (Collada) exporter might currently export multiple copies of the same texture but under different names:
       - Select 1 copy of the texture and rename it if you wish, then update the corresponding `<init_from>` lines inside the `<library_images>` section of the DAE file to point to that texture
       - Delete all other copies of that same texture
