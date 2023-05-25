@@ -406,10 +406,17 @@
 								if ( mat.displacementBias ) mtlOutput += 'Pdb ' + mat.displacementBias + '\n';
 								if ( mat.displacementScale ) mtlOutput += 'Pds ' + mat.displacementScale + '\n';
 								if ( mat.lightMapIntensity ) mtlOutput += 'Pl ' + mat.lightMapIntensity + '\n';
+								if ( mat.clearcoat ) mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
+								if ( mat.clearcoatRoughness ) mtlOutput += 'Pccr ' + mat.clearcoatRoughness + '\n';
+								if ( mat.clearcoatNormalScale ) mtlOutput += 'Pccns ' + mat.clearcoatNormalScale.x + ' ' + mat.clearcoatNormalScale.y + '\n';
+								if ( mat.ior ) mtlOutput += 'Pior ' + mat.ior + '\n';
+								if ( mat.sheen ) mtlOutput += 'Psh ' + mat.sheen + '\n';
+								if ( mat.sheenColor ) mtlOutput += 'Pshc ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
+								if ( mat.sheenRoughness ) mtlOutput += 'Pshr ' + mat.sheenRoughness + '\n';
 								mtlOutput += mat.aoMapIntensity ? 'Ka ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + '\n' : 'Ka 1 1 1\n';
 								mtlOutput += mat.color ? 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + '\n' : 'Kd 1 1 1\n';
 								mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + '\n' : 'Ke 0 0 0\n';
-	
+
 								if ( mat.map && mat.map.type === 1009 && mat.map.image ) {
 
 									if ( mat.map.image.src || mat.map.image.data ) {
@@ -477,13 +484,13 @@
 										if ( mat.bumpScale === 1 ) {
 
 											mtlOutput += 'map_bump ' + name + '.png' + '\n';
-	
+
 										} else {
-	
+
 											mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' ' + name + '.png' + '\n';
-	
+
 										}
-	
+
 									}
 
 								}
@@ -491,21 +498,21 @@
 								if ( mat.lightMap && mat.lightMap.type === 1009 && mat.lightMap.image ) {
 
 									if ( mat.lightMap.image.src || mat.lightMap.image.data ) {
-	
+
 										name = 'lightMap' + count;
-	
+
 										textures.push( {
 											name,
 											ext,
 											data: imageToData( mat.lightMap.image, ext )
 										});
-	
+
 										mtlOutput += 'map_Pl ' + name + '.png' + '\n';
-	
+
 									}
-	
+
 								}
-	
+
 								if ( mat.metalnessMap && mat.metalnessMap.type === 1009 && mat.metalnessMap.image ) {
 
 									if ( mat.metalnessMap.image.src || mat.metalnessMap.image.data ) {
@@ -545,21 +552,21 @@
 								if ( mat.displacementMap && mat.displacementMap.type === 1009 && mat.displacementMap.image ) {
 
 									if ( mat.displacementMap.image.src || mat.displacementMap.image.data ) {
-	
+
 										name = 'displacementMap' + count;
-	
+
 										textures.push( {
 											name,
 											ext,
 											data: imageToData( mat.displacementMap.image, ext )
 										});
-	
+
 										mtlOutput += 'map_Pd ' + name + '.png' + '\n';
-	
+
 									}
-	
+
 								}
-	
+
 								if ( mat.normalMap && mat.normalMap.type === 1009 && mat.normalMap.image ) {
 
 									if ( mat.normalMap.image.src || mat.normalMap.image.data ) {
@@ -614,6 +621,96 @@
 
 								}
 
+								if ( mat.clearcoatMap && mat.clearcoatMap.type === 1009 && mat.clearcoatMap.image ) {
+
+									if ( mat.clearcoatMap.image.src || mat.clearcoatMap.image.data ) {
+
+										name = 'clearcoatMap' + count;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.clearcoatMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pccm ' + name + '.png' + '\n';
+
+									}
+
+								}
+
+								if ( mat.clearcoatNormalMap && mat.clearcoatNormalMap.type === 1009 && mat.clearcoatNormalMap.image ) {
+
+									if ( mat.clearcoatNormalMap.image.src || mat.clearcoatNormalMap.image.data ) {
+
+										name = 'clearcoatNormalMap' + count;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.clearcoatNormalMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pccnm ' + name + '.png' + '\n';
+
+									}
+
+								}
+
+								if ( mat.clearcoatRoughnessMap && mat.clearcoatRoughnessMap.type === 1009 && mat.clearcoatRoughnessMap.image ) {
+
+									if ( mat.clearcoatRoughnessMap.image.src || mat.clearcoatRoughnessMap.image.data ) {
+
+										name = 'clearcoatRoughnessMap' + count;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.clearcoatRoughnessMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pccrm ' + name + '.png' + '\n';
+
+									}
+
+								}
+
+								if ( mat.sheenColorMap && mat.sheenColorMap.type === 1009 && mat.sheenColorMap.image ) {
+
+									if ( mat.sheenColorMap.image.src || mat.sheenColorMap.image.data ) {
+
+										name = 'sheenColorMap' + count;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.sheenColorMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pshcm ' + name + '.png' + '\n';
+
+									}
+
+								}
+
+								if ( mat.sheenRoughnessMap && mat.sheenRoughnessMap.type === 1009 && mat.sheenRoughnessMap.image ) {
+
+									if ( mat.sheenRoughnessMap.image.src || mat.sheenRoughnessMap.image.data ) {
+
+										name = 'sheenRoughnessMap' + count;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.sheenRoughnessMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pshrm ' + name + '.png' + '\n';
+
+									}
+
+								}
+
 								count += 1;
 
 							}
@@ -647,6 +744,13 @@
 							if ( mat.displacementBias ) mtlOutput += 'Pdb ' + mat.displacementBias + '\n';
 							if ( mat.displacementScale ) mtlOutput += 'Pds ' + mat.displacementScale + '\n';
 							if ( mat.lightMapIntensity ) mtlOutput += 'Pl ' + mat.lightMapIntensity + '\n';
+							if ( mat.clearcoat ) mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
+							if ( mat.clearcoatRoughness ) mtlOutput += 'Pccr ' + mat.clearcoatRoughness + '\n';
+							if ( mat.clearcoatNormalScale ) mtlOutput += 'Pccns ' + mat.clearcoatNormalScale.x + mat.clearcoatNormalScale.y + '\n';
+							if ( mat.ior ) mtlOutput += 'Pior ' + mat.ior + '\n';
+							if ( mat.sheen ) mtlOutput += 'Psh ' + mat.sheen + '\n';
+							if ( mat.sheenColor ) mtlOutput += 'Pshc ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
+							if ( mat.sheenRoughness ) mtlOutput += 'Pshr ' + mat.sheenRoughness + '\n';
 							mtlOutput += mat.aoMapIntensity ? 'Ka ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + '\n' : 'Ka 1 1 1\n';
 							mtlOutput += mat.color ? 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + '\n' : 'Kd 1 1 1\n';
 							mtlOutput += mat.emissive ? 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + '\n' : 'Ke 0 0 0\n';
@@ -855,6 +959,96 @@
 
 							}
 
+							if ( mat.clearcoatMap && mat.clearcoatMap.type === 1009 && mat.clearcoatMap.image ) {
+
+								if ( mat.clearcoatMap.image.src || mat.clearcoatMap.image.data ) {
+
+									name = 'clearcoatMap' + count;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.clearcoatMap.image, ext )
+									});
+
+									mtlOutput += 'map_Pccm ' + name + '.png' + '\n';
+
+								}
+
+							}
+
+							if ( mat.clearcoatNormalMap && mat.clearcoatNormalMap.type === 1009 && mat.clearcoatNormalMap.image ) {
+
+								if ( mat.clearcoatNormalMap.image.src || mat.clearcoatNormalMap.image.data ) {
+
+									name = 'clearcoatNormalMap' + count;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.clearcoatNormalMap.image, ext )
+									});
+
+									mtlOutput += 'map_Pccnm ' + name + '.png' + '\n';
+
+								}
+
+							}
+
+							if ( mat.clearcoatRoughnessMap && mat.clearcoatRoughnessMap.type === 1009 && mat.clearcoatRoughnessMap.image ) {
+
+								if ( mat.clearcoatRoughnessMap.image.src || mat.clearcoatRoughnessMap.image.data ) {
+
+									name = 'clearcoatRoughnessMap' + count;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.clearcoatRoughnessMap.image, ext )
+									});
+
+									mtlOutput += 'map_Pccrm ' + name + '.png' + '\n';
+
+								}
+
+							}
+
+							if ( mat.sheenColorMap && mat.sheenColorMap.type === 1009 && mat.sheenColorMap.image ) {
+
+								if ( mat.sheenColorMap.image.src || mat.sheenColorMap.image.data ) {
+
+									name = 'sheenColorMap' + count;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.sheenColorMap.image, ext )
+									});
+
+									mtlOutput += 'map_Pshcm ' + name + '.png' + '\n';
+
+								}
+
+							}
+
+							if ( mat.sheenRoughnessMap && mat.sheenRoughnessMap.type === 1009 && mat.sheenRoughnessMap.image ) {
+
+								if ( mat.sheenRoughnessMap.image.src || mat.sheenRoughnessMap.image.data ) {
+
+									name = 'sheenRoughnessMap' + count;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.sheenRoughnessMap.image, ext )
+									});
+
+									mtlOutput += 'map_Pshrm ' + name + '.png' + '\n';
+
+								}
+
+							}
+
 							count += 1;
 
 						}
@@ -900,12 +1094,14 @@
 
 				} else {
 
-					ctx.drawImage( image, 0, 0 ); // Get the base64 encoded data
+					ctx.drawImage( image, 0, 0 );
 
 				}
 
-				const base64data = canvas.toDataURL( `image/${ext}`, 1 ).replace( /^data:image\/(png|jpg);base64,/, '' ); // Convert to a uint8 array
+				// Get the base64 encoded data
+				const base64data = canvas.toDataURL( `image/${ext}`, 1 ).replace( /^data:image\/(png|jpg);base64,/, '' );
 
+				// Convert to a uint8 array
 				return base64ToBuffer( base64data );
 
 			}
