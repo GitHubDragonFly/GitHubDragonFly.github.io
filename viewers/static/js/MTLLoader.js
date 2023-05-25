@@ -453,6 +453,7 @@
 					case 'pshc':
 						// The sheen tint
 						params.sheenColor = new THREE.Color().fromArray( value );
+						use_phong = false;
 						break;
 
 					case 'pshr':
