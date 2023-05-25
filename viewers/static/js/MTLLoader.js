@@ -420,6 +420,47 @@
 						params.displacementScale = parseFloat( value );
 						break;
 
+					case 'pcc':
+						// Clearcoat
+						params.clearcoat = parseFloat( value );
+						use_phong = false;
+						break;
+
+					case 'pccr':
+						// Clearcoat roughness
+						params.clearcoatRoughness = parseFloat( value );
+						use_phong = false;
+						break;
+
+					case 'pccns':
+						// Clearcoat normal scale
+						params.clearcoatNormalScale = new THREE.Vector2().fromArray( value );
+						use_phong = false;
+						break;
+
+					case 'pior':
+						// Index-of-refraction for non-metallic materials
+						params.ior = parseFloat( value );
+						use_phong = false;
+						break;
+
+					case 'psh':
+						// The intensity of the sheen layer
+						params.sheen = parseFloat( value );
+						use_phong = false;
+						break;
+
+					case 'pshc':
+						// The sheen tint
+						params.sheenColor = new THREE.Color().fromArray( value );
+						break;
+
+					case 'pshr':
+						// Roughness of the sheen layer
+						params.sheenRoughness = parseFloat( value );
+						use_phong = false;
+						break;
+							
 					case 'map_pl':
 						// Light map
 						setMapForType( 'lightMap', value );
@@ -442,6 +483,36 @@
 						setMapForType( 'displacementMap', value );
 						break;
 
+					case 'map_pccm':
+						// Clearcoat map
+						setMapForType( 'clearcoatMap', value );
+						use_phong = false;
+						break;
+
+					case 'map_pccnm':
+						// Clearcoat normal map
+						setMapForType( 'clearcoatNormalMap', value );
+						use_phong = false;
+						break;
+
+					case 'map_pccrm':
+						// Clearcoat roughness map
+						setMapForType( 'clearcoatRoughnessMap', value );
+						use_phong = false;
+						break;
+
+					case 'map_pshcm':
+						// Sheen layer color map
+						setMapForType( 'sheenColorMap', value );
+						use_phong = false;
+						break;
+
+					case 'map_pshrm':
+						// Sheen layer roughness map
+						setMapForType( 'sheenRoughnessMap', value );
+						use_phong = false;
+						break;
+					
 					case 'ns':
 						// The specular exponent (defines the focus of the specular highlight)
 						// A high exponent results in a tight, concentrated highlight. Ns values normally range from 0 to 1000.
