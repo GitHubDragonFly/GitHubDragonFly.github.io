@@ -91,7 +91,7 @@
 				let line = lines[ i ];
 				line = line.trim();
 
-				if ( line.length === 0 || line.charAt( 0 ) === '#' ) {
+				if ( line.length === 0 || line.startsWith( '#' ) ) {
 
 					// Blank line or comment ignore
 					continue;
