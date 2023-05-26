@@ -436,24 +436,22 @@
 			}
 
 			const lines = text.split( '\n' );
-			let line = '',
-				lineFirstChar = '';
+			let line = '';
 			let lineLength = 0;
 			let result = []; // Faster to just trim left side of the line. Use if available.
 
-			const trimLeft = typeof ''.trimLeft === 'function';
+			const trimLeft = typeof ''.trimStart === 'function';
 
 			for ( let i = 0, l = lines.length; i < l; i ++ ) {
 
 				line = lines[ i ];
-				line = trimLeft ? line.trimLeft() : line.trim();
+				line = trimLeft ? line.trimStart() : line.trim();
 				lineLength = line.length;
 				if ( lineLength === 0 ) continue;
-				lineFirstChar = line.charAt( 0 ); // @todo invoke passed in handler if any
 
-				if ( lineFirstChar === '#' ) continue;
+				if ( line.startsWith( '#' ) ) continue;
 
-				if ( lineFirstChar === 'v' ) {
+				if ( line.startsWith( 'v' ) ) {
 
 					const data = line.split( /\s+/ );
 
@@ -485,9 +483,9 @@
 
 					}
 
-				} else if ( lineFirstChar === 'f' ) {
+				} else if ( line.startsWith( 'f' ) ) {
 
-					const lineData = line.substr( 1 ).trim();
+					const lineData = line.substring( 1 ).trim();
 					const vertexData = lineData.split( /\s+/ );
 					const faceVertices = []; // Parse the face vertex data into an easy to work with format
 
@@ -515,7 +513,7 @@
 
 					}
 
-				} else if ( lineFirstChar === 'l' ) {
+				} else if ( line.startsWith( 'l' ) ) {
 
 					const lineParts = line.substring( 1 ).trim().split( ' ' );
 					let lineVertices = [];
@@ -539,9 +537,9 @@
 
 					state.addLineGeometry( lineVertices, lineUVs );
 
-				} else if ( lineFirstChar === 'p' ) {
+				} else if ( line.startsWith( 'p' ) ) {
 
-					const lineData = line.substr( 1 ).trim();
+					const lineData = line.substring( 1 ).trim();
 					const pointData = lineData.split( ' ' );
 					state.addPointGeometry( pointData );
 
@@ -571,7 +569,7 @@
 					// (according to https://www.okino.com/conv/imp_wave.htm, 'usemap' is the old-style Wavefront texture reference method)
 					console.warn( 'THREE.OBJLoader: Rendering identifier "usemap" not supported. Textures must be defined in MTL files.' );
 
-				} else if ( lineFirstChar === 's' ) {
+				} else if ( line.startsWith( 's' ) ) {
 
 					result = line.split( ' ' ); // smooth shading
 					// @todo Handle files that have varying smooth values for a set of faces inside one geometry,
@@ -635,6 +633,7 @@
 					let hasVertexColors = false; // Skip o/g line declarations that did not follow with any faces
 
 					if ( geometry.vertices.length === 0 ) continue;
+
 					const buffergeometry = new THREE.BufferGeometry();
 					buffergeometry.setAttribute( 'position', new THREE.Float32BufferAttribute( geometry.vertices, 3 ) );
 
@@ -663,13 +662,15 @@
 					for ( let mi = 0, miLen = materials.length; mi < miLen; mi ++ ) {
 
 						const sourceMaterial = materials[ mi ];
+
 						const materialHash = sourceMaterial.name + '_' + sourceMaterial.smooth + '_' + hasVertexColors;
 						let material = state.materials[ materialHash ];
 
 						if ( this.materials !== null ) {
 
-							material = this.materials.create( sourceMaterial.name ); // mtl etc. loaders probably can't create line materials correctly, copy properties to a line material.
-
+							material = this.materials.create( sourceMaterial.name );
+							
+							// mtl etc. loaders probably can't create line materials correctly, copy properties to a line material.
 							if ( isLine && material && ! ( material instanceof THREE.LineBasicMaterial ) ) {
 
 								const materialLine = new THREE.LineBasicMaterial();
@@ -683,6 +684,7 @@
 									size: 10,
 									sizeAttenuation: false
 								} );
+
 								THREE.Material.prototype.copy.call( materialPoints, material );
 								materialPoints.color.copy( material.color );
 								materialPoints.map = material.map;
