@@ -9,6 +9,8 @@
 			let indexVertexUvs = 0;
 			let indexNormals = 0;
 			let mesh_count = 0;
+			let line_count = 0;
+			let points_count = 0;
 			let materials = {};
 			let material_names = [];
 			let material_colors = {};
@@ -240,12 +242,33 @@
 
 					throw new Error( 'THREE.OBJExporter: Geometry is not of type THREE.BufferGeometry.' );
 
-				} // shortcuts
+				}
 
+				// shortcuts
 
-				const vertices = geometry.getAttribute( 'position' ); // name of the line object
-
+				const vertices = geometry.getAttribute( 'position' );
+				
+				// name of the line object
 				output += 'o ' + line.name + '\n';
+
+				if ( line.material ) {
+
+					if ( line.material.name ) {
+
+						if ( line.material.name === '' ) line.material.name = 'line_material_' + line_count;
+
+					} else {
+
+						line.material[ 'name' ] = 'line_material_' + line_count;
+
+					}
+
+					materials[ line.material.name ] = line.material;
+
+					output += 'usemtl ' + line.material.name + '\n';
+
+					line_count += 1;
+				}
 
 				if ( vertices !== undefined ) {
 
@@ -253,10 +276,12 @@
 
 						vertex.x = vertices.getX( i );
 						vertex.y = vertices.getY( i );
-						vertex.z = vertices.getZ( i ); // transform the vertex to world space
+						vertex.z = vertices.getZ( i );
 
-						vertex.applyMatrix4( line.matrixWorld ); // transform the vertex to export format
+						// transform the vertex to world space
+						vertex.applyMatrix4( line.matrixWorld );
 
+						// transform the vertex to export format
 						output += 'v ' + vertex.x + ' ' + vertex.y + ' ' + vertex.z + '\n';
 
 					}
@@ -339,6 +364,25 @@
 				} // update index
 
 				indexVertex += nbVertex;
+
+				if ( points.material ) {
+
+					if ( points.material.name ) {
+
+						if ( points.material.name === '' ) points.material.name = 'points_material_' + points_count;
+
+					} else {
+
+						points.material[ 'name' ] = 'points_material_' + points_count;
+
+					}
+
+					materials[ points.material.name ] = points.material;
+
+					output += 'usemtl ' + points.material.name + '\n';
+
+					points_count += 1;
+				}
 
 			}
 
