@@ -444,10 +444,9 @@
 						use_phong = false;
 						break;
 
-					case 'pref':
+					case 'prfl':
 						// Reflectivity
 						params.reflectivity = parseFloat( value );
-						use_phong = false;
 						break;
 	
 					case 'psh':
