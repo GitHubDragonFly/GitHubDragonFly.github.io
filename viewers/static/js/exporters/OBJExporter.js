@@ -453,7 +453,7 @@
 								if ( mat.clearcoat ) mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
 								if ( mat.clearcoatRoughness ) mtlOutput += 'Pccr ' + mat.clearcoatRoughness + '\n';
 								if ( mat.clearcoatNormalScale ) mtlOutput += 'Pccns ' + mat.clearcoatNormalScale.x + ' ' + mat.clearcoatNormalScale.y + '\n';
-								if ( mat.reflectivity ) mtlOutput += 'Pref ' + mat.reflectivity + '\n';
+								if ( mat.reflectivity ) mtlOutput += 'Prfl ' + mat.reflectivity + '\n';
 								if ( mat.ior ) mtlOutput += 'Pior ' + mat.ior + '\n';
 								if ( mat.sheen ) mtlOutput += 'Psh ' + mat.sheen + '\n';
 								if ( mat.sheenColor ) mtlOutput += 'Pshc ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
@@ -868,7 +868,7 @@
 							if ( mat.clearcoat ) mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
 							if ( mat.clearcoatRoughness ) mtlOutput += 'Pccr ' + mat.clearcoatRoughness + '\n';
 							if ( mat.clearcoatNormalScale ) mtlOutput += 'Pccns ' + mat.clearcoatNormalScale.x + mat.clearcoatNormalScale.y + '\n';
-							if ( mat.reflectivity ) mtlOutput += 'Pref ' + mat.reflectivity + '\n';
+							if ( mat.reflectivity ) mtlOutput += 'Prfl ' + mat.reflectivity + '\n';
 							if ( mat.ior ) mtlOutput += 'Pior ' + mat.ior + '\n';
 							if ( mat.sheen ) mtlOutput += 'Psh ' + mat.sheen + '\n';
 							if ( mat.sheenColor ) mtlOutput += 'Pshc ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
