@@ -8,6 +8,8 @@ See `viewers/static/js/omggif` folder for licenses and Animated GIF export info,
 
 See `viewers/static/js/model-tag` folder for license related to mrdoob's [model-tag](https://github.com/mrdoob/model-tag) used in `GLTF Legacy` viewer
 
+See `viewers/static/js/jszip/dist` folder for license related to [JSZip](https://stuk.github.io/jszip/) used for exporting models
+
 jQuery license can be seen [here](https://jquery.org/license/)
 
 OrbitControlsGizmo MIT license can be seen [here](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo/blob/master/LICENSE)
