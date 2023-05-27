@@ -21,6 +21,7 @@
     <script src="../static/js/omggif/omggif.js" defer></script>
     <script src="../static/js/OrbitControls.js" defer></script>
     <script src="../static/js/OrbitControlsGizmo.js" defer></script>
+    <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
     <script src="../static/js/exporters/PLYExporter.js" defer></script>
     <script src="../static/js/exporters/STLExporter.js" defer></script>
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
@@ -565,7 +566,7 @@
       var ww = window.innerWidth, wh = window.innerHeight;
       var mouse_down, reset_rotation, events_initialized;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
-      var previous_scale = '1', bounding_box, filename;
+      var previous_scale = '1', bounding_box, filename, zip;
       var initial_opacity, initial_opacity_array, enable_opacity;
       var initial_transparency, initial_transparency_array;
       var original_side, original_side_array, edges, edges_visible, gif_export;
@@ -580,8 +581,14 @@
       link.style.display = 'none';
       document.body.appendChild( link );
 
-      function export_obj() {
+      async function export_obj() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise(resolve => setTimeout( resolve, 20 ));
 
         const obj_exporter = new THREE.OBJExporter( manager );
 
@@ -595,46 +602,58 @@
           }
 
           let exported = obj_exporter.parse( mmd_obj, filename );
-          let obj = exported[ 'obj' ].split( ',' );
-          let blob = new Blob( [ obj ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          URL.revokeObjectURL( blob );
-          link.download = filename + 'obj';
-          link.click();
+
+          zip.file( filename + 'obj', exported[ 'obj' ] );
 
           if (exported[ 'mtl' ]) {
-            let mtl = exported[ 'mtl' ].split( ',' );
-            blob = new Blob( [ mtl ], { type: 'text/plain' } );
-            link.href = URL.createObjectURL( blob );
-            URL.revokeObjectURL( blob );
-            link.download = filename + 'mtl';
-            link.click();
+            zip.file( filename + 'mtl', exported[ 'mtl' ] );
 
-            exported[ 'tex' ].forEach( tex => {
-              blob = new Blob( [ tex.data ], { type: 'image/png' } );
+            if (exported[ 'tex' ]) {
+              let processed_index = 0;
 
-              let img = new Image();
+              exported[ 'tex' ].forEach( ( tex, index ) => {
+                blob = new Blob( [ tex.data ], { type: 'image/png' } );
 
-              img.onload = function() {
-                let canvas = document.createElement('canvas');
+                let img = new Image();
 
-                canvas.width = img.naturalWidth;
-                canvas.height = img.naturalHeight;
+                img.onload = async function() {
+                  let canvas = document.createElement('canvas');
 
-                const ctx = canvas.getContext( '2d' );
+                  canvas.width = img.naturalWidth;
+                  canvas.height = img.naturalHeight;
 
-                // Flip image vertically
-                ctx.scale( 1, -1 );
-                ctx.drawImage( img, 0, -canvas.height );
+                  const ctx = canvas.getContext( '2d' );
 
-                link.href = canvas.toDataURL( 'image/png' );
-                link.download = `${ tex.name }.${ tex.ext }`;
-                link.click();
-              }
+                  // Flip image vertically
+                  ctx.scale( 1, -1 );
+                  ctx.drawImage( img, 0, -canvas.height );
 
-              img.src = URL.createObjectURL( blob );
-              URL.revokeObjectURL( blob );
-            });
+                  await new Promise( resolve => canvas.toBlob( resolve ) ).then( async function( canvas_blob ) {
+                    zip.file( `${ tex.name }.${ tex.ext }`, canvas_blob );
+
+                    if (processed_index === exported[ 'tex' ].length - 1) {
+                      await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 3 } } ).then( function( zipped_file ) {
+                        link.href = URL.createObjectURL( zipped_file );
+                        URL.revokeObjectURL( zipped_file );
+                        link.download = filename + 'zip';
+                        link.click();
+
+                        document.getElementById('div_loading').innerHTML = '';
+                        document.getElementById('div_loading').style.display = 'none';
+                        document.getElementById('fixed_menu').style.display = 'block';
+                        render_requested = true;
+                        render();
+                      });
+                    }
+                  });
+
+                  processed_index += 1;
+                }
+
+                img.src = URL.createObjectURL( blob );
+                URL.revokeObjectURL( blob );
+              });
+            }
           }
         }
       }
@@ -1459,6 +1478,8 @@
         if (listener === undefined) listener = new THREE.AudioListener();
         if (sound === undefined) sound = new THREE.Audio( listener );
         if (audio_loader === undefined) audio_loader = new THREE.AudioLoader();
+
+        if (zip === undefined) zip = new JSZip();
 
         extras = [];
         extra_running = false;
@@ -3615,12 +3636,17 @@
           function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
 
           $('#btn_bgnd_linear_gradient').unbind('mouseenter mouseleave');
+          $('#back_color').unbind('mouseenter mouseleave');
         } else {
           $('#btn_reflective').unbind('mouseenter mouseleave');
 
           $('#btn_bgnd_linear_gradient').hover(
           function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
           function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+
+          $('#back_color').hover(
+          function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
+          function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
         }
       }
 
