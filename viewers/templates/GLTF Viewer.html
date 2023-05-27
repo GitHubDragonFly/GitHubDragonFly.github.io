@@ -18,6 +18,7 @@
     <script src="../static/js/OrbitControls.js" defer></script>
     <script src="../static/js/OrbitControlsGizmo.js" defer></script>
     <script src="../static/js/libs/meshopt_decoder.js" defer></script>
+    <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
     <script src="../static/js/exporters/PLYExporter.js" defer></script>
     <script src="../static/js/exporters/STLExporter.js" defer></script>
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
@@ -573,7 +574,7 @@
       var initial_opacity, initial_opacity_array, enable_opacity;
       var initial_transparency, initial_transparency_array;
       var original_side, original_side_array, bgnd_linear_gradient;
-      var previous_scale = '1', bounding_box, gif_export;
+      var previous_scale = '1', bounding_box, gif_export, zip;
       var ktx2_loader, reflect, lines_present, lines_visible;
       var texture_files_svg, texture_files_webp, texture_files_ktx2;
       var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif;
@@ -585,8 +586,14 @@
       link.style.display = 'none';
       document.body.appendChild( link );
 
-      function export_obj() {
+      async function export_obj() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise(resolve => setTimeout( resolve, 20 ));
 
         const obj_exporter = new THREE.OBJExporter( manager );
 
@@ -602,46 +609,53 @@
           }
 
           let exported = obj_exporter.parse( gltf_obj, filename );
-          let obj = exported[ 'obj' ].split( ',' );
-          let blob = new Blob( [ obj ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          URL.revokeObjectURL( blob );
-          link.download = filename + 'obj';
-          link.click();
+
+          zip.file( filename + 'obj', exported[ 'obj' ] );
 
           if (exported[ 'mtl' ]) {
-            let mtl = exported[ 'mtl' ].split( ',' );
-            blob = new Blob( [ mtl ], { type: 'text/plain' } );
-            link.href = URL.createObjectURL( blob );
-            URL.revokeObjectURL( blob );
-            link.download = filename + 'mtl';
-            link.click();
+            zip.file( filename + 'mtl', exported[ 'mtl' ] );
 
-            exported[ 'tex' ].forEach( tex => {
-              blob = new Blob( [ tex.data ], { type: 'image/png' } );
+            if (exported[ 'tex' ]) {
+              exported[ 'tex' ].forEach( ( tex, index ) => {
+                blob = new Blob( [ tex.data ], { type: 'image/png' } );
 
-              let img = new Image();
+                let img = new Image();
 
-              img.onload = function() {
-                let canvas = document.createElement('canvas');
+                img.onload = async function() {
+                  let canvas = document.createElement('canvas');
 
-                canvas.width = img.naturalWidth;
-                canvas.height = img.naturalHeight;
+                  canvas.width = img.naturalWidth;
+                  canvas.height = img.naturalHeight;
 
-                const ctx = canvas.getContext( '2d' );
+                  const ctx = canvas.getContext( '2d' );
 
-                // Flip image vertically
-                ctx.scale( 1, -1 );
-                ctx.drawImage( img, 0, -canvas.height );
+                  // Flip image vertically
+                  ctx.scale( 1, -1 );
+                  ctx.drawImage( img, 0, -canvas.height );
 
-                link.href = canvas.toDataURL( 'image/png' );
-                link.download = `${ tex.name }.${ tex.ext }`;
-                link.click();
-              }
+                  blob = await new Promise( resolve => canvas.toBlob( resolve ) );
 
-              img.src = URL.createObjectURL( blob );
-              URL.revokeObjectURL( blob );
-            });
+                  zip.file( `${ tex.name }.${ tex.ext }`, blob );
+
+                  if (index === exported[ 'tex' ].length - 1) {
+                    zip.generateAsync( { type: "blob" } ).then( function( zipped_file ) {
+                      link.href = URL.createObjectURL( zipped_file );
+                      link.download = filename + 'zip';
+                      link.click();
+
+                      document.getElementById('div_loading').innerHTML = '';
+                      document.getElementById('div_loading').style.display = 'none';
+                      document.getElementById('fixed_menu').style.display = 'block';
+                      render_requested = true;
+                      render();
+                    });
+                  }
+                }
+
+                img.src = URL.createObjectURL( blob );
+                URL.revokeObjectURL( blob );
+              });
+            }
           }
         }
       }
@@ -1779,6 +1793,8 @@
           rgbe_loader = new THREE.RGBELoader();
           rgbe_loader.setDataType( THREE.UnsignedByteType );
         }
+
+        if (zip === undefined) zip = new JSZip();
 
         selected_gltf_file = null;
         selected_draco_file = null;
