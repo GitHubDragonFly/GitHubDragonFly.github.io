@@ -416,6 +416,8 @@
 				let mtlOutput = '# MTL file - created by a modified three.js OBJExporter' + '\n';
 				let textures = [];
 				let names = [];
+				let map_uuids = [];
+				let map_names = {};
 				const ext = 'png';
 				let count = 1;
 
@@ -470,13 +472,24 @@
 
 									if ( mat.map.image.src || mat.map.image.data ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.map.image, ext )
-										});
+										if ( map_uuids.includes( mat.map.uuid ) === false ) {
 
-										mtlOutput += 'map_Kd ' + name + '.png' + '\n';
+											map_uuids.push( mat.map.uuid );
+											map_names[ mat.map.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.map.image, ext )
+											});
+
+											mtlOutput += 'map_Kd ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Kd ' + map_names[ mat.map.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -486,15 +499,26 @@
 
 									if ( mat.specularMap.image.src || mat.specularMap.image.data ) {
 
-										name = 'specularMap' + count;
+										if ( map_uuids.includes( mat.specularMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.specularMap.image, ext )
-										});
+											name = 'specularMap' + count;
 
-										mtlOutput += 'map_Ks ' + name + '.png' + '\n';
+											map_uuids.push( mat.specularMap.uuid );
+											map_names[ mat.specularMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.specularMap.image, ext )
+											});
+
+											mtlOutput += 'map_Ks ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Ks ' + map_names[ mat.specularMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -504,15 +528,26 @@
 
 									if ( mat.emissiveMap.image.src || mat.emissiveMap.image.data ) {
 
-										name = 'emissiveMap' + count;
+										if ( map_uuids.includes( mat.emissiveMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.emissiveMap.image, ext )
-										});
+											name = 'emissiveMap' + count;
 
-										mtlOutput += 'map_Ke ' + name + '.png' + '\n';
+											map_uuids.push( mat.emissiveMap.uuid );
+											map_names[ mat.emissiveMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.emissiveMap.image, ext )
+											});
+
+											mtlOutput += 'map_Ke ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Ke ' + map_names[ mat.emissiveMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -522,21 +557,40 @@
 
 									if ( mat.bumpMap.image.src || mat.bumpMap.image.data ) {
 
-										name = 'bumpMap' + count;
+										if ( map_uuids.includes( mat.bumpMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.bumpMap.image, ext )
-										});
+											name = 'bumpMap' + count;
 
-										if ( mat.bumpScale === 1 ) {
+											map_uuids.push( mat.bumpMap.uuid );
+											map_names[ mat.bumpMap.uuid ] = name;
 
-											mtlOutput += 'map_bump ' + name + '.png' + '\n';
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.bumpMap.image, ext )
+											});
+
+											if ( mat.bumpScale === 1 ) {
+
+												mtlOutput += 'map_bump ' + name + '.png' + '\n';
+
+											} else {
+
+												mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' ' + name + '.png' + '\n';
+
+											}
 
 										} else {
 
-											mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' ' + name + '.png' + '\n';
+											if ( mat.bumpScale === 1 ) {
+
+												mtlOutput += 'map_bump ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
+
+											} else {
+
+												mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
+
+											}
 
 										}
 
@@ -548,15 +602,26 @@
 
 									if ( mat.lightMap.image.src || mat.lightMap.image.data ) {
 
-										name = 'lightMap' + count;
+										if ( map_uuids.includes( mat.lightMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.lightMap.image, ext )
-										});
+											name = 'lightMap' + count;
 
-										mtlOutput += 'map_Pl ' + name + '.png' + '\n';
+											map_uuids.push( mat.lightMap.uuid );
+											map_names[ mat.lightMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.lightMap.image, ext )
+											});
+
+											mtlOutput += 'map_Pl ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Pl ' + map_names[ mat.lightMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -566,15 +631,26 @@
 
 									if ( mat.metalnessMap.image.src || mat.metalnessMap.image.data ) {
 
-										name = 'metalnessMap' + count;
+										if ( map_uuids.includes( mat.metalnessMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.metalnessMap.image, ext )
-										});
+											name = 'metalnessMap' + count;
 
-										mtlOutput += 'map_Pm ' + name + '.png' + '\n';
+											map_uuids.push( mat.metalnessMap.uuid );
+											map_names[ mat.metalnessMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.metalnessMap.image, ext )
+											});
+
+											mtlOutput += 'map_Pm ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Pm ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -584,15 +660,26 @@
 
 									if ( mat.roughnessMap.image.src || mat.roughnessMap.image.data ) {
 
-										name = 'roughnessMap' + count;
+										if ( map_uuids.includes( mat.roughnessMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.roughnessMap.image, ext )
-										});
+											name = 'roughnessMap' + count;
 
-										mtlOutput += 'map_Pr ' + name + '.png' + '\n';
+											map_uuids.push( mat.roughnessMap.uuid );
+											map_names[ mat.roughnessMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.roughnessMap.image, ext )
+											});
+
+											mtlOutput += 'map_Pr ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Pr ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -602,15 +689,26 @@
 
 									if ( mat.displacementMap.image.src || mat.displacementMap.image.data ) {
 
-										name = 'displacementMap' + count;
+										if ( map_uuids.includes( mat.displacementMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.displacementMap.image, ext )
-										});
+											name = 'displacementMap' + count;
 
-										mtlOutput += 'map_Pd ' + name + '.png' + '\n';
+											map_uuids.push( mat.displacementMap.uuid );
+											map_names[ mat.displacementMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.displacementMap.image, ext )
+											});
+
+											mtlOutput += 'map_Pd ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Pd ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -620,15 +718,26 @@
 
 									if ( mat.normalMap.image.src || mat.normalMap.image.data ) {
 
-										name = 'normalMap' + count;
+										if ( map_uuids.includes( mat.normalMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.normalMap.image, ext )
-										});
+											name = 'normalMap' + count;
 
-										mtlOutput += 'norm ' + name + '.png' + '\n';
+											map_uuids.push( mat.normalMap.uuid );
+											map_names[ mat.normalMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.normalMap.image, ext )
+											});
+
+											mtlOutput += 'norm ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'norm ' + map_names[ mat.normalMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -638,15 +747,26 @@
 
 									if ( mat.alphaMap.image.src || mat.alphaMap.image.data ) {
 
-										name = 'alphaMap' + count;
+										if ( map_uuids.includes( mat.alphaMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.alphaMap.image, ext )
-										});
+											name = 'alphaMap' + count;
 
-										mtlOutput += 'map_d ' + name + '.png' + '\n';
+											map_uuids.push( mat.alphaMap.uuid );
+											map_names[ mat.alphaMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.alphaMap.image, ext )
+											});
+
+											mtlOutput += 'map_d ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_d ' + map_names[ mat.alphaMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -656,15 +776,26 @@
 
 									if ( mat.aoMap.image.src || mat.aoMap.image.data ) {
 
-										name = 'ambientMap' + count;
+										if ( map_uuids.includes( mat.aoMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.aoMap.image, ext )
-										});
+											name = 'ambientMap' + count;
 
-										mtlOutput += 'map_Ka ' + name + '.png' + '\n';
+											map_uuids.push( mat.aoMap.uuid );
+											map_names[ mat.aoMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.aoMap.image, ext )
+											});
+
+											mtlOutput += 'map_Ka ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Ka ' + map_names[ mat.aoMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -674,15 +805,26 @@
 
 									if ( mat.clearcoatMap.image.src || mat.clearcoatMap.image.data ) {
 
-										name = 'clearcoatMap' + count;
+										if ( map_uuids.includes( mat.clearcoatMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.clearcoatMap.image, ext )
-										});
+											name = 'clearcoatMap' + count;
 
-										mtlOutput += 'map_Pccm ' + name + '.png' + '\n';
+											map_uuids.push( mat.clearcoatMap.uuid );
+											map_names[ mat.clearcoatMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.clearcoatMap.image, ext )
+											});
+
+											mtlOutput += 'map_Pccm ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Pccm ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -692,15 +834,26 @@
 
 									if ( mat.clearcoatNormalMap.image.src || mat.clearcoatNormalMap.image.data ) {
 
-										name = 'clearcoatNormalMap' + count;
+										if ( map_uuids.includes( mat.clearcoatNormalMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.clearcoatNormalMap.image, ext )
-										});
+											name = 'clearcoatNormalMap' + count;
 
-										mtlOutput += 'map_Pccnm ' + name + '.png' + '\n';
+											map_uuids.push( mat.clearcoatNormalMap.uuid );
+											map_names[ mat.clearcoatNormalMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.clearcoatNormalMap.image, ext )
+											});
+
+											mtlOutput += 'map_Pccnm ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Pccnm ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -710,15 +863,26 @@
 
 									if ( mat.clearcoatRoughnessMap.image.src || mat.clearcoatRoughnessMap.image.data ) {
 
-										name = 'clearcoatRoughnessMap' + count;
+										if ( map_uuids.includes( mat.clearcoatRoughnessMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.clearcoatRoughnessMap.image, ext )
-										});
+											name = 'clearcoatRoughnessMap' + count;
 
-										mtlOutput += 'map_Pccrm ' + name + '.png' + '\n';
+											map_uuids.push( mat.clearcoatRoughnessMap.uuid );
+											map_names[ mat.clearcoatRoughnessMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.clearcoatRoughnessMap.image, ext )
+											});
+
+											mtlOutput += 'map_Pccrm ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Pccrm ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -728,15 +892,26 @@
 
 									if ( mat.sheenColorMap.image.src || mat.sheenColorMap.image.data ) {
 
-										name = 'sheenColorMap' + count;
+										if ( map_uuids.includes( mat.sheenColorMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.sheenColorMap.image, ext )
-										});
+											name = 'sheenColorMap' + count;
 
-										mtlOutput += 'map_Pshcm ' + name + '.png' + '\n';
+											map_uuids.push( mat.sheenColorMap.uuid );
+											map_names[ mat.sheenColorMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.sheenColorMap.image, ext )
+											});
+
+											mtlOutput += 'map_Pshcm ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Pshcm ' + map_names[ mat.sheenColorMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -746,15 +921,26 @@
 
 									if ( mat.sheenRoughnessMap.image.src || mat.sheenRoughnessMap.image.data ) {
 
-										name = 'sheenRoughnessMap' + count;
+										if ( map_uuids.includes( mat.sheenRoughnessMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.sheenRoughnessMap.image, ext )
-										});
+											name = 'sheenRoughnessMap' + count;
 
-										mtlOutput += 'map_Pshrm ' + name + '.png' + '\n';
+											map_uuids.push( mat.sheenRoughnessMap.uuid );
+											map_names[ mat.sheenRoughnessMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.sheenRoughnessMap.image, ext )
+											});
+
+											mtlOutput += 'map_Pshrm ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Pshrm ' + map_names[ mat.sheenRoughnessMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -764,15 +950,26 @@
 
 									if ( mat.specularIntensityMap.image.src || mat.specularIntensityMap.image.data ) {
 
-										name = 'specularIntensityMap' + count;
+										if ( map_uuids.includes( mat.specularIntensityMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.specularIntensityMap.image, ext )
-										});
+											name = 'specularIntensityMap' + count;
 
-										mtlOutput += 'map_Psim ' + name + '.png' + '\n';
+											map_uuids.push( mat.specularIntensityMap.uuid );
+											map_names[ mat.specularIntensityMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.specularIntensityMap.image, ext )
+											});
+
+											mtlOutput += 'map_Psim ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Psim ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -782,15 +979,26 @@
 
 									if ( mat.specularColorMap.image.src || mat.specularColorMap.image.data ) {
 
-										name = 'specularColorMap' + count;
+										if ( map_uuids.includes( mat.specularColorMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.specularColorMap.image, ext )
-										});
+											name = 'specularColorMap' + count;
 
-										mtlOutput += 'map_Pscm ' + name + '.png' + '\n';
+											map_uuids.push( mat.specularColorMap.uuid );
+											map_names[ mat.specularColorMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.specularColorMap.image, ext )
+											});
+
+											mtlOutput += 'map_Pscm ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Pscm ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -800,15 +1008,26 @@
 
 									if ( mat.thicknessMap.image.src || mat.thicknessMap.image.data ) {
 
-										name = 'thicknessMap' + count;
+										if ( map_uuids.includes( mat.thicknessMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.thicknessMap.image, ext )
-										});
+											name = 'thicknessMap' + count;
 
-										mtlOutput += 'map_Pthm ' + name + '.png' + '\n';
+											map_uuids.push( mat.thicknessMap.uuid );
+											map_names[ mat.thicknessMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.thicknessMap.image, ext )
+											});
+
+											mtlOutput += 'map_Pthm ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Pthm ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
@@ -818,20 +1037,31 @@
 
 									if ( mat.transmissionMap.image.src || mat.transmissionMap.image.data ) {
 
-										name = 'transmissionMap' + count;
+										if ( map_uuids.includes( mat.transmissionMap.uuid ) === false ) {
 
-										textures.push( {
-											name,
-											ext,
-											data: imageToData( mat.transmissionMap.image, ext )
-										});
+											name = 'transmissionMap' + count;
 
-										mtlOutput += 'map_Ptrm ' + name + '.png' + '\n';
+											map_uuids.push( mat.transmissionMap.uuid );
+											map_names[ mat.transmissionMap.uuid ] = name;
+
+											textures.push( {
+												name,
+												ext,
+												data: imageToData( mat.transmissionMap.image, ext )
+											});
+
+											mtlOutput += 'map_Ptrm ' + name + '.png' + '\n';
+
+										} else {
+
+											mtlOutput += 'map_Ptrm ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
+
+										}
 
 									}
 
 								}
-
+	
 								count += 1;
 
 							}
@@ -885,13 +1115,24 @@
 
 								if ( mat.map.image.src || mat.map.image.data ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.map.image, ext )
-									});
+									if ( map_uuids.includes( mat.map.uuid ) === false ) {
 
-									mtlOutput += 'map_Kd ' + name + '.png' + '\n';
+										map_uuids.push( mat.map.uuid );
+										map_names[ mat.map.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.map.image, ext )
+										});
+
+										mtlOutput += 'map_Kd ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Kd ' + map_names[ mat.map.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -901,15 +1142,26 @@
 
 								if ( mat.specularMap.image.src || mat.specularMap.image.data ) {
 
-									name = 'specularMap' + count;
+									if ( map_uuids.includes( mat.specularMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.specularMap.image, ext )
-									});
+										name = 'specularMap' + count;
 
-									mtlOutput += 'map_Ks ' + name + '.png' + '\n';
+										map_uuids.push( mat.specularMap.uuid );
+										map_names[ mat.specularMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.specularMap.image, ext )
+										});
+
+										mtlOutput += 'map_Ks ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Ks ' + map_names[ mat.specularMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -919,15 +1171,26 @@
 
 								if ( mat.emissiveMap.image.src || mat.emissiveMap.image.data ) {
 
-									name = 'emissiveMap' + count;
+									if ( map_uuids.includes( mat.emissiveMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.emissiveMap.image, ext )
-									});
+										name = 'emissiveMap' + count;
 
-									mtlOutput += 'map_Ke ' + name + '.png' + '\n';
+										map_uuids.push( mat.emissiveMap.uuid );
+										map_names[ mat.emissiveMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.emissiveMap.image, ext )
+										});
+
+										mtlOutput += 'map_Ke ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Ke ' + map_names[ mat.emissiveMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -937,21 +1200,40 @@
 
 								if ( mat.bumpMap.image.src || mat.bumpMap.image.data ) {
 
-									name = 'bumpMap' + count;
+									if ( map_uuids.includes( mat.bumpMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.bumpMap.image, ext )
-									});
+										name = 'bumpMap' + count;
 
-									if ( mat.bumpScale === 1 ) {
+										map_uuids.push( mat.bumpMap.uuid );
+										map_names[ mat.bumpMap.uuid ] = name;
 
-										mtlOutput += 'map_bump ' + name + '.png' + '\n';
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.bumpMap.image, ext )
+										});
+
+										if ( mat.bumpScale === 1 ) {
+
+											mtlOutput += 'map_bump ' + name + '.png' + '\n';
+	
+										} else {
+	
+											mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' ' + name + '.png' + '\n';
+	
+										}
 
 									} else {
 
-										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' ' + name + '.png' + '\n';
+										if ( mat.bumpScale === 1 ) {
+
+											mtlOutput += 'map_bump ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
+	
+										} else {
+	
+											mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
+	
+										}
 
 									}
 
@@ -963,15 +1245,26 @@
 
 								if ( mat.lightMap.image.src || mat.lightMap.image.data ) {
 
-									name = 'lightMap' + count;
+									if ( map_uuids.includes( mat.lightMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.lightMap.image, ext )
-									});
+										name = 'lightMap' + count;
 
-									mtlOutput += 'map_Pl ' + name + '.png' + '\n';
+										map_uuids.push( mat.lightMap.uuid );
+										map_names[ mat.lightMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.lightMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pl ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Pl ' + map_names[ mat.lightMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -981,15 +1274,26 @@
 
 								if ( mat.metalnessMap.image.src || mat.metalnessMap.image.data ) {
 
-									name = 'metalnessMap' + count;
+									if ( map_uuids.includes( mat.metalnessMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.metalnessMap.image, ext )
-									});
+										name = 'metalnessMap' + count;
 
-									mtlOutput += 'map_Pm ' + name + '.png' + '\n';
+										map_uuids.push( mat.metalnessMap.uuid );
+										map_names[ mat.metalnessMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.metalnessMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pm ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Pm ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -999,15 +1303,26 @@
 
 								if ( mat.roughnessMap.image.src || mat.roughnessMap.image.data ) {
 
-									name = 'roughnessMap' + count;
+									if ( map_uuids.includes( mat.roughnessMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.roughnessMap.image, ext )
-									});
+										name = 'roughnessMap' + count;
 
-									mtlOutput += 'map_Pr ' + name + '.png' + '\n';
+										map_uuids.push( mat.roughnessMap.uuid );
+										map_names[ mat.roughnessMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.roughnessMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pr ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Pr ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -1017,15 +1332,26 @@
 
 								if ( mat.displacementMap.image.src || mat.displacementMap.image.data ) {
 
-									name = 'displacementMap' + count;
+									if ( map_uuids.includes( mat.displacementMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.displacementMap.image, ext )
-									});
+										name = 'displacementMap' + count;
 
-									mtlOutput += 'map_Pd ' + name + '.png' + '\n';
+										map_uuids.push( mat.displacementMap.uuid );
+										map_names[ mat.displacementMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.displacementMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pd ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Pd ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -1035,15 +1361,26 @@
 
 								if ( mat.normalMap.image.src || mat.normalMap.image.data ) {
 
-									name = 'normalMap' + count;
+									if ( map_uuids.includes( mat.normalMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.normalMap.image, ext )
-									});
+										name = 'normalMap' + count;
 
-									mtlOutput += 'norm ' + name + '.png' + '\n';
+										map_uuids.push( mat.normalMap.uuid );
+										map_names[ mat.normalMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.normalMap.image, ext )
+										});
+
+										mtlOutput += 'norm ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'norm ' + map_names[ mat.normalMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -1053,15 +1390,26 @@
 
 								if ( mat.alphaMap.image.src || mat.alphaMap.image.data ) {
 
-									name = 'alphaMap' + count;
+									if ( map_uuids.includes( mat.alphaMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.alphaMap.image, ext )
-									});
+										name = 'alphaMap' + count;
 
-									mtlOutput += 'map_d ' + name + '.png' + '\n';
+										map_uuids.push( mat.alphaMap.uuid );
+										map_names[ mat.alphaMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.alphaMap.image, ext )
+										});
+
+										mtlOutput += 'map_d ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_d ' + map_names[ mat.alphaMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -1071,15 +1419,26 @@
 
 								if ( mat.aoMap.image.src || mat.aoMap.image.data ) {
 
-									name = 'ambientMap' + count;
+									if ( map_uuids.includes( mat.aoMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.aoMap.image, ext )
-									});
+										name = 'ambientMap' + count;
 
-									mtlOutput += 'map_Ka ' + name + '.png' + '\n';
+										map_uuids.push( mat.aoMap.uuid );
+										map_names[ mat.aoMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.aoMap.image, ext )
+										});
+
+										mtlOutput += 'map_Ka ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Ka ' + map_names[ mat.aoMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -1089,15 +1448,26 @@
 
 								if ( mat.clearcoatMap.image.src || mat.clearcoatMap.image.data ) {
 
-									name = 'clearcoatMap' + count;
+									if ( map_uuids.includes( mat.clearcoatMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.clearcoatMap.image, ext )
-									});
+										name = 'clearcoatMap' + count;
 
-									mtlOutput += 'map_Pccm ' + name + '.png' + '\n';
+										map_uuids.push( mat.clearcoatMap.uuid );
+										map_names[ mat.clearcoatMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.clearcoatMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pccm ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Pccm ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -1107,15 +1477,26 @@
 
 								if ( mat.clearcoatNormalMap.image.src || mat.clearcoatNormalMap.image.data ) {
 
-									name = 'clearcoatNormalMap' + count;
+									if ( map_uuids.includes( mat.clearcoatNormalMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.clearcoatNormalMap.image, ext )
-									});
+										name = 'clearcoatNormalMap' + count;
 
-									mtlOutput += 'map_Pccnm ' + name + '.png' + '\n';
+										map_uuids.push( mat.clearcoatNormalMap.uuid );
+										map_names[ mat.clearcoatNormalMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.clearcoatNormalMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pccnm ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Pccnm ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -1125,15 +1506,26 @@
 
 								if ( mat.clearcoatRoughnessMap.image.src || mat.clearcoatRoughnessMap.image.data ) {
 
-									name = 'clearcoatRoughnessMap' + count;
+									if ( map_uuids.includes( mat.clearcoatRoughnessMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.clearcoatRoughnessMap.image, ext )
-									});
+										name = 'clearcoatRoughnessMap' + count;
 
-									mtlOutput += 'map_Pccrm ' + name + '.png' + '\n';
+										map_uuids.push( mat.clearcoatRoughnessMap.uuid );
+										map_names[ mat.clearcoatRoughnessMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.clearcoatRoughnessMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pccrm ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Pccrm ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -1143,15 +1535,26 @@
 
 								if ( mat.sheenColorMap.image.src || mat.sheenColorMap.image.data ) {
 
-									name = 'sheenColorMap' + count;
+									if ( map_uuids.includes( mat.sheenColorMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.sheenColorMap.image, ext )
-									});
+										name = 'sheenColorMap' + count;
 
-									mtlOutput += 'map_Pshcm ' + name + '.png' + '\n';
+										map_uuids.push( mat.sheenColorMap.uuid );
+										map_names[ mat.sheenColorMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.sheenColorMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pshcm ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Pshcm ' + map_names[ mat.sheenColorMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -1161,15 +1564,26 @@
 
 								if ( mat.sheenRoughnessMap.image.src || mat.sheenRoughnessMap.image.data ) {
 
-									name = 'sheenRoughnessMap' + count;
+									if ( map_uuids.includes( mat.sheenRoughnessMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.sheenRoughnessMap.image, ext )
-									});
+										name = 'sheenRoughnessMap' + count;
 
-									mtlOutput += 'map_Pshrm ' + name + '.png' + '\n';
+										map_uuids.push( mat.sheenRoughnessMap.uuid );
+										map_names[ mat.sheenRoughnessMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.sheenRoughnessMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pshrm ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Pshrm ' + map_names[ mat.sheenRoughnessMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -1179,15 +1593,26 @@
 
 								if ( mat.specularIntensityMap.image.src || mat.specularIntensityMap.image.data ) {
 
-									name = 'specularIntensityMap' + count;
+									if ( map_uuids.includes( mat.specularIntensityMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.specularIntensityMap.image, ext )
-									});
+										name = 'specularIntensityMap' + count;
 
-									mtlOutput += 'map_Psim ' + name + '.png' + '\n';
+										map_uuids.push( mat.specularIntensityMap.uuid );
+										map_names[ mat.specularIntensityMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.specularIntensityMap.image, ext )
+										});
+
+										mtlOutput += 'map_Psim ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Psim ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -1197,15 +1622,26 @@
 
 								if ( mat.specularColorMap.image.src || mat.specularColorMap.image.data ) {
 
-									name = 'specularColorMap' + count;
+									if ( map_uuids.includes( mat.specularColorMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.specularColorMap.image, ext )
-									});
+										name = 'specularColorMap' + count;
 
-									mtlOutput += 'map_Pscm ' + name + '.png' + '\n';
+										map_uuids.push( mat.specularColorMap.uuid );
+										map_names[ mat.specularColorMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.specularColorMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pscm ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Pscm ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -1215,15 +1651,26 @@
 
 								if ( mat.thicknessMap.image.src || mat.thicknessMap.image.data ) {
 
-									name = 'thicknessMap' + count;
+									if ( map_uuids.includes( mat.thicknessMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.thicknessMap.image, ext )
-									});
+										name = 'thicknessMap' + count;
 
-									mtlOutput += 'map_Pthm ' + name + '.png' + '\n';
+										map_uuids.push( mat.thicknessMap.uuid );
+										map_names[ mat.thicknessMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.thicknessMap.image, ext )
+										});
+
+										mtlOutput += 'map_Pthm ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Pthm ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
@@ -1233,15 +1680,26 @@
 
 								if ( mat.transmissionMap.image.src || mat.transmissionMap.image.data ) {
 
-									name = 'transmissionMap' + count;
+									if ( map_uuids.includes( mat.transmissionMap.uuid ) === false ) {
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( mat.transmissionMap.image, ext )
-									});
+										name = 'transmissionMap' + count;
 
-									mtlOutput += 'map_Ptrm ' + name + '.png' + '\n';
+										map_uuids.push( mat.transmissionMap.uuid );
+										map_names[ mat.transmissionMap.uuid ] = name;
+
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( mat.transmissionMap.image, ext )
+										});
+
+										mtlOutput += 'map_Ptrm ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Ptrm ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
