@@ -27,6 +27,7 @@ Copy any of the following links and then paste it within the `URL` option of the
 - access to [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF v2.0 examples for GLTF Viewer, mind the correct path after `2.0`:
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Sponza/glTF/Sponza.gltf`
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf`
+- for multiple camera GLB example try downloading the fixed `VC-v2.glb.zip` file posted by donmccurdy [here](https://github.com/KhronosGroup/glTF-Sample-Models/issues/275)
 - access to some PCD example files at [Point Cloud Library (PCL)](https://github.com/PointCloudLibrary):
   - `https://raw.githubusercontent.com/PointCloudLibrary/pcl/master/test/office1.pcd`
   - `https://raw.githubusercontent.com/PointCloudLibrary/pcl/master/test/five_people.pcd`
