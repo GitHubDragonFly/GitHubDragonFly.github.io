@@ -13,6 +13,7 @@
     <script src="../static/js/omggif/omggif.js" defer></script>
     <script src="../static/js/OrbitControls.js" defer></script>
     <script src="../static/js/OrbitControlsGizmo.js" defer></script>
+    <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
     <script src="../static/js/exporters/GLTFExporter.js" defer></script>
     <script src="../static/js/exporters/ColladaExporter.js" defer></script>
@@ -453,7 +454,7 @@
       var ww = window.innerWidth, wh = window.innerHeight;
       var mouse_down, reset_rotation, events_initialized;
       var rot_x = 0, rot_y = 0, rot_z = 0, bgnd_linear_gradient;
-      var previous_scale = '1', bounding_box, filename, gif_export;
+      var previous_scale = '1', bounding_box, filename, gif_export, zip;
       var selected_gcode_file, selected_gcode_url_file, selected_url_file = '';
       var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
 
@@ -461,8 +462,31 @@
       link.style.display = 'none';
       document.body.appendChild( link );
 
-      function export_obj() {
+      async function process_zip( ext = '' ) {
+        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 3 } } ).then( function( zipped_file ) {
+          link.href = URL.createObjectURL( zipped_file );
+          URL.revokeObjectURL( zipped_file );
+          link.download = filename + ext + 'zip';
+          link.click();
+
+          document.getElementById('div_loading').innerHTML = '';
+          document.getElementById('div_loading').style.display = 'none';
+          document.getElementById('fixed_menu').style.display = 'block';
+          render_requested = true;
+          render();
+
+          zip = new JSZip();
+        });
+      }
+
+      async function export_obj() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const obj_exporter = new THREE.OBJExporter( manager );
 
@@ -474,34 +498,41 @@
           }
 
           let exported = obj_exporter.parse( gcode_obj, filename );
-          let obj = exported[ 'obj' ].split( ',' );
-          let blob = new Blob( [ obj ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          URL.revokeObjectURL( blob );
-          link.download = filename + 'obj';
-          link.click();
+
+          zip.file( filename + 'obj', exported[ 'obj' ] );
 
           if (exported[ 'mtl' ]) {
-            let mtl = exported[ 'mtl' ].split( ',' );
-            blob = new Blob( [ mtl ], { type: 'text/plain' } );
-            link.href = URL.createObjectURL( blob );
-            URL.revokeObjectURL( blob );
-            link.download = filename + 'mtl';
-            link.click();
+            zip.file( filename + 'mtl', exported[ 'mtl' ] );
 
-            exported[ 'tex' ].forEach( tex => {
-              blob = new Blob( [ tex.data ], { type: 'image/png' } );
-              link.href = URL.createObjectURL( blob );
-              URL.revokeObjectURL( blob );
-              link.download = `${ tex.name }.${ tex.ext }`;
-              link.click();
-            });
+            if (exported[ 'tex' ]) {
+              let processed_index = 0;
+
+              exported[ 'tex' ].forEach( async tex => {
+                let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+
+                zip.file( `${ tex.name }.${ tex.ext }`, blob );
+
+                if (processed_index === exported[ 'tex' ].length - 1) await process_zip( 'OBJ.' );
+
+                processed_index += 1;
+              });
+            } else {
+              await process_zip( 'OBJ.' );
+            }
+          } else {
+            await process_zip( 'OBJ.' );
           }
         }
       }
 
-      function export_gltf() {
+      async function export_gltf() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const gltf_exporter = new THREE.GLTFExporter( manager );
 
@@ -514,18 +545,25 @@
 
           let options = { binary: false, maxTextureSize: 4096 || Infinity };
 
-          gltf_exporter.parse( gcode_obj, ( json ) => {
+          gltf_exporter.parse( gcode_obj, async json => {
             let string = JSON.stringify( json, null, 2 );
             let blob = new Blob( [ string ], { type: 'text/plain' } );
-            link.href = URL.createObjectURL( blob );
-            link.download = filename + 'gltf';
-            link.click();
+
+            zip.file( filename + 'gltf', blob );
+
+            await process_zip( 'GLTF.' );
           }, function( error ) { console.log( error ); }, options);
         }
       }
 
-      function export_glb() {
+      async function export_glb() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const gltf_exporter = new THREE.GLTFExporter( manager );
 
@@ -538,17 +576,24 @@
 
           let options = { binary: true, maxTextureSize: 4096 || Infinity };
 
-          gltf_exporter.parse( gcode_obj, ( json ) => {
+          gltf_exporter.parse( gcode_obj, async json => {
             let blob = new Blob( [ json ], { type: 'application/octet-stream' } );
-            link.href = URL.createObjectURL( blob );
-            link.download = filename + 'glb';
-            link.click();
+
+            zip.file( filename + 'glb', blob );
+
+            await process_zip( 'GLB.' );
           }, function( error ) { console.log( error ); }, options );
         }
       }
 
-      function export_json() {
+      async function export_json() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         if (gcode_obj) {
           if (selected_gcode_file) {
@@ -559,9 +604,10 @@
 
           let json = JSON.stringify( gcode_obj.toJSON() );
           let blob = new Blob( [ json ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          link.download = filename + 'json';
-          link.click();
+
+          zip.file( filename + 'json', blob );
+
+          await process_zip( 'JSON.' );
         }
       }
 
@@ -665,6 +711,8 @@
             gif_export = false;
 
             if (render_requested) render();
+
+            return;
           }
 
           current ++;
@@ -755,6 +803,8 @@
             link.click();
 
             if (render_requested) render();
+
+            return;
           }
 
           current ++;
@@ -987,6 +1037,8 @@
         if (equi_loader === undefined) equi_loader = new THREE.CubeTextureLoader();
 
         if (gcode_loader === undefined) gcode_loader = new THREE.GCodeLoader( manager );
+
+        if (zip === undefined) zip = new JSZip();
 
         path = null;
         path_visible = false;

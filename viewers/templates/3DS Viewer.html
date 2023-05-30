@@ -15,6 +15,7 @@
     <script src="../static/js/omggif/omggif.js" defer></script>
     <script src="../static/js/OrbitControls.js" defer></script>
     <script src="../static/js/OrbitControlsGizmo.js" defer></script>
+    <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
     <script src="../static/js/exporters/PLYExporter.js" defer></script>
     <script src="../static/js/exporters/STLExporter.js" defer></script>
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
@@ -321,7 +322,9 @@
         <button title="Edges" id="btn_edges" onclick="show_edges();" disabled>E</button>
         <button title="Reflectivity" id="btn_reflective" onclick="set_reflectivity();" style="margin-left: 2px;" disabled>R</button>
         <button title="Flat Shading" id="btn_flat" onclick="set_flat();" disabled>F</button>
-        <button title="Material Side" id="btn_mtl_side" onclick="switch_mtl_side();" style="min-width: 28px;" disabled>OS</button>
+        <button title="Vertex Colors" id="btn_vertex_colors" onclick="set_vertex_colors();" style="min-width: 28px;" disabled>VC</button>
+        <button title="Random Vertex Colors" id="btn_random_vertex_colors" onclick="set_random_vertex_colors();" style="min-width: 12px;" disabled>!</button>
+        <button title="Material Side" id="btn_mtl_side" onclick="switch_mtl_side();" style="min-width: 28px;" disabled>DS</button>
         <button title="Grid" id="btn_grid" onclick="show_grid();" disabled>#</button>
         <button title="Polar Grid" id="btn_polar_grid" onclick="show_polar_grid();" style="min-width: 24px;" disabled><p class="polar"></p></button>
       </div>
@@ -553,20 +556,44 @@
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
       var mouse_down, reset_rotation, events_initialized;
       var previous_scale = '1', bounding_box, gif_export;
-      var initial_opacity, initial_opacity_array, enable_opacity;
+      var initial_opacity, initial_opacity_array, zip;
       var initial_transparency, initial_transparency_array;
-      var original_side, original_side_array;
+      var original_side, original_side_array, enable_opacity;
       var bgnd_linear_gradient, flatShading_enabled, slider_height = 0;
       var filename, textures, reflect, resource_path, url_resource_path;
       var selected_tds_file, selected_tds_url_file, selected_url_file = '';
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
+      var vertex_colors_enabled, random_vertex_colors_enabled, original_vertex_color_array, random_vertex_color_array;
 
       const link = document.createElement( 'a' );
       link.style.display = 'none';
       document.body.appendChild( link );
 
-      function export_obj() {
+      async function process_zip( ext = '' ) {
+        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 3 } } ).then( function( zipped_file ) {
+          link.href = URL.createObjectURL( zipped_file );
+          URL.revokeObjectURL( zipped_file );
+          link.download = filename + ext + 'zip';
+          link.click();
+
+          document.getElementById('div_loading').innerHTML = '';
+          document.getElementById('div_loading').style.display = 'none';
+          document.getElementById('fixed_menu').style.display = 'block';
+          render_requested = true;
+          render();
+
+          zip = new JSZip();
+        });
+      }
+
+      async function export_obj() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const obj_exporter = new THREE.OBJExporter( manager );
 
@@ -580,34 +607,41 @@
           }
 
           let exported = obj_exporter.parse( tds_obj, filename );
-          let obj = exported[ 'obj' ].split( ',' );
-          let blob = new Blob( [ obj ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          URL.revokeObjectURL( blob );
-          link.download = filename + 'obj';
-          link.click();
+
+          zip.file( filename + 'obj', exported[ 'obj' ] );
 
           if (exported[ 'mtl' ]) {
-            let mtl = exported[ 'mtl' ].split( ',' );
-            blob = new Blob( [ mtl ], { type: 'text/plain' } );
-            link.href = URL.createObjectURL( blob );
-            URL.revokeObjectURL( blob );
-            link.download = filename + 'mtl';
-            link.click();
+            zip.file( filename + 'mtl', exported[ 'mtl' ] );
 
-            exported[ 'tex' ].forEach( tex => {
-              blob = new Blob( [ tex.data ], { type: 'image/png' } );
-              link.href = URL.createObjectURL( blob );
-              URL.revokeObjectURL( blob );
-              link.download = `${ tex.name }.${ tex.ext }`;
-              link.click();
-            });
+            if (exported[ 'tex' ]) {
+              let processed_index = 0;
+
+              exported[ 'tex' ].forEach( async tex => {
+                let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+
+                zip.file( `${ tex.name }.${ tex.ext }`, blob );
+
+                if (processed_index === exported[ 'tex' ].length - 1) await process_zip( 'OBJ.' );
+
+                processed_index += 1;
+              });
+            } else {
+              await process_zip( 'OBJ.' );
+            }
+          } else {
+            await process_zip( 'OBJ.' );
           }
         }
       }
 
-      function export_ply() {
+      async function export_ply() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const ply_exporter = new THREE.PLYExporter( manager );
 
@@ -622,14 +656,21 @@
 
           let string = ply_exporter.parse( tds_obj ).split( ',' );
           let blob = new Blob( [ string ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          link.download = filename + 'ply';
-          link.click();
+
+          zip.file( filename + 'ply', blob );
+
+          await process_zip( 'PLY.' );
         }
       }
 
-      function export_stl() {
+      async function export_stl() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const stl_exporter = new THREE.STLExporter( manager );
 
@@ -643,15 +684,21 @@
           }
 
           let string = stl_exporter.parse( tds_obj ).split( ',' );
-          let blob = new Blob( [ string ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          link.download = filename + 'stl';
-          link.click();
+
+          zip.file( filename + 'stl', blob );
+
+          await process_zip( 'STL.' );
         }
       }
 
-      function export_dae() {
+      async function export_dae() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const dae_exporter = new THREE.ColladaExporter( manager );
 
@@ -665,24 +712,35 @@
           }
 
           let result = dae_exporter.parse( tds_obj );
-          let blob = new Blob( [ result.data ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          link.download = filename + 'dae';
-          link.click();
 
-          if (result.textures.length > 0) {
-            result.textures.forEach( tex => {
-              blob = new Blob( [ tex.data ], { type: 'image/png' } );
-              link.href = URL.createObjectURL( blob );
-              link.download = `${ tex.name }.${ tex.ext }`;
-              link.click();
+          zip.file( filename + 'dae', result.data );
+
+          if (result.textures && result.textures.length > 0) {
+            let processed_index = 0;
+
+            result.textures.forEach( async tex => {
+              let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+
+              zip.file( `${ tex.name }.${ tex.ext }`, blob );
+
+              if (processed_index === result.textures.length - 1) await process_zip( 'DAE.' );
+
+              processed_index += 1;
             });
+          } else {
+            await process_zip( 'DAE.' );
           }
         }
       }
 
-      function export_gltf() {
+      async function export_gltf() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const gltf_exporter = new THREE.GLTFExporter( manager );
 
@@ -697,18 +755,25 @@
 
           let options = { binary: false, maxTextureSize: 4096 || Infinity };
 
-          gltf_exporter.parse( tds_obj, ( json ) => {
+          gltf_exporter.parse( tds_obj, async json => {
             let string = JSON.stringify( json, null, 2 );
             let blob = new Blob( [ string ], { type: 'text/plain' } );
-            link.href = URL.createObjectURL( blob );
-            link.download = filename + 'gltf';
-            link.click();
+
+            zip.file( filename + 'gltf', blob );
+
+            await process_zip( 'GLTF.' );
           }, function( error ) { console.log( error ); }, options);
         }
       }
 
-      function export_glb() {
+      async function export_glb() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const gltf_exporter = new THREE.GLTFExporter( manager );
 
@@ -723,17 +788,24 @@
 
           let options = { binary: true, maxTextureSize: 4096 || Infinity };
 
-          gltf_exporter.parse( tds_obj, ( json ) => {
+          gltf_exporter.parse( tds_obj, async json => {
             let blob = new Blob( [ json ], { type: 'application/octet-stream' } );
-            link.href = URL.createObjectURL( blob );
-            link.download = filename + 'glb';
-            link.click();
+
+            zip.file( filename + 'glb', blob );
+
+            await process_zip( 'GLB.' );
           }, function( error ) { console.log( error ); }, options );
         }
       }
 
-      function export_json() {
+      async function export_json() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         if (tds_obj) {
           if (selected_tds_file) {
@@ -746,14 +818,21 @@
 
           let json = JSON.stringify( tds_obj.toJSON() );
           let blob = new Blob( [ json ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          link.download = filename + 'json';
-          link.click();
+
+          zip.file( filename + 'json', blob );
+
+          await process_zip( 'JSON.' );
         }
       }
 
-      function export_3dm() {
+      async function export_3dm() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         if (tds_obj) {
           if (selected_tds_file) {
@@ -783,7 +862,7 @@
 
           let count = 0;
 
-          rhino3dm().then( ( Module ) => {
+          rhino3dm().then( async Module => {
             let rhino_file = new Module.File3dm();
             let rhino_mesh;
 
@@ -850,9 +929,10 @@
             });
 
             let blob = new Blob( [ rhino_file.toByteArray() ], { type: 'application/octet-stream' } );
-            link.href = URL.createObjectURL( blob );
-            link.download = filename + '3dm';
-            link.click();
+
+            zip.file( filename + '3dm', blob );
+
+            await process_zip( '3DM.' );
           });
         }
       }
@@ -1464,6 +1544,8 @@
           manager.addHandler( /\.dds$/i, dds_loader );
         }
 
+        if (zip === undefined) zip = new JSZip();
+
         selected_tds_file = null;
         selected_tds_url_file = null;
         url_resource_path = ''
@@ -1478,10 +1560,15 @@
         original_side = {};
         original_side_array = {};
         edges_visible = false;
+        flatShading_enabled = false;
+        bgnd_linear_gradient = false;
+        vertex_colors_enabled = false;
+        random_vertex_colors_enabled = false;
+        original_vertex_color_array = {};
+        random_vertex_color_array = {};
         grid_visible = false;
         polar_grid_visible = false;
         render_requested = false;
-        flatShading_enabled = false;
         gif_export = false;
         initial_rotation = new THREE.Vector3();
         bounding_box = new THREE.Box3();
@@ -1499,7 +1586,7 @@
             else if (fi.files[ i ].type.startsWith('image/')) textures.push( fi.files[ i ] );
           };
 
-          if (!selected_tds_file) {
+          if (selected_tds_file === null) {
             console.log( 'No valid 3DS file selected!' );
             document.body.style.backgroundImage = 'none';
             document.getElementById('div_spinner').style.display = 'none';
@@ -1628,6 +1715,9 @@
                 child_count += 1;
               }
 
+              random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+              original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+
               if (Array.isArray( child.material )) {
                 let child_count_array = 1;
 
@@ -1636,8 +1726,17 @@
                 original_side_array[ child.name ] = {};
 
                 child.material.forEach( mtl => {
+                  mtl.side = THREE.DoubleSide;
                   mtl.flatShading = false;
                   mtl.skinning = true;
+
+                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                    mtl.vertexColors = true;
+                    vertex_colors_enabled = true;
+                    document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                    document.getElementById('btn_random_vertex_colors').disabled = false;
+                    random_vertex_changed();
+                  }
 
                   initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
                   initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
@@ -1645,8 +1744,17 @@
                   child_count_array += 1;
                 });
               } else {
+                child.material.side = THREE.DoubleSide;
                 child.material.flatShading = false;
                 child.material.skinning = true;
+
+                if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                  child.material.vertexColors = true;
+                  vertex_colors_enabled = true;
+                  document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                  document.getElementById('btn_random_vertex_colors').disabled = false;
+                  random_vertex_changed();
+                }
 
                 initial_opacity[ child.name ] = child.material.opacity;
                 initial_transparency[ child.name ] = child.material.transparent;
@@ -1722,7 +1830,7 @@
             if (selected_url_file.toUpperCase().endsWith('.3DS')) selected_tds_url_file = selected_url_file;
           }
 
-          if (!selected_tds_url_file) {
+          if (selected_tds_url_file === null) {
             console.log( 'Unsupported URL file!' );
             render_requested = false;
             enable_disable( true );
@@ -1746,6 +1854,9 @@
                   child_count += 1;
                 }
 
+                random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+                original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+
                 if (Array.isArray( child.material )) {
                   let child_count_array = 1;
 
@@ -1754,8 +1865,17 @@
                   original_side_array[ child.name ] = {};
 
                   child.material.forEach( mtl => {
+                    mtl.side = THREE.DoubleSide;
                     mtl.flatShading = false;
                     mtl.skinning = true;
+
+                    if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                      mtl.vertexColors = true;
+                      vertex_colors_enabled = true;
+                      document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                      document.getElementById('btn_random_vertex_colors').disabled = false;
+                      random_vertex_changed();
+                    }
 
                     initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
                     initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
@@ -1763,8 +1883,17 @@
                     child_count_array += 1;
                   });
                 } else {
+                  child.material.side = THREE.DoubleSide;
                   child.material.flatShading = false;
                   child.material.skinning = true;
+
+                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                    child.material.vertexColors = true;
+                    vertex_colors_enabled = true;
+                    document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                    document.getElementById('btn_random_vertex_colors').disabled = false;
+                    random_vertex_changed();
+                  }
 
                   initial_opacity[ child.name ] = child.material.opacity;
                   initial_transparency[ child.name ] = child.material.transparent;
@@ -2014,6 +2143,66 @@
         }
       }
 
+      function set_vertex_colors() {
+        if (vertex_colors_enabled === true) {
+          document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_random_vertex_colors').disabled = true;
+          random_vertex_colors_enabled = true;
+          set_random_vertex_colors();
+          vertex_colors_enabled = false;
+        } else {
+          document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_random_vertex_colors').disabled = false;
+          vertex_colors_enabled = true;
+        }
+
+        random_vertex_changed();
+
+        tds_obj.traverse( function( child ) {
+    	    if (child.isMesh) {
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtl => {
+                mtl.vertexColors = vertex_colors_enabled;
+                mtl.needsUpdate = true;
+              });
+            } else {
+              child.material.vertexColors = vertex_colors_enabled;
+              child.material.needsUpdate = true;
+            }
+    		  }
+    	  });
+      }
+
+      function set_random_vertex_colors() {
+        if (random_vertex_colors_enabled === true) {
+          document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
+          random_vertex_colors_enabled = false;
+        } else {
+          document.getElementById('btn_random_vertex_colors').style.backgroundColor = 'lightgreen';
+          random_vertex_colors_enabled = true;
+        }
+
+        tds_obj.traverse( function( child ) {
+    	    if (child.isMesh) {
+            if (random_vertex_colors_enabled === true) {
+              child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3, false ) );
+            } else {
+              original_vertex_color_array[ child.name ] ? child.geometry.setAttribute( 'color', original_vertex_color_array[ child.name ] ) : child.geometry.deleteAttribute( 'color' );
+            }
+
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtl => {
+                mtl.needsUpdate = true;
+              });
+            } else {
+              child.material.needsUpdate = true;
+            }
+    		  }
+    	  });
+      }
+
       async function render() {
         if (document.getElementById('gif_progress').style.display === 'none') {
           if (render_requested === true) requestAnimationFrame( render );
@@ -2043,7 +2232,7 @@
             }
 
             // Let GPU cool down a bit
-            if (progress.value === 0) await new Promise(resolve => setTimeout( resolve, 200 ));
+            if (progress.value === 0) await new Promise( resolve => setTimeout( resolve, 200 ) );
           }
 
           controls.update();
@@ -2103,13 +2292,14 @@
         document.getElementById('wireframe').checked = false;
         document.getElementById('scale_10x').checked = false;
 
-        // Reset opacity, scale, flat, edges and reflectivity values
+        // Reset opacity, scale, flat, edges, reflectivity and vertex colors values
         enable_opacity = false;
         document.getElementById('model_opacity').value = 1;
         document.getElementById('model_opacity').disabled = true;
         document.getElementById('btn_dc_opacity').style.backgroundColor = 'transparent';
         previous_scale = '1';
         document.getElementById('model_scale').value = 1;
+        document.getElementById('btn_mtl_side').innerHTML = 'DS';
         flatShading_enabled = false;
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         edges_visible = false;
@@ -2117,6 +2307,12 @@
         reflect = false;
         document.getElementById('btn_reflective').disabled = true;
         document.getElementById('btn_reflective').style.backgroundColor = '#d1cefc';
+        vertex_colors_enabled = false;
+        document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
+        random_vertex_colors_enabled = false;
+        document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_random_vertex_colors').disabled = true;
+        random_vertex_changed();
 
         gif_export = false;
         reset_rotation = true;
@@ -2176,6 +2372,7 @@
         document.getElementById('btn_dc_scale').disabled = disable;
         document.getElementById('btn_dc_opacity').disabled = disable;
         document.getElementById('btn_mtl_side').disabled = disable;
+        document.getElementById('btn_vertex_colors').disabled = disable;
         document.getElementById('btn_bgnd_linear_gradient').disabled = disable;
         document.getElementById('btn_polar_grid').disabled = disable;
         document.getElementById('btn_grid').disabled = disable;
@@ -2251,6 +2448,16 @@
           $('#back_color').hover(
           function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
           function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+        }
+      }
+
+      function random_vertex_changed() {
+        if ($('#btn_random_vertex_colors')[ 0 ].disabled === true) {
+          $('#btn_random_vertex_colors').unbind('mouseenter mouseleave');
+        } else {
+          $('#btn_random_vertex_colors').hover(
+          function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+          function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
         }
       }
     </script>
