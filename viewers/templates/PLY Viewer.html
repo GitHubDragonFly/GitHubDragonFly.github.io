@@ -5,7 +5,7 @@
     <meta name="description" content="PLY + STL Viewer">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
-    <script src="../static/js/jquery-3.6.4.min.js" defer></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
     <script src="../static/build/r135/three.min.js" defer></script>
     <script src="../static/js/PLYLoader.js" defer></script>
     <script src="../static/js/STLLoader.js" defer></script>
@@ -16,6 +16,7 @@
     <script src="../static/js/omggif/omggif.js" defer></script>
     <script src="../static/js/OrbitControls.js" defer></script>
     <script src="../static/js/OrbitControlsGizmo.js" defer></script>
+    <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
     <script src="../static/js/exporters/PLYExporter.js" defer></script>
     <script src="../static/js/exporters/STLExporter.js" defer></script>
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
@@ -49,11 +50,11 @@
         border: 1px solid blue;
         -webkit-border-radius: 2px;
         border-radius: 2px;
+        vertical-align: middle;
         margin: 2px 2px 2px 0;
         min-width: 22px;
         height: 22px;
         padding: 1px;
-        vertical-align: middle;
       }
 
       label {
@@ -265,17 +266,18 @@
         <label title="Equirectangular Background"><input type="checkbox" id="equi" onchange="set_equi();" disabled />Eq</label>
         <select title="Export" name="export_names" id="export_names" disabled>
           <option value="" selected disabled>Export</option>
-          <option value="gif" onclick="export_animated_gif();">GIF</option>
-          <option value="3dm" onclick="export_3dm();">3DM</option>
-          <option value="ply" onclick="export_ply();">PLY</option>
-          <option value="stl" onclick="export_stl();">STL</option>
-          <option value="obj" onclick="export_obj();">OBJ</option>
-          <option value="dae" onclick="export_dae();">DAE</option>
-          <option value="glb" onclick="export_glb();">GLB</option>
-          <option value="gltf" onclick="export_gltf();">GLTF</option>
-          <option value="json" onclick="export_json();">JSON</option>
-          <option value="prwm" onclick="export_prwm();">PRWM</option>
-          <option value="apng" onclick="export_animated_png();">APNG</option>
+          <option title="GIF - Animated GIF" value="gif" onclick="export_animated_gif();">GIF</option>
+          <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
+          <option title="STL - Stereolithography Format" value="stl" onclick="export_stl();">STL</option>
+          <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
+          <option title="DAE - Collada Format" value="dae" onclick="export_dae();">DAE</option>
+          <option title="GLB - GL Transmission Format binary" value="glb" onclick="export_gltf( true );">GLB</option>
+          <option title="GLTF - GL Transmission Format ascii" value="gltf" onclick="export_gltf( false );">GLTF</option>
+          <option title="PLY - Polygon File Format ascii" value="ply" onclick="export_ply( false );">PLY_a</option>
+          <option title="PLY - Polygon File Format binary" value="ply" onclick="export_ply( true );">PLY_b</option>
+          <option title="JSON - Three.js Format" value="json" onclick="export_json();">JSON</option>
+          <option title="PRWM - Packed Raw WebGL Model Format" value="prwm" onclick="export_prwm();">PRWM</option>
+          <option title="APNG - Animated PNG" value="apng" onclick="export_animated_png();">APNG</option>
         </select>
         <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; width: 40px;" disabled>RST</button>
         <button title="Full Screen" id="btn_full_screen" onclick="full_screen();" style="background-color: transparent; min-width: 24px;"><p class="full_screen"></p></button>
@@ -320,7 +322,7 @@
             <span id="ali_val">0.05</span>
           </div>
         </button>
-        <label title="Wireframe"><input type="checkbox" id="wireframe" name="wireframe" onchange="show_wireframe();" disabled />Wire</label>
+        <label title="Wireframe">Wire<input type="checkbox" id="wireframe" name="wireframe" onchange="show_wireframe();" disabled /></label>
         <label for="ambient_light_color" title="Ambient Light Color">AL</label>
         <input type="color" title="Ambient Light Color" id="ambient_light_color" name="ambient_light_color" onchange="set_ambient_light_color();" disabled />
         <label for="directional_light_color" title="Directional Light Color">DL</label>
@@ -570,10 +572,10 @@
       var ww = window.innerWidth, wh = window.innerHeight;
       var mouse_down, reset_rotation, events_initialized;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
-      var flat_shading_enabled, enable_opacity, bgnd_linear_gradient, gif_export;
-      var previous_scale = '1', bounding_box, filename, slider_height = 0;
+      var flat_shading_enabled, enable_opacity, bgnd_linear_gradient;
+      var previous_scale = '1', bounding_box, filename, gif_export, zip;
       var material, textures, current_texture, animated_gif_texture, url_tga_loaded;
-      var url_displayed = false, url_loading = false, menu_location_bottom = false;
+      var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
       var selected_ply_file, selected_stl_file, selected_url_file = '', selected_url_ply_file, selected_url_stl_file;
       var vertex_colors_enabled, original_vertex_color_array, random_vertex_colors_enabled, random_vertex_color_array;
 
@@ -581,226 +583,220 @@
       link.style.display = 'none';
       document.body.appendChild( link );
 
-      function export_obj() {
+      function start_export() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        render_requested = false;
+
+        set_filename();
+      }
+
+      function set_filename() {
+        if (selected_ply_file) {
+          filename = selected_ply_file.name.substring( 0, selected_ply_file.name.lastIndexOf('.') + 1 );
+        } else if (selected_stl_file) {
+          filename = selected_stl_file.name.substring( 0, selected_stl_file.name.lastIndexOf('.') + 1 );
+        } else {
+          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
+        }
+      }
+
+      async function process_zip( ext = '' ) {
+        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 3 } } ).then( function( zipped_file ) {
+          link.href = URL.createObjectURL( zipped_file );
+          URL.revokeObjectURL( zipped_file );
+          link.download = filename + ext + 'zip';
+          link.click();
+
+          document.getElementById('div_loading').innerHTML = '';
+          document.getElementById('div_loading').style.display = 'none';
+          document.getElementById('fixed_menu').style.display = 'block';
+          render_requested = true;
+          render();
+
+          zip = new JSZip();
+        });
+      }
+
+      async function export_obj() {
+        start_export();
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const obj_exporter = new THREE.OBJExporter( manager );
 
         if (mesh) {
-          if (selected_ply_file) {
-            filename = selected_ply_file.name.substring( 0, selected_ply_file.name.lastIndexOf('.') + 1 );
-          } else if (selected_stl_file) {
-            filename = selected_stl_file.name.substring( 0, selected_stl_file.name.lastIndexOf('.') + 1 );
-          } else {
-            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
-          }
-
           let exported = obj_exporter.parse( mesh, filename );
-          let obj = exported[ 'obj' ].split( ',' );
-          let blob = new Blob( [ obj ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          URL.revokeObjectURL( blob );
-          link.download = filename + 'obj';
-          link.click();
+
+          zip.file( filename + 'obj', exported[ 'obj' ] );
 
           if (exported[ 'mtl' ]) {
-            let mtl = exported[ 'mtl' ].split( ',' );
-            blob = new Blob( [ mtl ], { type: 'text/plain' } );
-            link.href = URL.createObjectURL( blob );
-            URL.revokeObjectURL( blob );
-            link.download = filename + 'mtl';
-            link.click();
+            zip.file( filename + 'mtl', exported[ 'mtl' ] );
 
-            exported[ 'tex' ].forEach( tex => {
-              blob = new Blob( [ tex.data ], { type: 'image/png' } );
-              link.href = URL.createObjectURL( blob );
-              URL.revokeObjectURL( blob );
-              link.download = `${ tex.name }.${ tex.ext }`;
-              link.click();
-            });
+            if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
+              let processed_index = 0;
+
+              exported[ 'tex' ].forEach( async tex => {
+                let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+
+                zip.file( `${ tex.name }.${ tex.ext }`, blob );
+
+                if (processed_index === exported[ 'tex' ].length - 1) await process_zip( 'OBJ.' );
+
+                processed_index += 1;
+              });
+            } else {
+              await process_zip( 'OBJ.' );
+            }
+          } else {
+            await process_zip( 'OBJ.' );
           }
         }
       }
 
-      function export_ply() {
-        document.getElementById('export_names').selectedIndex = 0;
+      async function export_ply( binary = false ) {
+        start_export();
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const ply_exporter = new THREE.PLYExporter( manager );
 
         if (mesh) {
-          if (selected_ply_file) {
-            filename = selected_ply_file.name.substring( 0, selected_ply_file.name.lastIndexOf('.') + 1 );
-          } else if (selected_stl_file) {
-            filename = selected_stl_file.name.substring( 0, selected_stl_file.name.lastIndexOf('.') + 1 );
-          } else {
-            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
-          }
+          ply_exporter.parse( mesh, async function( json ) {
+            let blob;
 
-          let string = ply_exporter.parse( mesh ).split( ',' );
-          let blob = new Blob( [ string ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          link.download = filename + 'ply';
-          link.click();
+            if (binary === true) {
+              blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+            } else {
+              let string = json.split( ',' );
+              blob = new Blob( [ string ], { type: 'text/plain' } );
+            }
+
+            zip.file( filename + 'ply', blob );
+
+            await process_zip( binary === true ? 'PLY_binary.' : 'PLY_ascii.' );
+
+          }, { binary: binary, littleEndian: true });
         }
       }
 
-      function export_stl() {
-        document.getElementById('export_names').selectedIndex = 0;
+      async function export_stl() {
+        start_export();
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const stl_exporter = new THREE.STLExporter( manager );
 
         if (mesh) {
-          if (selected_ply_file) {
-            filename = selected_ply_file.name.substring( 0, selected_ply_file.name.lastIndexOf('.') + 1 );
-          } else if (selected_stl_file) {
-            filename = selected_stl_file.name.substring( 0, selected_stl_file.name.lastIndexOf('.') + 1 );
-          } else {
-            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
-          }
-
           let string = stl_exporter.parse( mesh ).split( ',' );
           let blob = new Blob( [ string ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          link.download = filename + 'stl';
-          link.click();
+
+          zip.file( filename + 'stl', blob );
+
+          await process_zip( 'STL.' );
         }
       }
 
-      function export_dae() {
-        document.getElementById('export_names').selectedIndex = 0;
+      async function export_dae() {
+        start_export();
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const dae_exporter = new THREE.ColladaExporter( manager );
 
         if (mesh) {
-          if (selected_ply_file) {
-            filename = selected_ply_file.name.substring( 0, selected_ply_file.name.lastIndexOf('.') + 1 );
-          } else if (selected_stl_file) {
-            filename = selected_stl_file.name.substring( 0, selected_stl_file.name.lastIndexOf('.') + 1 );
-          } else {
-            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
-          }
-
           let result = dae_exporter.parse( mesh );
-          let blob = new Blob( [ result.data ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          link.download = filename + 'dae';
-          link.click();
 
-          if (result.textures.length > 0) {
-            result.textures.forEach( tex => {
-              blob = new Blob( [ tex.data ], { type: 'image/png' } );
-              link.href = URL.createObjectURL( blob );
-              link.download = `${ tex.name }.${ tex.ext }`;
-              link.click();
+          zip.file( filename + 'dae', result.data );
+
+          if (result.textures && result.textures.length > 0) {
+            let processed_index = 0;
+
+            result.textures.forEach( async tex => {
+              let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+
+              zip.file( `${ tex.name }.${ tex.ext }`, blob );
+
+              if (processed_index === result.textures.length - 1) await process_zip( 'DAE.' );
+
+              processed_index += 1;
             });
+          } else {
+            await process_zip( 'DAE.' );
           }
         }
       }
 
-      function export_gltf() {
-        document.getElementById('export_names').selectedIndex = 0;
+      async function export_gltf( binary = false ) {
+        start_export();
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         const gltf_exporter = new THREE.GLTFExporter( manager );
 
         if (mesh) {
-          if (selected_ply_file) {
-            filename = selected_ply_file.name.substring( 0, selected_ply_file.name.lastIndexOf('.') + 1 );
-          } else if (selected_stl_file) {
-            filename = selected_stl_file.name.substring( 0, selected_stl_file.name.lastIndexOf('.') + 1 );
-          } else {
-            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
-          }
+          let options = { binary: binary, maxTextureSize: 4096 || Infinity };
 
-          let options = { binary: false, maxTextureSize: 4096 || Infinity };
+          gltf_exporter.parse( mesh, async json => {
+            let blob;
 
-          gltf_exporter.parse( mesh, ( json ) => {
-            let string = JSON.stringify( json, null, 2 );
-            let blob = new Blob( [ string ], { type: 'text/plain' } );
-            link.href = URL.createObjectURL( blob );
-            link.download = filename + 'gltf';
-            link.click();
-          }, function( error ) { console.log( error ); }, options );
+            if (binary === true) {
+              blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+            } else {
+              let string = JSON.stringify( json, null, 2 );
+              blob = new Blob( [ string ], { type: 'text/plain' } );
+            }
+
+            let ext = (binary === true) ? 'glb' : 'gltf';
+
+            zip.file( filename + ext, blob );
+
+            ext = (binary === true) ? 'GLB.' : 'GLTF.';
+
+            await process_zip( ext );
+          }, function( error ) { console.log( error ); }, options);
         }
       }
 
-      function export_glb() {
-        document.getElementById('export_names').selectedIndex = 0;
+      async function export_json() {
+        start_export();
 
-        const gltf_exporter = new THREE.GLTFExporter( manager );
-
-        if (mesh) {
-          if (selected_ply_file) {
-            filename = selected_ply_file.name.substring( 0, selected_ply_file.name.lastIndexOf('.') + 1 );
-          } else if (selected_stl_file) {
-            filename = selected_stl_file.name.substring( 0, selected_stl_file.name.lastIndexOf('.') + 1 );
-          } else {
-            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
-          }
-
-          let options = { binary: true, maxTextureSize: 4096 || Infinity };
-
-          gltf_exporter.parse( mesh, ( json ) => {
-            let blob = new Blob( [ json ], { type: 'application/octet-stream' } );
-            link.href = URL.createObjectURL( blob );
-            link.download = filename + 'glb';
-            link.click();
-          }, function( error ) { console.log( error ); }, options );
-        }
-      }
-
-      function export_json() {
-        document.getElementById('export_names').selectedIndex = 0;
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         if (mesh) {
-          if (selected_ply_file) {
-            filename = selected_ply_file.name.substring( 0, selected_ply_file.name.lastIndexOf('.') + 1 );
-          } else if (selected_stl_file) {
-            filename = selected_stl_file.name.substring( 0, selected_stl_file.name.lastIndexOf('.') + 1 );
-          } else {
-            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
-          }
-
           let json = JSON.stringify( mesh.toJSON() );
           let blob = new Blob( [ json ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          link.download = filename + 'json';
-          link.click();
+
+          zip.file( filename + 'json', blob );
+
+          await process_zip( 'JSON.' );
         }
       }
 
-      function export_prwm() {
-        document.getElementById('export_names').selectedIndex = 0;
+      async function export_prwm() {
+        start_export();
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         if (mesh) {
-          if (selected_ply_file) {
-            filename = selected_ply_file.name.substring( 0, selected_ply_file.name.lastIndexOf('.') + 1 );
-          } else if (selected_stl_file) {
-            filename = selected_stl_file.name.substring( 0, selected_stl_file.name.lastIndexOf('.') + 1 );
-          } else {
-            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
-          }
-
           let bigEndian = false;
-          let arrayBuffer = threeBuffergeometryToPrwm( mesh.geometry, bigEndian);
+          let arrayBuffer = threeBuffergeometryToPrwm( mesh.geometry, bigEndian );
           let blob = new Blob( [ arrayBuffer ], { type: 'application/binary' } );
-          link.href = URL.createObjectURL( blob );
-          link.download = filename + 'prwm';
-          link.click();
+
+          zip.file( filename + 'prwm', blob );
+
+          await process_zip( 'PRWM.' );
         }
       }
 
-      function export_3dm() {
-        document.getElementById('export_names').selectedIndex = 0;
+      async function export_3dm() {
+        start_export();
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         if (mesh) {
-          if (selected_ply_file) {
-            filename = selected_ply_file.name.substring( 0, selected_ply_file.name.lastIndexOf('.') + 1 );
-          } else if (selected_stl_file) {
-            filename = selected_stl_file.name.substring( 0, selected_stl_file.name.lastIndexOf('.') + 1 );
-          } else {
-            filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
-          }
-
           let uuid_array = [], mesh_geometry_uuid, mesh_material_uuid;
 
           mesh.traverse( ( child ) => {
@@ -822,7 +818,7 @@
 
           let count = 0;
 
-          rhino3dm().then( ( Module ) => {
+          rhino3dm().then( async Module => {
             let rhino_file = new Module.File3dm();
             let rhino_mesh;
 
@@ -890,9 +886,10 @@
             });
 
             let blob = new Blob( [ rhino_file.toByteArray() ], { type: 'application/octet-stream' } );
-            link.href = URL.createObjectURL( blob );
-            link.download = filename + '3dm';
-            link.click();
+
+            zip.file( filename + '3dm', blob );
+
+            await process_zip( '3DM.' );
           });
         }
       }
@@ -902,13 +899,7 @@
 
         gif_export = true;
 
-        if (selected_ply_file) {
-          filename = selected_ply_file.name.substring( 0, selected_ply_file.name.lastIndexOf('.') + 1 );
-        } else if (selected_stl_file) {
-          filename = selected_stl_file.name.substring( 0, selected_stl_file.name.lastIndexOf('.') + 1 );
-        } else {
-          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
-        }
+        set_filename();
 
         // Generate
 
@@ -998,7 +989,9 @@
 
             gif_export = false;
 
-            if (render_requested) render();
+            if (render_requested === true) render();
+
+            return;
           }
 
           current ++;
@@ -1010,13 +1003,7 @@
       async function export_animated_png() {
         document.getElementById('export_names').selectedIndex = 0;
 
-        if (selected_ply_file) {
-          filename = selected_ply_file.name.substring( 0, selected_ply_file.name.lastIndexOf('.') + 1 );
-        } else if (selected_stl_file) {
-          filename = selected_stl_file.name.substring( 0, selected_stl_file.name.lastIndexOf('.') + 1 );
-        } else {
-          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') + 1 );
-        }
+        set_filename();
 
         // Generate
 
@@ -1090,7 +1077,9 @@
             link.download = filename + 'png';
             link.click();
 
-            if (render_requested) render();
+            if (render_requested === true) render();
+
+            return;
           }
 
           current ++;
@@ -1471,6 +1460,8 @@
           dds_loader = new THREE.DDSLoader( manager );
           manager.addHandler( /\.dds$/i, dds_loader );
         }
+
+        if (zip === undefined) zip = new JSZip();
 
         selected_ply_file = null;
         selected_stl_file = null;
