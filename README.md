@@ -73,7 +73,7 @@ Number Type Converter
     - Try not to change file names when saving files during initial export
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
-    - Animated GIF export is based on mrdoob's [example](https://github.com/mrdoob/omggif-example) and is using [omggif](https://github.com/deanm/omggif) library:
+    - Animated GIF export is based on mrdoob's [example](https://github.com/mrdoob/omggif-example) using [omggif](https://github.com/deanm/omggif) library:
       - currently set to 500 x 500 size in the centre of the window
       - the approximate GIF area rectangle will be shown during the GIF generation
       - if the model leaves this area during the GIF generation, due to its motion, the process might error out
@@ -101,6 +101,7 @@ Number Type Converter
       - Select 1 copy of the texture and rename it if you wish, then update the corresponding `<init_from>` lines inside the `<library_images>` section of the DAE file to point to that texture
       - Delete all other copies of that same texture
       - This bug might eventually get fixed
+    - PLY exporter will include vertex colors as well as convert material color to vertex color providing the material has no texture
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
