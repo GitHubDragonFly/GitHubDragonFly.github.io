@@ -62,6 +62,7 @@
 			};
 			options = Object.assign( defaultOptions, options );
 			const excludeAttributes = options.excludeAttributes;
+			let includeIndices = true;
 			let includeNormals = false;
 			let includeColors = false;
 			let includeUVs = false; // count the vertices, check which properties are used,
@@ -98,13 +99,16 @@
 					faceCount += indices ? indices.count / 3 : vertices.count / 3;
 					if ( normals !== undefined ) includeNormals = true;
 					if ( uvs !== undefined ) includeUVs = true;
-					if ( colors !== undefined ) includeColors = true;
+					// allow converting single material color to vertex color if material texture is not used
+					// material arrays will be disregarded
+					if ( colors !== undefined || ( child.material && child.material.color && child.material.map === null ) ) includeColors = true;
 
 				}
 
 			} );
+
 			const tempColor = new THREE.Color();
-			const includeIndices = excludeAttributes.indexOf( 'index' ) === - 1;
+			includeIndices = excludeAttributes.indexOf( 'index' ) === - 1;
 			includeNormals = includeNormals && excludeAttributes.indexOf( 'normal' ) === - 1;
 			includeColors = includeColors && excludeAttributes.indexOf( 'color' ) === - 1;
 			includeUVs = includeUVs && excludeAttributes.indexOf( 'uv' ) === - 1;
@@ -259,6 +263,15 @@
 								output.setUint8( vOffset, Math.floor( tempColor.b * 255 ) );
 								vOffset += 1;
 
+							} else if ( mesh.material && mesh.material.color ) {
+
+								output.setUint8( vOffset, Math.floor( mesh.material.color.r * 255 ) );
+								vOffset += 1;
+								output.setUint8( vOffset, Math.floor( mesh.material.color.g * 255 ) );
+								vOffset += 1;
+								output.setUint8( vOffset, Math.floor( mesh.material.color.b * 255 ) );
+								vOffset += 1;
+
 							} else {
 
 								output.setUint8( vOffset, 255 );
@@ -383,6 +396,10 @@
 
 								tempColor.fromBufferAttribute( colors, i ).convertLinearToSRGB();
 								line += ' ' + Math.floor( tempColor.r * 255 ) + ' ' + Math.floor( tempColor.g * 255 ) + ' ' + Math.floor( tempColor.b * 255 );
+
+							} else if ( mesh.material && mesh.material.color ) {
+
+								line += ' ' + Math.floor( mesh.material.color.r * 255 ) + ' ' + Math.floor( mesh.material.color.g * 255 ) + ' ' + Math.floor( mesh.material.color.b * 255 );
 
 							} else {
 
