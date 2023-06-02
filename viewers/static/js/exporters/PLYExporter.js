@@ -99,9 +99,16 @@
 					faceCount += indices ? indices.count / 3 : vertices.count / 3;
 					if ( normals !== undefined ) includeNormals = true;
 					if ( uvs !== undefined ) includeUVs = true;
-					// allow converting single material color to vertex color if material texture is not used
-					// material arrays will be disregarded
-					if ( colors !== undefined || ( child.material && child.material.color && child.material.map === null ) ) includeColors = true;
+					// allow converting material color to vertex color if material texture is not used
+					if ( colors !== undefined ) {
+						includeColors = true;
+					} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length === mesh.material.length ) ) {
+						includeColors = true;
+					} else if ( geometry.groups && geometry.groups.length === 1 && mesh.material && mesh.material.map === null ) {
+						includeColors = true;
+					} else if ( mesh.material && mesh.material.color && mesh.material.map === null ) {
+						includeColors = true;
+					}
 
 				}
 
@@ -187,6 +194,8 @@
 					const indices = geometry.getIndex();
 					normalMatrixWorld.getNormalMatrix( mesh.matrixWorld );
 
+					let j = 0;
+
 					for ( let i = 0, l = vertices.count; i < l; i ++ ) {
 
 						vertex.x = vertices.getX( i );
@@ -263,7 +272,19 @@
 								output.setUint8( vOffset, Math.floor( tempColor.b * 255 ) );
 								vOffset += 1;
 
-							} else if ( mesh.material && mesh.material.color ) {
+							} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length === mesh.material.length ) ) {
+
+								if ( i === ( geometry.groups[ j ].start + geometry.groups[ j ].count - 1 ) && j < geometry.groups.length - 1 ) j += 1;
+								let group_material_color = mesh.material[ geometry.groups[ j ].materialIndex ].color;
+
+								output.setUint8( vOffset, Math.floor( group_material_color.r * 255 ) );
+								vOffset += 1;
+								output.setUint8( vOffset, Math.floor( group_material_color.g * 255 ) );
+								vOffset += 1;
+								output.setUint8( vOffset, Math.floor( group_material_color.b * 255 ) );
+								vOffset += 1;
+
+							} else if ( ( geometry.groups && mesh.material && geometry.groups.length === 1 ) || ( mesh.material && mesh.material.color ) ) {
 
 								output.setUint8( vOffset, Math.floor( mesh.material.color.r * 255 ) );
 								vOffset += 1;
@@ -347,6 +368,8 @@
 					const indices = geometry.getIndex();
 					normalMatrixWorld.getNormalMatrix( mesh.matrixWorld ); // form each line
 
+					let j = 0;
+
 					for ( let i = 0, l = vertices.count; i < l; i ++ ) {
 
 						vertex.x = vertices.getX( i );
@@ -389,7 +412,6 @@
 
 						} // THREE.Color information
 
-
 						if ( includeColors === true ) {
 
 							if ( colors != null ) {
@@ -397,7 +419,14 @@
 								tempColor.fromBufferAttribute( colors, i ).convertLinearToSRGB();
 								line += ' ' + Math.floor( tempColor.r * 255 ) + ' ' + Math.floor( tempColor.g * 255 ) + ' ' + Math.floor( tempColor.b * 255 );
 
-							} else if ( mesh.material && mesh.material.color ) {
+							} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length === mesh.material.length ) ) {
+
+								if ( i === ( geometry.groups[ j ].start + geometry.groups[ j ].count - 1 ) && j < geometry.groups.length - 1 ) j += 1;
+								let group_material_color = mesh.material[ geometry.groups[ j ].materialIndex ].color;
+
+								line += ' ' + Math.floor( group_material_color.r * 255 ) + ' ' + Math.floor( group_material_color.g * 255 ) + ' ' + Math.floor( group_material_color.b * 255 );
+
+							} else if ( ( geometry.groups && mesh.material && geometry.groups.length === 1 ) || ( mesh.material && mesh.material.color ) ) {
 
 								line += ' ' + Math.floor( mesh.material.color.r * 255 ) + ' ' + Math.floor( mesh.material.color.g * 255 ) + ' ' + Math.floor( mesh.material.color.b * 255 );
 
