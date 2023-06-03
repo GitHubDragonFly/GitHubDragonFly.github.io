@@ -102,7 +102,7 @@
 					// allow converting material color to vertex color if material texture is not used
 					if ( colors !== undefined ) {
 						includeColors = true;
-					} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length === mesh.material.length ) ) {
+					} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length <= mesh.material.length ) ) {
 						includeColors = true;
 					} else if ( geometry.groups && geometry.groups.length === 1 && mesh.material && mesh.material.map === null ) {
 						includeColors = true;
@@ -272,7 +272,7 @@
 								output.setUint8( vOffset, Math.floor( tempColor.b * 255 ) );
 								vOffset += 1;
 
-							} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length === mesh.material.length ) ) {
+							} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length <= mesh.material.length ) ) {
 
 								if ( i === ( geometry.groups[ j ].start + geometry.groups[ j ].count - 1 ) && j < geometry.groups.length - 1 ) j += 1;
 								let group_material_color = mesh.material[ geometry.groups[ j ].materialIndex ].color;
@@ -419,7 +419,7 @@
 								tempColor.fromBufferAttribute( colors, i ).convertLinearToSRGB();
 								line += ' ' + Math.floor( tempColor.r * 255 ) + ' ' + Math.floor( tempColor.g * 255 ) + ' ' + Math.floor( tempColor.b * 255 );
 
-							} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length === mesh.material.length ) ) {
+							} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length <= mesh.material.length ) ) {
 
 								if ( i === ( geometry.groups[ j ].start + geometry.groups[ j ].count - 1 ) && j < geometry.groups.length - 1 ) j += 1;
 								let group_material_color = mesh.material[ geometry.groups[ j ].materialIndex ].color;
