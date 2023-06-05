@@ -31,6 +31,7 @@ Number Type Converter
 # Notes about three.js based 3D Model Viewers
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
+- Several different three.js revisions are being used and there is lots of customized code
 - Special notes about `Quick Viewer` which is using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
   - Seems to have a rather good fit on mobile devices due to its simple GUI
   - It is purely online based and can be used as standalone (just delete `favicon.ico` import)
