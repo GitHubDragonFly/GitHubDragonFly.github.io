@@ -2258,21 +2258,26 @@ class GLTFMeshQuantizationExtension {
 	function resolveURL( url, path ) {
 
 		// Invalid URL
-		if ( typeof url !== 'string' || url === '' ) return ''; // Host Relative URL
+		if ( typeof url !== 'string' || url === '' ) return '';
 
+		// Host Relative URL
 		if ( /^https?:\/\//i.test( path ) && /^\//.test( url ) ) {
 
 			path = path.replace( /(^https?:\/\/[^\/]+).*/i, '$1' );
 
-		} // Absolute URL http://,https://,//
+		}
 
+		// Absolute URL http://,https://,//
+		if ( /^(https?:)?\/\//i.test( url ) ) return url;
 
-		if ( /^(https?:)?\/\//i.test( url ) ) return url; // Data URI
+		// Data URI - see the "Length Limitations" section at:
+		// https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/Data_URLs
+		if ( /^data:.*,.*$/i.test( url ) ) return url;
 
-		if ( /^data:.*,.*$/i.test( url ) ) return url; // Blob URL
+		// Blob URL
+		if ( /^blob:.*$/i.test( url ) ) return url;
 
-		if ( /^blob:.*$/i.test( url ) ) return url; // Relative URL
-
+		// Relative URL
 		return path + url;
 
 	}
@@ -2919,7 +2924,7 @@ class GLTFMeshQuantizationExtension {
 
 					if ( bin_set === false && bufferDef.uri) options.path = '';
 				}
-	
+
 				loader.load( resolveURL( bufferDef.uri, options.path ), resolve, undefined, function () {
 
 					reject( new Error( 'THREE.GLTFLoader: Failed to load buffer "' + bufferDef.uri + '".' ) );
