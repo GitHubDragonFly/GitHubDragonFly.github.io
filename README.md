@@ -32,9 +32,13 @@ Number Type Converter
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
 - Several different three.js revisions are being used and there is lots of customized code
+- These would be the mouse controls:
+  - Rotation = left-click + hold + drag
+  - Move = right-click + hold + drag
+  - Zoom In / Out = mouse scroll wheel
 - Special notes about `Quick Viewer` which is using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
   - Seems to have a rather good fit on mobile devices due to its simple GUI
-  - It is purely online based and can be used as standalone (just delete `favicon.ico` import)
+  - It is purely online based and can be used as standalone HTML file (just delete `favicon.ico` import)
   - Might have bugs and library related limitations
   - Supported formats: 3DS, 3DM, 3MF, BIM, BREP, BRP, DAE, FBX, GLB, GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
   - Unsupported formats: FCSTD (requires worker)
@@ -171,7 +175,8 @@ PLY+STL Viewer
 - All of the above animated files are "view only" so most viewer controls will not have any effect and will be disabled
 - TIF / TIFF image file support is powered by [UTIF.js](https://github.com/photopea/UTIF.js)
 - Use the `T` button to switch between textures
-- Texture is displayed on a rotatable plane - rotation / move / zoom are not applicable to Animated GIF / PNG / WEBP files
+- Texture is displayed on a rotatable plane which can also be moved and zoomed in / out
+- Rotation / Move / Zoom are not applicable to Animated GIF - PNG - WEBP and / or video files (gizmo will disappear)
 - Video player has its own controls for playback and full-screen switching
 - URL text box also allows entering a single base64 string of the image data, see the `URLS4MODELS.md` file for an example
 - For certain formats and their manipulation an easy alternative to this viewer would be `https://ezgif.com`
