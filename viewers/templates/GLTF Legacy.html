@@ -8,6 +8,9 @@
 
     <script src="../static/model-tag/dist/model-gltf.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.135.0/build/three.min.js" defer></script>
+    <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
+    <script src="../static/js/exporters/PLYExporter.js" defer></script>
+    <script src="../static/js/exporters/STLExporter.js" defer></script>
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
     <script src="../static/js/exporters/GLTFExporter.js" defer></script>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
@@ -120,9 +123,9 @@
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".gltf, .bin, .glsl, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
         <select id="export_names" title="Export" disabled>
           <option value="" selected disabled>Export</option>
-          <option value="obj" onclick="export_obj();">OBJ</option>
-          <option value="glb" onclick="export_glb();">GLB</option>
-          <option value="gltf" onclick="export_gltf();">GLTF</option>
+          <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
+          <option title="GLB - GL Transmission Format binary" value="glb" onclick="export_gltf( true );">GLB</option>
+          <option title="GLTF - GL Transmission Format ascii" value="gltf" onclick="export_gltf( false );">GLTF</option>
         </select>
         <button title="Full Screen" id="btn_full_screen" onclick="full_screen();" style="float: right; min-width: 24px;"><p class="full_screen"></p></button>
       </div>
@@ -272,19 +275,53 @@
 
     <script>
       var manager, filename, local_blobs, url_displayed = false, url_loading = false;
-      var selected_model_file, selected_url_model_file, selected_url_file = '';
+      var selected_model_file, selected_url_model_file, selected_url_file = '', zip;
 
       const link = document.createElement( 'a' );
       link.style.display = 'none';
       document.body.appendChild( link );
 
-      function export_obj() {
+      function start_export() {
         document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_error').innerHTML = 'Please wait ...';
+        document.getElementById('div_error').style.display = 'block';
+
+        set_filename();
+      }
+
+      function set_filename() {
+        if (selected_model_file) {
+          filename = selected_model_file.name.substring( 0, selected_model_file.name.lastIndexOf('.') + 1 );
+        } else if (selected_url_model_file) {
+          filename = selected_url_model_file.substring( selected_url_model_file.lastIndexOf('/') + 1, selected_url_model_file.lastIndexOf('.') + 1 );
+        }
+      }
+
+      async function process_zip( ext = '' ) {
+        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 3 } } ).then( function( zipped_file ) {
+          link.href = URL.createObjectURL( zipped_file );
+          URL.revokeObjectURL( zipped_file );
+          link.download = filename + ext + 'zip';
+          link.click();
+
+          document.getElementById('div_error').innerHTML = '';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('fixed_menu').style.display = 'block';
+
+          zip = new JSZip();
+        });
+      }
+
+      async function export_obj() {
+        start_export();
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         let mesh = document.getElementById('model_gltf').scene.clone();
 
         mesh.traverse( ( child ) => {
-          if (child.isMesh && child.geometry.isBufferGeometry) {
+          if (child.isMesh && child.geometry.isBufferGeometry === true) {
             child.geometry = new THREE.BufferGeometry().copy( child.geometry ); // instance of new BufferGeometry for export
             if ( child.geometry.userData === undefined ) child.geometry.userData = {};
             if ( child.geometry.morphTargetsRelative === undefined ) child.geometry.morphTargetsRelative = {};
@@ -316,63 +353,62 @@
 
         const obj_exporter = new THREE.OBJExporter( manager );
 
-        if (selected_model_file) {
-          filename = selected_model_file.name.substring( 0, selected_model_file.name.lastIndexOf('.') + 1 );
-        } else if (selected_url_model_file) {
-          filename = selected_url_model_file.substring( selected_url_model_file.lastIndexOf('/') + 1, selected_url_model_file.lastIndexOf('.') + 1 );
-        }
-
         let exported = obj_exporter.parse( mesh, filename );
-        let obj = exported[ 'obj' ].split( ',' );
-        let blob = new Blob( [ obj ], { type: 'text/plain' } );
-        link.href = URL.createObjectURL( blob );
-        URL.revokeObjectURL( blob );
-        link.download = filename + 'obj';
-        link.click();
+
+        zip.file( filename + 'obj', exported[ 'obj' ] );
 
         if (exported[ 'mtl' ]) {
-          let mtl = exported[ 'mtl' ].split( ',' );
-          blob = new Blob( [ mtl ], { type: 'text/plain' } );
-          link.href = URL.createObjectURL( blob );
-          URL.revokeObjectURL( blob );
-          link.download = filename + 'mtl';
-          link.click();
+          zip.file( filename + 'mtl', exported[ 'mtl' ] );
 
-          exported[ 'tex' ].forEach( tex => {
-            blob = new Blob( [ tex.data ], { type: 'image/png' } );
+          if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
+            let processed_index = 0;
 
-            let img = new Image();
+            exported[ 'tex' ].forEach( tex => {
+              let blob = new Blob( [ tex.data ], { type: 'image/png' } );
 
-            img.onload = function() {
-              let canvas = document.createElement('canvas');
+              let img = new Image();
 
-              canvas.width = img.naturalWidth;
-              canvas.height = img.naturalHeight;
+              img.onload = async function() {
+                let canvas = document.createElement('canvas');
 
-              let ctx = canvas.getContext( '2d' );
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
 
-              // Flip image vertically
-              ctx.scale( 1, -1 );
-              ctx.drawImage( img, 0, -canvas.height );
+                const ctx = canvas.getContext( '2d' );
 
-              link.href = canvas.toDataURL( 'image/png' );
-              link.download = `${ tex.name }.${ tex.ext }`;
-              link.click();
-            }
+                // Flip image vertically
+                ctx.scale( 1, -1 );
+                ctx.drawImage( img, 0, -canvas.height );
 
-            img.src = URL.createObjectURL( blob );
-            URL.revokeObjectURL( blob );
-          });
+                await new Promise( resolve => canvas.toBlob( resolve ) ).then( async function( canvas_blob ) {
+                  zip.file( `${ tex.name }.${ tex.ext }`, canvas_blob );
+
+                  if (processed_index === exported[ 'tex' ].length - 1) await process_zip( 'OBJ.' );
+                });
+
+                processed_index += 1;
+              }
+
+              img.src = URL.createObjectURL( blob );
+              URL.revokeObjectURL( blob );
+            });
+          } else {
+            await process_zip( 'OBJ.' );
+          }
+        } else {
+          await process_zip( 'OBJ.' );
         }
       }
 
-      function export_gltf() {
-        document.getElementById('export_names').selectedIndex = 0;
+      async function export_gltf( binary = false ) {
+        start_export();
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         let mesh = document.getElementById('model_gltf').scene.clone();
 
         mesh.traverse( ( child ) => {
-          if (child.isMesh && child.geometry.isBufferGeometry) {
+          if (child.isMesh && child.geometry.isBufferGeometry === true) {
             child.geometry = new THREE.BufferGeometry().copy( child.geometry ); // instance of new BufferGeometry for export
             if ( child.geometry.userData === undefined ) child.geometry.userData = {};
             if ( child.geometry.morphTargetsRelative === undefined ) child.geometry.morphTargetsRelative = {};
@@ -404,83 +440,32 @@
 
         let gltf_exporter = new THREE.GLTFExporter( manager );
 
-        if (mesh) {
-          if (selected_model_file) {
-            filename = selected_model_file.name.substring( 0, selected_model_file.name.lastIndexOf('.') + 1 );
-          } else if (selected_url_model_file) {
-            filename = selected_url_model_file.substring( selected_url_model_file.lastIndexOf('/') + 1, selected_url_model_file.lastIndexOf('.') + 1 );
-          }
+        let options = {	binary: binary, maxTextureSize: 4096 || Infinity };
 
-          let options = {	binary: false, maxTextureSize: 4096 || Infinity };
+        gltf_exporter.parse( mesh, async json => {
+          let blob;
 
-          gltf_exporter.parse( mesh, ( json ) => {
+          if (binary === true) {
+            blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+          } else {
             let string = JSON.stringify( json, null, 2 );
-            let blob = new Blob( [ string ], { type: 'text/plain' } );
-            link.href = URL.createObjectURL( blob );
-            link.download = filename + 'gltf';
-            link.click();
-          }, function( error ) { console.log( error ); }, options );
-        }
-      }
-
-      function export_glb() {
-        document.getElementById('export_names').selectedIndex = 0;
-
-        let mesh = document.getElementById('model_gltf').scene.clone();
-
-        mesh.traverse( ( child ) => {
-          if (child.isMesh && child.geometry.isBufferGeometry) {
-            child.geometry = new THREE.BufferGeometry().copy( child.geometry ); // instance of new BufferGeometry for export
-            if ( child.geometry.userData === undefined ) child.geometry.userData = {};
-            if ( child.geometry.morphTargetsRelative === undefined ) child.geometry.morphTargetsRelative = {};
-
-            let ambient = child.material.uniforms.u_ambient ? child.material.uniforms.u_ambient.value : null;
-            let diffuse = child.material.uniforms.u_diffuse ? child.material.uniforms.u_diffuse.value : null;
-            let diffuse_color = (diffuse && diffuse.isVector4) ? new THREE.Color().setRGB( diffuse.x, diffuse.y, diffuse.z ) : null;
-            let emissive = child.material.uniforms.u_emissive ? child.material.uniforms.u_emissive.value : null;
-            let emissive_color = (emissive && emissive.isVector4) ? new THREE.Color().setRGB( emissive.x, emissive.y, emissive.z ) : null;
-            let specular = child.material.uniforms.u_specular ? child.material.uniforms.u_specular.value : null;
-            let specular_color = (specular && specular.isVector4) ? new THREE.Color().setRGB( specular.x, specular.y, specular.z ) : null;
-            let shininess = child.material.uniforms.u_shininess ? child.material.uniforms.u_shininess.value : 0;
-
-            child.material = new THREE.MeshPhongMaterial({
-              side: THREE.DoubleSide,
-              opacity: child.material.opacity || 1,
-              shininess: child.material.shininess || shininess,
-              vertexColors: child.material.vertexColors || false,
-              color: child.material.color ? child.material.color : (diffuse_color ? diffuse_color : child.material.defaultAttributeValues.color),
-              map: child.material.map ? child.material.map : (diffuse ? (diffuse.isVector4 ? null : diffuse) : null),
-              envMap: child.material.envMap ? child.material.envMap : (ambient ? (ambient.isVector4 ? null : ambient) : null),
-              emissive: child.material.emissive ? child.material.emissive : (emissive_color ? emissive_color : new THREE.Color( 0, 0, 0 )),
-              emissiveMap: child.material.emissiveMap ? child.material.emissiveMap : (emissive ? (emissive.isVector4 ? null : emissive) : null),
-              specular: child.material.specular ? child.material.specular : (specular_color ? specular_color : new THREE.Color( 0, 0, 0 )),
-              specularMap: child.material.specularMap ? child.material.specularMap : (specular ? (specular.isVector4 ? null : specular) : null)
-            });
-          }
-        });
-
-        let gltf_exporter = new THREE.GLTFExporter( manager );
-
-        if (mesh) {
-          if (selected_model_file) {
-            filename = selected_model_file.name.substring( 0, selected_model_file.name.lastIndexOf('.') + 1 );
-          } else if (selected_url_model_file) {
-            filename = selected_url_model_file.substring( selected_url_model_file.lastIndexOf('/') + 1, selected_url_model_file.lastIndexOf('.') + 1 );
+            blob = new Blob( [ string ], { type: 'text/plain' } );
           }
 
-          let options = {	binary: true, maxTextureSize: 4096 || Infinity };
+          let ext = (binary === true) ? 'glb' : 'gltf';
 
-          gltf_exporter.parse( mesh, ( json ) => {
-            let blob = new Blob( [ json ], { type: 'application/octet-stream' } );
-            link.href = URL.createObjectURL( blob );
-            link.download = filename + 'glb';
-            link.click();
-          }, function( error ) { console.log( error ); }, options );
-        }
+          zip.file( filename + ext, blob );
+
+          ext = (binary === true) ? 'GLB.' : 'GLTF.';
+
+          await process_zip( ext );
+        }, function( error ) { console.log( error ); }, options);
       }
 
       function init() {
         if (manager === undefined) manager = new THREE.LoadingManager();
+
+        if (zip === undefined) zip = new JSZip();
 
         reset( true );
 
