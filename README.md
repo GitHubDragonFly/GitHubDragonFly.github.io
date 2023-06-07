@@ -40,8 +40,8 @@ Number Type Converter
   - Seems to have a rather good fit on mobile devices due to its simple GUI
   - It is purely online based and can be used as standalone HTML file (just delete `favicon.ico` import)
   - Might have bugs and library related limitations
-  - Supported formats: 3DS, 3DM, 3MF, BIM, BREP, BRP, DAE, FBX, GLB, GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
-  - Unsupported formats: FCSTD (requires worker)
+  - Supported formats: 3DS, 3DM, 3MF, AMF, BIM, BREP, BRP, DAE, FBX, GLB, GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
+  - Unsupported formats: FCSTD (requires accessing a remote worker)
   - For proper viewing and additional features use the actual [Online 3D Viewer](https://3dviewer.net/) website
   - Most of the following notes do not apply to Quick Viewer in general
 - Special notes about `GLTF Legacy` viewer which is using modified version of mrdoob's [model-tag](https://github.com/mrdoob/model-tag):
