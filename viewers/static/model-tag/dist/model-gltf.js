@@ -20722,10 +20722,22 @@ function WebGLRenderer( parameters ) {
 		if ( renderTarget ) {
 
 			textures.updateRenderTargetMipmap( renderTarget );
-
+  
 		}
 
-		if (scene.rotate === true) scene.rotation.y += 0.01;
+		if (scene.rotate === true) {
+
+			if ( scene.children[ 0 ].children[ 0 ] && scene.children[ 0 ].children[ 0 ].isMesh === true ) {
+
+				scene.children[ 0 ].children[ 0 ].rotation.y += 0.01;
+
+			} else {
+
+				scene.rotation.y += 0.01;
+
+			}
+
+		}
 
 		// Ensure depth buffer writing is enabled so it can be cleared on next render
 
@@ -40824,7 +40836,9 @@ class ModelElement extends HTMLElement {
 		scope.scene = new Scene();
 		scope.scene[ 'rotate' ] = false;
 		scope.scene.background = new Color().setRGB( 0.961, 0.961, 0.961 );
+
 		scope.scene.add( scope.camera );
+
 		scope.camera.position.set( 0, 0, 25 );
 		scope.camera.lookAt( new Vector3( 0, 0, 0 ) );
 
@@ -40866,16 +40880,32 @@ GLTFLoader.prototype = {
 		var path = this.path && ( typeof this.path === "string" ) ? this.path : Loader.prototype.extractUrlBase( url );
 
 		var loader = new FileLoader( scope.manager );
+
 		loader.load( url, function( text ) {
 
-			try {
+			const json = JSON.parse( text );
+
+			if ( json.asset !== undefined && json.asset.version[ 0 ] > 1 ) {
+
+				let message = 'Only GLTF v1.0 models are supported!';
+
+				console.log( message );
+				if ( onError !== undefined ) onError( message );
+				return;
+
+			} else {
+
+				try {
 				
-				scope.parse( JSON.parse( text ), onLoad, path );
-
-			} catch ( error ) {
-
-				console.log( error );
-				if ( onError ) onError();
+					scope.parse( JSON.parse( text ), onLoad, path );
+	
+				} catch ( error ) {
+	
+					console.log( error );
+					let message = 'Error parsing the model!';
+					if ( onError !== undefined ) onError( message );
+	
+				}
 
 			}
 
@@ -41078,7 +41108,7 @@ GLTFShader.prototype.update = function( scene, camera ) {
 				for (var mi = 0; mi < m4v.length; mi++) {
 					// So it goes like this:
 					// SkinnedMesh world matrix is already baked into MODELVIEW;
-					// ransform joints to local space,
+					// transform joints to local space,
 					// then transform using joint's inverse
 					m4v[mi]
 						.getInverse(boundUniform.sourceNode.matrixWorld)
@@ -41399,9 +41429,7 @@ var WEBGL_TYPE_SIZES = {
 
 var _each = function( object, callback, thisObj ) {
 
-	if ( !object ) {
-		return Promise.resolve();
-	}
+	if ( !object ) { return Promise.resolve(); }
 
 	var results;
 	var fns = [];
@@ -41411,18 +41439,31 @@ var _each = function( object, callback, thisObj ) {
 		results = [];
 
 		var length = object.length;
+
 		for ( var idx = 0; idx < length; idx ++ ) {
+
 			var value = callback.call( thisObj || this, object[ idx ], idx );
+
 			if ( value ) {
+
 				fns.push( value );
+
 				if ( value instanceof Promise ) {
+
 					value.then( function( key, value ) {
+
 						results[ idx ] = value;
+
 					}.bind( this, key ));
+
 				} else {
+
 					results[ idx ] = value;
+
 				}
+
 			}
+
 		}
 
 	} else {
@@ -41430,19 +41471,33 @@ var _each = function( object, callback, thisObj ) {
 		results = {};
 
 		for ( var key in object ) {
+
 			if ( object.hasOwnProperty( key ) ) {
+
 				var value = callback.call( thisObj || this, object[ key ], key );
+
 				if ( value ) {
+
 					fns.push( value );
+
 					if ( value instanceof Promise ) {
+
 						value.then( function( key, value ) {
+
 							results[ key ] = value;
+
 						}.bind( this, key ));
+
 					} else {
+
 						results[ key ] = value;
+
 					}
+
 				}
+
 			}
+
 		}
 
 	}
@@ -41654,6 +41709,7 @@ GLTFParser.prototype.parse = function( callback ) {
 		var scene = dependencies.scenes[ this.json.scene ];
 
 		var cameras = [];
+
 		_each( dependencies.cameras, function( camera ) {
 
 			cameras.push( camera );
@@ -41661,6 +41717,7 @@ GLTFParser.prototype.parse = function( callback ) {
 		});
 
 		var animations = [];
+
 		_each( dependencies.animations, function( animation ) {
 
 			animations.push( animation );
@@ -41681,6 +41738,7 @@ GLTFParser.prototype.loadShaders = function() {
 
 			var loader = new FileLoader();
 			loader.responseType = 'text';
+
 			loader.load( resolveURL( shader.uri, this.options.path ), function( shaderText ) {
 
 				resolve( shaderText );
@@ -41703,6 +41761,7 @@ GLTFParser.prototype.loadBuffers = function() {
 
 				var loader = new FileLoader();
 				loader.responseType = 'arraybuffer';
+
 				loader.load( resolveURL( buffer.uri, this.options.path ), function( buffer ) {
 
 					resolve( buffer );
@@ -41787,11 +41846,13 @@ GLTFParser.prototype.loadTextures = function() {
 				var source = this.json.images[ texture.source ];
 
 				var textureLoader = Loader.Handlers.get( source.uri );
+
 				if ( textureLoader === null ) {
 
 					textureLoader = new TextureLoader();
 
 				}
+
 				textureLoader.crossOrigin = this.options.crossOrigin || false;
 
 				textureLoader.load( resolveURL( source.uri, this.options.path ), function( _texture ) {
@@ -42632,14 +42693,14 @@ GLTFParser.prototype.loadScenes = function() {
  * @author mrdoob / http://mrdoob.com/
  */
 
+const file_extensions = [ '.BIN', '.GLSL', '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP' ];
+var local_blobs;
+
 class GLTFModelElement extends ModelElement {
 
 	constructor() {
 
 		super();
-
-		const file_extensions = [ '.BIN', '.GLSL', '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP' ];
-		var local_blobs;
 
 		var scope = this;
 
@@ -42709,7 +42770,7 @@ class GLTFModelElement extends ModelElement {
 
 				return scope.onLoad( data );
 
-			}, () => { console.log( 'Loading Model' ) }, () => { return scope.onError( 'Error parsing the model!' ) });
+			}, () => { console.log( 'Loading Model' ) }, ( message ) => { return scope.onError( message ) });
 
 		} else if ( attribute === 'blobs' ) {
 
