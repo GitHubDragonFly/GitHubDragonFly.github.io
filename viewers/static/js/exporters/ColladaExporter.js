@@ -416,9 +416,9 @@
 
 					}
 
-					const emissive = m.emissive ? m.emissive : new THREE.Color( 0, 0, 0 );
-					const diffuse = m.color ? m.color : new THREE.Color( 0, 0, 0 );
-					const specular = m.specular ? m.specular : new THREE.Color( 1, 1, 1 );
+					const emissive = m.emissive ? m.emissive.clone() : new THREE.Color( 0, 0, 0 );
+					const diffuse = m.color ? m.color.clone() : new THREE.Color( 0, 0, 0 );
+					const specular = m.specular ? m.specular.clone() : new THREE.Color( 1, 1, 1 );
 					const shininess = m.shininess || 0;
 					const reflectivity = m.reflectivity || 0;
 					emissive.convertLinearToSRGB();
