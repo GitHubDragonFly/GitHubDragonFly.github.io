@@ -92,12 +92,12 @@ Number Type Converter
       - use some background image to avoid visual anomalies (artifacts) in the resulting file due to transparency:
         - where applicable, use the `Eq` checkbox to apply equirectangular scene background
         - where applicable, use the `G` button to add grayish linear gradient as a scene background
-        - use `black.gif` `white.gif` `dark_blue.png` files found in the `images` folder as a simple choice for background image
+        - use `black.gif` or `white.gif` or `dark_blue.png` files found in the `images` folder as a simple choice for background image
       - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
-      - currently set for Lossy PNG to speed up processing but with a comment on how to change it to full color if required
+      - currently set for full color PNG but can be changed to Lossy PNG to speed up processing (see the comment in the code)
     - JSON import / export is actually three.js created format:
       - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry and can export to current JSON format
-      - JSON Viewer is using r135 of three.js and cannot open legacy format
+      - JSON Viewer is currently using r145 of three.js and cannot open legacy format
     - OBJ exporter might currently, along with the exported MTL file, export multiple copies of the same texture but under different names:
       - Select 1 copy of the texture and rename it if you wish, then update the corresponding MTL file entries to point to that texture
       - Delete all other copies of that same texture
