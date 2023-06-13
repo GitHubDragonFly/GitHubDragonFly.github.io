@@ -745,15 +745,13 @@
         let fx = Math.ceil( ( renderer.domElement.width - 500 ) / 2.0 );
         let fy = Math.ceil( ( renderer.domElement.height - 500 ) / 2.0 );
 
-        let frames = 212;
-        let buffer = new Uint8Array( 187500000 ); // 500 * 500 * 150 * 5
-        let pixels = new Uint8Array( 250000 ); // 500 * 500
-        let writer = new GifWriter( buffer, 500, 500, { loop: 0 } );
+        let frames = 211;
+        let gif_frames = [];
 
-        await generateGIF( render, frames, fx, fy, buffer, pixels, writer );
+        await generateGIF( render, frames, fx, fy, gif_frames );
       }
 
-      function generateGIF( renderFunction, frames, frame_x, frame_y, buffer, pixels, writer ) {
+      function generateGIF( renderFunction, frames, frame_x, frame_y, gif_frames ) {
         let canvas;
 
         if (navigator.userAgent.indexOf('Safari') !== -1) {
@@ -766,9 +764,10 @@
 
         let context = canvas.getContext( '2d', { willReadFrequently: true } );
 
+        let before_last = frames - 2;
         let current = 0;
 
-        function addFrame() {
+        async function addFrame() {
           if (current <= frames) {
             if (current > 0) {
               context.clearRect( 0, 0, 500, 500 );
@@ -776,42 +775,22 @@
               renderFunction();
 
               context.drawImage( renderer.domElement, frame_x, frame_y, 500, 500, 0, 0, 500, 500 );
-              let data = context.getImageData( 0, 0, 500, 500 ).data;
-
-              let palette = [];
-
-              for ( var j = 0, k = 0, jl = data.length; j < jl; j += 4, k ++ ) {
-                let r = Math.floor( data[ j + 0 ] * 0.1 ) * 10;
-                let g = Math.floor( data[ j + 1 ] * 0.1 ) * 10;
-                let b = Math.floor( data[ j + 2 ] * 0.1 ) * 10;
-                let color = r << 16 | g << 8 | b << 0;
-
-                let index = palette.indexOf( color );
-
-                if (index === -1) {
-                  pixels[ k ] = palette.length;
-                  palette.push( color );
-                } else {
-                  pixels[ k ] = index;
-                }
-              }
-
-              // Force palette to be power of 2
-              let powof2 = 1;
-              while ( powof2 < palette.length ) powof2 <<= 1;
-              if (powof2 > 256) powof2 = 256;
-              palette.length = powof2;
-
-              let options = { palette: new Uint32Array( palette ), delay: 4 };
-
-              writer.addFrame( 0, 0, 500, 500, pixels, options );
+              gif_frames.push( context.getImageData( 0, 0, 500, 500 ).data );
             } else {
               document.getElementById('fixed_menu').style.display = 'none';
               document.getElementById('gif_progress').style.display = 'block';
               document.getElementById('div_gif_rectangle').style.display = 'block';
+
+              await new Promise( resolve => setTimeout( resolve, 100 ) );
             }
 
             progress.value = current / frames;
+
+            if (current === before_last) {
+              document.getElementById('div_loading').innerHTML = 'Please wait ...';
+              document.getElementById('div_loading').style.display = 'block';
+            }
+
             setTimeout( addFrame, 0 );
           } else {
             progress.value = 0;
@@ -821,7 +800,11 @@
 
             // Download
 
-            let blob = new Blob( [ buffer.subarray( 0, writer.end() ) ], { type: 'image/gif' } );
+            let blob = await gif_encode( gif_frames );
+
+            document.getElementById('div_loading').innerHTML = '';
+            document.getElementById('div_loading').style.display = 'none';
+
             link.href = URL.createObjectURL( blob );
             link.download = filename + 'gif';
             link.click();
@@ -839,6 +822,48 @@
         addFrame();
       }
 
+      function gif_encode( gif_frames ) {
+        let buffer = new Uint8ClampedArray( 187500000 ); // 500 * 500 * 150 * 5
+        let pixels = new Uint8ClampedArray( 250000 ); // 500 * 500
+        let writer = new GifWriter( buffer, 500, 500, { loop: 0 } );
+
+        // Skip first frame since it might be all zeros due to rendering
+        // Any subsequent frame that might be all zeros will throw an error
+        for ( let i = 1; i < gif_frames.length; i++ ) {
+          let data = gif_frames[ i ];
+          let palette = [];
+
+          for ( var j = 0, k = 0, jl = data.length; j < jl; j += 4, k ++ ) {
+            let r = Math.floor( data[ j + 0 ] * 0.1 ) * 10;
+            let g = Math.floor( data[ j + 1 ] * 0.1 ) * 10;
+            let b = Math.floor( data[ j + 2 ] * 0.1 ) * 10;
+            let color = r << 16 | g << 8 | b << 0;
+
+            let index = palette.indexOf( color );
+
+            if (index === -1) {
+              pixels[ k ] = palette.length;
+              palette.push( color );
+            } else {
+              pixels[ k ] = index;
+            }
+          }
+
+          // Force palette to be power of 2
+          let powof2 = 1;
+          while ( powof2 < palette.length ) powof2 <<= 1;
+          if (powof2 > 256) powof2 = 256;
+          palette.length = powof2;
+
+          let options = { palette: new Uint32Array( palette ), delay: 4 };
+
+          writer.addFrame( 0, 0, 500, 500, pixels, options );
+          
+        }
+
+        return new Blob( [ buffer.subarray( 0, writer.end() ) ], { type: 'image/gif' } );
+      }
+
       async function export_animated_png() {
         document.getElementById('export_names').selectedIndex = 0;
 
@@ -849,7 +874,7 @@
         let fx = Math.ceil( ( renderer.domElement.width - 500 ) / 2.0 );
         let fy = Math.ceil( ( renderer.domElement.height - 500 ) / 2.0 );
 
-        let frames_count = 127;
+        let frames_count = 125;
         let delay = 75;
         let png_frames = [];
 
@@ -905,8 +930,8 @@
 
             // Download
 
-            // Lossy PNG - for full color PNG consider replacing 256 with 0
-            let apng = await UPNG.encode( png_frames, 500, 500, 256, frame_delay );
+            // For Lossy PNG consider replacing 0 with 256
+            let apng = await UPNG.encode( png_frames, 500, 500, 0, frame_delay );
 
             document.getElementById('div_loading').innerHTML = '';
             document.getElementById('div_loading').style.display = 'none';
@@ -1120,12 +1145,26 @@
 
       function init() {
         if (scene) {
-          if (pcd_obj) {
-            if (pcd_obj.material) pcd_obj.material.dispose();
-            if (pcd_obj.geometry) pcd_obj.geometry.dispose();
-          }
+          if (polar_grid_visible === true) show_polar_grid();
+          if (grid_visible === true) show_grid();
 
-          scene.remove.apply( scene, scene.children );
+          pcd_obj.traverse( ( child ) => {
+            if (child.isPoints) {
+              if (child.material) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.dispose();
+                  });
+                } else {
+                  child.material.dispose();
+                }
+              }
+
+              child.geometry.dispose();
+            }
+          });
+
+          scene.remove( pcd_obj );
 
           // Reset all values
           reset_all( true );
@@ -1158,9 +1197,6 @@
         bounding_box = new THREE.Box3();
 
         document.getElementById('points_color').value = '#000000';
-        document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
-        document.getElementById('btn_polar_grid').style.backgroundColor = '#d1cefc';
-        document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
 
         if (url_loading === false) {
           // Loaded file
@@ -1298,7 +1334,12 @@
           console.log( error );
           render_requested = false;
           enable_disable( true );
-          if (gizmo) gizmo.dispose();
+
+          if (gizmo) {
+            document.getElementById('gizmo').removeChild( gizmo.domElement );
+            gizmo.dispose();
+          }
+
           document.getElementById('div_loading').style.display = 'none';
           document.getElementById('div_error').style.display = 'block';
 
@@ -1324,7 +1365,12 @@
             console.log( 'Unsupported URL file!' );
             render_requested = false;
             enable_disable( true );
-            if (gizmo) gizmo.dispose();
+
+            if (gizmo) {
+              document.getElementById('gizmo').removeChild( gizmo.domElement );
+              gizmo.dispose();
+            }
+
             document.getElementById('div_loading').style.display = 'none';
             document.getElementById('div_error').style.display = 'block';
             return;
@@ -1370,7 +1416,12 @@
             console.log( error );
             render_requested = false;
             enable_disable( true );
-            if (gizmo) gizmo.dispose();
+
+            if (gizmo) {
+              document.getElementById('gizmo').removeChild( gizmo.domElement );
+              gizmo.dispose();
+            }
+
             document.getElementById('div_loading').style.display = 'none';
             document.getElementById('div_error').style.display = 'block';
           });
@@ -1469,9 +1520,6 @@
         }
 
         if (pcd_obj) {
-          scene.updateMatrixWorld();
-          camera.updateMatrixWorld();
-
           // Reset pcd_obj rotational values
           if (reset_rotation === true) {
             pcd_obj.rotation.set( 0, 0, 0 );
@@ -1500,6 +1548,9 @@
 
           renderer.clear();
         	renderer.render( scene, camera );
+
+          scene.updateMatrixWorld();
+          camera.updateMatrixWorld();
         }
       }
 
@@ -1507,12 +1558,23 @@
         if (polar_grid_visible) show_polar_grid();
         if (grid_visible) show_grid();
 
-        if (pcd_obj) {
-          if (pcd_obj.material) pcd_obj.material.dispose();
-          if (pcd_obj.geometry) pcd_obj.geometry.dispose();
+        pcd_obj.traverse( ( child ) => {
+          if (child.isPoints) {
+            if (child.material) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.dispose();
+                });
+              } else {
+                child.material.dispose();
+              }
+            }
 
-          scene.remove( pcd_obj );
-        }
+            child.geometry.dispose();
+          }
+        });
+
+        scene.remove( pcd_obj );
 
         reset_all( true );
 
