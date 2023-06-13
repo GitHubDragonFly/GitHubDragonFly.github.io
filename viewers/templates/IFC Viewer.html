@@ -860,15 +860,13 @@
         let fx = Math.ceil( ( renderer.domElement.width - 500 ) / 2.0 );
         let fy = Math.ceil( ( renderer.domElement.height - 500 ) / 2.0 );
 
-        let frames = 212;
-        let buffer = new Uint8Array( 187500000 ); // 500 * 500 * 150 * 5
-        let pixels = new Uint8Array( 250000 ); // 500 * 500
-        let writer = new GifWriter( buffer, 500, 500, { loop: 0 } );
+        let frames = 211;
+        let gif_frames = [];
 
-        await generateGIF( render, frames, fx, fy, buffer, pixels, writer );
+        await generateGIF( render, frames, fx, fy, gif_frames );
       }
 
-      function generateGIF( renderFunction, frames, frame_x, frame_y, buffer, pixels, writer ) {
+      function generateGIF( renderFunction, frames, frame_x, frame_y, gif_frames ) {
         let canvas;
 
         if (navigator.userAgent.indexOf('Safari') !== -1) {
@@ -881,9 +879,10 @@
 
         let context = canvas.getContext( '2d', { willReadFrequently: true } );
 
+        let before_last = frames - 2;
         let current = 0;
 
-        function addFrame() {
+        async function addFrame() {
           if (current <= frames) {
             if (current > 0) {
               context.clearRect( 0, 0, 500, 500 );
@@ -891,42 +890,22 @@
               renderFunction();
 
               context.drawImage( renderer.domElement, frame_x, frame_y, 500, 500, 0, 0, 500, 500 );
-              let data = context.getImageData( 0, 0, 500, 500 ).data;
-
-              let palette = [];
-
-              for ( var j = 0, k = 0, jl = data.length; j < jl; j += 4, k ++ ) {
-                let r = Math.floor( data[ j + 0 ] * 0.1 ) * 10;
-                let g = Math.floor( data[ j + 1 ] * 0.1 ) * 10;
-                let b = Math.floor( data[ j + 2 ] * 0.1 ) * 10;
-                let color = r << 16 | g << 8 | b << 0;
-
-                let index = palette.indexOf( color );
-
-                if (index === -1) {
-                  pixels[ k ] = palette.length;
-                  palette.push( color );
-                } else {
-                  pixels[ k ] = index;
-                }
-              }
-
-              // Force palette to be power of 2
-              let powof2 = 1;
-              while ( powof2 < palette.length ) powof2 <<= 1;
-              if (powof2 > 256) powof2 = 256;
-              palette.length = powof2;
-
-              let options = { palette: new Uint32Array( palette ), delay: 4 };
-
-              writer.addFrame( 0, 0, 500, 500, pixels, options );
+              gif_frames.push( context.getImageData( 0, 0, 500, 500 ).data );
             } else {
               document.getElementById('fixed_menu').style.display = 'none';
               document.getElementById('gif_progress').style.display = 'block';
               document.getElementById('div_gif_rectangle').style.display = 'block';
+
+              await new Promise( resolve => setTimeout( resolve, 100 ) );
             }
 
             progress.value = current / frames;
+
+            if (current === before_last) {
+              document.getElementById('div_loading').innerHTML = 'Please wait ...';
+              document.getElementById('div_loading').style.display = 'block';
+            }
+
             setTimeout( addFrame, 0 );
           } else {
             progress.value = 0;
@@ -936,7 +915,11 @@
 
             // Download
 
-            let blob = new Blob( [ buffer.subarray( 0, writer.end() ) ], { type: 'image/gif' } );
+            let blob = await gif_encode( gif_frames );
+
+            document.getElementById('div_loading').innerHTML = '';
+            document.getElementById('div_loading').style.display = 'none';
+
             link.href = URL.createObjectURL( blob );
             link.download = filename + 'gif';
             link.click();
@@ -954,6 +937,48 @@
         addFrame();
       }
 
+      function gif_encode( gif_frames ) {
+        let buffer = new Uint8ClampedArray( 187500000 ); // 500 * 500 * 150 * 5
+        let pixels = new Uint8ClampedArray( 250000 ); // 500 * 500
+        let writer = new GifWriter( buffer, 500, 500, { loop: 0 } );
+
+        // Skip first frame since it might be all zeros due to rendering
+        // Any subsequent frame that might be all zeros will throw an error
+        for ( let i = 1; i < gif_frames.length; i++ ) {
+          let data = gif_frames[ i ];
+          let palette = [];
+
+          for ( var j = 0, k = 0, jl = data.length; j < jl; j += 4, k ++ ) {
+            let r = Math.floor( data[ j + 0 ] * 0.1 ) * 10;
+            let g = Math.floor( data[ j + 1 ] * 0.1 ) * 10;
+            let b = Math.floor( data[ j + 2 ] * 0.1 ) * 10;
+            let color = r << 16 | g << 8 | b << 0;
+
+            let index = palette.indexOf( color );
+
+            if (index === -1) {
+              pixels[ k ] = palette.length;
+              palette.push( color );
+            } else {
+              pixels[ k ] = index;
+            }
+          }
+
+          // Force palette to be power of 2
+          let powof2 = 1;
+          while ( powof2 < palette.length ) powof2 <<= 1;
+          if (powof2 > 256) powof2 = 256;
+          palette.length = powof2;
+
+          let options = { palette: new Uint32Array( palette ), delay: 4 };
+
+          writer.addFrame( 0, 0, 500, 500, pixels, options );
+          
+        }
+
+        return new Blob( [ buffer.subarray( 0, writer.end() ) ], { type: 'image/gif' } );
+      }
+
       async function export_animated_png() {
         document.getElementById('export_names').selectedIndex = 0;
 
@@ -964,7 +989,7 @@
         let fx = Math.ceil( ( renderer.domElement.width - 500 ) / 2.0 );
         let fy = Math.ceil( ( renderer.domElement.height - 500 ) / 2.0 );
 
-        let frames_count = 127;
+        let frames_count = 125;
         let delay = 75;
         let png_frames = [];
 
@@ -1020,8 +1045,8 @@
 
             // Download
 
-            // Lossy PNG - for full color PNG consider replacing 256 with 0
-            let apng = await UPNG.encode( png_frames, 500, 500, 256, frame_delay );
+            // For Lossy PNG consider replacing 0 with 256
+            let apng = await UPNG.encode( png_frames, 500, 500, 0, frame_delay );
 
             document.getElementById('div_loading').innerHTML = '';
             document.getElementById('div_loading').style.display = 'none';
@@ -1383,19 +1408,20 @@
       function init() {
         if (scene) {
           if (ifc_obj) {
-            if (ifc_obj.material) {
+            if (Array.isArray( ifc_obj.material )) {
               ifc_obj.material.forEach( mtl => {
                 if (mtl.map) mtl.map.dispose();
                 mtl.dispose();
               });
+            } else {
+              if (ifc_obj.material.map) ifc_obj.material.map.dispose();
+              ifc_obj.material.dispose();
             }
 
             if (ifc_obj.geometry) ifc_obj.geometry.dispose();
+
+            scene.remove( ifc_obj );
           }
-
-          if (gizmo) gizmo.dispose();
-
-          scene.remove.apply( scene, scene.children );
 
           // Reset all values
           reset_all( true );
@@ -1474,9 +1500,9 @@
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
           renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
           renderer.autoClear = false;
-        }
 
-        document.body.appendChild( renderer.domElement );
+          document.body.appendChild( renderer.domElement );
+        }
 
         if (scene === undefined) scene = new THREE.Scene();
         if (ifc_obj === undefined) ifc_obj = new THREE.Object3D();
@@ -1487,62 +1513,80 @@
         if (polar_grid === undefined) polar_grid = new THREE.PolarGridHelper( 100, 10 );
         if (grid === undefined) grid = new THREE.GridHelper( 200, 200, 'yellow' );
 
-        camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 2500 );
-        camera.position.set( 0, 0, 250 );
-        scene.add( camera );
+        if (camera === undefined) {
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 2500 );
+          camera.position.set( 0, 0, 250 );
+          scene.add( camera );
+        }
 
         // Add AmbientLight to the scene
-        ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.05 );
-        ambientLight.position.set( 0, 0, 250 );
-        scene.add( ambientLight );
+        if (ambientLight === undefined) {
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.05 );
+          ambientLight.position.set( 0, 0, 250 );
+          scene.add( ambientLight );
+        }
 
         // Add HemisphereLight to the scene
-        hemisphereLight = new THREE.HemisphereLight( 0x000000, 0x000000, 0.05 );
-        hemisphereLight.position.set( 0, 250, 0 );
-        scene.add( hemisphereLight );
+        if (hemisphereLight === undefined) {
+          hemisphereLight = new THREE.HemisphereLight( 0x000000, 0x000000, 0.05 );
+          hemisphereLight.position.set( 0, 250, 0 );
+          scene.add( hemisphereLight );
+        }
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
-        directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 1 );
-        directionalLight.position.set( 0, 0, 250 );
-        directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
-        camera.add( directionalLight );
+        if (directionalLight === undefined) {
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 1 );
+          directionalLight.position.set( 0, 0, 250 );
+          directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
+          camera.add( directionalLight );
+        }
 
-        controls = new THREE.OrbitControls( camera, renderer.domElement );
-        controls.enableZoomToCursor = true;
-        controls.enableDamping = true;
-        //controls.enableKeys = false;
-        //controls.enableZoom = true;
-        //controls.maxPolarAngle = 2.2;
-        //controls.minPolarAngle = 1.1;
-        //controls.dampingFactor = 0.1;
-        //controls.rotateSpeed = 0.2;
-        //controls.minDistance = 2;
-        //controls.maxDistance = 500;
+        if (controls === undefined) {
+          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls.enableZoomToCursor = true;
+          controls.enableDamping = true;
+          //controls.enableKeys = false;
+          //controls.enableZoom = true;
+          //controls.maxPolarAngle = 2.2;
+          //controls.minPolarAngle = 1.1;
+          //controls.dampingFactor = 0.1;
+          //controls.rotateSpeed = 0.2;
+          //controls.minDistance = 2;
+          //controls.maxDistance = 500;
+        }
 
-        gizmo = new OrbitControlsGizmo( controls, {
-          size: 65,
-          padding: 4,
-          bubbleSizePrimary: 7,
-          bubbleSizeSecondary: 3,
-          lineWidth: 1,
-          fontSize: '8px',
-          fontColor: 'black',
-          fontWeight: 'bold'
-        });
+        if (gizmo === undefined) {
+          gizmo = new OrbitControlsGizmo( controls, {
+            size: 65,
+            padding: 4,
+            bubbleSizePrimary: 7,
+            bubbleSizeSecondary: 3,
+            lineWidth: 1,
+            fontSize: '8px',
+            fontColor: 'black',
+            fontWeight: 'bold'
+          });
 
-        document.getElementById('gizmo').appendChild( gizmo.domElement );
+          document.getElementById('gizmo').appendChild( gizmo.domElement );
+        }
+
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
         if (ifc_loader) {
           // Load the ifc file
-          selected_ifc_file ? loadFile() : loadURLFile();
+          selected_ifc_file !== null ? loadFile() : loadURLFile();
 
           render_requested = true;
           render();
         } else {
           console.log( 'Could not load IFCLoader!' );
           enable_disable( true );
-          if (gizmo) gizmo.dispose();
+
+          if (gizmo) {
+            document.getElementById('gizmo').removeChild( gizmo.domElement );
+            gizmo.dispose();
+          }
+
           document.getElementById('div_error').style.display = 'block';
         }
       }
@@ -1619,7 +1663,12 @@
           console.log( error );
           render_requested = false;
           enable_disable( true );
-          if (gizmo) gizmo.dispose();
+
+          if (gizmo) {
+            document.getElementById('gizmo').removeChild( gizmo.domElement );
+            gizmo.dispose();
+          }
+
           document.getElementById('div_loading').style.display = 'none';
           document.getElementById('div_error').style.display = 'block';
 
@@ -1699,7 +1748,12 @@
               console.log( error );
               render_requested = false;
               enable_disable( true );
-              if (gizmo) gizmo.dispose();
+
+              if (gizmo) {
+                document.getElementById('gizmo').removeChild( gizmo.domElement );
+                gizmo.dispose();
+              }
+
               document.getElementById('div_loading').style.display = 'none';
               document.getElementById('div_error').style.display = 'block';
             });
@@ -1707,7 +1761,12 @@
             console.log( 'Unsupported URL file!' );
             render_requested = false;
             enable_disable( true );
-            if (gizmo) gizmo.dispose();
+
+            if (gizmo) {
+              document.getElementById('gizmo').removeChild( gizmo.domElement );
+              gizmo.dispose();
+            }
+
             document.getElementById('div_loading').style.display = 'none';
             document.getElementById('div_error').style.display = 'block';
           }
@@ -1860,9 +1919,6 @@
         }
 
         if (ifc_obj) {
-          scene.updateMatrixWorld();
-          camera.updateMatrixWorld();
-
           // Reset ifc_obj rotational values
           if (reset_rotation === true) {
             ifc_obj.rotation.set( 0, 0, 0 );
@@ -1873,15 +1929,17 @@
           if (mouse_down === false) {
             if (rot_x === 0 && rot_y === 0 && rot_z === 0) {
               // Animated GIF / APNG generation
-              if (progress.value > 0.01) ( gif_export ? ifc_obj.rotation.y += 0.03 : ifc_obj.rotation.y += 0.05 );
+              if (progress.value > 0.0) {
+                gif_export ? ifc_obj.rotation.y += 0.03 : ifc_obj.rotation.y += 0.05;
+              } else {
+                // Let GPU cool down a bit
+                await new Promise( resolve => setTimeout( resolve, 200 ) );
+              }
             } else {
               if (rot_x !== 0) ifc_obj.rotation.x += rot_x;
               if (rot_y !== 0) ifc_obj.rotation.y += rot_y;
               if (rot_z !== 0) ifc_obj.rotation.z += rot_z;
             }
-
-            // Let GPU cool down a bit
-            if (progress.value === 0) await new Promise( resolve => setTimeout( resolve, 200 ) );
           }
 
           controls.update();
@@ -1889,6 +1947,9 @@
 
           renderer.clear();
         	renderer.render( scene, camera );
+
+          scene.updateMatrixWorld();
+          camera.updateMatrixWorld();
         }
       }
 
@@ -1994,6 +2055,11 @@
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
           enable_disable( true );
+
+          if (gizmo) {
+            document.getElementById('gizmo').removeChild( gizmo.domElement );
+            gizmo.dispose();
+          }
         }
 
         disabled_changed();
