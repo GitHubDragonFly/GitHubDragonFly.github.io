@@ -7,10 +7,9 @@
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_decoder.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.145.0" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0" defer></script>
     <script src="../static/js/DRACOLoader.js" defer></script>
     <script src="../static/js/GLTFLoader.js" defer></script>
-    <script src="../static/js/RGBELoader.js" defer></script>
     <script src="../static/js/TGALoader.js" defer></script>
     <script src="../static/js/DDSLoader.js" defer></script>
     <script src="../static/js/upng/UPNG.js" defer></script>
@@ -25,6 +24,7 @@
     <script src="../static/js/exporters/GLTFExporter.js" defer></script>
     <script src="../static/js/exporters/ColladaExporter.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/rhino3dm.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/RGBELoader.js" defer></script>
 
     <style>
       body, html {
@@ -106,6 +106,7 @@
         -webkit-border-radius: 2px;
         border-radius: 2px;
         position: absolute;
+        display: none;
         margin-top: 2px;
         z-index: 10;
       }
@@ -208,6 +209,7 @@
 
       .fm { color: navy; width: calc(100% - 86px); border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
       .fm_gizmo { width: 63px; height: 63px; padding: 4px; margin: 2px; }
+      #gui_position { position: absolute; display: none; min-width: 200px; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; min-height: 22px; margin-left: 2px; }
 
       .fixed-menu {
         background-color: whitesmoke;
@@ -236,7 +238,7 @@
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm_gizmo" id="gizmo" title="Interactive Orbit Controls Gizmo" style="float: right; background-color: black;"></div>
       <div class="fm">
-        <label for="file_input" title="GLTF + BIN, GLB, DRC Formats" style="color: #553801; margin-left: 3px;">GLTF</label>
+        <label title="GLTF + BIN, GLB, DRC Formats" style="color: #553801; margin-left: 3px;">GLTF</label>
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".gltf, .glb, .drc, .bin, .ktx2, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
         <label for="file_image_input" title="Background Image" style="color: #553801;">BGND</label>
@@ -341,6 +343,7 @@
         <button title="Polar Grid" id="btn_polar_grid" onclick="show_polar_grid();" style="min-width: 24px;" disabled><p class="polar"></p></button>
       </div>
     </div>
+    <div id="gui_position"></div>
     <div id="gif_progress" style="display: none; background-color: whitesmoke; border: none;">
       <progress id="progress" value="0" max="1" style="width: 99.5%; margin-left: 3px; margin-right: 3px;"></progress>
     </div>
@@ -477,6 +480,11 @@
           document.getElementById('url').style.display = 'block';
           url_displayed = true;
         }
+
+        if (gui && menu_location_bottom === false) {
+          let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+          document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
+        }
       }
 
       function load_url_file() {
@@ -530,22 +538,30 @@
           document.getElementById('fixed_menu').style.bottom = '';
           document.getElementById('btn_menu_location').innerHTML = '&#x2193';
           document.getElementById('btn_menu_location').style.backgroundColor = 'transparent';
+
+          if (gui) {
+            let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+            document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
+          }
         } else {
           menu_location_bottom = true;
           document.getElementById('fixed_menu').style.top = '';
           document.getElementById('fixed_menu').style.bottom = 0;
           document.getElementById('btn_menu_location').innerHTML = '&#x2191';
           document.getElementById('btn_menu_location').style.backgroundColor = '#FFFF00';
+
+          if (gui) document.getElementById('gui_position').style.marginTop = '2px';
         }
       }
     </script>
 
     <script>
       var gltfInstancingExtension, gltfMaterialsVariantsExtension, gltfTextureDDSExtension, gltfVideoTextureExtension;
-      var ktx2_loader, texture_loader, gltf_loader, draco_loader, tga_loader, dds_loader, equi_loader;
+      var ktx2_loader, texture_loader, gltf_loader, draco_loader, tga_loader, dds_loader, rgbe_loader;
       var animations, animation_mixer, current_animation, extras, current_extra, clock;
       var manager, renderer, scene, scenes, default_camera, camera, cameras, cam_id;
       var gltf_obj, current_side, resource_path, edges, edges_visible;
+      var gui, gui_set, guiExposure, params, toneMappingOptions;
       var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
       var variants, current_variant, variants_available, draco_material;
@@ -573,6 +589,7 @@
         document.getElementById('fixed_menu').style.display = 'none';
         document.getElementById('div_loading').innerHTML = 'Please wait ...';
         document.getElementById('div_loading').style.display = 'block';
+        if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
         render_requested = false;
 
         set_filename();
@@ -600,6 +617,7 @@
           document.getElementById('div_loading').innerHTML = '';
           document.getElementById('div_loading').style.display = 'none';
           document.getElementById('fixed_menu').style.display = 'block';
+          if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
           render_requested = true;
           render();
 
@@ -1027,6 +1045,7 @@
               document.getElementById('fixed_menu').style.display = 'none';
               document.getElementById('gif_progress').style.display = 'block';
               document.getElementById('div_gif_rectangle').style.display = 'block';
+              if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
 
               await new Promise( resolve => setTimeout( resolve, 100 ) );
             }
@@ -1044,6 +1063,7 @@
             document.getElementById('fixed_menu').style.display = 'block';
             document.getElementById('gif_progress').style.display = 'none';
             document.getElementById('div_gif_rectangle').style.display = 'none';
+            if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
 
             // Download
 
@@ -1105,6 +1125,7 @@
           let options = { palette: new Uint32Array( palette ), delay: 4 };
 
           writer.addFrame( 0, 0, 500, 500, pixels, options );
+          
         }
 
         return new Blob( [ buffer.subarray( 0, writer.end() ) ], { type: 'image/gif' } );
@@ -1158,6 +1179,7 @@
               document.getElementById('fixed_menu').style.display = 'none';
               document.getElementById('gif_progress').style.display = 'block';
               document.getElementById('div_gif_rectangle').style.display = 'block';
+              if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
             }
 
             progress.value = current / frames;
@@ -1173,6 +1195,7 @@
             document.getElementById('fixed_menu').style.display = 'block';
             document.getElementById('gif_progress').style.display = 'none';
             document.getElementById('div_gif_rectangle').style.display = 'none';
+            if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
 
             // Download
 
@@ -1301,31 +1324,62 @@
         }
       }
 
+			function updateGUI() {
+        if ( guiExposure !== null ) {
+          guiExposure.destroy();
+          guiExposure = null;
+        }
+
+        if ( params.toneMapping !== 'None' ) {
+          guiExposure = gui.add( params, 'exposure', 0, 2 )
+          .onChange( function () {
+            renderer.toneMappingExposure = params.exposure;
+          });
+        }
+      }
+
       async function set_equi() {
         if (document.getElementById('equi').checked) {
-          let tex = await equi_loader.load([
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/MilkyWay/dark-s_px.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/MilkyWay/dark-s_nx.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/MilkyWay/dark-s_py.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/MilkyWay/dark-s_ny.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/MilkyWay/dark-s_pz.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/MilkyWay/dark-s_nz.jpg',
-          ], () => {
-            document.getElementById('file_image_input').value = '';
-            document.getElementById('file_image_input').disabled = true;
-            document.getElementById('btn_reflective').disabled = false;
-            document.getElementById('back_color').disabled = true;
-            document.getElementById('back_color').value = '#000000';
-            document.body.style.backgroundColor = document.getElementById('back_color').value;
-            bgnd_linear_gradient = false;
-            document.getElementById('btn_bgnd_linear_gradient').disabled = true;
-            document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
-            scene.background = tex;
-            tex.dispose();
-          }, () => { console.log( 'Textures loaded' ) }, () => { console.log( 'Error loading textures' ) });
+          if (gui_set === false) {
+            gui.add( params, 'toneMapping', Object.keys( toneMappingOptions ) )
+            .onChange( function () {
+              updateGUI();
+              renderer.toneMapping = toneMappingOptions[ params.toneMapping ];
+            });
+
+            gui.add( params, 'blurriness', 0, 1 )
+            .onChange( function ( value ) {
+              scene.backgroundBlurriness = value;
+            });
+
+            updateGUI();
+
+            gui.open();
+
+            scene.backgroundBlurriness = params.blurriness;
+            gui_set = true;
+          }
+
+          document.getElementById('gui_position').style.display = 'block';
+
+          document.getElementById('file_image_input').value = '';
+          document.getElementById('file_image_input').disabled = true;
+          document.getElementById('btn_reflective').disabled = false;
+          document.getElementById('back_color').disabled = true;
+          document.getElementById('back_color').value = '#000000';
+          document.body.style.backgroundColor = document.getElementById('back_color').value;
+          bgnd_linear_gradient = false;
+          document.getElementById('btn_bgnd_linear_gradient').disabled = true;
+          document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+
+          scene.background = tex;
+          scene.environment = tex;
         } else {
+          document.getElementById('gui_position').style.display = 'none';
+
           scene.background = null;
           scene.environment = null;
+
           document.getElementById('file_image_input').disabled = false;
           document.getElementById('back_color').disabled = false;
           document.getElementById('btn_reflective').disabled = true;
@@ -1744,15 +1798,27 @@
           manager.addHandler( /\.dds$/i, dds_loader );
         }
 
-        if (equi_loader === undefined) equi_loader = new THREE.CubeTextureLoader();
+        if (rgbe_loader === undefined) {
+          rgbe_loader = new THREE.RGBELoader();
+          rgbe_loader.setDataType( THREE.HalfFloatType );
+        }
 
         if (zip === undefined) zip = new JSZip();
+
+        if (params === undefined) params = { exposure: 1.0, toneMapping: 'ACESFilmic', blurriness: 0.3 };
+
+        if (toneMappingOptions === undefined) toneMappingOptions = {
+          None: THREE.NoToneMapping,
+          Linear: THREE.LinearToneMapping,
+          Reinhard: THREE.ReinhardToneMapping,
+          Cineon: THREE.CineonToneMapping,
+          ACESFilmic: THREE.ACESFilmicToneMapping
+        };
 
         selected_gltf_file = null;
         selected_gltf_url_file = null;
         selected_draco_file = null;
         selected_bin_file = null;
-        current_side = 'DS';
         texture_files_png = [];
         texture_files_jpg = [];
         texture_files_bmp = [];
@@ -1760,6 +1826,9 @@
         texture_files_svg = [];
         texture_files_webp = [];
         texture_files_ktx2 = [];
+        current_side = 'DS';
+        guiExposure = null;
+        gui_set = false;
         resource_path = '';
         variants = null;
         cameras = null;
@@ -1906,6 +1975,7 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
           renderer.outputEncoding = THREE.sRGBEncoding;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
@@ -2008,6 +2078,14 @@
 
           document.getElementById('gizmo').appendChild( gizmo.domElement );
         }
+
+        rgbe_loader.load( 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/venice_sunset_1k.hdr', function( texture ) {
+          tex = texture;
+          texture.dispose();
+          tex.format = THREE.RGBAFormat;
+          tex.encoding = THREE.sRGBEncoding;
+          tex.mapping = THREE.EquirectangularReflectionMapping;
+        });
 
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
@@ -2968,8 +3046,6 @@
 
         reset_all( true );
 
-        document.getElementById('div_loading').innerHTML = 'Reload';
-
         (selected_gltf_file !== null) ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : loadURLFile() );
       }
 
@@ -3043,6 +3119,8 @@
         document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_random_vertex_colors').disabled = true;
         random_vertex_changed();
+
+        if (gui_set) document.getElementById('gui_position').style.display = 'none';
 
         gif_export = false;
         reset_rotation = true;
@@ -3208,10 +3286,19 @@
 
     <script type="module">
       import { KTX2Loader } from '../static/jsm/KTX2Loader.js';
+      import { GUI } from 'https://cdn.jsdelivr.net/npm/three@0.147.0/examples/jsm/libs/lil-gui.module.min.js';
       import GLTFTextureDDSExtension from '../static/jsm/extensions/loaders/MSFT_texture_dds/MSFT_texture_dds.js';
       import GLTFInstancingExtension from '../static/jsm/extensions/loaders/EXT_mesh_gpu_instancing/EXT_mesh_gpu_instancing.js';
       import GLTFVideoTextureExtension from '../static/jsm/extensions/loaders/EXT_texture_video/EXT_texture_video.js';
       import GLTFMaterialsVariantsExtension from '../static/jsm/extensions/loaders/KHR_materials_variants/KHR_materials_variants.js';
+
+      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
+
+      if (url_displayed === true) {
+        document.getElementById('gui_position').style.marginTop = '118px';
+      } else {
+        document.getElementById('gui_position').style.marginTop = '80px';
+      }
 
       gltfTextureDDSExtension = GLTFTextureDDSExtension;
       gltfInstancingExtension = GLTFInstancingExtension;
