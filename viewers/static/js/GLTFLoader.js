@@ -2904,25 +2904,18 @@ class GLTFMeshQuantizationExtension {
 
 				if ( options.path.indexOf( ',' ) > -1 ) {
 
-					let bin_set = false;
 					let blobs = options.path.split( ',' );
-	
-					blobs.forEach( ( blob_name, index ) => {
 
-						if ( blob_name === bufferDef.uri ) {
+					for ( let i = 0; i < blobs.length; i += 2 ) {
 
-							if ( bin_set === false ) {
+						if ( ( bufferDef.uri === blobs[ i ] ) || ( bufferDef.uri.endsWith( blobs[ i ] ) === true ) ) {
 
-								bufferDef.uri = blobs[ index + 1 ];
-								bin_set = true;
-
-							}
+							bufferDef.uri = blobs[ i + 1 ];
 
 						}
 
-					});
+					}
 
-					if ( bin_set === false && bufferDef.uri) options.path = '';
 				}
 
 				loader.load( resolveURL( bufferDef.uri, options.path ), resolve, undefined, function () {
@@ -3100,18 +3093,21 @@ class GLTFMeshQuantizationExtension {
 
 				if ( source.uri.indexOf( '/' ) > -1 ) temp_name = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
 
-				blobs.forEach( ( blob_name, index ) => {
+				for ( let i = 0; i < blobs.length; i += 2 ) {
 
-					if ( blob_name === source.uri || blob_name === source.name || ( temp_name !== '' && temp_name === blob_name ) ) {
+					if ( ( source.uri === blobs[ i ] ) || ( source.name === blobs[ i ] ) || ( ( temp_name !== '' ) && ( temp_name === blobs[ i ] ) ) ) {
 
 						if ( texture_set === false ) {
 
-							if ( !source.name ) source.name = source.uri;
-							source.uri = blobs[ index + 1 ];
+							if ( source.name === undefined ) source.name = source.uri;
+							source.uri = blobs[ i + 1 ];
 							texture_set = true;
+
 						}
+
 					}
-				});
+
+				}
 
 				if ( texture_set === false && options.path.includes( '.bin' ) === false ) options.path = '';
 			}
