@@ -1112,16 +1112,7 @@
 				// this seems to work fine for exporting TGA images as PNG
 				if ( image.data && image.data.constructor === Uint8Array ) {
 
-					let imgData = ctx.createImageData( image.width, image.height );
-
-					for (let i = 0; i < imgData.data.length; i += 4) {
-
-						imgData.data[ i + 0 ] = image.data[ i + 0 ];
-					  	imgData.data[ i + 1 ] = image.data[ i + 1 ];
-					  	imgData.data[ i + 2 ] = image.data[ i + 2 ];
-					  	imgData.data[ i + 3 ] = image.data[ i + 3 ];
-
-					}
+					let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
 
 					ctx.putImageData( imgData, 0, 0 );
 
