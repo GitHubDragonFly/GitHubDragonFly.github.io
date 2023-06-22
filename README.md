@@ -32,6 +32,7 @@ Number Type Converter
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
 - Several different three.js revisions are being used and there is lots of customized code
+- If you wish to modify or customize your 3D model then use [three.js editor](https://threejs.org/editor/)
 - These would be the mouse controls:
   - Rotation = left-click + hold + drag
   - Move = right-click + hold + drag
