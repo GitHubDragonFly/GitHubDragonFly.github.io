@@ -1517,7 +1517,7 @@
 				let transparent = parameters[ 'transparent' ];
 				let transparency = parameters[ 'transparency' ]; // <transparency> does not exist but <transparent>
 
-				if ( transparency === undefined && transparent ) {
+				if ( transparent && transparency === undefined ) {
 
 					transparency = {
 						float: 1
@@ -1538,7 +1538,7 @@
 				}
 
 				if ( transparent && transparency ) {
-
+					console.log( transparent, transparency );
 					// handle case if a texture exists but no color
 					if ( transparent.data.texture ) {
 
@@ -1552,19 +1552,19 @@
 						switch ( transparent.opaque ) {
 
 							case 'A_ONE':
-								material.opacity = color[ 3 ] * transparency.float;
+								material.opacity = color ? color[ 3 ] * transparency.float : transparency.float;
 								break;
 
 							case 'RGB_ZERO':
-								material.opacity = 1 - color[ 0 ] * transparency.float;
+								material.opacity = color ? 1 - color[ 0 ] * transparency.float : 1 - transparency.float;
 								break;
 
 							case 'A_ZERO':
-								material.opacity = 1 - color[ 3 ] * transparency.float;
+								material.opacity = color ? 1 - color[ 3 ] * transparency.float : 1 - transparency.float;
 								break;
 
 							case 'RGB_ONE':
-								material.opacity = color[ 0 ] * transparency.float;
+								material.opacity = color ? color[ 0 ] * transparency.float : transparency.float;
 								break;
 
 							default:
