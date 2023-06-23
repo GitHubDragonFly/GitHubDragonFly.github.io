@@ -1538,7 +1538,7 @@
 				}
 
 				if ( transparent && transparency ) {
-					console.log( transparent, transparency );
+
 					// handle case if a texture exists but no color
 					if ( transparent.data.texture ) {
 
