@@ -2,7 +2,7 @@
 
 	class OBJExporter {
 
-		parse( object, filename ) {
+		parse( object, filename = 'model' ) {
 
 			let output = '';
 			let indexVertex = 0;
@@ -420,7 +420,7 @@
 				// mtl output (Ref: https://stackoverflow.com/questions/35070048/export-a-three-js-textured-model-to-a-obj-with-mtl-file)
 
 				// add the provided filename as the name of the material library
-				output = 'mtllib ' + filename + 'mtl' + '\n' + output;
+				output = 'mtllib ' + filename + '.mtl' + '\n' + output;
 
 				let mtlOutput = '# MTL file - created by a modified three.js OBJExporter' + '\n';
 				let textures = [];
