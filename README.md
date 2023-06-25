@@ -127,6 +127,7 @@ Number Type Converter
   - `MP` - material - Phong (MP), Standard (MS), Lambert (ML)
     - `*` - applicable to MS to provide envMap + metalness (VTK, PRWM viewers)
   - `OS` - material side - Original (OS), Front (FS), Back (BS), Double (DS)
+  - `PM` - show model as points (PLY+STL Viewer)
   - `VC` - vertex colors
     - `!` - random vertex colors
   - `XS` - xtra smooth
