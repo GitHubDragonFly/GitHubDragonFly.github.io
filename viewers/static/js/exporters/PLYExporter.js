@@ -23,14 +23,15 @@
 				options = onDone;
 				onDone = undefined;
 
-			} // Iterate over the valid meshes in the object
+			}
 
+			// Iterate over the valid meshes in the object
 
 			function traverseMeshes( cb ) {
 
 				object.traverse( function ( child ) {
 
-					if ( child.isMesh === true ) {
+					if ( child.isMesh === true || child.isPoints === true ) {
 
 						const mesh = child;
 						const geometry = mesh.geometry;
@@ -51,8 +52,9 @@
 
 				} );
 
-			} // Default options
+			}
 
+			// Default options
 
 			const defaultOptions = {
 				binary: false,
@@ -60,19 +62,22 @@
 				// normal, uv, color, index
 				littleEndian: false
 			};
+
 			options = Object.assign( defaultOptions, options );
 			const excludeAttributes = options.excludeAttributes;
 			let includeIndices = true;
 			let includeNormals = false;
 			let includeColors = false;
-			let includeUVs = false; // count the vertices, check which properties are used,
+			let includeUVs = false;
+
+			// count the vertices, check which properties are used,
 			// and cache the BufferGeometry
 
 			let vertexCount = 0;
 			let faceCount = 0;
 			object.traverse( function ( child ) {
 
-				if ( child.isMesh === true ) {
+				if ( child.isMesh === true || child.isPoints === true ) {
 
 					const mesh = child;
 					const geometry = mesh.geometry;
@@ -99,6 +104,7 @@
 					faceCount += indices ? indices.count / 3 : vertices.count / 3;
 					if ( normals !== undefined ) includeNormals = true;
 					if ( uvs !== undefined ) includeUVs = true;
+
 					// allow converting material color to vertex color if material texture is not used
 					if ( colors !== undefined ) {
 						includeColors = true;
@@ -171,12 +177,16 @@
 			if ( options.binary === true ) {
 
 				// Binary File Generation
-				const headerBin = new TextEncoder().encode( header ); // 3 position values at 4 bytes
+				const headerBin = new TextEncoder().encode( header );
+
+				// 3 position values at 4 bytes
 				// 3 normal values at 4 bytes
 				// 3 color channels with 1 byte
 				// 2 uv values at 4 bytes
 
-				const vertexListLength = vertexCount * ( 4 * 3 + ( includeNormals ? 4 * 3 : 0 ) + ( includeColors ? 3 : 0 ) + ( includeUVs ? 4 * 2 : 0 ) ); // 1 byte shape desciptor
+				const vertexListLength = vertexCount * ( 4 * 3 + ( includeNormals ? 4 * 3 : 0 ) + ( includeColors ? 3 : 0 ) + ( includeUVs ? 4 * 2 : 0 ) );
+
+				// 1 byte shape descriptor
 				// 3 vertex indices at ${indexByteCount} bytes
 
 				const faceListLength = includeIndices ? faceCount * ( indexByteCount * 3 + 1 ) : 0;
@@ -201,14 +211,18 @@
 						vertex.x = vertices.getX( i );
 						vertex.y = vertices.getY( i );
 						vertex.z = vertices.getZ( i );
-						vertex.applyMatrix4( mesh.matrixWorld ); // Position information
+						vertex.applyMatrix4( mesh.matrixWorld );
+
+						// Position information
 
 						output.setFloat32( vOffset, vertex.x, options.littleEndian );
 						vOffset += 4;
 						output.setFloat32( vOffset, vertex.y, options.littleEndian );
 						vOffset += 4;
 						output.setFloat32( vOffset, vertex.z, options.littleEndian );
-						vOffset += 4; // Normal information
+						vOffset += 4;
+
+						// Normal information
 
 						if ( includeNormals === true ) {
 
@@ -236,8 +250,9 @@
 
 							}
 
-						} // UV information
+						}
 
+						// UV information
 
 						if ( includeUVs === true ) {
 
@@ -257,8 +272,9 @@
 
 							}
 
-						} // THREE.Color information
+						}
 
+						// THREE.Color information
 
 						if ( includeColors === true ) {
 
@@ -343,13 +359,15 @@
 
 						}
 
-					} // Save the amount of verts we've already written so we can offset
-					// the face index on the next mesh
+					}
 
+					// Save the amount of verts we've already written so we can offset
+					// the face index on the next mesh
 
 					writtenVertices += vertices.count;
 
 				} );
+
 				result = output.buffer;
 
 			} else {
@@ -359,6 +377,7 @@
 				let writtenVertices = 0;
 				let vertexList = '';
 				let faceList = '';
+
 				traverseMeshes( function ( mesh, geometry ) {
 
 					const vertices = geometry.getAttribute( 'position' );
@@ -366,7 +385,10 @@
 					const uvs = geometry.getAttribute( 'uv' );
 					const colors = geometry.getAttribute( 'color' );
 					const indices = geometry.getIndex();
-					normalMatrixWorld.getNormalMatrix( mesh.matrixWorld ); // form each line
+
+					normalMatrixWorld.getNormalMatrix( mesh.matrixWorld );
+
+					// form each line
 
 					let j = 0;
 
@@ -375,9 +397,14 @@
 						vertex.x = vertices.getX( i );
 						vertex.y = vertices.getY( i );
 						vertex.z = vertices.getZ( i );
-						vertex.applyMatrix4( mesh.matrixWorld ); // Position information
 
-						let line = vertex.x + ' ' + vertex.y + ' ' + vertex.z; // Normal information
+						vertex.applyMatrix4( mesh.matrixWorld );
+
+						// Position information
+
+						let line = vertex.x + ' ' + vertex.y + ' ' + vertex.z;
+
+						// Normal information
 
 						if ( includeNormals === true ) {
 
@@ -386,7 +413,9 @@
 								vertex.x = normals.getX( i );
 								vertex.y = normals.getY( i );
 								vertex.z = normals.getZ( i );
+
 								vertex.applyMatrix3( normalMatrixWorld ).normalize();
+
 								line += ' ' + vertex.x + ' ' + vertex.y + ' ' + vertex.z;
 
 							} else {
@@ -395,8 +424,9 @@
 
 							}
 
-						} // UV information
+						}
 
+						// UV information
 
 						if ( includeUVs === true ) {
 
@@ -410,7 +440,9 @@
 
 							}
 
-						} // THREE.Color information
+						}
+
+						// THREE.Color information
 
 						if ( includeColors === true ) {
 
@@ -440,8 +472,9 @@
 
 						vertexList += line + '\n';
 
-					} // Create the face list
+					}
 
+					// Create the face list
 
 					if ( includeIndices === true ) {
 
@@ -472,11 +505,13 @@
 					writtenVertices += vertices.count;
 
 				} );
+
 				result = `${header}${vertexList}${includeIndices ? `${faceList}\n` : '\n'}`;
 
 			}
 
 			if ( typeof onDone === 'function' ) requestAnimationFrame( () => onDone( result ) );
+
 			return result;
 
 		}
