@@ -345,6 +345,7 @@
         <button title="Random Vertex Colors" id="btn_random_vertex_colors" onclick="set_random_vertex_colors();" style="min-width: 12px;" disabled>!</button>
         <button title="Grid" id="btn_grid" onclick="show_grid();" disabled>#</button>
         <button title="Polar Grid" id="btn_polar_grid" onclick="show_polar_grid();" style="min-width: 24px;" disabled><p class="polar"></p></button>
+        <button title="Points Model" id="btn_points_model" onclick="show_points_model();" style="min-width: 27px;" disabled>PM</button>
       </div>
     </div>
     <div id="gif_progress" style="display: none; background-color: whitesmoke; border: none;">
@@ -554,6 +555,7 @@
       var ww = window.innerWidth, wh = window.innerHeight;
       var mouse_down, reset_rotation, events_initialized;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
+      var original_model, points_model, object_is_points;
       var bounding_box, filename, gif_export, zip;
       var flat_shading_enabled, enable_opacity, bgnd_linear_gradient;
       var material, textures, current_texture, animated_gif_texture, url_tga_loaded;
@@ -646,6 +648,14 @@
         const ply_exporter = new THREE.PLYExporter( manager );
 
         if (mesh) {
+          let options;
+
+          if (object_is_points === true) {
+            options = { binary: binary, excludeAttributes: [ 'index', 'uv' ], littleEndian: true };
+          } else {
+            options = { binary: binary, littleEndian: true };
+          }
+
           ply_exporter.parse( mesh, async function( json ) {
             let blob;
 
@@ -660,11 +670,16 @@
 
             await process_zip( binary === true ? '.PLY_binary' : '.PLY_ascii' );
 
-          }, { binary: binary, littleEndian: true });
+          }, options );
         }
       }
 
       async function export_stl() {
+        if (object_is_points === true) {
+          alert( 'STLExporter: points are not supported!' );
+          return;
+        }
+
         start_export();
 
         await new Promise( resolve => setTimeout( resolve, 20 ) );
@@ -1109,9 +1124,13 @@
 
           if (obj_colors === '#000000') obj_colors = '#FFFFFF';
 
-          mesh.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 255.0, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 255.0, parseInt( obj_colors.substring( 5 ), 16 ) / 255.0 );
-          mesh.material.opacity = document.getElementById('model_opacity').value;
-          mesh.material.needsUpdate = true;
+          mesh.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              child.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 255.0, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 255.0, parseInt( obj_colors.substring( 5 ), 16 ) / 255.0 );
+              child.material.opacity = document.getElementById('model_opacity').value;
+              child.material.needsUpdate = true;
+            }
+          });
         }
       }
 
@@ -1119,13 +1138,19 @@
         if (mesh) {
           let opacity_value = document.getElementById('model_opacity').value;
           document.getElementById('opacity_val').innerText = opacity_value;
-          mesh.material.opacity = opacity_value;
+
+          mesh.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              child.material.opacity = opacity_value;
+              child.material.needsUpdate = true;
+            }
+          });
         }
       }
 
       function set_opacity() {
         if (mesh) {
-          if (enable_opacity) {
+          if (enable_opacity === true) {
             enable_opacity = false;
             document.getElementById('model_opacity').value = 1;
             document.getElementById('model_opacity').disabled = true;
@@ -1200,8 +1225,12 @@
 
       function set_envMap() {
         if (mesh) {
-          mesh.material.envMap = reflect ? scene.background : null;
-          mesh.material.needsUpdate = true;
+          mesh.traverse( ( child ) => {
+            if (child.isMesh) {
+              child.material.envMap = reflect ? scene.background : null;
+              child.material.needsUpdate = true;
+            }
+          });
         }
       }
 
@@ -1414,9 +1443,17 @@
           if (grid_visible === true) show_grid();
 
           if (mesh) {
-            if (mesh.material && mesh.material.map) mesh.material.map.dispose();
-            if (mesh.material) mesh.material.dispose();
-            if (mesh.geometry) mesh.geometry.dispose();
+            mesh.traverse( ( child ) => {
+              if (child.isMesh || child.isPoints) {
+                if (child.material && child.material.map) child.material.map.dispose();
+                if (child.material) child.material.dispose();
+                if (child.geometry) child.geometry.dispose();
+              }
+            });
+
+            while (mesh.children.length > 0) {
+              mesh.remove( mesh.children[ 0 ] );
+            }
 
             material.dispose();
 
@@ -1459,6 +1496,7 @@
         selected_stl_file = null;
         selected_url_ply_file = null;
         selected_url_stl_file = null;
+        object_is_points = false;
         edges = null;
         edges_visible = false;
         enable_opacity = false;
@@ -1528,6 +1566,9 @@
         }
 
         if (scene === undefined) scene = new THREE.Scene();
+        if (mesh === undefined) mesh = new THREE.Group();
+        if (original_model === undefined) original_model = new THREE.Object3D();
+        if (points_model === undefined) points_model = new THREE.Object3D();
 
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
@@ -1665,16 +1706,13 @@
       function addFileInScene( object ) {
         let smooth = object.clone();
 
-        smooth.deleteAttribute('normal');
-        smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
-        smooth.computeVertexNormals();
-        smooth.center();
-
-        random_vertex_color_array = new Float32Array( Array.from( { length: smooth.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-        original_vertex_color_array = smooth.getAttribute( 'color' );
-
-        if (selected_ply_file) {
+        if ( smooth.index !== null ) {
           URL.revokeObjectURL( selected_ply_file );
+
+          smooth.deleteAttribute('normal');
+          smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
+          smooth.computeVertexNormals();
+          smooth.center();
 
           if (object.attributes.color && object.attributes.color.array.length > 0) {
             material.vertexColors = true;
@@ -1683,25 +1721,108 @@
             document.getElementById('btn_random_vertex_colors').disabled = false;
             random_vertex_changed();
           }
-        } else {
-          URL.revokeObjectURL( selected_stl_file );
 
-          if (object.hasColors) {
-            material.vertexColors = true;
+          document.getElementById('directional_light_intensity').value = 0.75;
+          set_directional_light_intensity();
+
+          original_model = new THREE.Mesh( smooth, material );
+          edges = new THREE.LineSegments( new THREE.EdgesGeometry( original_model.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+
+          mesh.add( original_model );
+
+          initial_rotation = mesh.rotation;
+
+          // Create points model
+          document.getElementById('btn_points_model').disabled = false;
+
+          let non_indexed_geometry = smooth.clone().toNonIndexed();
+          let points_material = new THREE.PointsMaterial( { size: 0.01, transparent: true } );
+
+          if (non_indexed_geometry.hasAttribute( 'color' )) {
+            points_material.vertexColors = true;
             vertex_colors_enabled = true;
             document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
             document.getElementById('btn_random_vertex_colors').disabled = false;
             random_vertex_changed();
           }
+
+          points_model = new THREE.Points( non_indexed_geometry, points_material );
+
+          mesh.add( points_model );
+
+          mesh.children[ 1 ].visible = false;
+        } else {
+          if (selected_ply_file) {
+            URL.revokeObjectURL( selected_ply_file );
+
+            object_is_points = true;
+            document.getElementById('btn_points_model').disabled = true;
+            document.getElementById('btn_points_model').style.backgroundColor = '#d1cefc';
+            document.getElementById('wireframe').disabled = true;
+            document.getElementById('btn_flat').disabled = true;
+            document.getElementById('btn_edges').disabled = true;
+            document.getElementById('btn_material').disabled = true;
+            if (textures.length > 0) document.getElementById('btn_textures').disabled = true;
+            points_model_enabled();
+
+            let points_material = new THREE.PointsMaterial( { size: 0.01, transparent: true } );
+
+            if (smooth.hasAttribute( 'color' )) {
+              points_material.vertexColors = true;
+              vertex_colors_enabled = true;
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+              random_vertex_changed();
+            }
+
+            original_model = new THREE.Points( smooth, points_material );
+
+            mesh.add( original_model );
+
+            disabled_changed();
+          } else {
+            URL.revokeObjectURL( selected_stl_file );
+
+            smooth.deleteAttribute('normal');
+            smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
+            smooth.computeVertexNormals();
+            smooth.center();
+
+            if (object.hasColors) {
+              material.vertexColors = true;
+              vertex_colors_enabled = true;
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+              random_vertex_changed();
+            }
+
+            original_model = new THREE.Mesh( smooth, material );
+            edges = new THREE.LineSegments( new THREE.EdgesGeometry( original_model.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+
+            mesh.add( original_model );
+
+            // Create points model
+            document.getElementById('btn_points_model').disabled = false;
+
+            let non_indexed_geometry = smooth.clone().toNonIndexed();
+            let points_material = new THREE.PointsMaterial( { size: 0.01, transparent: true } );
+
+            if (non_indexed_geometry.hasAttribute( 'color' )) {
+              points_material.vertexColors = true;
+              vertex_colors_enabled = true;
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+              random_vertex_changed();
+            }
+
+            points_model = new THREE.Points( non_indexed_geometry, points_material );
+
+            mesh.add( points_model );
+            mesh.children[ 1 ].visible = false;
+
+            initial_rotation = mesh.rotation;
+          }
         }
-
-        document.getElementById('directional_light_intensity').value = 0.75;
-        set_directional_light_intensity();
-
-        mesh = new THREE.Mesh( smooth, material );
-        edges = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
-
-        initial_rotation = mesh.rotation;
 
         // Add mesh to the scene
         scene.add( mesh );
@@ -1712,7 +1833,7 @@
 
         console.timeEnd( 'Loading Time' );
         document.getElementById('div_loading').style.display = 'none';
-        document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+        if (object_is_points === false) document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
 
         disabled_changed();
       }
@@ -1872,15 +1993,14 @@
       function addURLFileInScene( object ) {
         let smooth = object.clone();
 
-        smooth.deleteAttribute('normal');
-        smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
-        smooth.computeVertexNormals();
-        smooth.center();
+        if ( smooth.index !== null ) {
+          URL.revokeObjectURL( selected_ply_file );
 
-        random_vertex_color_array = new Float32Array( Array.from( { length: smooth.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-        original_vertex_color_array = smooth.getAttribute( 'color' );
+          smooth.deleteAttribute('normal');
+          smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
+          smooth.computeVertexNormals();
+          smooth.center();
 
-        if (selected_url_ply_file) {
           if (object.attributes.color && object.attributes.color.array.length > 0) {
             material.vertexColors = true;
             vertex_colors_enabled = true;
@@ -1888,23 +2008,108 @@
             document.getElementById('btn_random_vertex_colors').disabled = false;
             random_vertex_changed();
           }
-        } else {
-          if (object.hasColors) {
-            material.vertexColors = true;
+
+          document.getElementById('directional_light_intensity').value = 0.75;
+          set_directional_light_intensity();
+
+          original_model = new THREE.Mesh( smooth, material );
+          edges = new THREE.LineSegments( new THREE.EdgesGeometry( original_model.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+
+          mesh.add( original_model );
+
+          initial_rotation = mesh.rotation;
+
+          // Create points model
+          document.getElementById('btn_points_model').disabled = false;
+
+          let non_indexed_geometry = smooth.clone().toNonIndexed();
+          let points_material = new THREE.PointsMaterial( { size: 0.01, transparent: true } );
+
+          if (non_indexed_geometry.hasAttribute( 'color' )) {
+            points_material.vertexColors = true;
             vertex_colors_enabled = true;
             document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
             document.getElementById('btn_random_vertex_colors').disabled = false;
             random_vertex_changed();
           }
+
+          points_model = new THREE.Points( non_indexed_geometry, points_material );
+
+          mesh.add( points_model );
+
+          mesh.children[ 1 ].visible = false;
+        } else {
+          if (selected_ply_file) {
+            URL.revokeObjectURL( selected_ply_file );
+
+            object_is_points = true;
+            document.getElementById('btn_points_model').disabled = true;
+            document.getElementById('btn_points_model').style.backgroundColor = '#d1cefc';
+            document.getElementById('wireframe').disabled = true;
+            document.getElementById('btn_flat').disabled = true;
+            document.getElementById('btn_edges').disabled = true;
+            document.getElementById('btn_material').disabled = true;
+            if (textures.length > 0) document.getElementById('btn_textures').disabled = true;
+            points_model_enabled();
+
+            let points_material = new THREE.PointsMaterial( { size: 0.01, transparent: true } );
+
+            if (smooth.hasAttribute( 'color' )) {
+              points_material.vertexColors = true;
+              vertex_colors_enabled = true;
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+              random_vertex_changed();
+            }
+
+            original_model = new THREE.Points( smooth, points_material );
+
+            mesh.add( original_model );
+
+            disabled_changed();
+          } else {
+            URL.revokeObjectURL( selected_stl_file );
+
+            smooth.deleteAttribute('normal');
+            smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
+            smooth.computeVertexNormals();
+            smooth.center();
+
+            if (object.hasColors) {
+              material.vertexColors = true;
+              vertex_colors_enabled = true;
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+              random_vertex_changed();
+            }
+
+            original_model = new THREE.Mesh( smooth, material );
+            edges = new THREE.LineSegments( new THREE.EdgesGeometry( original_model.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+
+            mesh.add( original_model );
+
+            // Create points model
+            document.getElementById('btn_points_model').disabled = false;
+
+            let non_indexed_geometry = smooth.clone().toNonIndexed();
+            let points_material = new THREE.PointsMaterial( { size: 0.01, transparent: true } );
+
+            if (non_indexed_geometry.hasAttribute( 'color' )) {
+              points_material.vertexColors = true;
+              vertex_colors_enabled = true;
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+              random_vertex_changed();
+            }
+
+            points_model = new THREE.Points( non_indexed_geometry, points_material );
+
+            mesh.add( points_model );
+            mesh.children[ 1 ].visible = false;
+
+            initial_rotation = mesh.rotation;
+          }
         }
-
-        document.getElementById('directional_light_intensity').value = 0.75;
-        set_directional_light_intensity();
-
-        mesh = new THREE.Mesh( smooth, material );
-        edges = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
-
-        initial_rotation = mesh.rotation;
 
         // Add mesh to the scene
         scene.add( mesh );
@@ -1915,9 +2120,39 @@
 
         console.timeEnd( 'Loading Time' );
         document.getElementById('div_loading').style.display = 'none';
-        document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+        if (object_is_points === false) document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
 
         disabled_changed();
+      }
+
+      function show_points_model() {
+        if (mesh) {
+          if (object_is_points === false) {
+            document.getElementById('btn_points_model').style.backgroundColor = 'lightgreen';
+            document.getElementById('wireframe').disabled = true;
+            document.getElementById('btn_flat').disabled = true;
+            document.getElementById('btn_material').disabled = true;
+            if (textures.length > 0) document.getElementById('btn_textures').disabled = true;
+
+            mesh.children[ 0 ].visible = false;
+            mesh.children[ 1 ].visible = true;
+
+            object_is_points = true;
+          } else {
+            document.getElementById('btn_points_model').style.backgroundColor = '#d1cefc';
+            document.getElementById('wireframe').disabled = false;
+            document.getElementById('btn_flat').disabled = false;
+            document.getElementById('btn_material').disabled = false;
+            if (textures.length > 0) document.getElementById('btn_textures').disabled = false;
+
+            mesh.children[ 0 ].visible = true;
+            mesh.children[ 1 ].visible = false;
+
+            object_is_points = false;
+          }
+
+          disabled_changed();
+        }
       }
 
       function show_polar_grid() {
@@ -1997,7 +2232,13 @@
       }
 
       function show_wireframe() {
-        if (mesh) { mesh.material.wireframe = document.getElementById('wireframe').checked; }
+        if (mesh) {
+          mesh.traverse( ( child ) => {
+            if (child.isMesh) {
+              child.material.wireframe = document.getElementById('wireframe').checked;
+            }
+          });
+        }
       }
 
       function set_flat() {
@@ -2010,63 +2251,71 @@
             flat_shading_enabled = true;
           }
 
-          mesh.material.flatShading = flat_shading_enabled;
-          mesh.material.needsUpdate = true;
+          mesh.traverse( ( child ) => {
+            if (child.isMesh) {
+              child.material.flatShading = flat_shading_enabled;
+              child.material.needsUpdate = true;
+            }
+          });
         }
       }
 
       function set_material() {
         if (mesh) {
-          let current_material = document.getElementById('btn_material').innerHTML;
+          mesh.traverse( ( child ) => {
+            if (child.isMesh) {
+              let current_material = document.getElementById('btn_material').innerHTML;
 
-          if (current_material === 'MP') {
-            document.getElementById('btn_material').innerHTML = 'MS';
-            document.getElementById('btn_material').style.backgroundColor = 'lightgreen';
+              if (current_material === 'MP') {
+                document.getElementById('btn_material').innerHTML = 'MS';
+                document.getElementById('btn_material').style.backgroundColor = 'lightgreen';
 
-            let mtrl = new THREE.MeshStandardMaterial( {
-              side: THREE.DoubleSide,
-              metalness: 0.5,
-              roughness: 0.3,
-              transparent: true,
-              envMapIntensity: 1.0,
-              flatShading: flat_shading_enabled,
-              vertexColors: vertex_colors_enabled
-            });
+                let mtrl = new THREE.MeshStandardMaterial( {
+                  side: THREE.DoubleSide,
+                  metalness: 0.5,
+                  roughness: 0.3,
+                  transparent: true,
+                  envMapIntensity: 1.0,
+                  flatShading: flat_shading_enabled,
+                  vertexColors: vertex_colors_enabled
+                });
 
-            if (mesh.material.map) { mtrl.map = mesh.material.map; mesh.material.map.dispose(); mesh.material.map = null; }
-            mesh.material.dispose();
-            mesh[ 'material' ] = mtrl;
-            mesh.material.needsUpdate = true;
+                if (child.material.map) { mtrl.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
+                child.material.dispose();
+                child[ 'material' ] = mtrl;
+                child.material.needsUpdate = true;
 
-            mtrl.dispose();
-          } else if (current_material === 'MS') {
-            document.getElementById('btn_material').innerHTML = 'ML';
-            document.getElementById('btn_material').style.backgroundColor = 'lightblue';
+                mtrl.dispose();
+              } else if (current_material === 'MS') {
+                document.getElementById('btn_material').innerHTML = 'ML';
+                document.getElementById('btn_material').style.backgroundColor = 'lightblue';
 
-            let mtrl = new THREE.MeshLambertMaterial( {
-              side: THREE.DoubleSide,
-              transparent: true,
-              flatShading: flat_shading_enabled,
-              vertexColors: vertex_colors_enabled
-            });
+                let mtrl = new THREE.MeshLambertMaterial( {
+                  side: THREE.DoubleSide,
+                  transparent: true,
+                  flatShading: flat_shading_enabled,
+                  vertexColors: vertex_colors_enabled
+                });
 
-            if (mesh.material.map) { mtrl.map = mesh.material.map; mesh.material.map.dispose(); mesh.material.map = null; }
-            mesh.material.dispose();
-            mesh[ 'material' ] = mtrl;
-            mesh.material.needsUpdate = true;
+                if (child.material.map) { mtrl.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
+                child.material.dispose();
+                child[ 'material' ] = mtrl;
+                child.material.needsUpdate = true;
 
-            mtrl.dispose();
-          } else {
-            document.getElementById('btn_material').innerHTML = 'MP';
-            document.getElementById('btn_material').style.backgroundColor = '#d1cefc';
+                mtrl.dispose();
+              } else {
+                document.getElementById('btn_material').innerHTML = 'MP';
+                document.getElementById('btn_material').style.backgroundColor = '#d1cefc';
 
-            if (mesh.material.map) { material.map = mesh.material.map; mesh.material.map.dispose(); mesh.material.map = null; }
-            mesh.material.dispose();
-            mesh[ 'material' ] = material;
-            mesh.material.vertexColors = vertex_colors_enabled;
-            mesh.material.flatShading = flat_shading_enabled;
-            mesh.material.needsUpdate = true;
-          }
+                if (child.material.map) { material.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
+                child.material.dispose();
+                child[ 'material' ] = material;
+                child.material.vertexColors = vertex_colors_enabled;
+                child.material.flatShading = flat_shading_enabled;
+                child.material.needsUpdate = true;
+              }
+            }
+          });
 
           set_object_color();
           set_model_opacity();
@@ -2087,93 +2336,97 @@
             document.getElementById('btn_textures').innerHTML = 'T' + current_texture;
           }
 
-          if (current_texture === -1) {
-            // Remove texture
-            if (mesh.material.map) mesh.material.map.dispose();
-            mesh.material.map = null;
-            mesh.material.needsUpdate = true;
-          } else {
-            if (selected_url_ply_file || selected_url_stl_file) {
-              if (textures[ current_texture ].num_frames && textures[ current_texture ].num_frames > 1) animated_gif_texture = true;
-
-              textures[ current_texture ].encoding = THREE.sRGBEncoding;
-              textures[ current_texture ].wrapS = THREE.RepeatWrapping;
-              textures[ current_texture ].wrapT = THREE.RepeatWrapping;
-
-              // Apply texture
-              mesh.material.map = textures[ current_texture ];
-
-              if (url_tga_loaded) {
-                mesh.material.map.generateMipmaps = true;
-                mesh.material.map.flipY = true;
-              }
-
-              mesh.material.needsUpdate = true;
-            } else {
-              if (textures[ current_texture ].name.toUpperCase().endsWith('.DDS')) {
-                dds_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
-                  URL.revokeObjectURL( textures[ current_texture ] );
-
-                  texture.encoding = THREE.sRGBEncoding;
-                  texture.wrapS = THREE.RepeatWrapping;
-                  texture.wrapT = THREE.RepeatWrapping;
-
-                  // Apply texture
-                  mesh.material.map = texture;
-                  mesh.material.needsUpdate = true;
-                });
-              } else if (textures[ current_texture ].name.toUpperCase().endsWith('.TGA')) {
-                tga_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
-                  URL.revokeObjectURL( textures[ current_texture ] );
-
-                  texture.encoding = THREE.sRGBEncoding;
-                  texture.wrapS = THREE.RepeatWrapping;
-                  texture.wrapT = THREE.RepeatWrapping;
-
-                  // Apply texture
-                  mesh.material.map = texture;
-                  mesh.material.map.generateMipmaps = true;
-                  mesh.material.map.flipY = true;
-                  mesh.material.needsUpdate = true;
-                });
-              } else if (textures[ current_texture ].name.toUpperCase().endsWith('.GIF')) {
-                let tex = gif_loader.load( URL.createObjectURL( textures[ current_texture ] ) );
-                URL.revokeObjectURL( textures[ current_texture ] );
-
-                tex.encoding = THREE.sRGBEncoding;
-                tex.wrapS = THREE.RepeatWrapping;
-                tex.wrapT = THREE.RepeatWrapping;
-
-                await new Promise(resolve => setTimeout( resolve, 1000 )); // adjust timing if necessary
-
-                if (tex.num_frames > 1) animated_gif_texture = true;
-
-                // Apply texture
-                mesh.material.map = tex;
-                mesh.material.needsUpdate = true;
-
-                tex.dispose();
+          mesh.traverse( async ( child ) => {
+            if (child.isMesh) {
+              if (current_texture === -1) {
+                // Remove texture
+                if (child.material.map) child.material.map.dispose();
+                child.material.map = null;
+                child.material.needsUpdate = true;
               } else {
-                texture_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
-                  URL.revokeObjectURL( textures[ current_texture ] );
+                if (selected_url_ply_file || selected_url_stl_file) {
+                  if (textures[ current_texture ].num_frames && textures[ current_texture ].num_frames > 1) animated_gif_texture = true;
 
-                  texture.encoding = THREE.sRGBEncoding;
-                  texture.wrapS = THREE.RepeatWrapping;
-                  texture.wrapT = THREE.RepeatWrapping;
+                  textures[ current_texture ].encoding = THREE.sRGBEncoding;
+                  textures[ current_texture ].wrapS = THREE.RepeatWrapping;
+                  textures[ current_texture ].wrapT = THREE.RepeatWrapping;
 
                   // Apply texture
-                  mesh.material.map = texture;
-                  mesh.material.needsUpdate = true;
-                });
+                  child.material.map = textures[ current_texture ];
+
+                  if (url_tga_loaded) {
+                    child.material.map.generateMipmaps = true;
+                    child.material.map.flipY = true;
+                  }
+
+                  child.material.needsUpdate = true;
+                } else {
+                  if (textures[ current_texture ].name.toUpperCase().endsWith('.DDS')) {
+                    dds_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                      URL.revokeObjectURL( textures[ current_texture ] );
+
+                      texture.encoding = THREE.sRGBEncoding;
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
+
+                      // Apply texture
+                      child.material.map = texture;
+                      child.material.needsUpdate = true;
+                    });
+                  } else if (textures[ current_texture ].name.toUpperCase().endsWith('.TGA')) {
+                    tga_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                      URL.revokeObjectURL( textures[ current_texture ] );
+
+                      texture.encoding = THREE.sRGBEncoding;
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
+
+                      // Apply texture
+                      child.material.map = texture;
+                      child.material.map.generateMipmaps = true;
+                      child.material.map.flipY = true;
+                      child.material.needsUpdate = true;
+                    });
+                  } else if (textures[ current_texture ].name.toUpperCase().endsWith('.GIF')) {
+                    let tex = gif_loader.load( URL.createObjectURL( textures[ current_texture ] ) );
+                    URL.revokeObjectURL( textures[ current_texture ] );
+
+                    await new Promise(resolve => setTimeout( resolve, 1000 )); // adjust timing if necessary
+
+                    tex.encoding = THREE.sRGBEncoding;
+                    tex.wrapS = THREE.RepeatWrapping;
+                    tex.wrapT = THREE.RepeatWrapping;
+
+                    if (tex.num_frames > 1) animated_gif_texture = true;
+
+                    // Apply texture
+                    child.material.map = tex;
+                    child.material.needsUpdate = true;
+
+                    tex.dispose();
+                  } else {
+                    texture_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                      URL.revokeObjectURL( textures[ current_texture ] );
+
+                      texture.encoding = THREE.sRGBEncoding;
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
+
+                      // Apply texture
+                      child.material.map = texture;
+                      child.material.needsUpdate = true;
+                    });
+                  }
+                }
               }
             }
-          }
+          });
         }
       }
 
       function set_vertex_colors() {
         if (mesh) {
-          if (vertex_colors_enabled) {
+          if (vertex_colors_enabled === true) {
             document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
             if (random_vertex_colors_enabled === true) set_random_vertex_colors();
             document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
@@ -2188,23 +2441,40 @@
 
           random_vertex_changed();
 
-          mesh.material.vertexColors = vertex_colors_enabled;
-          mesh.material.needsUpdate = true;
+          mesh.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              random_vertex_color_array = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+              original_vertex_color_array = child.geometry.getAttribute( 'color' );
+
+              child.material.vertexColors = vertex_colors_enabled;
+              child.material.needsUpdate = true;
+            }
+          });
         }
       }
 
       function set_random_vertex_colors() {
         if (random_vertex_colors_enabled === true) {
-          original_vertex_color_array ? mesh.geometry.setAttribute( 'color', original_vertex_color_array ) : mesh.geometry.deleteAttribute( 'color' );
+          mesh.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              original_vertex_color_array ? child.geometry.setAttribute( 'color', original_vertex_color_array ) : child.geometry.deleteAttribute( 'color' );
+              child.material.needsUpdate = true;
+            }
+          });
+
           document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
           random_vertex_colors_enabled = false;
         } else {
-          mesh.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array, 3, false ) );
+          mesh.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array, 3, false ) );
+              child.material.needsUpdate = true;
+            }
+          });
+
           document.getElementById('btn_random_vertex_colors').style.backgroundColor = 'lightgreen';
           random_vertex_colors_enabled = true;
         }
-
-        mesh.material.needsUpdate = true;
       }
 
       async function render() {
@@ -2250,9 +2520,17 @@
         if (polar_grid_visible === true) show_polar_grid();
         if (grid_visible === true) show_grid();
 
-        if (mesh.material && mesh.material.map) mesh.material.map.dispose();
-        if (mesh.material) mesh.material.dispose();
-        if (mesh.geometry) mesh.geometry.dispose();
+        mesh.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            if (child.material && child.material.map) child.material.map.dispose();
+            if (child.material) child.material.dispose();
+            if (child.geometry) child.geometry.dispose();
+          }
+        });
+
+        while (mesh.children.length > 0) {
+          mesh.remove( mesh.children[ 0 ] );
+        }
 
         document.getElementById('file_image_input').disabled = false;
 
@@ -2302,7 +2580,7 @@
         document.getElementById('model_opacity').disabled = true;
         document.getElementById('btn_dc_opacity').style.backgroundColor = 'transparent';
 
-        // Reset flat, edges, textures, material, reflectivity and vertex_colors related values
+        // Reset flat, edges, textures, material, reflectivity, points model and vertex_colors related values
         flat_shading_enabled = true;
         document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
         edges_visible = false;
@@ -2319,11 +2597,14 @@
         bgnd_linear_gradient = false;
         document.getElementById('btn_bgnd_linear_gradient').disabled = false;
         document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+        object_is_points = false;
+        document.getElementById('btn_points_model').disabled = true;
+        document.getElementById('btn_points_model').style.backgroundColor = '#d1cefc';
         vertex_colors_enabled = false;
         document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
         random_vertex_colors_enabled = false;
-        document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_random_vertex_colors').disabled = true;
+        document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
         random_vertex_changed();
 
         gif_export = false;
@@ -2473,6 +2754,16 @@
           $('#back_color').hover(
           function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
           function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+        }
+      }
+
+      function points_model_enabled() {
+        if ($('#btn_points_model')[ 0 ].disabled === true) {
+          $('#btn_points_model').unbind('mouseenter mouseleave');
+        } else {
+          $('#btn_points_model').hover(
+          function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+          function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
         }
       }
 
