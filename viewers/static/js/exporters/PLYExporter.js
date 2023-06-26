@@ -288,19 +288,22 @@
 								output.setUint8( vOffset, Math.floor( tempColor.b * 255 ) );
 								vOffset += 1;
 
-							} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length <= mesh.material.length ) ) {
+							} else if ( geometry.groups && ( geometry.groups.length <= mesh.material.length ) && mesh.material && ( Array.isArray( mesh.material ) === true ) ) {
 
-								if ( i === ( geometry.groups[ j ].start + geometry.groups[ j ].count - 1 ) && j < geometry.groups.length - 1 ) j += 1;
-								let group_material_color = mesh.material[ geometry.groups[ j ].materialIndex ].color;
+								if ( geometry.groups[ j ].count !== Infinity ) {
 
-								output.setUint8( vOffset, Math.floor( group_material_color.r * 255 ) );
+									if ( i === ( geometry.groups[ j ].start + geometry.groups[ j ].count - 1 ) && j < geometry.groups.length - 1 ) j += 1;
+
+								}
+
+								output.setUint8( vOffset, Math.floor( mesh.material[ geometry.groups[ j ].materialIndex ].color.r * 255 ) );
 								vOffset += 1;
-								output.setUint8( vOffset, Math.floor( group_material_color.g * 255 ) );
+								output.setUint8( vOffset, Math.floor( mesh.material[ geometry.groups[ j ].materialIndex ].color.g * 255 ) );
 								vOffset += 1;
-								output.setUint8( vOffset, Math.floor( group_material_color.b * 255 ) );
+								output.setUint8( vOffset, Math.floor( mesh.material[ geometry.groups[ j ].materialIndex ].color.b * 255 ) );
 								vOffset += 1;
 
-							} else if ( ( geometry.groups && mesh.material && geometry.groups.length === 1 ) || ( mesh.material && mesh.material.color ) ) {
+							} else if ( ( mesh.material && geometry.groups && geometry.groups.length === 1 ) || ( mesh.material && mesh.material.color ) ) {
 
 								output.setUint8( vOffset, Math.floor( mesh.material.color.r * 255 ) );
 								vOffset += 1;
