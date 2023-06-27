@@ -77,7 +77,7 @@
 
 					const lineValues = line.split( /\s+/ );
 
-					if ( lineValues.length === 3 ) {
+					if ( lineValues.length >= 3 ) {
 
 						// XYZ
 
@@ -87,17 +87,16 @@
 
 					}
 
-					if ( lineValues.length === 6 ) {
+					if ( lineValues.length === 4 ) {
 
-						// XYZRGB
+						// possible RGB or RGBA Int32 value so parse it and convert to hex
+						let hex_value = ( parseInt( lineValues[ 3 ] ) ).toString( 16 ).padEnd( 8, '0' );
 
-						vertices.push( parseFloat( lineValues[ 0 ] ) );
-						vertices.push( parseFloat( lineValues[ 1 ] ) );
-						vertices.push( parseFloat( lineValues[ 2 ] ) );
+						// RGB
 
-						const r = parseFloat( lineValues[ 3 ] ) / 255;
-						const g = parseFloat( lineValues[ 4 ] ) / 255;
-						const b = parseFloat( lineValues[ 5 ] ) / 255;
+						const r = parseFloat( parseInt( hex_value.substring( 0, 2 ), 16 ) );
+						const g = parseFloat( parseInt( hex_value.substring( 2, 4 ), 16 ) );
+						const b = parseFloat( parseInt( hex_value.substring( 4, 6 ), 16 ) );
 
 						color.set( r, g, b ).convertSRGBToLinear();
 
@@ -105,7 +104,21 @@
 
 					}
 
-					if ( lineValues.length === 9 ) {
+					if ( lineValues.length >= 6 ) {
+
+						// RGB
+
+						const r = parseFloat( lineValues[ 3 ] );
+						const g = parseFloat( lineValues[ 4 ] );
+						const b = parseFloat( lineValues[ 5 ] );
+
+						color.set( r, g, b ).convertSRGBToLinear();
+
+						colors.push( color.r, color.g, color.b );
+
+					}
+
+					if ( lineValues.length >= 9 ) {
 
 						// Normals
 						normals.push( parseFloat( lineValues[ 6 ] ) );
@@ -129,7 +142,7 @@
 
 			if ( normals.length > 0 ) {
 
-				geometry.setAttribute( 'normals', new THREE.Float32BufferAttribute( normals, 3 ) );
+				geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
 
 			}
 
