@@ -90,15 +90,15 @@
 					if ( lineValues.length === 4 ) {
 
 						// possible RGB or RGBA Int32 value so parse it and convert to hex
-						let hex_value = ( parseInt( lineValues[ 3 ] ) ).toString( 16 ).padEnd( 8, '0' );
+						let hex_value = ( parseInt( lineValues[ 3 ] ) ).toString( 16 ).padEnd( 6, '0' );
 
 						// RGB
 
-						const r = parseFloat( parseInt( hex_value.substring( 0, 2 ), 16 ) );
-						const g = parseFloat( parseInt( hex_value.substring( 2, 4 ), 16 ) );
-						const b = parseFloat( parseInt( hex_value.substring( 4, 6 ), 16 ) );
+						const r = parseInt( hex_value.substring( 0, 2 ), 16 ) / 255.0;
+						const g = parseInt( hex_value.substring( 2, 4 ), 16 ) / 255.0;
+						const b = parseInt( hex_value.substring( 4, 6 ), 16 ) / 255.0;
 
-						color.set( r, g, b ).convertSRGBToLinear();
+						color.setRGB( r, g, b ).convertSRGBToLinear();
 
 						colors.push( color.r, color.g, color.b );
 
@@ -108,11 +108,11 @@
 
 						// RGB
 
-						const r = parseFloat( lineValues[ 3 ] );
-						const g = parseFloat( lineValues[ 4 ] );
-						const b = parseFloat( lineValues[ 5 ] );
+						const r = parseFloat( lineValues[ 3 ] ) / 255.0;
+						const g = parseFloat( lineValues[ 4 ] ) / 255.0;
+						const b = parseFloat( lineValues[ 5 ] ) / 255.0;
 
-						color.set( r, g, b ).convertSRGBToLinear();
+						color.setRGB( r, g, b ).convertSRGBToLinear();
 
 						colors.push( color.r, color.g, color.b );
 
