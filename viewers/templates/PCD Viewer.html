@@ -2,12 +2,13 @@
 <html lang="en">
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
-    <meta name="description" content="PCD (Point Cloud Data) Viewer">
+    <meta name="description" content="PCD (Point Cloud Data) and XYZ Viewer">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js" defer></script>
     <script src="../static/js/PCDLoader.js" defer></script>
+    <script src="../static/js/XYZLoader.js" defer></script>
     <script src="../static/js/upng/UPNG.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
     <script src="../static/js/omggif/omggif.js" defer></script>
@@ -223,15 +224,15 @@
     <!--   https://github.com/photopea/UPNG.js -->
     <!--   https://github.com/nodeca/pako -->
 
-    <title>PCD Viewer</title>
+    <title>PCD+XYZ Viewer</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm_gizmo" id="gizmo" title="Orbit Controls Gizmo" style="float: right; background-color: black;"></div>
       <div class="fm">
-        <label for="file_input" title="PCD (Point Cloud Data) Format" style="color: #553801; margin-left: 3px;">PCD</label>
+        <label for="file_input" title="3D Model PCD (Point Cloud Data) and XYZ Format" style="color: #553801; margin-left: 3px;">3D</label>
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".pcd" />
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".pcd, .xyz" />
         <label for="file_image_input" title="Background Image" style="color: #553801;">BGND</label>
         <input type="file" title="Background Image" id="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
         <label for="back_color" title="Background Color">BG</label>
@@ -468,7 +469,7 @@
     </script>
 
     <script>
-      var manager, texture_loader, pcd_loader;
+      var manager, texture_loader, pcd_loader, xyz_loader, xyz_format;
       var renderer, scene, camera, pcd_obj, render_requested;
       var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var ww = window.innerWidth, wh = window.innerHeight;
@@ -1207,6 +1208,7 @@
         if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
 
         if (pcd_loader === undefined) pcd_loader = new THREE.PCDLoader( manager );
+        if (xyz_loader === undefined) xyz_loader = new THREE.XYZLoader( manager );
 
         if (zip === undefined) zip = new JSZip();
 
@@ -1231,6 +1233,7 @@
           var fi = document.getElementById('file_input');
 
           if (fi.files[ 0 ].name.toUpperCase().endsWith('.PCD')) selected_pcd_file = fi.files[ 0 ];
+          else if (fi.files[ 0 ].name.toUpperCase().endsWith('.XYZ')) { selected_pcd_file = fi.files[ 0 ]; xyz_format = true; }
 
           if (selected_pcd_file === null) {
             console.log( 'No valid PCD file selected!' );
@@ -1323,24 +1326,45 @@
         console.time( 'Loading Time' );
         document.getElementById('div_loading').style.display = 'block';
 
-        pcd_loader.load( URL.createObjectURL( selected_pcd_file ), function( points ) {
+        let loader = (xyz_format === true) ? xyz_loader : pcd_loader;
+
+        loader.load( URL.createObjectURL( selected_pcd_file ), function( points ) {
           URL.revokeObjectURL( selected_pcd_file );
 
-          points.geometry.center();
-          points.geometry.rotateX( Math.PI );
-          original_material_opacity = points.material.opacity;
-          points.material.transparent = true;
+          if (xyz_format === true) {
+            points.center();
+            points.rotateX( - Math.PI / 2 );
 
-          if (points.material.vertexColors) {
-            vertex_colors_enabled = true;
+            if ( points.hasAttribute( 'color' ) === true ) {
+              vertex_colors_enabled = true;
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+            }
+
+            let material = new THREE.PointsMaterial( { size: 0.1, transparent: true, vertexColors: vertex_colors_enabled } );
             original_material_color = { r: 1, g: 1, b: 1 };
-            document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-            document.getElementById('btn_random_vertex_colors').disabled = false;
+
+            pcd_obj = new THREE.Points( points, material );
           } else {
-            original_material_color = new THREE.Color( points.material.color );
+            points.geometry.center();
+            points.geometry.rotateX( Math.PI );
+            original_material_opacity = points.material.opacity;
+            points.material.transparent = true;
+
+            if (points.material.vertexColors) {
+              vertex_colors_enabled = true;
+              original_material_color = { r: 1, g: 1, b: 1 };
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+            } else {
+              original_material_color = new THREE.Color( points.material.color );
+            }
+
+            pcd_obj = points.clone();
           }
 
-          pcd_obj = points.clone();
+          pcd_obj.sizeAttenuation = true;
+          pcd_obj.sortPoints = true;
 
           // Add pcd_obj to the scene
           scene.add( pcd_obj );
@@ -1383,10 +1407,12 @@
             for (let i = 0; i < urls.length; i++) {
               let url = urls[ i ].trim();
 
-              if (url.toUpperCase().endsWith('.PCD')) { selected_pcd_url_file = url; }
+              if (url.toUpperCase().endsWith('.PCD')) selected_pcd_url_file = url;
+              else if (url.toUpperCase().endsWith('.XYZ')) { selected_pcd_url_file = url; xyz_format = true; }
             }
           } else {
             if (selected_url_file.toUpperCase().endsWith('.PCD')) selected_pcd_url_file = selected_url_file;
+            else if (selected_url_file.toUpperCase().endsWith('.XYZ')) { selected_pcd_url_file = selected_url_file; xyz_format = true; }
           }
 
           if (selected_pcd_url_file === null) {
@@ -1407,7 +1433,9 @@
           console.time( 'Loading Time' );
           document.getElementById('div_loading').style.display = 'block';
 
-          pcd_loader.load( selected_pcd_url_file, function( points ) {
+          let loader = (xyz_format === true) ? xyz_loader : pcd_loader;
+
+          loader.load( selected_pcd_url_file, function( points ) {
             points.geometry.center();
             points.geometry.rotateX( Math.PI );
             original_material_opacity = points.material.opacity;
