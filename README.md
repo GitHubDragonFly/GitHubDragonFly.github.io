@@ -107,7 +107,7 @@ Number Type Converter
       - Select 1 copy of the texture and rename it if you wish, then update the corresponding `<init_from>` lines inside the `<library_images>` section of the DAE file to point to that texture
       - Delete all other copies of that same texture
       - This bug might eventually get fixed
-    - PLY exporter will include vertex colors as well as convert material color to vertex color providing the material has no texture
+    - PLY exporter will include vertex colors, will convert material color to vertex color if the material has no texture and can also export points version of the model in the PLY+STL Viewer
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
