@@ -107,7 +107,7 @@ Number Type Converter
       - Select 1 copy of the texture and rename it if you wish, then update the corresponding `<init_from>` lines inside the `<library_images>` section of the DAE file to point to that texture
       - Delete all other copies of that same texture
       - This bug might eventually get fixed
-    - PLY exporter will include vertex colors, will convert material color to vertex color if the material has no texture and can also export points version of the model in the PLY+STL Viewer
+    - PLY exporter will include vertex colors and will convert material color to vertex color if the material has no texture
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
@@ -147,6 +147,7 @@ Number Type Converter
     - `R` - reflectivity (envMap + metalness)
 - JSON Viewer has timeouts which might need to be adjusted when loading large files
 - GLTF / FBX / DAE viewers will also export animations to JSON format
+- PLY+STL Viewer can also show a points version of the loaded model and export it as such
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
     - currently available only in `FBX` `OBJ` `PLY+STL` `PRWM` viewers and should be tried on simple models
     - see the Animated GIF of a cube using Animated GIF as a texture in the `images` folder
