@@ -388,7 +388,7 @@
 						material = new THREE.PointsMaterial( {
 							vertexColors: true,
 							sizeAttenuation: false,
-							size: 2
+							size: 0.01
 						} );
 
 					} else {
@@ -398,7 +398,7 @@
 						material = new THREE.PointsMaterial( {
 							color: color,
 							sizeAttenuation: false,
-							size: 2
+							size: 0.01
 						} );
 
 					}
