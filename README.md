@@ -114,6 +114,7 @@ Number Type Converter
     - `EC` - edge color
   - `F` - flatShading
   - `G` - linear gradient background
+  - `I` - raycasting intersects (VTK Viewer)
   - `K` - kinematics (DAE viewer)
   - `L` - lines (LDRAW and its exports in GLTF, OBJ, JSON viewers)
   - `O` - opacity
@@ -147,7 +148,7 @@ Number Type Converter
     - `R` - reflectivity (envMap + metalness)
 - JSON Viewer has timeouts which might need to be adjusted when loading large files
 - GLTF / FBX / DAE viewers will also export animations to JSON format
-- PLY+STL Viewer can also show a points version of the loaded model and export it as such
+- PLY+STL / PRWM / VTK viewers can also show a points version of the loaded model and export it as such
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
     - currently available only in `FBX` `OBJ` `PLY+STL` `PRWM` viewers and should be tried on simple models
     - see the Animated GIF of a cube using Animated GIF as a texture in the `images` folder
