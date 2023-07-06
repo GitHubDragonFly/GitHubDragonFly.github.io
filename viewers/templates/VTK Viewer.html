@@ -6,7 +6,8 @@
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.135.0" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/math/MeshSurfaceSampler.js" defer></script>
     <script src="../static/js/VTKLoader.js" defer></script>
     <script src="../static/js/TGALoader.js" defer></script>
     <script src="../static/js/DDSLoader.js" defer></script>
@@ -307,8 +308,8 @@
         </button>
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 2px; border-radius: 2px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
-            <input type="range" orient="vertical" id="directional_light_intensity" min="0.05" max="2" step="0.05" value="1" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
-            <span id="dli_val">1</span>
+            <input type="range" orient="vertical" id="directional_light_intensity" min="0.05" max="2" step="0.05" value="0.75" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
+            <span id="dli_val">0.75</span>
           </div>
         </button>
         <button title="Ambient Light Intensity" id="btn_dc_ali" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 2px; border-radius: 2px;" onclick="show_hide_dropdown_ali();">ALi
@@ -335,9 +336,11 @@
         <button title="Standard Material Xtra" id="btn_material_extra" onclick="set_material_extra();" style="min-width: 14px; margin-left: 0px;" disabled>*</button>
         <button title="Textures" id="btn_textures" onclick="set_texture();" style="min-width: 27px;" disabled>T</button>
         <button title="Vertex Colors" id="btn_vertex_colors" onclick="set_vertex_colors();" style="min-width: 27px;" disabled>VC</button>
-        <button title="Random Vertex Colors" id="btn_random_vertex_colors" onclick="set_random_vertex_colors();" style="min-width: 12px;" disabled>!</button>
+        <button title="Random Vertex Colors" id="btn_random_vertex_colors" onclick="set_random_vertex_colors();" style="min-width: 14px;" disabled>!</button>
         <button title="Grid" id="btn_grid" onclick="show_grid();" disabled>#</button>
         <button title="Polar Grid" id="btn_polar_grid" onclick="show_polar_grid();" style="min-width: 24px;" disabled><p class="polar"></p></button>
+        <button title="Enable Raycasting Intersects" id="btn_raycasting" onclick="set_raycasting();" style="min-width: 14px;" disabled>I</button>
+        <button title="Points Model" id="btn_points_model" onclick="show_points_model();" style="min-width: 27px;" disabled>PM</button>
       </div>
     </div>
     <div id="gif_progress" style="display: none; background-color: whitesmoke; border: none;">
@@ -486,8 +489,58 @@
       function clear_url() { document.getElementById('url_entry').value = ''; }
 
       function initialize_event_listeners() {
-        window.addEventListener( 'mousedown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
-        window.addEventListener( 'mouseup', ( event ) => { mouse_down = false; }, false);
+        renderer.domElement.addEventListener( 'mousedown', onMouseDown );
+        renderer.domElement.addEventListener( 'mouseup', onMouseUp );
+      }
+
+      function onMouseDown( event ) {
+        if (progress.value === 0) mouse_down = true;
+
+        if (raycast_enabled === true) {
+          // calculate pointer position in normalized device coordinates
+          // (-1 to +1) for both components
+          mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+          mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+
+          // update the picking ray with the camera and mouse position
+          raycaster.setFromCamera( mouse, camera );
+
+          let intersects = [];
+
+          // calculate objects intersecting the picking ray
+          if (object_is_points) {
+            mesh.children[ 1 ].raycast( raycaster, intersects );
+
+            if (intersects[ 0 ]) {
+              scene.add( spherePoints );
+              spherePoints.position.copy( intersects[ 0 ].point );
+            }
+          } else {
+            mesh.children[ 0 ].raycast( raycaster, intersects );
+
+            for ( let i = 0; i < intersects.length; i ++ ) {
+              intersects[ i ].object.material.color.set( 0xff0000 );
+            }
+          }
+        }
+      }
+
+      function onMouseUp( event ) {
+        mouse_down = false;
+        if (raycast_enabled === true) {
+          if (object_is_points === true) scene.remove( spherePoints );
+          set_object_color();
+        }
+      }
+
+      function set_raycasting() {
+        if (raycast_enabled === true) {
+          document.getElementById('btn_raycasting').style.backgroundColor = '#d1cefc';
+          raycast_enabled = false;
+        } else {
+          document.getElementById('btn_raycasting').style.backgroundColor = 'lightgreen';
+          raycast_enabled = true;
+        }
       }
 
       function resize() {
@@ -542,7 +595,9 @@
     <script>
       var manager, vtk_loader, texture_loader, equi_loader, rgbe_loader, tga_loader, dds_loader;
       var renderer, scene, camera, mesh, edges, edges_visible, render_requested;
-      var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
+      var controls, gizmo, raycaster, raycast_enabled, spherePoints, mouse;
+      var original_model, points_model, object_is_points, sampler;
+      var grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
       var mouse_down, reset_rotation, events_initialized;
@@ -604,7 +659,7 @@
         const obj_exporter = new THREE.OBJExporter( manager );
 
         if (mesh) {
-          let exported = obj_exporter.parse( mesh, filename );
+          let exported = obj_exporter.parse( (mesh.children[ 0 ].visible === true) ? mesh.children[ 0 ] : mesh.children[ 1 ], filename );
 
           zip.file( filename + '.obj', exported[ 'obj' ] );
 
@@ -640,7 +695,15 @@
         const ply_exporter = new THREE.PLYExporter( manager );
 
         if (mesh) {
-          ply_exporter.parse( mesh, async function( json ) {
+          let options;
+
+          if (object_is_points === true) {
+            options = { binary: binary, excludeAttributes: [ 'index', 'uv' ], littleEndian: true };
+          } else {
+            options = { binary: binary, littleEndian: true };
+          }
+
+          ply_exporter.parse( (mesh.children[ 0 ].visible === true) ? mesh.children[ 0 ] : mesh.children[ 1 ], async function( json ) {
             let blob;
 
             if (binary === true) {
@@ -654,11 +717,16 @@
 
             await process_zip( binary === true ? '.PLY_binary' : '.PLY_ascii' );
 
-          }, { binary: binary, littleEndian: true });
+          }, options );
         }
       }
 
       async function export_stl() {
+        if (object_is_points === true) {
+          alert( 'STLExporter: points are not supported!' );
+          return;
+        }
+
         start_export();
 
         await new Promise( resolve => setTimeout( resolve, 20 ) );
@@ -666,7 +734,7 @@
         const stl_exporter = new THREE.STLExporter( manager );
 
         if (mesh) {
-          let string = stl_exporter.parse( mesh ).split( ',' );
+          let string = stl_exporter.parse( mesh.children[ 0 ] ).split( ',' );
           let blob = new Blob( [ string ], { type: 'text/plain' } );
 
           zip.file( filename + '.stl', blob );
@@ -683,7 +751,7 @@
         const dae_exporter = new THREE.ColladaExporter( manager );
 
         if (mesh) {
-          let result = dae_exporter.parse( mesh );
+          let result = dae_exporter.parse( (mesh.children[ 0 ].visible === true) ? mesh.children[ 0 ] : mesh.children[ 1 ] );
 
           zip.file( filename + '.dae', result.data );
 
@@ -715,7 +783,7 @@
         if (mesh) {
           let options = { binary: binary, maxTextureSize: 4096 || Infinity };
 
-          gltf_exporter.parse( mesh, async json => {
+          gltf_exporter.parse( (mesh.children[ 0 ].visible === true) ? mesh.children[ 0 ] : mesh.children[ 1 ], async json => {
             let blob;
 
             if (binary === true) {
@@ -742,7 +810,7 @@
         await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         if (mesh) {
-          let json = JSON.stringify( mesh.toJSON() );
+          let json = JSON.stringify( ( (mesh.children[ 0 ].visible === true) ? mesh.children[ 0 ] : mesh.children[ 1 ] ).toJSON() );
           let blob = new Blob( [ json ], { type: 'text/plain' } );
 
           zip.file( filename + '.json', blob );
@@ -752,6 +820,11 @@
       }
 
       async function export_prwm() {
+        if (object_is_points === true) {
+          alert( 'PRWMExporter: points are not supported!' );
+          return;
+        }
+
         start_export();
 
         await new Promise( resolve => setTimeout( resolve, 20 ) );
@@ -773,21 +846,33 @@
         await new Promise( resolve => setTimeout( resolve, 20 ) );
 
         if (mesh) {
-          let uuid_array = [];
+          let uuid_array = [], uuid_array_points = [];
 
-          mesh.traverse( ( child ) => {
+          let object = (mesh.children[ 0 ].visible === true) ? mesh.children[ 0 ] : mesh.children[ 1 ];
+
+          object.traverse( ( child ) => {
             if (child.isMesh) {
-              if (Array.isArray( child.material )) {
+              mesh_geometry_uuid = child.geometry.uuid;
+
+              if (Array.isArray( child.material)) {
                 child.material.forEach( mtl => {
-                  uuid_array.push( { mesh_geometry_uuid: child.geometry.uuid, mesh_material_uuid: mtl.uuid } );
+                  uuid_array.push( { mesh_geometry_uuid: mesh_geometry_uuid, material_uuid: mtl.uuid } );
                 });
               } else {
-                uuid_array.push( { mesh_geometry_uuid: child.geometry.uuid, mesh_material_uuid: child.material.uuid } );
+                uuid_array.push( { mesh_geometry_uuid: mesh_geometry_uuid, material_uuid: child.material.uuid } );
+              }
+            } else if (child.isPoints) {
+              if (Array.isArray( child.material)) {
+                child.material.forEach( mtl => {
+                  uuid_array_points.push( { points_geometry_uuid: child.geometry.uuid, material_uuid: mtl.uuid } );
+                });
+              } else {
+                uuid_array_points.push( { points_geometry_uuid: child.geometry.uuid, material_uuid: child.material.uuid } );
               }
             }
           });
 
-          let json = JSON.stringify( mesh.toJSON() );
+          let json = JSON.stringify( object.toJSON() );
           let result = JSON.parse( json );
 
           let count = 0;
@@ -797,90 +882,127 @@
             let rhino_mesh;
 
             result.geometries.forEach( child_geo => {
-              let geo_isMesh = false, geo_isSphere = false;
-              let geo_isBox = false, geo_isCylinder = false;
-
-              if (child_geo.type === 'BufferGeometry') {
-                geo_isMesh = true;
-                rhino_mesh = new Module.Mesh.createFromThreejsJSON( child_geo );
-              } else if (child_geo.type === 'SphereGeometry') {
-                geo_isSphere = true;
-                let center = [ 0.0, 0.0, 0.0 ];
-                rhino_mesh = new Module.Sphere( center, child_geo.radius );
-              } else if (child_geo.type === 'BoxGeometry') { // brep?
-                geo_isBox = true;
-                let min = [ 0.0, 0.0, 0.0 ];
-                let max = [ 1.0, 1.0, 1.0 ];
-                let bbox = new Module.BoundingBox( min, max );
-                rhino_mesh = new Module.Box( bbox );
-              } else if (child_geo.type === 'CylinderGeometry') { // brep?
-                geo_isCylinder = true;
-                let circle = new Module.Circle( child_geo.radiusTop );
-                rhino_mesh = new Module.Cylinder( circle, child_geo.height ).toBrep();
-              }
-
-              // Add Vertex Colors as red / green / blue Uint8 values 0 - 255
-              if (child_geo.data && child_geo.data.attributes.color && child_geo.data.attributes.color.array.length > 0) {
-                let dataAsUint8Array = new Uint8Array( child_geo.data.attributes.color.array.length );
-
-                for ( let i = 0; i < dataAsUint8Array.length; i ++ ) {
-                  let tmp = Math.max( -1, Math.min( 1, child_geo.data.attributes.color.array[ i ] ) );
-                  tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
-                  tmp = tmp / 256;
-                  dataAsUint8Array[ i ] = tmp + 128;
-                }
-
-                for ( let j = 0; j < dataAsUint8Array.length; j += child_geo.data.attributes.color.itemSize ) {
-                  rhino_mesh.vertexColors().add( dataAsUint8Array[ j ], dataAsUint8Array[ j + 1 ], dataAsUint8Array[ j + 2 ] );
-                }
-              }
-
-              let rhino_material;
               let rhino_attributes = new Module.ObjectAttributes();
+              let rhino_material;
 
-              result.materials.forEach( child_mtl => {
-                uuid_array.forEach( key_value_pair => {
-                  if (key_value_pair.mesh_geometry_uuid === child_geo.uuid && key_value_pair.mesh_material_uuid === child_mtl.uuid) {
-                    rhino_material = new Module.Material();
-                    rhino_material.default();
-                    rhino_material.name = 'material_' + count;
+              if (uuid_array.some( e => e.mesh_geometry_uuid === child_geo.uuid)) {
+                rhino_mesh = new Module.Mesh.createFromThreejsJSON( child_geo );
 
-                    if (child_mtl.name && child_mtl.name !== '') rhino_material.name = child_mtl.name;
+                // Add Vertex Colors as red / green / blue Uint8 values 0 - 255
+                if (child_geo.data && child_geo.data.attributes.color && child_geo.data.attributes.color.array.length > 0) {
+                  let dataAsUint8Array = new Uint8Array( child_geo.data.attributes.color.array.length );
 
-                    if (child_mtl.color) {
-                      let d_c = '#' + child_mtl.color.toString( 16 ).toUpperCase().padStart( 6, '0' );
-                      rhino_material.diffuseColor = { r: parseInt( d_c.substring( 1, 3 ), 16 ), g: parseInt( d_c.substring( 3, 5 ), 16 ), b: parseInt( d_c.substring( 5 ), 16 ), a: 255 };
-                    }
-
-                    if (child_mtl.emissive) {
-                      let e_c = '#' + child_mtl.emissive.toString( 16 ).toUpperCase().padStart( 6, '0' );
-                      rhino_material.emissionColor = { r: parseInt( e_c.substring( 1, 3 ), 16 ), g: parseInt( e_c.substring( 3, 5 ), 16 ), b: parseInt( e_c.substring( 5 ), 16 ), a: 255 };
-                    }
-
-                    if (child_mtl.specular) {
-                      let s_c = '#' + child_mtl.specular.toString( 16 ).toUpperCase().padStart( 6, '0' );
-                      rhino_material.specularColor = { r: parseInt( s_c.substring( 1, 3 ), 16 ), g: parseInt( s_c.substring( 3, 5 ), 16 ), b: parseInt( s_c.substring( 5 ), 16 ), a: 255 };
-                    }
-
-                    if (child_mtl.metalness || child_mtl.reflectivity) rhino_material.reflectivity = child_mtl.metalness || child_mtl.reflectivity;
-                    if (child_mtl.shininess) rhino_material.shine = child_mtl.shininess;
-                    child_mtl.opacity ? (rhino_material.transparency = 1.0 - child_mtl.opacity) : rhino_material.transparency = 0.0;
-
-                    rhino_file.materials().add( rhino_material );
-
-                    rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
-                    rhino_attributes.materialIndex = count;
-
-                    count ++;
+                  for ( let i = 0; i < dataAsUint8Array.length; i ++ ) {
+                    let tmp = Math.max( -1, Math.min( 1, child_geo.data.attributes.color.array[ i ] ) );
+                    tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
+                    tmp = tmp / 256;
+                    dataAsUint8Array[ i ] = tmp + 128;
                   }
-                });
-              });
 
-              if (geo_isMesh === true) {
-                rhino_file.objects().add( rhino_mesh, rhino_attributes );
-              } else if (geo_isSphere === true) {
-                rhino_file.objects().addSphere( rhino_mesh, rhino_attributes );
+                  for ( let j = 0; j < dataAsUint8Array.length; j += child_geo.data.attributes.color.itemSize ) {
+                    rhino_mesh.vertexColors().add( dataAsUint8Array[ j ], dataAsUint8Array[ j + 1 ], dataAsUint8Array[ j + 2 ] );
+                  }
+                }
+
+                result.materials.forEach( child_mtl => {
+                  uuid_array.forEach( key_value_pair => {
+                    if (key_value_pair.mesh_geometry_uuid === child_geo.uuid && key_value_pair.material_uuid === child_mtl.uuid) {
+                      rhino_material = new Module.Material();
+                      rhino_material.default();
+
+                      (child_mtl.name && child_mtl.name !== '') ? rhino_material.name = child_mtl.name : rhino_material.name = 'material_' + count;
+
+                      if (child_mtl.color) {
+                        let d_c = '#' + child_mtl.color.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                        rhino_material.diffuseColor = { r: parseInt( d_c.substring( 1, 3 ), 16 ), g: parseInt( d_c.substring( 3, 5 ), 16 ), b: parseInt( d_c.substring( 5 ), 16 ), a: 255 };
+                      }
+
+                      if (child_mtl.emissive) {
+                        let e_c = '#' + child_mtl.emissive.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                        rhino_material.emissionColor = { r: parseInt( e_c.substring( 1, 3 ), 16 ), g: parseInt( e_c.substring( 3, 5 ), 16 ), b: parseInt( e_c.substring( 5 ), 16 ), a: 255 };
+                      }
+
+                      if (child_mtl.specular) {
+                        let s_c = '#' + child_mtl.specular.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                        rhino_material.specularColor = { r: parseInt( s_c.substring( 1, 3 ), 16 ), g: parseInt( s_c.substring( 3, 5 ), 16 ), b: parseInt( s_c.substring( 5 ), 16 ), a: 255 };
+                      }
+
+                      if (child_mtl.metalness || child_mtl.reflectivity) rhino_material.reflectivity = child_mtl.metalness || child_mtl.reflectivity;
+                      if (child_mtl.shininess) rhino_material.shine = child_mtl.shininess;
+                      child_mtl.opacity ? (rhino_material.transparency = 1.0 - child_mtl.opacity) : rhino_material.transparency = 0.0;
+
+                      rhino_file.materials().add( rhino_material );
+
+                      rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
+                      rhino_attributes.materialIndex = count;
+
+                      count ++;
+                    }
+                  });
+                });
+              } else if (uuid_array_points.some( e => e.points_geometry_uuid === child_geo.uuid)) {
+                let points_count = 0;
+
+                rhino_mesh = new Module.PointCloud();
+
+                // Add Vertex Colors as red / green / blue Uint8 values 0 - 255
+                if (child_geo.data && child_geo.data.attributes.color && child_geo.data.attributes.color.array.length > 0) {
+                  let dataAsUint8Array = new Uint8Array( child_geo.data.attributes.color.array.length );
+
+                  for ( let i = 0; i < dataAsUint8Array.length; i ++ ) {
+                    let tmp = Math.max( -1, Math.min( 1, child_geo.data.attributes.color.array[ i ] ) );
+                    tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
+                    tmp = tmp / 256;
+                    dataAsUint8Array[ i ] = tmp + 128;
+                  }
+
+                  for ( let j = 0; j < dataAsUint8Array.length; j += child_geo.data.attributes.color.itemSize ) {
+                    let location = [ child_geo.data.attributes.position.array[ j ], child_geo.data.attributes.position.array[ j + 1 ], child_geo.data.attributes.position.array[ j + 2 ] ]
+                    let point_color = { r: dataAsUint8Array[ j ], g: dataAsUint8Array[ j + 1 ], b: dataAsUint8Array[ j + 2 ], a: 255 };
+                    let point_cloud_item = rhino_mesh.insertNew( points_count );
+                    point_cloud_item.location = location;
+                    point_cloud_item.color = point_color;
+                    points_count ++;
+                  }
+                } else {
+                  result.materials.forEach( ( child_mtl ) => {
+                    uuid_array_points.forEach( key_value_pair => {
+                      if (key_value_pair.points_geometry_uuid === child_geo.uuid && key_value_pair.material_uuid === child_mtl.uuid) {
+                        rhino_material = new Module.Material();
+                        rhino_material.default();
+
+                        (child_mtl.name && child_mtl.name !== '') ? rhino_material.name = child_mtl.name : rhino_material.name = 'material_' + count;
+
+                        if (child_mtl.color) {
+                          let d_c = '#' + child_mtl.color.toString( 16 ).toUpperCase().padStart( 6, '0' );
+                          let point_color = { r: parseInt( d_c.substring( 1, 3 ), 16 ), g: parseInt( d_c.substring( 3, 5 ), 16 ), b: parseInt( d_c.substring( 5 ), 16 ), a: 255 };
+
+                          for ( let j = 0; j < child_geo.data.attributes.position.array.length; j += child_geo.data.attributes.position.itemSize ) {
+                            let location = [ child_geo.data.attributes.position.array[ j ], child_geo.data.attributes.position.array[ j + 1 ], child_geo.data.attributes.position.array[ j + 2 ] ]
+                            let point_cloud_item = rhino_mesh.insertNew( points_count );
+                            point_cloud_item.location = location;
+                            point_cloud_item.color = point_color;
+                            points_count ++;
+                          }
+
+                          rhino_material.diffuseColor = point_color;
+                        }
+
+                        (child_mtl.opacity) ? (rhino_material.transparency = 1.0 - child_mtl.opacity) : rhino_material.transparency = 0.0;
+
+                        rhino_file.materials().add( rhino_material );
+
+                        rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
+                        rhino_attributes.materialIndex = count;
+
+                        count ++;
+                      }
+                    });
+                  });
+                }
               }
+
+              rhino_file.objects().add( rhino_mesh, rhino_attributes );
             });
 
             let blob = new Blob( [ rhino_file.toByteArray() ], { type: 'application/octet-stream' } );
@@ -1125,9 +1247,13 @@
 
           if (obj_colors === '#000000') obj_colors = '#FFFFFF';
 
-          mesh.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 255.0, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 255.0, parseInt( obj_colors.substring( 5 ), 16 ) / 255.0 ); // hex format '#rrggbb'
-
-          if (enable_opacity === true) set_model_opacity();
+          mesh.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              child.material.color.setRGB( parseInt( obj_colors.substring( 1, 3 ), 16 ) / 255.0, parseInt( obj_colors.substring( 3, 5 ), 16 ) / 255.0, parseInt( obj_colors.substring( 5 ), 16 ) / 255.0 );
+              child.material.opacity = document.getElementById('model_opacity').value;
+              child.material.needsUpdate = true;
+            }
+          });
         }
       }
 
@@ -1135,7 +1261,13 @@
         if (mesh) {
           let opacity_value = document.getElementById('model_opacity').value;
           document.getElementById('opacity_val').innerText = opacity_value;
-          mesh.material.opacity = opacity_value;
+
+          mesh.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              child.material.opacity = opacity_value;
+              child.material.needsUpdate = true;
+            }
+          });
         }
       }
 
@@ -1405,13 +1537,19 @@
           if (grid_visible === true) show_grid();
 
           if (mesh) {
-            if (mesh.material && mesh.material.map) mesh.material.map.dispose();
-            if (mesh.material) mesh.material.dispose();
-            if (mesh.geometry) mesh.geometry.dispose();
+            mesh.traverse( ( child ) => {
+              if (child.isMesh || child.isPoints) {
+                if (child.material && child.material.map) child.material.map.dispose();
+                if (child.material) child.material.dispose();
+                if (child.geometry) child.geometry.dispose();
+              }
+            });
+
+            while (mesh.children.length > 0) {
+              mesh.remove( mesh.children[ 0 ] );
+            }
 
             material.dispose();
-            tex.dispose();
-            tex = null;
 
             scene.remove( mesh );
           }
@@ -1455,6 +1593,7 @@
         selected_url_vtk_file = null;
         edges = null;
         edges_visible = false;
+        raycast_enabled = false;
         grid_visible = false;
         polar_grid_visible = false;
         enable_opacity = false;
@@ -1462,8 +1601,8 @@
         bgnd_linear_gradient = false;
         vertex_colors_enabled = false;
         random_vertex_colors_enabled = false;
-        random_vertex_color_array = null;
-        original_vertex_color_array = null;
+        random_vertex_color_array = {};
+        original_vertex_color_array = {};
         material_extra_enabled = false;
         render_requested = false;
         textures = [];
@@ -1522,6 +1661,23 @@
         }
 
         if (scene === undefined) scene = new THREE.Scene();
+        if (mesh === undefined) mesh = new THREE.Group();
+        if (original_model === undefined) original_model = new THREE.Object3D();
+        if (points_model === undefined) points_model = new THREE.Object3D();
+
+        if (raycaster === undefined) {
+          raycaster = new THREE.Raycaster();
+          raycaster.params.Points.threshold = 0.25;
+        }
+
+        if (spherePoints === undefined) {
+          const sphere_geometry = new THREE.SphereGeometry( 0.05 );
+          const sphere_material = new THREE.MeshBasicMaterial( { color: 0xff0000 } );
+
+          spherePoints = new THREE.Mesh( sphere_geometry, sphere_material );
+        }
+
+        if (mouse === undefined) mouse = new THREE.Vector2();
 
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
@@ -1551,7 +1707,7 @@
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 1 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 0.75 );
           directionalLight.position.set( 0, 0, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
@@ -1649,9 +1805,6 @@
         smooth.computeVertexNormals();
         smooth.center();
 
-        random_vertex_color_array = new Float32Array( Array.from( { length: smooth.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-        original_vertex_color_array = smooth.getAttribute( 'color' );
-
         if (object.attributes.color && object.attributes.color.length > 0) {
           material.vertexColors = true;
           vertex_colors_enabled = true;
@@ -1660,11 +1813,30 @@
           random_vertex_changed();
         }
 
-        mesh = new THREE.Mesh( smooth, material );
-        edges = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+        original_model = new THREE.InstancedMesh( smooth, material, 1 );
+        original_model.name = 'original_model';
+        edges = new THREE.LineSegments( new THREE.EdgesGeometry( original_model.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
 
-        document.getElementById('directional_light_intensity').value = 0.75;
-        set_directional_light_intensity();
+        mesh.add( original_model );
+
+        let sampled_points = sample_mesh_surface( original_model );
+
+        // Create points model
+        document.getElementById('btn_points_model').disabled = false;
+
+        let non_indexed_geometry = smooth.clone().toNonIndexed();
+        let points_material = new THREE.PointsMaterial( { size: 0.02, transparent: true, blending: THREE.AdditiveBlending } );
+
+        points_model = new THREE.Points( non_indexed_geometry, points_material );
+        points_model.name = 'points_model';
+        points_model.sizeAttenuation = true;
+        points_model.sortPoints = true;
+
+        // Add sampled points
+        points_model.add( sampled_points );
+
+        mesh.add( points_model );
+        mesh.children[ 1 ].visible = false;
 
         // Add mesh to the scene
         scene.add( mesh );
@@ -1672,6 +1844,15 @@
 
         set_initial_scale();
         resize();
+
+        mesh.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+            original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+
+            child.material.vertexColors = vertex_colors_enabled;
+          }
+        });
 
         console.timeEnd( 'Loading Time' );
         document.getElementById('div_loading').style.display = 'none';
@@ -1787,9 +1968,6 @@
         smooth.computeVertexNormals();
         smooth.center();
 
-        random_vertex_color_array = new Float32Array( Array.from( { length: smooth.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-        original_vertex_color_array = smooth.getAttribute( 'color' );
-
         if (object.attributes.color && object.attributes.color.length > 0) {
           material.vertexColors = true;
           vertex_colors_enabled = true;
@@ -1798,11 +1976,30 @@
           random_vertex_changed();
         }
 
-        mesh = new THREE.Mesh( smooth, material );
-        edges = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+        original_model = new THREE.InstancedMesh( smooth, material, 1 );
+        original_model.name = 'original_model';
+        edges = new THREE.LineSegments( new THREE.EdgesGeometry( original_model.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
 
-        document.getElementById('directional_light_intensity').value = 0.75;
-        set_directional_light_intensity();
+        mesh.add( original_model );
+
+        let sampled_points = sample_mesh_surface( original_model );
+
+        // Create points model
+        document.getElementById('btn_points_model').disabled = false;
+
+        let non_indexed_geometry = smooth.clone().toNonIndexed();
+        let points_material = new THREE.PointsMaterial( { size: 0.02, transparent: true, blending: THREE.AdditiveBlending } );
+
+        points_model = new THREE.Points( non_indexed_geometry, points_material );
+        points_model.name = 'points_model';
+        points_model.sizeAttenuation = true;
+        points_model.sortPoints = true;
+
+        // Add sampled points
+        points_model.add( sampled_points );
+
+        mesh.add( points_model );
+        mesh.children[ 1 ].visible = false;
 
         // Add mesh to the scene
         scene.add( mesh );
@@ -1811,6 +2008,15 @@
         set_initial_scale();
         resize();
 
+        mesh.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+            original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+
+            child.material.vertexColors = vertex_colors_enabled;
+          }
+        });
+
         console.timeEnd( 'Loading Time' );
         document.getElementById('div_loading').style.display = 'none';
 
@@ -1818,6 +2024,87 @@
 
         render_requested = true;
         render();
+      }
+
+      function show_points_model() {
+        if (mesh) {
+          if (object_is_points === false) {
+            document.getElementById('btn_points_model').style.backgroundColor = 'lightgreen';
+            document.getElementById('wireframe').disabled = true;
+            document.getElementById('btn_flat').disabled = true;
+            document.getElementById('btn_material').disabled = true;
+            document.getElementById('btn_material_extra').disabled = true;
+
+            mesh.children[ 0 ].visible = false;
+            mesh.children[ 1 ].visible = true;
+
+            object_is_points = true;
+          } else {
+            document.getElementById('btn_points_model').style.backgroundColor = '#d1cefc';
+            document.getElementById('wireframe').disabled = false;
+            document.getElementById('btn_flat').disabled = false;
+            document.getElementById('btn_material').disabled = false;
+            if (document.getElementById('btn_material').innerHTML === 'MS') document.getElementById('btn_material_extra').disabled = false;
+
+            mesh.children[ 0 ].visible = true;
+            mesh.children[ 1 ].visible = false;
+
+            object_is_points = false;
+          }
+
+          disabled_changed();
+        }
+      }
+
+      function sample_mesh_surface( model ) {
+        // Mesh surface sampling to increase number of displayed points
+        // Ref: https://tympanus.net/codrops/2021/08/31/surface-sampling-in-three-js/
+
+        if (model.geometry.index !== null) model.geometry = model.geometry.toNonIndexed();
+
+        // Create a surface sampler from the loaded model
+        sampler = new THREE.MeshSurfaceSampler( model )
+          .setWeightAttribute( 'color' )
+          .build();
+
+        // The geometry of the sampled points
+        const sampler_geometry = new THREE.BufferGeometry();
+
+        // The material of the sampled points
+        const sampler_material = new THREE.PointsMaterial( { size: 0.02, transparent: true, blending: THREE.AdditiveBlending } );
+
+        // Create a Points object
+        const sampled_points = new THREE.Points( sampler_geometry, sampler_material );
+        sampled_points.name = 'sampled_points';
+
+        // Create variables for sampling
+        const sampled_position = new THREE.Vector3();
+        const sampled_color = new THREE.Color();
+        const vertices = [];
+        const colors = [];
+
+        // Sample 100000 points randomly from the surface
+        // Lower this number for any exported file size considerations
+        for ( let i = 0; i < 100000; i ++ ) {
+          sampler.sample( sampled_position, undefined, sampled_color );
+
+          // Push the point coordinates
+          vertices.push( sampled_position.x, sampled_position.y, sampled_position.z );
+
+          // Push the picked color
+          colors.push( sampled_color.r, sampled_color.g, sampled_color.b );
+        }
+
+        // Update the position attribute with sampled coordinates
+        sampler_geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( vertices, 3 ) );
+
+        // Update the color attribute with sampled colors
+        sampler_geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 3 ) );
+
+        sampled_points.sizeAttenuation = true;
+        sampled_points.sortPoints = true;
+
+        return sampled_points;
       }
 
       function show_polar_grid() {
@@ -1895,7 +2182,13 @@
       }
 
       function show_wireframe() {
-        if (mesh) mesh.material.wireframe = document.getElementById('wireframe').checked;
+        if (mesh) {
+          mesh.traverse( ( child ) => {
+            if (child.isMesh) {
+              child.material.wireframe = document.getElementById('wireframe').checked;
+            }
+          });
+        }
       }
 
       function set_flat() {
@@ -1908,75 +2201,84 @@
             flat_shading_enabled = true;
           }
 
-          mesh.material.flatShading = flat_shading_enabled;
-          mesh.material.needsUpdate = true;
+          mesh.traverse( ( child ) => {
+            if (child.isMesh) {
+              child.material.flatShading = flat_shading_enabled;
+              child.material.needsUpdate = true;
+            }
+          });
         }
       }
 
       function set_material() {
         if (mesh) {
-          let current_material = document.getElementById('btn_material').innerHTML;
+          mesh.traverse( ( child ) => {
+            if (child.isMesh) {
+              let current_material = document.getElementById('btn_material').innerHTML;
 
-          if (current_material === 'MP') {
-            document.getElementById('btn_material').innerHTML = 'MS';
-            document.getElementById('btn_material').style.backgroundColor = 'lightgreen';
+              if (current_material === 'MP') {
+                document.getElementById('btn_material').innerHTML = 'MS';
+                document.getElementById('btn_material').style.backgroundColor = 'lightgreen';
 
-            document.getElementById('btn_material_extra').disabled = false;
-            material_extra_changed();
+                document.getElementById('btn_material_extra').disabled = false;
+                material_extra_changed();
 
-            let mtrl = new THREE.MeshStandardMaterial( {
-              side: THREE.DoubleSide,
-              metalness: 0.5,
-              roughness: 0.3,
-              transparent: true,
-              envMapIntensity: 1.0,
-              flatShading: flat_shading_enabled,
-              vertexColors: vertex_colors_enabled
-            });
+                let mtrl = new THREE.MeshStandardMaterial( {
+                  side: THREE.DoubleSide,
+                  metalness: 0.5,
+                  roughness: 0.3,
+                  transparent: true,
+                  envMapIntensity: 1.0,
+                  flatShading: flat_shading_enabled,
+                  vertexColors: vertex_colors_enabled
+                });
 
-            if (mesh.material.map) { mtrl.map = mesh.material.map; mesh.material.map.dispose(); mesh.material.map = null; }
-            mesh.material.dispose();
-            mesh[ 'material' ] = mtrl;
-            mesh.material.needsUpdate = true;
+                if (child.material.map) { mtrl.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
+                child.material.dispose();
+                child[ 'material' ] = mtrl;
+                child.material.needsUpdate = true;
 
-            mtrl.dispose();
-          } else if (current_material === 'MS') {
-            document.getElementById('btn_material').innerHTML = 'ML';
-            document.getElementById('btn_material').style.backgroundColor = 'lightblue';
+                mtrl.dispose();
+              } else if (current_material === 'MS') {
+                document.getElementById('btn_material').innerHTML = 'ML';
+                document.getElementById('btn_material').style.backgroundColor = 'lightblue';
 
-            document.getElementById('btn_material_extra').style.backgroundColor = '#d1cefc';
-            document.getElementById('btn_material_extra').disabled = true;
-            material_extra_changed();
+                document.getElementById('btn_material_extra').style.backgroundColor = '#d1cefc';
+                document.getElementById('btn_material_extra').disabled = true;
+                material_extra_changed();
 
-            if (mesh.material.envMap) {
-              mesh.material.envMap.dispose();
-              mesh.material.envMap = null;
-              material_extra_enabled = false;
+                if (child.material.envMap) {
+                  child.material.envMap.dispose();
+                  child.material.envMap = null;
+                  material_extra_enabled = false;
+                }
+
+                let mtrl = new THREE.MeshLambertMaterial( {
+                  side: THREE.DoubleSide,
+                  transparent: true,
+                  flatShading: flat_shading_enabled,
+                  vertexColors: vertex_colors_enabled
+                });
+
+                if (child.material.map) { mtrl.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
+                child.material.dispose();
+                child[ 'material' ] = mtrl;
+                child.material.needsUpdate = true;
+
+                mtrl.dispose();
+              } else {
+                document.getElementById('btn_material').innerHTML = 'MP';
+                document.getElementById('btn_material').style.backgroundColor = '#d1cefc';
+
+                if (child.material.map) { material.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
+                child.material.dispose();
+                child[ 'material' ] = material;
+                child.material.vertexColors = vertex_colors_enabled;
+                child.material.flatShading = flat_shading_enabled;
+                child.material.needsUpdate = true;
+              }
             }
-
-            let mtrl = new THREE.MeshLambertMaterial( {
-              side: THREE.DoubleSide,
-              transparent: true,
-              vertexColors: vertex_colors_enabled
-            });
-
-            if (mesh.material.map) { mtrl.map = mesh.material.map; mesh.material.map.dispose(); mesh.material.map = null; }
-            mesh.material.dispose();
-            mesh[ 'material' ] = mtrl;
-            mesh.material.needsUpdate = true;
-
-            mtrl.dispose();
-          } else {
-            document.getElementById('btn_material').innerHTML = 'MP';
-            document.getElementById('btn_material').style.backgroundColor = '#d1cefc';
-
-            if (mesh.material.map) { material.map = mesh.material.map; mesh.material.map.dispose(); mesh.material.map = null; }
-            mesh.material.dispose();
-            mesh[ 'material' ] = material;
-            mesh.material.vertexColors = vertex_colors_enabled;
-            mesh.material.flatShading = flat_shading_enabled;
-            mesh.material.needsUpdate = true;
-          }
+          });
 
           set_object_color();
           set_model_opacity();
@@ -1989,19 +2291,27 @@
           material_extra_enabled = false;
           document.getElementById('btn_material_extra').style.backgroundColor = '#d1cefc';
 
-          mesh.material.envMap.dispose();
-          mesh.material.envMap = null;
+          mesh.traverse( ( child ) => {
+            if (child.isMesh) {
+              if (child.material.envMap) child.material.envMap.dispose();
+              child.material.envMap = null;
+              child.material.needsUpdate = true;
+            }
+          });
         } else {
           material_extra_enabled = true;
           document.getElementById('btn_material_extra').style.backgroundColor = 'lightgreen';
 
-          mesh.material.envMap = tex;
+          mesh.traverse( ( child ) => {
+            if (child.isMesh) {
+              child.material.envMap = tex;
+              child.material.needsUpdate = true;
+            }
+          });
         }
-
-        mesh.material.needsUpdate = true;
       }
 
-      function set_texture() {
+      async function set_texture() {
         if (mesh) {
           if (current_texture === textures.length - 1) {
             document.getElementById('btn_textures').style.backgroundColor = '#d1cefc';
@@ -2013,68 +2323,91 @@
             document.getElementById('btn_textures').innerHTML = 'T' + current_texture;
           }
 
-          if (current_texture === -1) {
-            // Remove texture
-            mesh.material.map.dispose();
-            mesh.material.map = null;
-            mesh.material.needsUpdate = true;
-          } else {
-            if (selected_url_vtk_file) {
-              textures[ current_texture ].encoding = THREE.sRGBEncoding;
-              textures[ current_texture ].wrapS = THREE.RepeatWrapping;
-              textures[ current_texture ].wrapT = THREE.RepeatWrapping;
-
-              // Apply texture
-              mesh.material.map = textures[ current_texture ];
-
-              if (url_tga_loaded === true) {
-                mesh.material.map.generateMipmaps = true;
-                mesh.material.map.flipY = true;
-              }
-
-              mesh.material.needsUpdate = true;
-            } else {
-              if (textures[ current_texture ].name.toUpperCase().endsWith('.DDS')) {
-                dds_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
-                  URL.revokeObjectURL( textures[ current_texture ] );
-
-                  texture.encoding = THREE.sRGBEncoding;
-                  texture.wrapS = THREE.RepeatWrapping;
-                  texture.wrapT = THREE.RepeatWrapping;
-
-                  // Apply texture
-                  mesh.material.map = texture;
-                  mesh.material.needsUpdate = true;
-                });
-              } else if (textures[ current_texture ].name.toUpperCase().endsWith('.TGA')) {
-                tga_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
-                  URL.revokeObjectURL( textures[ current_texture ] );
-
-                  texture.encoding = THREE.sRGBEncoding;
-                  texture.wrapS = THREE.RepeatWrapping;
-                  texture.wrapT = THREE.RepeatWrapping;
-
-                  // Apply texture
-                  mesh.material.map = texture;
-                  mesh.material.map.generateMipmaps = true;
-                  mesh.material.map.flipY = true;
-                  mesh.material.needsUpdate = true;
-                });
+          mesh.traverse( async ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              if (current_texture === -1) {
+                // Remove texture
+                if (child.material.map) child.material.map.dispose();
+                child.material.map = null;
+                child.material.needsUpdate = true;
               } else {
-                texture_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
-                  URL.revokeObjectURL( textures[ current_texture ] );
+                if (selected_url_vtk_file) {
+                  if (textures[ current_texture ].num_frames && textures[ current_texture ].num_frames > 1) animated_gif_texture = true;
 
-                  texture.encoding = THREE.sRGBEncoding;
-                  texture.wrapS = THREE.RepeatWrapping;
-                  texture.wrapT = THREE.RepeatWrapping;
+                  textures[ current_texture ].encoding = THREE.sRGBEncoding;
+                  textures[ current_texture ].wrapS = THREE.RepeatWrapping;
+                  textures[ current_texture ].wrapT = THREE.RepeatWrapping;
 
                   // Apply texture
-                  mesh.material.map = texture;
-                  mesh.material.needsUpdate = true;
-                });
+                  child.material.map = textures[ current_texture ];
+
+                  if (url_tga_loaded) {
+                    child.material.map.generateMipmaps = true;
+                    child.material.map.flipY = true;
+                  }
+
+                  child.material.needsUpdate = true;
+                } else {
+                  if (textures[ current_texture ].name.toUpperCase().endsWith('.DDS')) {
+                    dds_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                      URL.revokeObjectURL( textures[ current_texture ] );
+
+                      texture.encoding = THREE.sRGBEncoding;
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
+
+                      // Apply texture
+                      child.material.map = texture;
+                      child.material.needsUpdate = true;
+                    });
+                  } else if (textures[ current_texture ].name.toUpperCase().endsWith('.TGA')) {
+                    tga_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                      URL.revokeObjectURL( textures[ current_texture ] );
+
+                      texture.encoding = THREE.sRGBEncoding;
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
+
+                      // Apply texture
+                      child.material.map = texture;
+                      child.material.map.generateMipmaps = true;
+                      child.material.map.flipY = true;
+                      child.material.needsUpdate = true;
+                    });
+                  } else if (textures[ current_texture ].name.toUpperCase().endsWith('.GIF')) {
+                    let tex = gif_loader.load( URL.createObjectURL( textures[ current_texture ] ) );
+                    URL.revokeObjectURL( textures[ current_texture ] );
+
+                    await new Promise(resolve => setTimeout( resolve, 1000 )); // adjust timing if necessary
+
+                    tex.encoding = THREE.sRGBEncoding;
+                    tex.wrapS = THREE.RepeatWrapping;
+                    tex.wrapT = THREE.RepeatWrapping;
+
+                    if (tex.num_frames > 1) animated_gif_texture = true;
+
+                    // Apply texture
+                    child.material.map = tex;
+                    child.material.needsUpdate = true;
+
+                    tex.dispose();
+                  } else {
+                    texture_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                      URL.revokeObjectURL( textures[ current_texture ] );
+
+                      texture.encoding = THREE.sRGBEncoding;
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
+
+                      // Apply texture
+                      child.material.map = texture;
+                      child.material.needsUpdate = true;
+                    });
+                  }
+                }
               }
             }
-          }
+          });
         }
       }
 
@@ -2082,10 +2415,9 @@
         if (mesh) {
           if (vertex_colors_enabled === true) {
             document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
+            if (random_vertex_colors_enabled === true) set_random_vertex_colors();
             document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
             document.getElementById('btn_random_vertex_colors').disabled = true;
-            random_vertex_colors_enabled = true;
-            set_random_vertex_colors();
             vertex_colors_enabled = false;
           } else {
             document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
@@ -2094,23 +2426,42 @@
             vertex_colors_enabled = true;
           }
 
-          mesh.material.vertexColors = vertex_colors_enabled;
-          mesh.material.needsUpdate = true;
+          random_vertex_changed();
+
+          mesh.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+              original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+
+              child.material.vertexColors = vertex_colors_enabled;
+              child.material.needsUpdate = true;
+            }
+          });
         }
       }
 
       function set_random_vertex_colors() {
         if (random_vertex_colors_enabled === true) {
-          original_vertex_color_array ? mesh.geometry.setAttribute( 'color', original_vertex_color_array ) : mesh.geometry.deleteAttribute( 'color' );
+          mesh.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              original_vertex_color_array[ child.name ] ? child.geometry.setAttribute( 'color', original_vertex_color_array[ child.name ] ) : child.geometry.deleteAttribute( 'color' );
+              child.material.needsUpdate = true;
+            }
+          });
+
           document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
           random_vertex_colors_enabled = false;
         } else {
-          mesh.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array, 3, false ) );
+          mesh.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3, false ) );
+              child.material.needsUpdate = true;
+            }
+          });
+
           document.getElementById('btn_random_vertex_colors').style.backgroundColor = 'lightgreen';
           random_vertex_colors_enabled = true;
         }
-
-        mesh.material.needsUpdate = true;
       }
 
       async function render() {
@@ -2157,13 +2508,19 @@
         if (polar_grid_visible === true) show_polar_grid();
         if (grid_visible === true) show_grid();
 
-        if (mesh) {
-          if (mesh.material && mesh.material.map) { mesh.material.map.dispose(); mesh.material.map = null; }
-          if (mesh.material) mesh.material.dispose();
-          if (mesh.geometry) mesh.geometry.dispose();
+        mesh.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            if (child.material && child.material.map) child.material.map.dispose();
+            if (child.material) child.material.dispose();
+            if (child.geometry) child.geometry.dispose();
+          }
+        });
 
-          scene.remove( mesh );
+        while (mesh.children.length > 0) {
+          mesh.remove( mesh.children[ 0 ] );
         }
+
+        scene.remove( mesh );
 
         reset_all( true );
 
@@ -2184,7 +2541,7 @@
         // Reset all range values
         document.getElementById('opacity_val').innerText = 1;
         document.getElementById('ali_val').innerText = 0.05;
-        document.getElementById('dli_val').innerText = 1;
+        document.getElementById('dli_val').innerText = 0.75;
         document.getElementById('x_val').innerText = 0;
         document.getElementById('y_val').innerText = 0;
         document.getElementById('z_val').innerText = 0;
@@ -2199,7 +2556,7 @@
         document.getElementById('ambient_light_color').value = '#FFFFFF';
         document.getElementById('hemisphere_light_color').value = '#000000';
         document.getElementById('directional_light_color').value = '#FFFFFF';
-        document.getElementById('directional_light_intensity').value = 1;
+        document.getElementById('directional_light_intensity').value = 0.75;
         document.getElementById('ambient_light_intensity').value = 0.05;
 
         // Reset the radio inputs
@@ -2217,7 +2574,7 @@
         document.getElementById('model_opacity').disabled = true;
         document.getElementById('btn_dc_opacity').style.backgroundColor = 'transparent';
 
-        // Reset flat, edges. material, textures and vertex_colors related values
+        // Reset flat, edges. material, textures, vertex_colors and raycast related values
         flat_shading_enabled = false;
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         edges_visible = false;
@@ -2234,12 +2591,17 @@
         bgnd_linear_gradient = false;
         document.getElementById('btn_bgnd_linear_gradient').disabled = false;
         document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+        object_is_points = false;
+        document.getElementById('btn_points_model').disabled = true;
+        document.getElementById('btn_points_model').style.backgroundColor = '#d1cefc';
         vertex_colors_enabled = false;
         document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
         random_vertex_colors_enabled = false;
         document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_random_vertex_colors').disabled = true;
         random_vertex_changed();
+        raycast_enabled = false;
+        document.getElementById('btn_raycasting').style.backgroundColor = '#d1cefc';
 
         gif_export = false;
         reset_rotation = true;
@@ -2308,6 +2670,7 @@
         document.getElementById('btn_dc_dli').disabled = disable;
         document.getElementById('btn_dc_opacity').disabled = disable;
         document.getElementById('btn_material').disabled = disable;
+        document.getElementById('btn_raycasting').disabled = disable;
         document.getElementById('btn_vertex_colors').disabled = disable;
         document.getElementById('btn_bgnd_linear_gradient').disabled = disable;
         document.getElementById('btn_polar_grid').disabled = disable;
