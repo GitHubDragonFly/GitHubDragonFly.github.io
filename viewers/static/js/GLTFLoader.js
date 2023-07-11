@@ -118,7 +118,6 @@
 			// the model is fully loaded. This means the count of items loaded will
 			// be incorrect, but ensures manager.onLoad() does not fire early.
 
-
 			this.manager.itemStart( url );
 
 			const _onError = function ( e ) {
@@ -262,7 +261,8 @@
 			}
 
 			const parser = new GLTFParser( json, {
-				path: this.resourcePath || path || '',
+				path: path || '',
+				resourcePath: this.resourcePath,
 				crossOrigin: this.crossOrigin,
 				requestHeader: this.requestHeader,
 				manager: this.manager,
@@ -3085,21 +3085,22 @@ class GLTFMeshQuantizationExtension {
 			const source = json.images[ textureDef.source ];
 			let loader = this.textureLoader;
 
-			if ( options.path.indexOf( ',' ) > -1 ) {
+			if ( options.resourcePath.indexOf( ',' ) > -1 ) {
 
 				let temp_name = '';
 				let texture_set = false;
-				let blobs = options.path.split( ',' );
+				let blobs = options.resourcePath.split( ',' );
 
-				if ( source.uri.indexOf( '/' ) > -1 ) temp_name = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
+				if ( source.uri && source.uri.indexOf( '/' ) > -1 ) temp_name = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
+				else if ( source.uri && source.uri.indexOf( '\\' ) > -1 ) temp_name = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
 
 				for ( let i = 0; i < blobs.length; i += 2 ) {
 
-					if ( ( source.uri === blobs[ i ] ) || ( source.name === blobs[ i ] ) || ( ( temp_name !== '' ) && ( temp_name === blobs[ i ] ) ) ) {
+					if ( ( source.uri && source.uri === blobs[ i ] ) || ( source.name && ( source.name === blobs[ i ] || source.name.endsWith( blobs[ i ] ) ) ) || ( ( temp_name !== '' ) && ( temp_name === blobs[ i ] ) ) ) {
 
 						if ( texture_set === false ) {
 
-							if ( source.name === undefined ) source.name = source.uri;
+							if ( source.name === undefined ) if (source.uri) source.name = source.uri;
 							source.uri = blobs[ i + 1 ];
 							texture_set = true;
 
@@ -3112,10 +3113,36 @@ class GLTFMeshQuantizationExtension {
 				if ( texture_set === false && options.path.includes( '.bin' ) === false ) options.path = '';
 			}
 
+			let handler;
+
 			if ( source.uri ) {
 
-				const handler = options.manager.getHandler( source.uri );
+				handler = options.manager.getHandler( source.uri );
 				if ( handler !== null ) loader = handler;
+
+			}
+
+			if ( handler === null && source.name ) {
+
+				if ( source.name.endsWith( '.tga' ) ) {
+
+					if ( THREE.TGALoader ) {
+
+						loader = new THREE.TGALoader( options.manager );
+						source.mimeType = 'image/tga';
+
+					}
+
+				} else if ( source.name.endsWith( '.dds' ) ) {
+
+					if ( THREE.DDSLoader ) {
+
+						loader = new THREE.DDSLoader( options.manager );
+						source.mimeType = 'image/dds';
+
+					}
+
+				}
 
 			}
 
@@ -3162,13 +3189,12 @@ class GLTFMeshQuantizationExtension {
 						const colorType = new DataView( bufferView, 25, 1 ).getUint8( 0, false );
 						hasAlpha = colorType === 6 || colorType === 4 || colorType === 3;
 
-					}
+					}	
 
 					isObjectURL = true;
-					const blob = new Blob( [ bufferView ], {
-						type: source.mimeType
-					} );
+					const blob = new Blob( [ bufferView ], { type: source.mimeType } );
 					sourceURI = URL.createObjectURL( blob );
+
 					return sourceURI;
 
 				} );
@@ -3185,7 +3211,7 @@ class GLTFMeshQuantizationExtension {
 
 					let onLoad = resolve;
 
-					if ( loader.isImageBitmapLoader === true ) {
+					if ( loader.isImageBitmapLoader !== undefined && loader.isImageBitmapLoader === true ) {
 
 						onLoad = function ( imageBitmap ) {
 
@@ -3211,6 +3237,7 @@ class GLTFMeshQuantizationExtension {
 				}
 
 				texture.flipY = false;
+
 				if ( textureDef.name ) texture.name = textureDef.name;
 
 				// When there is definitely no alpha channel in the texture, set THREE.RGBFormat to save space.
