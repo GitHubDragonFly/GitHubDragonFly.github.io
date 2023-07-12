@@ -43,8 +43,10 @@ Number Type Converter
   - Might have bugs and interface / library related limitations and slow to load some models
   - GLTF / GLB v2.0 and DRC models will be handled by three.js (using THREE.MeshStandardMaterial)
   - All other formats will be handled by ASSIMP(JS) (using THREE.MeshLambertMaterial)
-  - Supported formats: 3DS, 3MF, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IQM, IRR, KMZ, LWO, LWS, LXO, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NFF, OBJ + MTL, OFF, OGEX, PLY, PMX, Q3O, Q3S, SIB, SMD, STL, X, XGL, XML, ZGL
+  - Supported formats: 3DS, 3MF, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IQM, IRR, KMZ, LWO, LWS, LXO, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NFF, OBJ + MTL, OFF, OGEX, PLY, PMX, Q3O, Q3S, SIB, SMD, STL, X, XGL, XML, ZAE, ZGL
   - Unsupported formats: 3D, IFC, JT, PK3, RAW, TER, WRL (might get fixed with updated ASSIMPJS)
+  - Some models might show rather small so use the `Scale` and also flatShading `F` controls, also change background if necessary
+  - When using the viewer's URL option remember that BIN and / or MTL file URLs need to be added alongside the model URL and comma separated, this would normally apply to GLTF and OBJ files
 
 - Special notes about `Quick Viewer` which is using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
   - Seems to have a rather good fit on mobile devices due to its simple GUI
