@@ -2260,13 +2260,6 @@ class GLTFMeshQuantizationExtension {
 		// Invalid URL
 		if ( typeof url !== 'string' || url === '' ) return '';
 
-		// Host Relative URL
-		if ( /^https?:\/\//i.test( path ) && /^\//.test( url ) ) {
-
-			path = path.replace( /(^https?:\/\/[^\/]+).*/i, '$1' );
-
-		}
-
 		// Absolute URL http://,https://,//
 		if ( /^(https?:)?\/\//i.test( url ) ) return url;
 
@@ -2276,6 +2269,13 @@ class GLTFMeshQuantizationExtension {
 
 		// Blob URL
 		if ( /^blob:.*$/i.test( url ) ) return url;
+
+		// Host Relative URL
+		if ( /^https?:\/\//i.test( path ) && /^\//.test( url ) ) {
+
+			path = path.replace( /(^https?:\/\/[^\/]+).*/i, '$1' );
+
+		}
 
 		// Relative URL
 		return path + url;
@@ -2902,9 +2902,9 @@ class GLTFMeshQuantizationExtension {
 			const options = this.options;
 			return new Promise( function ( resolve, reject ) {
 
-				if ( options.path.indexOf( ',' ) > -1 ) {
+				if ( options.resourcePath.includes( ',' ) === true ) {
 
-					let blobs = options.path.split( ',' );
+					let blobs = options.resourcePath.split( ',' );
 
 					for ( let i = 0; i < blobs.length; i += 2 ) {
 
@@ -3085,14 +3085,14 @@ class GLTFMeshQuantizationExtension {
 			const source = json.images[ textureDef.source ];
 			let loader = this.textureLoader;
 
-			if ( options.resourcePath.indexOf( ',' ) > -1 ) {
+			if ( options.resourcePath.includes( ',' ) === true ) {
 
 				let temp_name = '';
 				let texture_set = false;
 				let blobs = options.resourcePath.split( ',' );
 
-				if ( source.uri && source.uri.indexOf( '/' ) > -1 ) temp_name = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
-				else if ( source.uri && source.uri.indexOf( '\\' ) > -1 ) temp_name = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
+				if ( source.uri && source.uri.includes( '/' ) === true ) temp_name = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
+				else if ( source.uri && source.uri.includes( '\\' ) > -1 ) temp_name = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
 
 				for ( let i = 0; i < blobs.length; i += 2 ) {
 
@@ -3111,38 +3111,59 @@ class GLTFMeshQuantizationExtension {
 				}
 
 				if ( texture_set === false && options.path.includes( '.bin' ) === false ) options.path = '';
+
+			} else {
+
+				if ( source.uri && source.uri.startsWith( './' ) === true && options.resourcePath !== '' ) {
+
+					source.uri = options.resourcePath + source.uri.substring( 2 );
+					( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
+	
+				} else if ( source.uri && source.uri.startsWith( '.\\' ) === true && options.resourcePath !== '' ) {
+	
+					source.uri = options.resourcePath + source.uri.substring( 2 );
+					( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
+	
+				} else if ( source.uri && options.resourcePath !== '' && source.uri.startsWith( options.resourcePath ) === false ) {
+	
+					source.uri = options.resourcePath + source.uri;
+					( source.name === undefined ) ? source[ 'name' ] = source.uri : source.name = source.uri;
+	
+				}
+	
 			}
 
-			let handler;
+			if ( source.uri && source.uri.toLowerCase().endsWith( '.tga' ) || ( source.name && source.name.toLowerCase().endsWith( '.tga' ) ) ) {
 
-			if ( source.uri ) {
+				if ( THREE.TGALoader ) {
 
-				handler = options.manager.getHandler( source.uri );
-				if ( handler !== null ) loader = handler;
-
-			}
-
-			if ( handler === null && source.name ) {
-
-				if ( source.name.endsWith( '.tga' ) ) {
-
-					if ( THREE.TGALoader ) {
-
-						loader = new THREE.TGALoader( options.manager );
-						source.mimeType = 'image/tga';
-
-					}
-
-				} else if ( source.name.endsWith( '.dds' ) ) {
-
-					if ( THREE.DDSLoader ) {
-
-						loader = new THREE.DDSLoader( options.manager );
-						source.mimeType = 'image/dds';
-
-					}
+					loader = new THREE.TGALoader( options.manager );
+					source.mimeType = 'image/tga';
 
 				}
+
+			} else if ( source.uri && source.uri.toLowerCase().endsWith( '.dds' ) || ( source.name && source.name.toLowerCase().endsWith( '.dds' ) ) ) {
+
+				if ( THREE.DDSLoader ) {
+
+					loader = new THREE.DDSLoader( options.manager );
+					source.mimeType = 'image/dds';
+
+				}
+
+			} else if ( source.uri && source.uri.toLowerCase().endsWith( '.exr' ) || ( source.name && source.name.toLowerCase().endsWith( '.exr' ) ) ) {
+
+				if ( THREE.EXRLoader ) {
+
+					loader = new THREE.EXRLoader( options.manager );
+					source.mimeType = 'image/exr';
+
+				}
+
+			} else if ( source.uri ) {
+
+				let handler = options.manager.getHandler( source.uri.toLowerCase().substring( source.uri.lastIndexOf( '.' ) ) );
+				if ( handler !== null ) loader = handler;
 
 			}
 
