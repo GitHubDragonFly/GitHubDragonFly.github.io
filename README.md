@@ -37,14 +37,15 @@ Number Type Converter
   - Rotation = left-click + hold + drag
   - Move = right-click + hold + drag
   - Zoom In / Out = mouse scroll wheel
+
 - Special notes about `ASSIMP Viewer` which is using [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and [ASSIMP](https://github.com/assimp/assimp) library:
   - This is a revamped version of my GLTF Viewer and is a sort of ASSIMP / three.js hybrid
   - Might have bugs and interface / library related limitations and slow to load some models
   - GLTF / GLB v2.0 and DRC models will be handled by three.js (using THREE.MeshStandardMaterial)
   - All other formats will be handled by ASSIMP(JS) (using THREE.MeshLambertMaterial)
-  - Supported formats: 3DS, 3MF, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IQM, IRR, KMZ, LWO, LWS, LXO, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NFF, OBJ + MTL, OFF, OGEX, PLY, PMX, Q3O, Q3S, SIB, SMD, STL, X, XGL, ZGL
+  - Supported formats: 3DS, 3MF, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IQM, IRR, KMZ, LWO, LWS, LXO, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NFF, OBJ + MTL, OFF, OGEX, PLY, PMX, Q3O, Q3S, SIB, SMD, STL, X, XGL, XML, ZGL
   - Unsupported formats: 3D, IFC, JT, PK3, RAW, TER, WRL (might get fixed with updated ASSIMPJS)
-  - Most of the following notes do not apply to ASSIMP Viewer in general
+
 - Special notes about `Quick Viewer` which is using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
   - Seems to have a rather good fit on mobile devices due to its simple GUI
   - It is purely online based and can be used as standalone HTML file (just delete `favicon.ico` import)
@@ -53,6 +54,7 @@ Number Type Converter
   - Unsupported formats: FCSTD (requires accessing a remote worker)
   - For proper viewing and additional features use the actual [Online 3D Viewer](https://3dviewer.net/) website
   - Most of the following notes do not apply to Quick Viewer in general
+
 - Special notes about `GLTF Legacy` viewer which is using modified version of mrdoob's [model-tag](https://github.com/mrdoob/model-tag):
   - Set in 500 x 500 viewport and seems to have a good fit on mobile devices
   - It is relatively simple and might have bugs and limitations
@@ -60,6 +62,7 @@ Number Type Converter
   - Unsupported formats: GLB
   - It can export to GLTF / GLB v2.0 and OBJ formats (animations are not currently supported)
   - Most of the following notes do not apply to GLTF Legacy viewer in general
+
 - Menu with controls can be located either on top or on the bottom of the page
 - All viewers include the interactive [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
 - Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers
