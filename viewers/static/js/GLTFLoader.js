@@ -3114,14 +3114,14 @@ class GLTFMeshQuantizationExtension {
 
 			} else {
 
-				if ( source.uri && source.uri.startsWith( './' ) === true && options.resourcePath !== '' ) {
+				if ( source.uri && ( source.uri.startsWith( './' ) === true || source.uri.toUpperCase().startsWith( 'C:' ) === true ) && options.resourcePath !== '' ) {
 
-					source.uri = options.resourcePath + source.uri.substring( 2 );
+					source.uri = options.resourcePath + source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
 					( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
 	
 				} else if ( source.uri && source.uri.startsWith( '.\\' ) === true && options.resourcePath !== '' ) {
 	
-					source.uri = options.resourcePath + source.uri.substring( 2 );
+					source.uri = options.resourcePath + source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
 					( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
 	
 				} else if ( source.uri && options.resourcePath !== '' && source.uri.startsWith( options.resourcePath ) === false ) {
