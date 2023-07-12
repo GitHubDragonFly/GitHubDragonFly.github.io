@@ -30,7 +30,7 @@ Else, copy any of the following links and then paste it within the `URL` option 
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Sponza/glTF/Sponza.gltf`
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf`
 - for multiple camera GLB example try downloading the fixed `VC-v2.glb.zip` file posted by donmccurdy [here](https://github.com/KhronosGroup/glTF-Sample-Models/issues/275)
-- access to some example files at [ASSIMP)](https://github.com/assimp/assimp/tree/master/test):
+- access to some ASSIMP example files at [assimp](https://github.com/assimp/assimp/tree/master/test):
   - `https://raw.githubusercontent.com/assimp/assimp/master/test/models-nonbsd/B3D/dwarf2.b3d`
   - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/IQM/mrfixit.iqm`
   - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/BVH/01_01.bvh`
