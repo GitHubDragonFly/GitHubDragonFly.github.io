@@ -3114,23 +3114,23 @@ class GLTFMeshQuantizationExtension {
 
 			} else {
 
-				if ( source.uri && ( source.uri.startsWith( './' ) === true || ( source.uri[ 1 ] && source.uri[ 1 ] === ':' ) ) && options.resourcePath !== '' ) {
+				if ( source.uri && source.uri.includes( '/' ) === true && options.resourcePath !== '' ) {
 
 					source.uri = options.resourcePath + source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
 					( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
-	
-				} else if ( source.uri && source.uri.startsWith( '.\\' ) === true && options.resourcePath !== '' ) {
-	
+
+				} else if ( source.uri && source.uri.includes( '\\' ) === true && options.resourcePath !== '' ) {
+
 					source.uri = options.resourcePath + source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
 					( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
-	
+
 				} else if ( source.uri && options.resourcePath !== '' && source.uri.startsWith( options.resourcePath ) === false ) {
-	
+
 					source.uri = options.resourcePath + source.uri;
 					( source.name === undefined ) ? source[ 'name' ] = source.uri : source.name = source.uri;
-	
+
 				}
-	
+
 			}
 
 			if ( source.uri && source.uri.toLowerCase().endsWith( '.tga' ) || ( source.name && source.name.toLowerCase().endsWith( '.tga' ) ) ) {
