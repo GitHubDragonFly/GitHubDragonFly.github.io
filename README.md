@@ -43,13 +43,16 @@ Number Type Converter
   - Might have bugs and interface / library related limitations and slow to load some models
   - GLTF / GLB v2.0 and DRC models will be handled by three.js (using THREE.MeshStandardMaterial)
   - All other formats will be handled by ASSIMP(JS) (using THREE.MeshLambertMaterial)
-  - Supported formats: 3DS, 3MF, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IFC, IQM, IRR, IRRMESH, KMZ, LWO, LWS, LXO, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NFF, OBJ + MTL, OFF, OGEX, PLY, PMX, Q3O, Q3S, RAW, SIB, SMD, STL, TER, X, X3D, XGL, XML, ZAE, ZGL
-  - Unsupported formats: 3D, A3D, JT, M3, M3D, PK3, WRL
+  - Supported formats: 3DS, 3MF, A3D, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IFC, IQM, IRR, IRRMESH, KMZ, LWO, LWS, LXO, M3D, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NFF, OBJ + MTL, OFF, OGEX, PLY, PMX, Q3O, Q3S, RAW, SIB, SMD, STL, TER, X, X3D, XGL, XML, ZAE, ZGL
+  - Unsupported formats: 3D, JT, M3, PK3, WRL
     - the viewer will allow you to select and load these files but they just don't work currently
   - Some models might show rather small so use the `Scale` and also flatShading `F` controls, also change background if necessary
-  - When using the viewer's URL option remember that BIN and / or MTL file URLs need to be added alongside the model URL and comma separated, this would normally apply to GLTF and OBJ files
-  - The above also applies to MD2 models and their textures, for example:
-    - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/MD2/faerie.md2, https://raw.githubusercontent.com/assimp/assimp/master/test/models/MD2/faerie2.bmp`
+  - When using the viewer's URL option remember the following:
+    - BIN and / or MTL file URLs need to be added alongside the model URL and comma separated, this would normally apply to GLTF and OBJ files
+    - For MD2 models you will have to add their texture URL, for example:
+      - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/MD2/faerie.md2, https://raw.githubusercontent.com/assimp/assimp/master/test/models/MD2/faerie2.bmp`
+    - If textures are not automatically fetched with the model URL only then add the texture location URL, for example:
+      - `https://raw.githubusercontent.com/SaschaWillems/VulkanSponza/master/data/sponza.dae, https://raw.githubusercontent.com/SaschaWillems/VulkanSponza/master/data/sponza/`
 
 - Special notes about `Quick Viewer` which is using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
   - Seems to have a rather good fit on mobile devices due to its simple GUI
