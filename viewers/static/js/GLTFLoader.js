@@ -3084,19 +3084,48 @@ class GLTFMeshQuantizationExtension {
 			const textureDef = json.textures[ textureIndex ];
 			const source = json.images[ textureDef.source ];
 			let loader = this.textureLoader;
+			let texture_set = false;
 
 			if ( options.resourcePath.includes( ',' ) === true ) {
 
 				let temp_name = '';
-				let texture_set = false;
+				let any_texture = false;
 				let blobs = options.resourcePath.split( ',' );
 
-				if ( source.uri && source.uri.includes( '/' ) === true ) temp_name = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
-				else if ( source.uri && source.uri.includes( '\\' ) > -1 ) temp_name = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
+				if ( source.uri && source.uri.includes( '/' ) === true ) {
+
+					let delimiter = ( ( source.uri.includes( '\\') === true ) && ( source.uri.lastIndexOf( '\\') > source.uri.lastIndexOf( '/') ) ) ? '\\' : '/';
+					temp_name = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
+
+				} else if ( source.uri && source.uri.includes( '\\' ) === true ) {
+
+					temp_name = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
+
+				} else if ( source.uri && ( source.uri === '$texture_dummy.bmp' || source.uri === 'default.bmp' || source.uri === 'any_texture' ) ) {
+
+					any_texture = true;
+
+				}
 
 				for ( let i = 0; i < blobs.length; i += 2 ) {
 
-					if ( ( source.uri && source.uri === blobs[ i ] ) || ( source.name && ( source.name === blobs[ i ] || source.name.endsWith( blobs[ i ] ) ) ) || ( ( temp_name !== '' ) && ( temp_name === blobs[ i ] ) ) ) {
+					if ( any_texture === true ) {
+
+						let image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF', '.SVG', '.WEBP', 'DIB', '.DDS', '.EXR', '.KTX2', '.TGA' ];
+
+						if ( texture_set === false ) {
+
+							if ( image_extensions.some( ext => blobs[ i ].toUpperCase().endsWith( ext ) ) ) {
+
+								if ( source.name === undefined ) source.name = blobs[ i ];
+								source.uri = blobs[ i + 1 ];
+								texture_set = true;
+
+							}
+
+						}
+
+					} else if ( ( source.uri && source.uri === blobs[ i ] ) || ( source.name && ( source.name === blobs[ i ] || source.name.endsWith( blobs[ i ] ) ) ) || ( ( temp_name !== '' ) && ( temp_name === blobs[ i ] ) ) ) {
 
 						if ( texture_set === false ) {
 
@@ -3114,7 +3143,11 @@ class GLTFMeshQuantizationExtension {
 
 			} else {
 
-				if ( source.uri && source.uri.includes( '/' ) === true && options.resourcePath !== '' ) {
+				if ( source.uri && ( source.uri === '$texture_dummy.bmp' || source.uri === 'default.bmp' || source.uri === 'any_texture' ) && options.resourcePath !== '' ) {
+
+					source.uri = options.resourcePath;
+
+				} else if ( source.uri && source.uri.includes( '/' ) === true && options.resourcePath !== '' ) {
 
 					source.uri = options.resourcePath + source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
 					( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
@@ -3128,6 +3161,22 @@ class GLTFMeshQuantizationExtension {
 
 					source.uri = options.resourcePath + source.uri;
 					( source.name === undefined ) ? source[ 'name' ] = source.uri : source.name = source.uri;
+
+				} else if ( source.uri && source.uri[ 1 ] && source.uri[ 1 ] === ':' ) {
+
+					if ( source.uri[ 2 ] && source.uri[ 2 ] === '/' ) {
+
+						let delimiter = ( ( source.uri.includes( '\\') === true ) && ( source.uri.lastIndexOf( '\\') > source.uri.lastIndexOf( '/') ) ) ? '\\' : '/';
+						source.uri = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
+						( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
+
+					} else if ( source.uri[ 2 ] && source.uri[ 2 ] === '\\' ) {
+
+						let delimiter = ( ( source.uri.includes( '/') === true ) && ( source.uri.lastIndexOf( '/') > source.uri.lastIndexOf( '\\') ) ) ? '/' : '\\';
+						source.uri = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
+						( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
+
+					}
 
 				}
 
