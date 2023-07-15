@@ -488,6 +488,7 @@
       function initialize_event_listeners() {
         window.addEventListener( 'mousedown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
         window.addEventListener( 'mouseup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { if (progress.value === 0) mouse_wheel = true; }, false);
       }
 
       function resize() {
@@ -544,10 +545,10 @@
       var renderer, render_requested, scene, camera, dae_obj, object_is_points, clock, duration;
       var animations, animation_mixer, animation_running, current_animation;
       var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
-      var ambientLight, hemisphereLight, directionalLight;
+      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var edges, edges_visible, edge_material, reflect, gif_export;
+      var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
-      var mouse_down, reset_rotation, events_initialized;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
       var bounding_box, filename, zip;
       var original_side, original_side_array;
@@ -1627,6 +1628,8 @@
 
         selected_dae_file = null;
         object_is_points = false;
+        mouse_down = false;
+        mouse_wheel = false;
         texture_files_png = [];
         texture_files_jpg = [];
         texture_files_bmp = [];
@@ -1668,6 +1671,13 @@
         document.getElementById('btn_kinematics').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_kinematics').disabled = true;
 
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_spinner').style.display = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
         if (url_loading === false) {
           selected_url_file = '';
 
@@ -1691,11 +1701,7 @@
           };
 
           if (selected_dae_file === null) {
-            console.log( 'No valid DAE file selected!' );
-            document.body.style.backgroundImage = 'none';
-            document.getElementById('div_spinner').style.display = 'none';
-            document.getElementById('div_loading').style.display = 'none';
-            document.getElementById('div_error').style.display = 'block';
+            handle_error( 'No valid DAE (Collada) file selected!' );
             return;
           }
         } else {
@@ -1703,12 +1709,6 @@
           document.getElementById('file_input').value = '';
           url_loading = false;
         }
-
-        document.body.style.backgroundImage = 'none';
-        document.getElementById('div_spinner').style.display = 'none';
-        document.getElementById('div_loading').innerHTML = 'Loading';
-        document.getElementById('div_error').style.display = 'none';
-        enable_disable( false );
 
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
@@ -1795,6 +1795,9 @@
           document.getElementById('gizmo').appendChild( gizmo.domElement );
         }
 
+        enable_disable( false );
+        disabled_changed();
+
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
         // Load the dae file
@@ -1805,9 +1808,6 @@
       }
 
       function loadFile(){
-        console.time( 'Loading Time' );
-        document.getElementById('div_loading').style.display = 'block';
-
         // Launch loading of the selected file
         dae_loader.load( URL.createObjectURL( selected_dae_file ), async function( collada ) {
           URL.revokeObjectURL( selected_dae_file );
@@ -2017,6 +2017,8 @@
                               texture.offset.set( technique.offsetU || 0, technique.offsetV || 0 );
                               texture.repeat.set( technique.repeatU || 1, technique.repeatV || 1 );
                             } else {
+                              texture.magFilter = THREE.LinearFilter;
+                              texture.minFilter = THREE.LinearMipmapLinearFilter;
                               texture.wrapS = THREE.RepeatWrapping;
                               texture.wrapT = THREE.RepeatWrapping;
                             }
@@ -2109,21 +2111,26 @@
 
           collada.scene.traverse( function( child ) {
             if (child.isMesh || child.isPoints) {
-              if (child.name === '') {
-                child.name = 'child_' + child_count;
-                child_count += 1;
-              }
+              if (child.name === '') child.name = 'child_' + child_count;
 
               random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
               original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
 
+              child.geometry.computeBoundingBox();
+              child.geometry.computeBoundingSphere();
+
+              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+              child.geometry.normalizeNormals();
+
               if (child.isMesh) {
-                mesh_included = true;
-                if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
                 if (child.isSkinnedMesh) child.frustumCulled = false;
+                mesh_included = true;
+
                 if (child.geometry.attributes.position) {
-                  let edge_geometry = new THREE.EdgesGeometry( child.geometry, 30 );
-                  edges[ child.name ] = new THREE.LineSegments( edge_geometry, edge_material );
+                  edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), edge_material );
+                  edges[ child.name ].name = child.name + '_edges';
+                  random_vertex_color_array[ edges[ child.name ].name ] = new Float32Array( Array.from( { length: edges[ child.name ].geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+                  original_vertex_color_array[ edges[ child.name ].name ] = edges[ child.name ].geometry.getAttribute( 'color' );
                 }
               } else {
                 object_is_points = true;
@@ -2271,6 +2278,8 @@
                 }
               }
             }
+
+            child_count += 1;
           });
 
           if (mesh_included === true) {
@@ -2321,30 +2330,14 @@
           disabled_changed();
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
-          console.timeEnd( 'Loading Time' );
-          console.log( 'Error loading DAE!' );
-          console.log( error );
-          render_requested = false;
-          enable_disable( true );
-
-          if (gizmo) {
-            document.getElementById('gizmo').removeChild( gizmo.domElement );
-            gizmo.dispose();
-          }
-
-          document.getElementById('div_loading').style.display = 'none';
-          document.getElementById('div_error').style.display = 'block';
-
           URL.revokeObjectURL( selected_dae_file );
+          handle_error( error );
         });
       }
 
       function loadURLFile() {
         if (selected_url_file !== '') {
           if (selected_url_file.toUpperCase().endsWith('.DAE')) {
-            console.time( 'Loading Time' );
-            document.getElementById('div_loading').style.display = 'block';
-
             dae_loader.load( selected_url_file, function( collada ) {
               let mesh_included = false;
               let points_included = false;
@@ -2352,21 +2345,26 @@
 
               collada.scene.traverse( function( child ) {
             	  if (child.isMesh || child.isPoints) {
-                  if (child.name === '') {
-                    child.name = 'child_' + child_count;
-                    child_count += 1;
-                  }
+                  if (child.name === '') child.name = 'child_' + child_count;
 
                   random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
                   original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
 
+                  child.geometry.computeBoundingBox();
+                  child.geometry.computeBoundingSphere();
+
+                  if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                  child.geometry.normalizeNormals();
+
                   if (child.isMesh) {
-                    mesh_included = true;
-                    if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
                     if (child.isSkinnedMesh) child.frustumCulled = false;
+                    mesh_included = true;
+
                     if (child.geometry.attributes.position) {
-                      let edge_geometry = new THREE.EdgesGeometry( child.geometry, 30 );
-                      edges[ child.name ] = new THREE.LineSegments( edge_geometry, edge_material );
+                      edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), edge_material );
+                      edges[ child.name ].name = child.name + '_edges';
+                      random_vertex_color_array[ edges[ child.name ].name ] = new Float32Array( Array.from( { length: edges[ child.name ].geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+                      original_vertex_color_array[ edges[ child.name ].name ] = edges[ child.name ].geometry.getAttribute( 'color' );
                     }
                   } else {
                     object_is_points = true;
@@ -2399,6 +2397,7 @@
                       initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
                       initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
                       original_side_array[ child.name ][ child_count_array ] = mtl.side;
+
                       child_count_array += 1;
                     });
                   } else {
@@ -2422,7 +2421,9 @@
                     original_side[ child.name ] = child.material.side;
                   }
     		        }
-    	        });
+
+                child_count += 1;
+              });
 
               if (mesh_included === true) {
                 document.getElementById('wireframe').disabled = false;
@@ -2472,34 +2473,28 @@
               disabled_changed();
             }, function ( xhr ) { // onProgress
             }, function ( error ) { // onError
-              console.timeEnd( 'Loading Time' );
-              console.log( 'Error loading URL DAE!' );
-              console.log( error );
-              render_requested = false;
-              enable_disable( true );
-
-              if (gizmo) {
-                document.getElementById('gizmo').removeChild( gizmo.domElement );
-                gizmo.dispose();
-              }
-
-              document.getElementById('div_loading').style.display = 'none';
-              document.getElementById('div_error').style.display = 'block';
+              handle_error( error );
             });
           } else {
-            console.log( 'Unsupported URL file!' );
-            render_requested = false;
-            enable_disable( true );
-
-            if (gizmo) {
-              document.getElementById('gizmo').removeChild( gizmo.domElement );
-              gizmo.dispose();
-            }
-
-            document.getElementById('div_loading').style.display = 'none';
-            document.getElementById('div_error').style.display = 'block';
+            handle_error( 'Unsupported URL model!' );
           }
         }
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        render_requested = false;
+        enable_disable( true );
+
+        if (gizmo) {
+          document.getElementById('gizmo').removeChild( gizmo.domElement );
+          gizmo.dispose();
+        }
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
       }
 
       function dae_kinematics() {
@@ -2799,10 +2794,6 @@
       }
 
       async function render() {
-        if (document.getElementById('gif_progress').style.display === 'none') {
-          if (render_requested === true) requestAnimationFrame( render );
-        }
-
         if (dae_obj) {
           // Reset dae_obj rotational values
           if (reset_rotation === true) {
@@ -2819,8 +2810,21 @@
                   (initial_rotation.x !== 0 && initial_rotation.x < Math.PI) ? ( gif_export ? dae_obj.rotation.z += 0.03 : dae_obj.rotation.z += 0.05 ) : ( gif_export ? dae_obj.rotation.y += 0.03 : dae_obj.rotation.y += 0.05 );
                 }
               } else {
-                // Let GPU cool down a bit
-                await new Promise( resolve => setTimeout( resolve, 200 ) );
+                if (animation_running === false && kinematics_running === false) {
+                  // Let GPU cool down a bit
+                  let count = 0;
+
+                  while (count < 10) {
+                    await new Promise( resolve => setTimeout( resolve, 20 ) ).then( () => {
+                      if (mouse_down === true || mouse_wheel === true) {
+                        if (mouse_wheel === true) mouse_wheel = false;
+                        count = 10;
+                      } else {
+                        count ++;
+                      }
+                    });
+                  }
+                }
               }
             } else {
               if (rot_x !== 0) dae_obj.rotation.x += rot_x;
@@ -2840,6 +2844,10 @@
 
           scene.updateMatrixWorld();
           camera.updateMatrixWorld();
+
+          if (document.getElementById('gif_progress').style.display === 'none') {
+            if (render_requested === true) requestAnimationFrame( render );
+          }
         }
       }
 
@@ -2866,6 +2874,8 @@
         scene.remove( dae_obj );
 
         reset_all( true );
+
+        console.time( 'Loading Time' );
 
         document.getElementById('div_loading').innerHTML = 'Reload';
 
