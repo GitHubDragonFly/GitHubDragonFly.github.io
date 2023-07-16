@@ -7,6 +7,7 @@
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.149.0" defer></script>
+    <script src="../static/assimpjs/assimpjs.js" defer></script>
     <script src="../static/js/RGBELoader.js" defer></script>
     <script src="../static/js/upng/UPNG.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
@@ -266,6 +267,8 @@
           <option title="STL - Stereolithography Format" value="stl" onclick="export_stl();">STL</option>
           <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
           <option title="DAE - Collada Format" value="dae" onclick="export_dae();">DAE</option>
+          <option title="FBX - Filmbox Format" value="fbx" onclick="export_assimp( 'fbx' );">FBX</option>
+          <option title="X3D - Extensible 3D Graphics Format" value="x3d" onclick="export_assimp( 'x3d' );">X3D</option>
           <option title="GLB - GL Transmission Format binary" value="glb" onclick="export_gltf( true );">GLB</option>
           <option title="GLTF - GL Transmission Format ascii" value="gltf" onclick="export_gltf( false );">GLTF</option>
           <option title="PLY - Polygon File Format ascii" value="ply" onclick="export_ply( false );">PLY_a</option>
@@ -486,6 +489,7 @@
       function initialize_event_listeners() {
         window.addEventListener( 'mousedown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
         window.addEventListener( 'mouseup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { if (progress.value === 0) mouse_wheel = true; }, false);
       }
 
       function resize() {
@@ -541,10 +545,10 @@
       var manager, texture_loader, equi_loader, rgbe_loader;
       var renderer, scene, camera, mesh, render_requested;
       var controls, gizmo, edges, edges_visible, outline_material;
+      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
-      var mouse_down, reset_rotation, events_initialized;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
       var bounding_box, gif_export, bgnd_linear_gradient;
       var selected_step_file, selected_url_file = '', filename;
@@ -729,6 +733,53 @@
             ext = (binary === true) ? '.GLB' : '.GLTF';
 
             await process_zip( ext );
+          }, function( error ) { console.log( error ); }, options);
+        }
+      }
+
+      async function export_assimp( format = 'fbx' ) {
+        start_export();
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+        if (mesh) {
+          // Try to convert the scene to glb and then to fbx
+
+          let gltf_exporter = new THREE.GLTFExporter( manager );
+
+          let options = {	binary: true, maxTextureSize: 4096 || Infinity };
+
+          gltf_exporter.parse( mesh, function( json ) {
+            let blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+
+            let loader = new THREE.FileLoader( manager );
+            loader.setResponseType( 'arraybuffer' );
+
+            loader.load( URL.createObjectURL( blob ), function( data ) {
+              // Revoke URL
+              URL.revokeObjectURL( blob );
+
+              // Use ASSIMPJS to export files
+              assimpjs().then( async function( ajs ) {
+                let result = ajs.ConvertFile( filename, format, new Uint8Array( data ), undefined, undefined );
+                let fileCount = result.FileCount();
+
+                // check if the conversion succeeded
+                if (result.IsSuccess() === false || fileCount === 0) {
+                  handle_error( result.GetErrorCode() );
+                  return;
+                }
+
+                // get the first result file and convert it to blob
+                let resultFile = await result.GetFile( 0 );
+                let jsonContent = resultFile.GetContent();
+                let blob = new Blob( [ jsonContent ], { type: 'application/octet-stream' } );
+
+                zip.file( filename + '.' + format, blob );
+
+                await process_zip( '.' + format.toUpperCase() );
+              });
+            });
           }, function( error ) { console.log( error ); }, options);
         }
       }
@@ -1483,6 +1534,8 @@
 
         mesh = new THREE.Object3D();
         selected_step_file = null;
+        mouse_down = false;
+        mouse_wheel = false;
         iges = false;
         brep = false;
         response = null;
@@ -2389,7 +2442,18 @@
                 initial_rotation.x !== 0 ? ( gif_export ? mesh.rotation.z += 0.03 : mesh.rotation.z += 0.05 ) : ( gif_export ? mesh.rotation.y += 0.03 : mesh.rotation.y += 0.05 );
               } else {
                 // Let GPU cool down a bit
-                await new Promise( resolve => setTimeout( resolve, 200 ) );
+                let count = 0;
+
+                while (count < 10) {
+                  await new Promise( resolve => setTimeout( resolve, 20 ) ).then( () => {
+                    if (mouse_down === true || mouse_wheel === true) {
+                      if (mouse_wheel === true) mouse_wheel = false;
+                      count = 10;
+                    } else {
+                      count ++;
+                    }
+                  });
+                }
               }
             } else {
               if (rot_x !== 0) mesh.rotation.x += rot_x;
