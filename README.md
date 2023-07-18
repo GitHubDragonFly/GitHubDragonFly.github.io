@@ -39,7 +39,7 @@ Number Type Converter
   - Zoom In / Out = mouse scroll wheel
 
 - Special notes about `ASSIMP Viewer` which is using [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and [ASSIMP](https://github.com/assimp/assimp) library:
-  - This is a revamped version of my GLTF v2.0 Viewer and is a sort of ASSIMP / three.js hybrid
+  - This is a revamped version of my GLTF v2.0 Viewer and is a sort of ASSIMP(JS) / three.js hybrid
   - Might have bugs and interface / library related limitations and slow to load some models
   - GLTF / GLB v2.0 and DRC models will be handled by three.js
   - All other formats, including GLTF / GLB v1.0, will be handled by ASSIMP(JS)
@@ -97,7 +97,7 @@ Number Type Converter
     - Try not to change file names when saving files during initial export
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
-    - FBX / M3D / X3D / X exports are powered by ASSIMP(JS)
+    - FBX / M3D / X3D / X exports are powered by [ASSIMPJS](https://github.com/kovacsv/assimpjs) / [ASSIMP](https://github.com/assimp/assimp)
     - Animated GIF export is based on mrdoob's [example](https://github.com/mrdoob/omggif-example) using [omggif](https://github.com/deanm/omggif) library:
       - currently set to 500 x 500 size in the centre of the window
       - the approximate GIF area rectangle will be shown during the GIF generation
