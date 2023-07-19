@@ -43,9 +43,9 @@ Number Type Converter
   - Might have bugs and interface / library related limitations and slow to load some models
   - GLTF / GLB v2.0 and DRC models will be handled by three.js
   - All other formats, including GLTF / GLB v1.0, will be handled by ASSIMP(JS)
-  - Supported formats: 3DS, 3MF, A3D, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IFC, IQM, IRR, IRRMESH, KMZ, LWO, LWS, LXO, M3D, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NDO, NFF, OBJ + MTL, OFF, OGEX, PLY, PMX, Q3O, Q3S, RAW, SIB, SMD, STL, TER, X, X3D, XGL, XML, ZAE, ZGL
-  - Unsupported formats: 3D, BSP, JT, M3, PK3, WRL
-    - the viewer will allow you to select and load these files but they just don't work currently
+  - Supported formats: 3D, 3DS, 3MF, A3D, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IFC, IQM, IRR, IRRMESH, KMZ, LWO, LWS, LXO, M3D, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NDO, NFF, OBJ + MTL, OFF, OGEX, PLY, PMX, Q3O, Q3S, RAW, SIB, SMD, STL, TER, X, X3D, XGL, XML, ZAE, ZGL
+  - Unsupported formats: BSP, JT, M3, PK3, WRL
+    - the viewer will allow you to select these files but they didn't work for me
   - When using the viewer's URL option remember the following:
     - BIN and / or MTL file URLs need to be added alongside the model URL and comma separated, this would normally apply to GLTF and OBJ files
     - For MD2 models you will have to add their texture URL, for example:
