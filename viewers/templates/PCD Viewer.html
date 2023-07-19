@@ -7,6 +7,7 @@
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js" defer></script>
+    <script src="../static/assimpjs/assimpjs.js" defer></script>
     <script src="../static/js/PCDLoader.js" defer></script>
     <script src="../static/js/XYZLoader.js" defer></script>
     <script src="../static/js/upng/UPNG.js" defer></script>
@@ -295,6 +296,9 @@
           <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
           <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
           <option title="DAE - Collada Format" value="dae" onclick="export_dae();">DAE</option>
+          <option title="FBX - Filmbox Format" value="fbx" onclick="export_assimp( 'fbx' );">FBX</option>
+          <option title="X3D - Extensible 3D Graphics Format" value="x3d" onclick="export_assimp( 'x3d' );">X3D</option>
+          <option title="X - Format" value="x" onclick="export_assimp( 'x' );">X</option>
           <option title="GLB - GL Transmission Format binary" value="glb" onclick="export_gltf( true );">GLB</option>
           <option title="GLTF - GL Transmission Format ascii" value="gltf" onclick="export_gltf( false );">GLTF</option>
           <option title="PLY - Polygon File Format ascii" value="ply" onclick="export_ply( false );">PLY_a</option>
@@ -417,6 +421,7 @@
       function initialize_event_listeners() {
         window.addEventListener( 'mousedown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
         window.addEventListener( 'mouseup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { if (progress.value === 0) mouse_wheel = true; }, false);
       }
 
       function resize() {
@@ -470,10 +475,10 @@
 
     <script>
       var manager, texture_loader, pcd_loader, xyz_loader, xyz_format;
-      var renderer, scene, camera, pcd_obj, render_requested;
-      var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
+      var renderer, scene, camera, pcd_obj, controls, render_requested;
+      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
+      var gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var ww = window.innerWidth, wh = window.innerHeight;
-      var mouse_down, reset_rotation, events_initialized;
       var rot_x = 0, rot_y = 0, rot_z = 0, filename;
       var bounding_box, bgnd_linear_gradient, gif_export;
       var original_material_opacity, original_material_color, enable_opacity;
@@ -525,7 +530,7 @@
 
         await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-        const obj_exporter = new THREE.OBJExporter( manager );
+        let obj_exporter = new THREE.OBJExporter( manager );
 
         if (pcd_obj) {
           let exported = obj_exporter.parse( pcd_obj, filename );
@@ -543,15 +548,15 @@
 
                 zip.file( `${ tex.name }.${ tex.ext }`, blob );
 
-                if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '.OBJ' );
+                if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
 
                 processed_index += 1;
               });
             } else {
-              await process_zip( '.OBJ' );
+              await process_zip( '_OBJ' );
             }
           } else {
-            await process_zip( '.OBJ' );
+            await process_zip( '_OBJ' );
           }
         }
       }
@@ -561,7 +566,7 @@
 
         await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-        const ply_exporter = new THREE.PLYExporter( manager );
+        let ply_exporter = new THREE.PLYExporter( manager );
 
         if (pcd_obj) {
           ply_exporter.parse( pcd_obj, async function( json ) {
@@ -576,7 +581,7 @@
 
             zip.file( filename + '.ply', blob );
 
-            await process_zip( binary === true ? '.PLY_binary' : '.PLY_ascii' );
+            await process_zip( binary === true ? '_PLY_binary' : '_PLY_ascii' );
 
           }, { binary: binary, excludeAttributes: [ 'index', 'uv' ], littleEndian: true });
         }
@@ -587,7 +592,7 @@
 
         await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-        const dae_exporter = new THREE.ColladaExporter( manager );
+        let dae_exporter = new THREE.ColladaExporter( manager );
 
         if (pcd_obj) {
           let result = dae_exporter.parse( pcd_obj );
@@ -602,12 +607,12 @@
 
               zip.file( `${ tex.name }.${ tex.ext }`, blob );
 
-              if (processed_index === result.textures.length - 1) await process_zip( '.DAE' );
+              if (processed_index === result.textures.length - 1) await process_zip( '_DAE' );
 
               processed_index += 1;
             });
           } else {
-            await process_zip( '.DAE' );
+            await process_zip( '_DAE' );
           }
         }
       }
@@ -617,7 +622,7 @@
 
         await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-        const gltf_exporter = new THREE.GLTFExporter( manager );
+        let gltf_exporter = new THREE.GLTFExporter( manager );
 
         if (pcd_obj) {
           let options = { binary: binary, maxTextureSize: 4096 || Infinity };
@@ -636,9 +641,69 @@
 
             zip.file( filename + ext, blob );
 
-            ext = (binary === true) ? '.GLB' : '.GLTF';
+            ext = (binary === true) ? '_GLB' : '_GLTF';
 
             await process_zip( ext );
+          }, function( error ) { console.log( error ); }, options);
+        }
+      }
+
+      async function export_assimp( format = 'fbx' ) {
+        start_export();
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+        if (pcd_obj) {
+          // Try to convert the scene to glb and then to fbx
+
+          let gltf_exporter = new THREE.GLTFExporter( manager );
+
+          let options = {	binary: true, maxTextureSize: 4096 || Infinity };
+
+          gltf_exporter.parse( pcd_obj, function( json ) {
+            let blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+
+            let loader = new THREE.FileLoader( manager );
+            loader.setResponseType( 'arraybuffer' );
+
+            loader.load( URL.createObjectURL( blob ), function( data ) {
+              // Revoke URL
+              URL.revokeObjectURL( blob );
+
+              // Use ASSIMPJS to export files
+              assimpjs().then( async function( ajs ) {
+                let result = ajs.ConvertFile( filename, format, new Uint8Array( data ), undefined, undefined );
+                let fileCount = result.FileCount();
+
+                // check if the conversion succeeded
+                if (result.IsSuccess() === false || fileCount === 0) {
+                  console.log( 'Error exporting the model!' );
+                  console.log( result.GetErrorCode() );
+                  document.getElementById('div_loading').innerHTML = '';
+                  document.getElementById('div_loading').style.display = 'none';
+                  document.getElementById('fixed_menu').style.display = 'block';
+                  render_requested = true;
+                  render();
+                  return;
+                }
+
+                // get the first result file and convert it to blob
+                let resultFile = await result.GetFile( 0 );
+                let jsonContent = resultFile.GetContent();
+                let blob = new Blob( [ jsonContent ], { type: 'application/octet-stream' } );
+
+                // Possible ASSIMP export formats, some with binary / ascii options:
+                //   assjson, assbin, assxml, collada, x, stp, obj, objnomtl, 3ds, 3mf, pbrt
+                //   gltf, gltf2, glb, glb2, stl, stlb, ply, plyb, fbx, fbxa, m3d, m3da, x3d
+                // For proper file extension, shorten the format before zipping it up
+                let ext_to_change = { 'fbxa': 'fbx' }; // 'collada': 'dae', 'plyb': 'ply' ... etc
+                if (ext_to_change[ format ]) format = ext_to_change[ format ];
+
+                zip.file( filename + '.' + format, blob );
+
+                await process_zip( '_' + format.toUpperCase() );
+              });
+            });
           }, function( error ) { console.log( error ); }, options);
         }
       }
@@ -654,7 +719,7 @@
 
           zip.file( filename + '.json', blob );
 
-          await process_zip( '.JSON' );
+          await process_zip( '_JSON' );
         }
       }
 
@@ -752,7 +817,7 @@
 
             zip.file( filename + '.3dm', blob );
 
-            await process_zip( '.3DM' );
+            await process_zip( '_3DM' );
           });
         }
       }
@@ -1217,6 +1282,8 @@
         selected_pcd_file = null;
         selected_pcd_url_file = null;
         xyz_format = false;
+        mouse_down = false;
+        mouse_wheel = false;
         original_material_color = null;
         vertex_colors_enabled = false;
         random_vertex_colors_enabled = false;
@@ -1658,7 +1725,18 @@
                 gif_export ? pcd_obj.rotation.y += 0.03 : pcd_obj.rotation.y += 0.05;
               } else {
                 // Let GPU cool down a bit
-                await new Promise( resolve => setTimeout( resolve, 200 ) );
+                let count = 0;
+
+                while (count < 25) {
+                  await new Promise( resolve => setTimeout( resolve, 20 ) ).then( () => {
+                    if (mouse_down === true || mouse_wheel === true) {
+                      if (mouse_wheel === true) mouse_wheel = false;
+                      count = 25;
+                    } else {
+                      count ++;
+                    }
+                  });
+                }
               }
             } else {
               if (rot_x !== 0) pcd_obj.rotation.x += rot_x;
