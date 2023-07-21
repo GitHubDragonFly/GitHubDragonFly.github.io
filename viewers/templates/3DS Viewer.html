@@ -1496,6 +1496,13 @@
         initial_rotation = new THREE.Vector3();
         bounding_box = new THREE.Box3();
 
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_spinner').style.display = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
         if (url_loading === false) {
           // Loaded file
           var fi = document.getElementById('file_input');
@@ -1506,11 +1513,7 @@
           };
 
           if (selected_tds_file === null) {
-            console.log( 'No valid 3DS file selected!' );
-            document.body.style.backgroundImage = 'none';
-            document.getElementById('div_spinner').style.display = 'none';
-            document.getElementById('div_loading').style.display = 'none';
-            document.getElementById('div_error').style.display = 'block';
+            handle_error( 'No valid 3DS file selected!' );
             return;
           }
 
@@ -1529,12 +1532,6 @@
           document.getElementById('file_input').value = '';
           url_loading = false;
         }
-
-        document.body.style.backgroundImage = 'none';
-        document.getElementById('div_spinner').style.display = 'none';
-        document.getElementById('div_loading').innerHTML = 'Loading';
-        document.getElementById('div_error').style.display = 'none';
-        enable_disable( false );
 
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
@@ -1614,7 +1611,8 @@
           document.getElementById('gizmo').appendChild( gizmo.domElement );
         }
 
-        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+        enable_disable( false );
+        disabled_changed();
 
         // Load 3DS file
         selected_tds_file ? loadFile() : loadURLFile();
@@ -1628,9 +1626,6 @@
         // whose required texture files might be either missing or just not selected for loading
         if (resource_path === '') resource_path = ',';
 
-        console.time( 'Loading Time' );
-        document.getElementById('div_loading').style.display = 'block';
-
         tds_loader.load( URL.createObjectURL( selected_tds_file ), resource_path, url_resource_path, function( object ) {
           URL.revokeObjectURL( selected_tds_file );
 
@@ -1640,13 +1635,23 @@
 
           tds_obj.traverse( function( child ) {
             if (child.isMesh) {
-              if (child.name === '') {
-                child.name = 'child_' + child_count;
-                child_count += 1;
-              }
+              if (child.name === '') child.name = 'child_' + child_count;
 
               random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
               original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+
+              child.geometry.computeBoundingBox();
+              child.geometry.computeBoundingSphere();
+
+              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+              child.geometry.normalizeNormals();
+
+              if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                vertex_colors_enabled = true;
+                document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                document.getElementById('btn_random_vertex_colors').disabled = false;
+                random_vertex_changed();
+              }
 
               if (Array.isArray( child.material )) {
                 let child_count_array = 1;
@@ -1657,16 +1662,7 @@
 
                 child.material.forEach( mtl => {
                   mtl.side = THREE.DoubleSide;
-                  mtl.flatShading = false;
-                  mtl.skinning = true;
-
-                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                    mtl.vertexColors = true;
-                    vertex_colors_enabled = true;
-                    document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                    document.getElementById('btn_random_vertex_colors').disabled = false;
-                    random_vertex_changed();
-                  }
+                  mtl.vertexColors = vertex_colors_enabled;
 
                   initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
                   initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
@@ -1675,24 +1671,15 @@
                 });
               } else {
                 child.material.side = THREE.DoubleSide;
-                child.material.flatShading = false;
-                child.material.skinning = true;
-
-                if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                  child.material.vertexColors = true;
-                  vertex_colors_enabled = true;
-                  document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                  document.getElementById('btn_random_vertex_colors').disabled = false;
-                  random_vertex_changed();
-                }
+                child.material.vertexColors = vertex_colors_enabled;
 
                 initial_opacity[ child.name ] = child.material.opacity;
                 initial_transparency[ child.name ] = child.material.transparent;
                 original_side[ child.name ] = child.material.side;
               }
-
-              if (child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
             }
+
+            child_count += 1;
           });
 
           tds_obj.rotation.x -= Math.PI / 2.0;
@@ -1710,22 +1697,13 @@
           document.getElementById('div_loading').style.display = 'none';
 
           disabled_changed();
+
+          tds_obj.traverse( function( child ) {
+            if (child.isMesh && child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+          });
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
-          console.timeEnd( 'Loading Time' );
-          console.log( 'Error loading 3DS!' );
-          console.log( error );
-          render_requested = false;
-          enable_disable( true );
-
-          if (gizmo) {
-            document.getElementById('gizmo').removeChild( gizmo.domElement );
-            gizmo.dispose();
-          }
-
-          document.getElementById('div_loading').style.display = 'none';
-          document.getElementById('div_error').style.display = 'block';
-
+          handle_error( error );
           URL.revokeObjectURL( selected_tds_file );
         });
       }
@@ -1753,22 +1731,9 @@
           }
 
           if (selected_tds_url_file === null) {
-            console.log( 'Unsupported URL file!' );
-            render_requested = false;
-            enable_disable( true );
-
-            if (gizmo) {
-              document.getElementById('gizmo').removeChild( gizmo.domElement );
-              gizmo.dispose();
-            }
-
-            document.getElementById('div_loading').style.display = 'none';
-            document.getElementById('div_error').style.display = 'block';
+            handle_error( 'Unsupported URL model!' );
             return;
           }
-
-          console.time( 'Loading Time' );
-          document.getElementById('div_loading').style.display = 'block';
 
           tds_loader.load( selected_tds_url_file, resource_path, url_resource_path, function( object ) {
             tds_obj = object.clone();
@@ -1777,13 +1742,23 @@
 
             tds_obj.traverse( function( child ) {
               if (child.isMesh) {
-                if (child.name === '') {
-                  child.name = 'child_' + child_count;
-                  child_count += 1;
-                }
+                if (child.name === '') child.name = 'child_' + child_count;
 
                 random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
                 original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+
+                child.geometry.computeBoundingBox();
+                child.geometry.computeBoundingSphere();
+
+                if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                child.geometry.normalizeNormals();
+
+                if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                  vertex_colors_enabled = true;
+                  document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                  document.getElementById('btn_random_vertex_colors').disabled = false;
+                  random_vertex_changed();
+                }
 
                 if (Array.isArray( child.material )) {
                   let child_count_array = 1;
@@ -1794,16 +1769,7 @@
 
                   child.material.forEach( mtl => {
                     mtl.side = THREE.DoubleSide;
-                    mtl.flatShading = false;
-                    mtl.skinning = true;
-
-                    if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                      mtl.vertexColors = true;
-                      vertex_colors_enabled = true;
-                      document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                      document.getElementById('btn_random_vertex_colors').disabled = false;
-                      random_vertex_changed();
-                    }
+                    mtl.vertexColors = vertex_colors_enabled;
 
                     initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
                     initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
@@ -1812,24 +1778,15 @@
                   });
                 } else {
                   child.material.side = THREE.DoubleSide;
-                  child.material.flatShading = false;
-                  child.material.skinning = true;
-
-                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                    child.material.vertexColors = true;
-                    vertex_colors_enabled = true;
-                    document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                    document.getElementById('btn_random_vertex_colors').disabled = false;
-                    random_vertex_changed();
-                  }
+                  child.material.vertexColors = vertex_colors_enabled;
 
                   initial_opacity[ child.name ] = child.material.opacity;
                   initial_transparency[ child.name ] = child.material.transparent;
                   original_side[ child.name ] = child.material.side;
                 }
-
-                if (child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
               }
+
+              child_count += 1;
             });
 
             tds_obj.rotation.x -= Math.PI / 2.0;
@@ -1847,23 +1804,29 @@
             document.getElementById('div_loading').style.display = 'none';
 
             disabled_changed();
+
+            tds_obj.traverse( function( child ) {
+              if (child.isMesh && child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+            });
           }, function ( xhr ) { // onProgress
-          }, function ( error ) { // onError
-            console.timeEnd( 'Loading Time' );
-            console.log( 'Error loading URL 3DS!' );
-            console.log( error );
-            render_requested = false;
-            enable_disable( true );
-
-            if (gizmo) {
-              document.getElementById('gizmo').removeChild( gizmo.domElement );
-              gizmo.dispose();
-            }
-
-            document.getElementById('div_loading').style.display = 'none';
-            document.getElementById('div_error').style.display = 'block';
-          });
+          }, function ( error ) { handle_error( error ); }); // onError
         }
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        render_requested = false;
+        enable_disable( true );
+
+        if (gizmo) {
+          document.getElementById('gizmo').removeChild( gizmo.domElement );
+          gizmo.dispose();
+        }
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
       }
 
       function show_polar_grid() {
@@ -2197,6 +2160,8 @@
         scene.remove( tds_obj );
 
         reset_all( true );
+
+        console.time( 'Loading Time' );
 
         document.getElementById('div_loading').innerHTML = 'Reload';
 
