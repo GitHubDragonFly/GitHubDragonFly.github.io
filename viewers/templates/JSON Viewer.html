@@ -327,6 +327,7 @@
         <button title="Lines" id="btn_lines" onclick="update_line_visibility();" disabled>L</button>
         <button title="Skeleton" id="btn_skeleton" onclick="show_skeleton();" disabled>S</button>
         <button title="Animations" id="btn_animate" onclick="animate_json();" style="min-width: 28px;" disabled>A</button>
+        <button title="Morphs" id="btn_extras" onclick="animate_extra();" style="min-width: 28px;" disabled>X</button>
         <button title="Vertex Colors" id="btn_vertex_colors" onclick="set_vertex_colors();" style="min-width: 28px;" disabled>VC</button>
         <button title="Random Vertex Colors" id="btn_random_vertex_colors" onclick="set_random_vertex_colors();" style="min-width: 12px;" disabled>!</button>
         <button title="Material Side" id="btn_mtl_side" onclick="switch_mtl_side();" style="min-width: 28px;" disabled>DS</button>
@@ -483,6 +484,7 @@
       function initialize_event_listeners() {
         window.addEventListener( 'mousedown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
         window.addEventListener( 'mouseup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { if (progress.value === 0) mouse_wheel = true; }, false);
       }
 
       function resize() {
@@ -537,16 +539,16 @@
     <script>
       const image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJP', '.PJPEG', '.BMP', '.GIF', '.SVG', '.WEBP' ];
 
-      var manager, file_loader, texture_loader, equi_loader, json_loader, bg_loader;
+      var animations, animation_mixer, animation_running, current_animation, extras, extra_running, current_extra;
+      var manager, file_loader, texture_loader, equi_loader, json_loader, bg_loader, clock;
       var renderer, scene, camera, mesh, edges, edges_visible, render_requested;
       var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
+      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
-      var mouse_down, reset_rotation, events_initialized;
       var bounding_box, flat_shading_enabled, reflect;
       var loader, fd, material, textures, buffer_geometry;
-      var animations, animation_mixer, current_animation, clock;
       var initial_opacity, initial_opacity_array, enable_opacity;
       var initial_transparency, initial_transparency_array;
       var original_color, original_color_array;
@@ -1588,6 +1590,57 @@
         }
       }
 
+      function animate_extra() {
+        if (extra_running === true) {
+          if (current_extra === extras.length - 1) {
+            mesh.traverse( function( child ) {
+              if (child.isMesh) {
+                if (child.id === extras[ current_extra ][ 0 ]) {
+                  child.morphTargetInfluences[ extras[ current_extra ][ 2 ] ] = 0;
+                }
+              }
+            });
+
+            document.getElementById('btn_extras').style.backgroundColor = '#d1cefc';
+            document.getElementById('btn_extras').innerHTML = 'X';
+            current_extra = 0;
+            extra_running = false;
+          } else {
+            mesh.traverse( function( child ) {
+              if (child.isMesh) {
+                if (child.id === extras[ current_extra ][ 0 ]) {
+                  child.morphTargetInfluences[ extras[ current_extra ][ 2 ] ] = 0;
+                }
+              }
+            });
+
+            current_extra += 1;
+
+            mesh.traverse( function( child ) {
+              if (child.isMesh) {
+                if (child.id === extras[ current_extra ][ 0 ]) {
+                  child.morphTargetInfluences[ extras[ current_extra ][ 2 ] ] = 1;
+                }
+              }
+            });
+
+            document.getElementById('btn_extras').innerHTML = 'X' + current_extra;
+          }
+        } else {
+          document.getElementById('btn_extras').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_extras').innerHTML = 'X0';
+          extra_running = true;
+
+          mesh.traverse( function( child ) {
+            if (child.isMesh) {
+              if (child.id === extras[ 0 ][ 0 ]) {
+                child.morphTargetInfluences[ extras[ 0 ][ 2 ] ] = 1;
+              }
+            }
+          });
+        }
+      }
+
       async function init() {
         if (scene) {
           if (polar_grid_visible) show_polar_grid();
@@ -1629,6 +1682,8 @@
 
         selected_json_file = null;
         selected_json_url_file = null;
+        mouse_down = false;
+        mouse_wheel = false;
         buffer_geometry = false;
         skeleton_helper = null;
         skeleton_visible = false;
@@ -1646,6 +1701,8 @@
         animations = [];
         animation_mixer = null;
         animation_running = false;
+        extras = [];
+        extra_running = false;
         enable_opacity = false;
         initial_opacity = {};
         initial_opacity_array = {};
@@ -1868,6 +1925,26 @@
             random_vertex_changed();
           }
 
+          if (mesh.morphTargetDictionary && Object.entries( mesh.morphTargetDictionary ).length > 0) {
+            // Check for morph targets
+            Object.keys( mesh.morphTargetDictionary ).forEach( ( key, index ) => {
+              extras.push( [ mesh.id, key, index ] );
+            });
+
+            if (extras.length > 0) {
+              document.getElementById('btn_extras').disabled = false;
+              current_extra = 0;
+
+              if (Array.isArray( mesh.material )) {
+                mesh.material.forEach( mtl => {
+                  mtl.morphTargets = true;
+                });
+              } else {
+                mesh.material.morphTargets = true;
+              }
+            }
+          }
+
           if (Object.getOwnPropertyNames( textures ).length !== 0) {
             let child_count_array = 1;
 
@@ -1942,6 +2019,7 @@
 
             mesh.material.vertexColors = vertex_colors_enabled;
             mesh.material.format = THREE.RGBAFormat;
+            mesh.material.flatShading = false;
 
             initial_opacity[ mesh.name ] = mesh.material.opacity;
             initial_transparency[ mesh.name ] = mesh.material.transparent;
@@ -1986,6 +2064,27 @@
 
               if (child.isMesh) {
                 if (child.isSkinnedMesh) child.frustumCulled = false;
+
+                if (child.morphTargetDictionary && Object.entries( child.morphTargetDictionary ).length > 0) {
+                  // Check for morph targets
+                  Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
+                    extras.push( [ child.id, key, index ] );
+                  });
+
+                  if (extras.length > 0) {
+                    document.getElementById('btn_extras').disabled = false;
+                    current_extra = 0;
+
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        mtl.morphTargets = true;
+                      });
+                    } else {
+                      child.material.morphTargets = true;
+                    }
+                  }
+                }
+
                 if (child.geometry.attributes && child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
               } else {
                 document.getElementById('wireframe').disabled = true;
@@ -2011,6 +2110,7 @@
 
                     mtl.vertexColors = vertex_colors_enabled;
                     mtl.format = THREE.RGBAFormat;
+                    mtl.flatShading = false;
 
                     initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
                     initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
@@ -2031,6 +2131,7 @@
 
                   child.material.vertexColors = vertex_colors_enabled;
                   child.material.format = THREE.RGBAFormat;
+                  child.material.flatShading = false;
 
                   initial_opacity[ child.name ] = child.material.opacity;
                   initial_transparency[ child.name ] = child.material.transparent;
@@ -2191,6 +2292,26 @@
             random_vertex_changed();
           }
 
+          if (mesh.morphTargetDictionary && Object.entries( mesh.morphTargetDictionary ).length > 0) {
+            // Check for morph targets
+            Object.keys( mesh.morphTargetDictionary ).forEach( ( key, index ) => {
+              extras.push( [ mesh.id, key, index ] );
+            });
+
+            if (extras.length > 0) {
+              document.getElementById('btn_extras').disabled = false;
+              current_extra = 0;
+
+              if (Array.isArray( mesh.material )) {
+                mesh.material.forEach( mtl => {
+                  mtl.morphTargets = true;
+                });
+              } else {
+                mesh.material.morphTargets = true;
+              }
+            }
+          }
+
           if (Array.isArray( mesh.material )) {
             let child_count_array = 1;
 
@@ -2202,6 +2323,7 @@
 
               mtl.vertexColors = vertex_colors_enabled;
               mtl.format = THREE.RGBAFormat;
+              mtl.flatShading = false;
 
               initial_opacity_array[ mesh.name ][ child_count_array ] = mtl.opacity;
               initial_transparency_array[ mesh.name ][ child_count_array ] = mtl.transparent;
@@ -2222,6 +2344,7 @@
 
             mesh.material.vertexColors = vertex_colors_enabled;
             mesh.material.format = THREE.RGBAFormat;
+            mesh.material.flatShading = false;
 
             initial_opacity[ mesh.name ] = mesh.material.opacity;
             initial_transparency[ mesh.name ] = mesh.material.transparent;
@@ -2270,6 +2393,27 @@
 
               if (child.isMesh) {
                 if (child.isSkinnedMesh) child.frustumCulled = false;
+
+                if (child.morphTargetDictionary && Object.entries( child.morphTargetDictionary ).length > 0) {
+                  // Check for morph targets
+                  Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
+                    extras.push( [ child.id, key, index ] );
+                  });
+
+                  if (extras.length > 0) {
+                    document.getElementById('btn_extras').disabled = false;
+                    current_extra = 0;
+
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        mtl.morphTargets = true;
+                      });
+                    } else {
+                      child.material.morphTargets = true;
+                    }
+                  }
+                }
+
                 if (child.geometry.attributes && child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
               } else {
                 document.getElementById('wireframe').disabled = true;
@@ -2294,6 +2438,7 @@
 
                   mtl.vertexColors = vertex_colors_enabled;
                   mtl.format = THREE.RGBAFormat;
+                  mtl.flatShading = false;
 
                   initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
                   initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
@@ -2315,6 +2460,7 @@
 
                 child.material.vertexColors = vertex_colors_enabled;
                 child.material.format = THREE.RGBAFormat;
+                child.material.flatShading = false;
 
                 initial_opacity[ child.name ] = child.material.opacity;
                 initial_transparency[ child.name ] = child.material.transparent;
@@ -2724,8 +2870,21 @@
                   (initial_rotation.x !== 0 && initial_rotation.x < Math.PI) ? ( gif_export ? mesh.rotation.z += 0.03 : mesh.rotation.z += 0.05 ) : ( gif_export ? mesh.rotation.y += 0.03 : mesh.rotation.y += 0.05 );
                 }
               } else {
-                // Let GPU cool down a bit
-                await new Promise( resolve => setTimeout( resolve, 200 ) );
+                if (animation_running === false) {
+                  // Let GPU cool down a bit
+                  let count = 0;
+
+                  while (count < 15) {
+                    await new Promise( resolve => setTimeout( resolve, 20 ) ).then( () => {
+                      if (mouse_down === true || mouse_wheel === true) {
+                        if (mouse_wheel === true) mouse_wheel = false;
+                        count = 15;
+                      } else {
+                        count ++;
+                      }
+                    });
+                  }
+                }
               }
             } else {
               if (rot_x !== 0) mesh.rotation.x += rot_x;
@@ -2855,6 +3014,9 @@
         animation_running = false;
         document.getElementById('btn_animate').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_animate').innerHTML = 'A';
+        extra_running = false;
+        document.getElementById('btn_extras').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_extras').innerHTML = 'X';
         reflect = false;
         document.getElementById('btn_reflective').disabled = true;
         document.getElementById('btn_reflective').style.backgroundColor = '#d1cefc';
@@ -2894,6 +3056,7 @@
           document.getElementById('div_error').style.display = 'none';
           document.getElementById('btn_lines').disabled = true;
           document.getElementById('btn_animate').disabled = true;
+          document.getElementById('btn_extras').disabled = true;
           document.getElementById('edge_color').disabled = true;
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
