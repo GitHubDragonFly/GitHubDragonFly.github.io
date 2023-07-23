@@ -274,10 +274,31 @@ THREE.LegacyJSONLoader = ( function () {
 
 			function loadTexture( path, repeat, offset, wrap, anisotropy, textures, texturePath, crossOrigin, manager ) {
 
-				var fullPath = texturePath + path;
-				var loader = manager.getHandler( fullPath );
+				var fullPath, loader, texture;
 
-				var texture;
+				if ( texturePath.includes( ',' ) === true ) {
+
+					let blobs = texturePath.split( ',' );
+
+					for ( let i = 0; i < blobs.length; i += 2 ) {
+
+						if ( ( path === blobs[ i ] ) || ( path.endsWith( blobs[ i ] ) === true ) ) {
+
+							path = blobs[ i + 1 ];
+
+						}
+
+					}
+					
+					fullPath = path;
+
+				} else {
+
+					fullPath = texturePath + path;
+
+				}
+
+				loader = manager.getHandler( fullPath );
 
 				if ( loader !== null ) {
 
