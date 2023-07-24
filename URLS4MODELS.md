@@ -47,6 +47,7 @@ Else, copy any of the following links and then paste it within the `URL` option 
 - example for JSON Legacy viewer (see [#25](https://github.com/leapmotion/leapjs-rigged-hand/pull/25) with suggestion to correct original files):
   - `https://raw.githubusercontent.com/GitHubDragonFly/leapjs-rigged-hand/master/models/Game%20Quality%20Hand/Handsolo/Leapmotion_Handsolo_Rig_Left.json`
   - `https://raw.githubusercontent.com/GitHubDragonFly/leapjs-rigged-hand/master/models/Game%20Quality%20Hand/Handsolo/Leapmotion_Handsolo_Rig_Right.json`
+  - some legacy models from r68 and r69 releases of the three.js are available in the `viewers/examples/legacy_json` folder
 - other examples:
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.obj`
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/male02_dds.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/male02.obj`
@@ -70,7 +71,7 @@ For multiple image format testing - copy all of the following and then paste it 
 # Additional Resources
 
 Use the `Raw` button in any of the GitHub repositories to get the correct URL or just download the file to a hard drive and load it with the `Browse` option of the corresponding viewer:
- - check the `viewers/examples` folder for different formats of the Lego Brick model
+ - check the `viewers/examples` folder in this repository for some example models
  - `https://github.com/gkjohnson/3d-demo-data/tree/main/models`
  - `https://github.com/ue4plugins/GLTFWebViewer/tree/main/public/assets`
  - `https://github.com/josdirksen/learning-threejs/tree/master/assets/models`
