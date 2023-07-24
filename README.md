@@ -118,8 +118,8 @@ Number Type Converter
       - currently set for full color PNG but can be changed to Lossy PNG to speed up processing (see the comment in the code)
     - JSON import / export is actually three.js created format:
       - JSON Legacy viewer is using r124 of three.js to support legacy THREE.Geometry and can export to current JSON format
-        - JSON models of the `Object` type are not currently supported
-      - JSON Viewer is currently using r145 of three.js and cannot open legacy format
+        - Legacy JSON models of the `Object` type are not currently supported
+      - JSON Viewer is currently using r147 of three.js and cannot open legacy format
     - OBJ exporter might currently, along with the exported MTL file, export multiple copies of the same texture but under different names:
       - Select 1 copy of the texture and rename it if you wish, then update the corresponding MTL file entries to point to that texture
       - Delete all other copies of that same texture
