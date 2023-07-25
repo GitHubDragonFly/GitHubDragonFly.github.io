@@ -464,16 +464,16 @@
 						mtlOutput += '\n' + 'newmtl ' + name + '\n';
 
 						mtlOutput += 'Tr ' + transparency + '\n';
-						mtlOutput += 'Tf 1.0000 1.0000 1.0000\n';
-						mtlOutput += 'illum 1\n';
+						mtlOutput += 'Tf 1.0000 1.0000 1.0000\n'; // this property is not used by the three.js MTL Loader
+						mtlOutput += 'illum 2\n'; // this property is not used by the three.js MTL Loader
 						if ( mat.specular ) mtlOutput += 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + '\n';
 						if ( mat.shininess ) mtlOutput += 'Ns ' + mat.shininess + '\n';
 						if ( mat.refractionRatio ) mtlOutput += 'Ni ' + mat.refractionRatio + '\n';
 						if ( mat.metalness ) mtlOutput += 'Pm ' + mat.metalness + '\n';
 						if ( mat.roughness ) mtlOutput += 'Pr ' + mat.roughness + '\n';
-						if ( mat.displacementBias ) mtlOutput += 'Pdb ' + mat.displacementBias + '\n';
-						if ( mat.displacementScale ) mtlOutput += 'Pds ' + mat.displacementScale + '\n';
-						if ( mat.lightMapIntensity ) mtlOutput += 'Pl ' + mat.lightMapIntensity + '\n';
+						if ( mat.displacementBias ) mtlOutput += 'disp_b ' + mat.displacementBias + '\n';
+						if ( mat.displacementScale ) mtlOutput += 'disp_s ' + mat.displacementScale + '\n';
+						if ( mat.lightMapIntensity ) mtlOutput += 'Pli ' + mat.lightMapIntensity + '\n';
 						if ( mat.clearcoat ) mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
 						if ( mat.clearcoatRoughness ) mtlOutput += 'Pccr ' + mat.clearcoatRoughness + '\n';
 						if ( mat.clearcoatNormalScale ) mtlOutput += 'Pccns ' + mat.clearcoatNormalScale.x + mat.clearcoatNormalScale.y + '\n';
@@ -724,11 +724,11 @@
 										data: imageToData( mat.displacementMap.image, ext )
 									});
 
-									mtlOutput += 'map_Pd ' + name + '.png' + '\n';
+									mtlOutput += 'map_disp ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pd ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_disp ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
 
 								}
 
