@@ -378,11 +378,12 @@
 						break;
 
 					case 'norm':
+					case 'map_kn':
 						setMapForType( 'normalMap', value );
 						break;
 
-					case 'map_bump':
 					case 'bump':
+					case 'map_bump':
 						// Bump texture map
 						setMapForType( 'bumpMap', value );
 						break;
@@ -393,7 +394,7 @@
 						params.transparent = true;
 						break;
 
-					case 'pl':
+					case 'pli':
 						// Lightmap intensity
 						params.lightMapIntensity = parseFloat( value );
 						break;
@@ -410,12 +411,12 @@
 						use_phong = false;
 						break;
 
-					case 'pdb':
+					case 'disp_b':
 						// Displacement bias
 						params.displacementBias = parseFloat( value );
 						break;
 
-					case 'pds':
+					case 'disp_s':
 						// Displacement scale
 						params.displacementScale = parseFloat( value );
 						break;
@@ -508,7 +509,8 @@
 						use_phong = false;
 						break;
 
-					case 'map_pd':
+					case 'disp':
+					case 'map_disp':
 						// Displacement map
 						setMapForType( 'displacementMap', value );
 						break;
@@ -531,6 +533,7 @@
 						use_phong = false;
 						break;
 
+					case 'map_ps':
 					case 'map_pshcm':
 						// Sheen layer color map
 						setMapForType( 'sheenColorMap', value );
