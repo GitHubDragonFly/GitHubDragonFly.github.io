@@ -430,6 +430,8 @@
 				const ext = 'png';
 				let count = 1;
 
+				let image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJP', '.PJPEG', '.BMP', '.GIF', '.SVG', '.WEBP' ];
+
 				Object.keys( materials ).forEach( ( key ) => {
 
 					if ( Array.isArray( materials[ key ] )) {
@@ -451,7 +453,7 @@
 				// set MTL parameters and textures
 				function set_mtl_params_textures( mat) {
 
-					let name = ( mat.name && mat.name !== '' ) ? ( ( mat.name.toUpperCase().endsWith( '.PNG' ) || mat.name.toUpperCase().endsWith( '.JPG' ) ) ? mat.name.substring(0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : 'material' + mat.id;
+					let name = ( mat.name && mat.name !== '' ) ? ( image_extensions.some( ext => mat.name.toUpperCase().endsWith( ext ) ) ? mat.name.substring( 0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : 'material' + mat.id;
 					name = name.replace( '#', '' );
 					name = name.replace( ' ', '_' );
 
@@ -476,9 +478,12 @@
 						if ( mat.lightMapIntensity ) mtlOutput += 'Pli ' + mat.lightMapIntensity + '\n';
 						if ( mat.clearcoat ) mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
 						if ( mat.clearcoatRoughness ) mtlOutput += 'Pccr ' + mat.clearcoatRoughness + '\n';
-						if ( mat.clearcoatNormalScale ) mtlOutput += 'Pccns ' + mat.clearcoatNormalScale.x + mat.clearcoatNormalScale.y + '\n';
+						if ( mat.clearcoatNormalScale ) mtlOutput += 'Pccns ' + mat.clearcoatNormalScale.x + ' ' + mat.clearcoatNormalScale.y + '\n';
 						if ( mat.reflectivity ) mtlOutput += 'Prfl ' + mat.reflectivity + '\n';
 						if ( mat.ior ) mtlOutput += 'Pior ' + mat.ior + '\n';
+						if ( mat.iridescence ) mtlOutput += 'Pir ' + mat.iridescence + '\n';
+						if ( mat.iridescenceIOR ) mtlOutput += 'Pirior ' + mat.iridescenceIOR + '\n';
+						if ( mat.iridescenceThicknessRange ) mtlOutput += 'Pirtr ' + mat.iridescenceThicknessRange[ 0 ] + ' ' + mat.iridescenceThicknessRange[ 1 ] + '\n';
 						if ( mat.sheen ) mtlOutput += 'Psh ' + mat.sheen + '\n';
 						if ( mat.sheenColor ) mtlOutput += 'Pshc ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
 						if ( mat.sheenRoughness ) mtlOutput += 'Pshr ' + mat.sheenRoughness + '\n';
