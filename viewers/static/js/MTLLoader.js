@@ -373,6 +373,7 @@
 						break;
 
 					case 'map_ke':
+					case 'map_emissive':
 						// Emissive map
 						setMapForType( 'emissiveMap', value );
 						break;
@@ -445,6 +446,24 @@
 						use_phong = false;
 						break;
 
+					case 'pir':
+						// Iridescence
+						params.iridescence = parseFloat( value );
+						use_phong = false;
+						break;
+
+					case 'pirior':
+						// Iridescence index-of-refraction
+						params.iridescenceIOR = parseFloat( value );
+						use_phong = false;
+						break;
+
+					case 'pirtr':
+						// Iridescence thickness range
+						params.iridescenceThicknessRange = new THREE.Vector2().fromArray( value );
+						use_phong = false;
+						break;
+			
 					case 'prfl':
 						// Reflectivity
 						params.reflectivity = parseFloat( value );
