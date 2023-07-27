@@ -399,7 +399,19 @@
 						// Lightmap intensity
 						params.lightMapIntensity = parseFloat( value );
 						break;
-	
+
+					case 'pa':
+						// Anisotropy
+						params.anisotropy = parseFloat( value );
+						use_phong = false;
+						break;
+
+					case 'par':
+						// Anisotropy Rotation
+						params.anisotropyRotation = parseFloat( value );
+						use_phong = false;
+						break;
+			
 					case 'pm':
 						// Metalness
 						params.metalness = parseFloat( value );
@@ -463,7 +475,7 @@
 						params.iridescenceThicknessRange = new THREE.Vector2().fromArray( value );
 						use_phong = false;
 						break;
-			
+
 					case 'prfl':
 						// Reflectivity
 						params.reflectivity = parseFloat( value );
@@ -510,10 +522,16 @@
 						params.transmission = parseFloat( value );
 						use_phong = false;
 						break;
-											
+
 					case 'map_pl':
 						// Light map
 						setMapForType( 'lightMap', value );
+						break;
+
+					case 'map_pa':
+						// Anisotropy map
+						setMapForType( 'anisotropyMap', value );
+						use_phong = false;
 						break;
 	
 					case 'map_pm':
