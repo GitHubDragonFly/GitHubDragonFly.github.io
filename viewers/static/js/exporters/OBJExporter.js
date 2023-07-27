@@ -481,6 +481,8 @@
 						if ( mat.clearcoatNormalScale ) mtlOutput += 'Pccns ' + mat.clearcoatNormalScale.x + ' ' + mat.clearcoatNormalScale.y + '\n';
 						if ( mat.reflectivity ) mtlOutput += 'Prfl ' + mat.reflectivity + '\n';
 						if ( mat.ior ) mtlOutput += 'Pior ' + mat.ior + '\n';
+						if ( mat.anisotropy ) mtlOutput += 'Pa ' + mat.anisotropy + '\n';
+						if ( mat.anisotropyRotation ) mtlOutput += 'Par ' + mat.anisotropyRotation + '\n';
 						if ( mat.iridescence ) mtlOutput += 'Pir ' + mat.iridescence + '\n';
 						if ( mat.iridescenceIOR ) mtlOutput += 'Pirior ' + mat.iridescenceIOR + '\n';
 						if ( mat.iridescenceThicknessRange ) mtlOutput += 'Pirtr ' + mat.iridescenceThicknessRange[ 0 ] + ' ' + mat.iridescenceThicknessRange[ 1 ] + '\n';
@@ -647,6 +649,35 @@
 								} else {
 
 									mtlOutput += 'map_Pl ' + map_names[ mat.lightMap.uuid ] + '.png' + '\n';
+
+								}
+
+							}
+
+						}
+
+						if ( mat.anisotropyMap && mat.anisotropyMap.type === 1009 && mat.anisotropyMap.image ) {
+
+							if ( mat.anisotropyMap.image.src || mat.anisotropyMap.image.data ) {
+
+								if ( map_uuids.includes( mat.anisotropyMap.uuid ) === false ) {
+
+									name = 'anisotropyMap' + count;
+
+									map_uuids.push( mat.anisotropyMap.uuid );
+									map_names[ mat.anisotropyMap.uuid ] = name;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.anisotropyMap.image, ext )
+									});
+
+									mtlOutput += 'map_Pa ' + name + '.png' + '\n';
+
+								} else {
+
+									mtlOutput += 'map_Pa ' + map_names[ mat.anisotropyMap.uuid ] + '.png' + '\n';
 
 								}
 
