@@ -2,23 +2,22 @@
 <html lang="en">
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
-    <meta name="description" content="Three.js JSON Legacy Viewer">
+    <meta name="description" content="JSON Legacy Viewer">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="../static/build/legacy/three.min.js" defer></script>
-    <script src="../static/js/LegacyJSONLoader.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.111.0" defer></script>
+    <script src="../static/js/legacy/LegacyJSONLoader.js" defer></script>
+    <script src="../static/js/legacy/AssimpJSONLoader.js" defer></script>
+    <script src="../static/js/legacy/OrbitControls.js" defer></script>
     <script src="../static/js/upng/UPNG.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
     <script src="../static/js/omggif/omggif.js" defer></script>
-    <script src="../static/js/OrbitControls.js" defer></script>
-    <script src="../static/js/OrbitControlsGizmo.js" defer></script>
     <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
     <script src="../static/js/exporters/PLYExporter.js" defer></script>
     <script src="../static/js/exporters/STLExporter.js" defer></script>
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
     <script src="../static/js/exporters/GLTFExporter.js" defer></script>
-    <script src="../static/js/exporters/ColladaExporter.js" defer></script>
     <script src="../static/js/utils/BufferGeometryUtils.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/rhino3dm.js" defer></script>
 
@@ -202,8 +201,7 @@
         height: 15px;
       }
 
-      .fm { color: navy; width: calc(100% - 86px); border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
-      .fm_gizmo { width: 63px; height: 63px; padding: 4px; margin: 2px; }
+      .fm { color: navy; width: calc(100% - 4px); border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
 
       .fixed-menu {
         background-color: whitesmoke;
@@ -229,9 +227,8 @@
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
-      <div class="fm_gizmo" id="gizmo" title="Interactive Orbit Controls Gizmo" style="float: right; background-color: black;"></div>
       <div class="fm">
-        <label for="file_input" title="Three.js Legacy JSON Format" style="color: #553801; margin-left: 3px;">JSON</label>
+        <label for="file_input" title="Supported Formats: JS, JSON" style="color: #553801; margin-left: 3px;">JSON</label>
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".js, .json, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
         <label for="file_image_input" title="Background Image" style="color: #553801;">BGND</label>
@@ -260,7 +257,6 @@
           <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
           <option title="STL - Stereolithography Format" value="stl" onclick="export_stl();">STL</option>
           <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
-          <option title="DAE - Collada Format" value="dae" onclick="export_dae();">DAE</option>
           <option title="GLB - GL Transmission Format binary" value="glb" onclick="export_gltf( true );">GLB</option>
           <option title="GLTF - GL Transmission Format ascii" value="gltf" onclick="export_gltf( false );">GLTF</option>
           <option title="PLY - Polygon File Format ascii" value="ply" onclick="export_ply( false );">PLY_a</option>
@@ -540,11 +536,12 @@
     <script>
       const image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJP', '.PJPEG', '.BMP', '.GIF', '.SVG', '.WEBP' ];
 
+      var manager, file_loader, texture_loader, equi_loader, loader, assimp_loader, json_loader, object_loader;
       var animations, animation_mixer, animation_running, current_animation, extras, extra_running, current_extra;
-      var manager, file_loader, texture_loader, equi_loader, legacy_json_loader, resource_path;
-      var renderer, scene, camera, mesh, edges, edges_visible, render_requested, clock;
-      var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
+      var renderer, scene, camera, mesh, model_is_object, model_is_assimp, edges, edges_visible;
+      var controls, grid, polar_grid, grid_visible, polar_grid_visible;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
+      var resource_path, texturePath, render_requested, clock;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
@@ -644,6 +641,8 @@
         let ply_exporter = new THREE.PLYExporter( manager );
 
         if (mesh) {
+          let options = { binary: binary, littleEndian: true };
+
           ply_exporter.parse( mesh, async function( json ) {
             let blob;
 
@@ -658,7 +657,7 @@
 
             await process_zip( binary === true ? '_PLY_binary' : '_PLY_ascii' );
 
-          }, { binary: binary, littleEndian: true });
+          }, options );
         }
       }
 
@@ -679,36 +678,6 @@
         }
       }
 
-      async function export_dae() {
-        start_export();
-
-        await new Promise( resolve => setTimeout( resolve, 20 ) );
-
-        let dae_exporter = new THREE.ColladaExporter( manager );
-
-        if (mesh) {
-          let result = dae_exporter.parse( mesh );
-
-          zip.file( filename + '.dae', result.data );
-
-          if (result.textures && result.textures.length > 0) {
-            let processed_index = 0;
-
-            result.textures.forEach( async tex => {
-              let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
-
-              zip.file( `${ tex.name }.${ tex.ext }`, blob );
-
-              if (processed_index === result.textures.length - 1) await process_zip( '_DAE' );
-
-              processed_index += 1;
-            });
-          } else {
-            await process_zip( '_DAE' );
-          }
-        }
-      }
-
       async function export_gltf( binary = false ) {
         start_export();
 
@@ -719,7 +688,7 @@
         if (mesh) {
           let options;
 
-          if (animations.length > 0) {
+          if (animations && animations.length > 0) {
             options = {	binary: binary, maxTextureSize: 4096 || Infinity, animations: animations };
           } else {
             options = { binary: binary, maxTextureSize: 4096 || Infinity };
@@ -1668,12 +1637,18 @@
 
         if (equi_loader === undefined) equi_loader = new THREE.CubeTextureLoader();
 
-        if (legacy_json_loader === undefined) legacy_json_loader = new THREE.LegacyJSONLoader( manager );
+        if (json_loader === undefined) json_loader = new THREE.LegacyJSONLoader( manager );
+
+        if (assimp_loader === undefined) assimp_loader = new THREE.AssimpJSONLoader( manager );
+
+        if (object_loader === undefined) object_loader = new THREE.ObjectLoader( manager );
 
         if (zip === undefined) zip = new JSZip();
 
         selected_json_file = null;
         selected_json_url_file = null;
+        model_is_object = false;
+        model_is_assimp = false;
         resource_path = '';
         mouse_down = false;
         mouse_wheel = false;
@@ -1745,6 +1720,8 @@
             return;
           }
 
+          if (resource_path !== '') resource_path = resource_path.slice( 0, -1 );
+
           file_loader.load( URL.createObjectURL( selected_json_file ), async function( file_data ) {
             URL.revokeObjectURL( selected_json_file );
 
@@ -1753,9 +1730,30 @@
 
           await new Promise( resolve => setTimeout( resolve, 500 )); // adjust timing if necessary
 
-          if (fd && fd.metadata && fd.metadata.type && fd.metadata.type !== 'Geometry') {
-            handle_error( 'Try using JSON Viewer instead!' );
-            return;
+          if (fd && fd.metadata && fd.metadata.type) {
+            if (fd.metadata.type.toUpperCase() === 'BUFFERGEOMETRY') {
+              handle_error( 'Try using JSON Viewer instead!' );
+              return;
+            } else if (fd.metadata.type.toUpperCase() === 'GEOMETRY') {
+              loader = json_loader;
+              console.log( 'Trying Legacy JSON Loader' );
+            } else if (fd.metadata.type.toUpperCase() === 'OBJECT' || fd.objects) {
+              loader = object_loader;
+              model_is_object = true;
+              console.log( 'Trying Object Loader' );
+            }
+          } else if (fd && fd.__metadata__ && fd.__metadata__.format.toUpperCase() === 'ASSIMP2JSON') {
+            loader = assimp_loader;
+            model_is_assimp = true;
+            console.log( 'Trying Assimp JSON Loader' );
+            if (resource_path !== '') texturePath = resource_path;
+          } else {
+            // Try using assimp_loader first
+            // Will fallback to json_loader on error
+            loader = assimp_loader;
+            model_is_assimp = true;
+            console.log( 'Trying Assimp JSON Loader' );
+            if (resource_path !== '') texturePath = resource_path;
           }
 
           selected_url_file = '';
@@ -1777,11 +1775,7 @@
           document.body.appendChild( renderer.domElement );
         }
 
-        if (resource_path !== '') {
-          legacy_json_loader.setResourcePath( resource_path.slice( 0, -1 ) );
-        } else {
-          legacy_json_loader.setResourcePath( resource_path );
-        }
+        if (loader === json_loader) loader.setResourcePath( resource_path );
 
         if (clock === undefined) clock = new THREE.Clock();
 
@@ -1824,31 +1818,19 @@
 
         if (controls === undefined) {
           controls = new THREE.OrbitControls(camera, renderer.domElement);
-          controls.enableZoomToCursor = true;
+          controls.zoomSpeed = 0.8;
+          controls.rotateSpeed = 0.3;
+          controls.keyPanSpeed = 0.4; 
+          controls.panSpeed = 0.4;
           controls.enableDamping = true;
+          controls.dampingFactor = 0.3;
           //controls.enableKeys = false;
           //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.dampingFactor = 0.1;
           //controls.rotateSpeed = 0.2;
           //controls.minDistance = 2;
           //controls.maxDistance = 500;
-        }
-
-        if (gizmo === undefined) {
-          gizmo = new OrbitControlsGizmo( controls, {
-            size: 65,
-            padding: 4,
-            bubbleSizePrimary: 7,
-            bubbleSizeSecondary: 3,
-            lineWidth: 1,
-            fontSize: '8px',
-            fontColor: 'black',
-            fontWeight: 'bold'
-          });
-
-          document.getElementById('gizmo').appendChild( gizmo.domElement );
         }
 
         if (material === undefined) {
@@ -1873,164 +1855,180 @@
 
       function loadFile() {
         if (selected_json_file) {
-          legacy_json_loader.load( URL.createObjectURL( selected_json_file ), addFileInScene,
-          function( xhr ) { }, // onProgress
-          function ( error ) { handle_error( error ); }); // onError
+          if (model_is_object === true) {
+            // Add local image blob URLs
+            if (fd.images && fd.images.length > 0) {
+              fd.images.forEach( ( img, index ) => {
+                if (textures[ img.name ]) {
+                  let url = textures[ img.name ];
+                  let uuid = (url.includes( '/' ) === true) ? url.substring( url.lastIndexOf( '/' ) + 1 ) : ((url.includes( '\\' ) === true) ? url.substring( url.lastIndexOf( '\\' ) + 1 ) : '');
+
+                  if (fd.textures && fd.textures.length > 0) {
+                    fd.textures.forEach( ( tex, index ) => {
+                      if (tex.image === img.uuid) fd.textures[ index ].image = uuid;
+                    });
+                  }
+
+                  fd.images[ index ].url = url;
+                  fd.images[ index ].uuid = uuid;
+                }
+              });
+            }
+
+            loader.parse( fd, addObjectInScene,
+            function( xhr ) { }, // onProgress
+            function ( error ) { // onError
+              handle_error( error );
+            });
+          } else {
+            loader.load( URL.createObjectURL( selected_json_file ), addFileInScene,
+            function( xhr ) { }, // onProgress
+            function ( error ) { // onError
+              URL.revokeObjectURL( selected_json_file );
+
+              // Check if this is coming from assimp_loader and try using json_loader instead
+
+              if (model_is_assimp === true) {
+                loader = json_loader;
+                model_is_assimp = false;
+                texturePath = undefined;
+                console.log( 'Trying Legacy JSON Loader' );
+                if (resource_path !== '') loader.setResourcePath( resource_path );
+
+                loader.load( URL.createObjectURL( selected_json_file ), addFileInScene,
+                function( xhr ) { }, // onProgress
+                function ( error ) { // onError
+                  URL.revokeObjectURL( selected_json_file );
+                  handle_error( error );
+                }, texturePath );
+              } else {
+                handle_error( error );
+              }
+            }, texturePath );
+
+            URL.revokeObjectURL( selected_json_file );
+          }
         }
       }
 
-      async function addFileInScene( object ) {
-        URL.revokeObjectURL( selected_json_file );
+      async function addObjectInScene( object ) {
+        if (object.name && object.name === '') object.name = 'scene';
+        animations = object.animations;
+        mesh = object.clone();
 
-        animations = object.geometry.animations;
+        let child_count = 0;
 
-        object.geometry = new THREE.BufferGeometry().fromGeometry( object.geometry );
+        mesh.traverse( ( child ) => {
+          if (child.isMesh === true) {
+            if (child.name === '') {
+              child.name = 'child_' + child_count;
+              child_count += 1;
+            }
 
-        object.geometry.deleteAttribute('normal');
-        object.geometry = THREE.BufferGeometryUtils.mergeVertices( object.geometry );
-        object.geometry.computeVertexNormals();
-        object.geometry.center();
+            if (child.geometry.type.toUpperCase() === 'GEOMETRY') {
+              child.geometry = new THREE.BufferGeometry().fromGeometry( child.geometry );
 
-        object.geometry.computeBoundingBox();
-        object.geometry.computeBoundingSphere();
+              child.geometry.computeVertexNormals();
+              child.geometry.computeBoundingBox();
+              child.geometry.computeBoundingSphere();
+              child.geometry.center();
+            }
 
-        if (object.materials && object.materials.length > 0) {
-          if (object.bones && object.bones.length > 0) {
-            bones_exist = true;
-            object.materials.forEach( ( mtl ) => { mtl.skinning = true });
-            mesh = new THREE.SkinnedMesh( object.geometry, object.materials );
-          } else {
-            mesh = new THREE.Mesh( object.geometry, object.materials );
-          }
-        } else {
-          if (object.bones && object.bones.length > 0) {
-            bones_exist = true;
-            mesh = new THREE.SkinnedMesh( object.geometry, material );
-          } else {
-            mesh = new THREE.Mesh( object.geometry, material );
-          }
-        }
+            random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+            original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
 
-        if (object.bones && object.bones.length > 0) {
-          document.getElementById('btn_skeleton').disabled = false;
+            if (child.material) {
+              if (Array.isArray( child.material )) {
+                let child_count_array = 1;
 
-          let root, previous_index, current_index, next_index;
+                initial_opacity_array[ child.name ] = {};
+                initial_transparency_array[ child.name ] = {};
+                original_color_array[ child.name ] = {};
+                original_side_array[ child.name ] = {};
 
-          for (let i = 0; i < object.bones.length; i++) {
-            next_index = object.bones[ i + 1 ] ? object.bones[ i + 1 ].parent : null;
+                child.material.forEach( mtl => {
+                  mtl.vertexColors = vertex_colors_enabled;
+                  mtl.format = THREE.RGBAFormat;
+                  mtl.side = THREE.DoubleSide;
+                  mtl.flatShading = false;
 
-            let bone = new THREE.Bone();
+                  initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                  initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
+                  original_color_array[ child.name ][ child_count_array ] = new THREE.Color ( mtl.color );
+                  original_side_array[ child.name ][ child_count_array ] = mtl.side;
+                  child_count_array += 1;
 
-            bone.position.x = object.bones[ i ].pos[ 0 ];
-            bone.position.y = object.bones[ i ].pos[ 1 ];
-            bone.position.z = object.bones[ i ].pos[ 2 ];
-
-            bone.quaternion.x = object.bones[ i ].rotq[ 0 ];
-            bone.quaternion.y = object.bones[ i ].rotq[ 1 ];
-            bone.quaternion.z = object.bones[ i ].rotq[ 2 ];
-            bone.quaternion.w = object.bones[ i ].rotq[ 3 ];
-
-            bone[ 'name' ] = object.bones[ i ].name;
-            current_index = object.bones[ i ].parent;
-
-            bones.push( bone );
-
-            if (current_index === -1) {
-              root = bones[ 0 ];
-            } else if (current_index === 0) {
-              root.add( bones[ i ] );
-            } else if (current_index > previous_index) {
-              if (next_index === current_index) {
-                bones[ previous_index + 1 ].add( bones[ i ] );
+                  mtl.needsUpdate = true;
+                });
               } else {
-                bones[ current_index ].add( bones[ i ] );
+                child.material.vertexColors = vertex_colors_enabled;
+                child.material.format = THREE.RGBAFormat;
+                child.material.side = THREE.DoubleSide;
+                child.material.flatShading = false;
+
+                initial_opacity[ child.name ] = child.material.opacity;
+                initial_transparency[ child.name ] = child.material.transparent;
+                original_color[ child.name ] = new THREE.Color ( child.material.color );
+                original_side[ child.name ] = child.material.side;
+
+                child.material.needsUpdate = true;
               }
-            } else {
-              bones[ current_index ].add( bones[ i ] );
             }
 
-            previous_index = current_index;
-          }
+            if (child.geometry.attributes && child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+          }            
+        });
 
-          skeleton = new THREE.Skeleton( bones );
-          skeleton.calculateInverses();
-          mesh.add( skeleton.bones[ 0 ] );
-          mesh.bind( skeleton );
-          mesh.normalizeSkinWeights();
+        initial_rotation = mesh.rotation;
+
+        // Add mesh to the scene
+        scene.add( mesh );
+        camera.lookAt( mesh.position );
+
+        set_initial_scale();
+        resize();
+
+        if (animations && animations.length > 0) {
+          animation_mixer = new THREE.AnimationMixer( mesh );
+          current_animation = 0;
+          animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; });
+          animation_mixer.clipAction( animations[ 0 ] ).play();
+          document.getElementById('btn_animate').disabled = false;
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_animate').innerHTML = 'A0';
+          animation_running = true;
         }
 
-        if ((object.materials && object.materials.length > 0 && object.materials[ 0 ].vertexColors === true) || (object.geometry.attributes.color && object.geometry.attributes.color.array.length > 0)) {
-          vertex_colors_enabled = true;
-          document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-          document.getElementById('btn_random_vertex_colors').disabled = false;
-          random_vertex_changed();
-        }
+        console.timeEnd( 'Loading Time' );
+        document.getElementById('div_loading').style.display = 'none';
 
-        if (mesh.morphTargetDictionary && Object.entries( mesh.morphTargetDictionary ).length > 0) {
-          // Check for morph targets
-          Object.keys( mesh.morphTargetDictionary ).forEach( ( key, index ) => {
-            extras.push( [ mesh.id, key, index ] );
-          });
+        disabled_changed();
+      }
 
-          if (extras.length > 0) {
-            document.getElementById('btn_extras').disabled = false;
-            current_extra = 0;
+      async function addFileInScene( object ) {
+        if (model_is_assimp === true) {
+          mesh = object.clone();
 
-            if (Array.isArray( mesh.material )) {
-              mesh.material.forEach( mtl => {
-                mtl.morphTargets = true;
-              });
-            } else {
-              mesh.material.morphTargets = true;
-            }
-          }
-        }
-
-        await new Promise( resolve => setTimeout( resolve, 100 )); // adjust timing if necessary
-
-        let child_count = 1;
-
-        if (mesh.material && mesh.isPoints !== undefined && mesh.isPoints === false) {
-          mesh.name = 'mesh_0';
-          initial_opacity_array[ mesh.name ] = {};
-          initial_transparency_array[ mesh.name ] = {};
-          original_color_array[ mesh.name ] = {};
-          original_side_array[ mesh.name ] = {};
-
-          random_vertex_color_array[ 'mesh_0' ] = new Float32Array( Array.from( { length: mesh.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-          original_vertex_color_array[ 'mesh_0' ] = mesh.geometry.getAttribute( 'color' );
-
-          if (Object.getOwnPropertyNames( textures ).length !== 0) {
-            let child_count_array = 1;
-
-            mesh.material.forEach( mtl => {
-              mtl.vertexColors = vertex_colors_enabled;
-              mtl.format = THREE.RGBAFormat;
-              mtl.flatShading = false;
-
-              initial_opacity_array[ mesh.name ][ child_count_array ] = mtl.opacity;
-              initial_transparency_array[ mesh.name ][ child_count_array ] = mtl.transparent;
-              original_color_array[ mesh.name ][ child_count_array ] = new THREE.Color ( mtl.color );
-              original_side_array[ mesh.name ][ child_count_array ] = mtl.side;
-              child_count_array += 1;
-
-              mtl.needsUpdate = true;
+          // Check if animations exist
+          if (object.animations) {
+            // Check if the model has any bones
+            mesh.traverse( function( child ) {
+              if (child.type === 'Bone') animations = object.animations;
             });
-          } else {
-            mesh.material.vertexColors = vertex_colors_enabled;
-            mesh.material.format = THREE.RGBAFormat;
-            mesh.material.flatShading = false;
-
-            initial_opacity[ mesh.name ] = mesh.material.opacity;
-            initial_transparency[ mesh.name ] = mesh.material.transparent;
-            original_color[ mesh.name ] = new THREE.Color ( mesh.material.color );
-            original_side[ mesh.name ] = mesh.material.side;
-
-            mesh.material.needsUpdate = true;
           }
 
-          if (mesh.geometry && mesh.geometry.attributes && mesh.geometry.attributes.position) edges[ mesh.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
-        } else {
+          if (mesh.geometry) {
+            mesh.geometry.deleteAttribute('normal');
+            mesh.geometry = THREE.BufferGeometryUtils.mergeVertices( object.geometry );
+            mesh.geometry.computeVertexNormals();
+            mesh.geometry.center();
+
+            mesh.geometry.computeBoundingBox();
+            mesh.geometry.computeBoundingSphere();
+          }
+
+          let child_count = 0;
+
           mesh.traverse( function( child ) {
             if (child.name === '') {
               child.name = 'child_' + child_count;
@@ -2053,6 +2051,7 @@
                   child.material.forEach( mtl => {
                     mtl.vertexColors = vertex_colors_enabled;
                     mtl.format = THREE.RGBAFormat;
+                    mtl.side = THREE.DoubleSide;
                     mtl.flatShading = false;
 
                     initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
@@ -2066,6 +2065,7 @@
                 } else {
                   child.material.vertexColors = vertex_colors_enabled;
                   child.material.format = THREE.RGBAFormat;
+                  child.material.side = THREE.DoubleSide;
                   child.material.flatShading = false;
 
                   initial_opacity[ child.name ] = child.material.opacity;
@@ -2080,6 +2080,210 @@
               if (child.geometry.attributes && child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
             }
           });
+        } else {
+          animations = object.geometry.animations;
+
+          object.geometry = new THREE.BufferGeometry().fromGeometry( object.geometry );
+
+          object.geometry.deleteAttribute('normal');
+          object.geometry = THREE.BufferGeometryUtils.mergeVertices( object.geometry );
+          object.geometry.computeVertexNormals();
+          object.geometry.center();
+
+          object.geometry.computeBoundingBox();
+          object.geometry.computeBoundingSphere();
+
+          if (object.materials && object.materials.length > 0) {
+            if (object.bones && object.bones.length > 0) {
+              bones_exist = true;
+              object.materials.forEach( ( mtl ) => { mtl.skinning = true });
+              mesh = new THREE.SkinnedMesh( object.geometry, object.materials );
+            } else {
+              mesh = new THREE.Mesh( object.geometry, object.materials );
+            }
+          } else {
+            if (object.bones && object.bones.length > 0) {
+              bones_exist = true;
+              mesh = new THREE.SkinnedMesh( object.geometry, material );
+            } else {
+              mesh = new THREE.Mesh( object.geometry, material );
+            }
+          }
+
+          if (object.bones && object.bones.length > 0) {
+            document.getElementById('btn_skeleton').disabled = false;
+
+            let root, previous_index, current_index, next_index;
+
+            for (let i = 0; i < object.bones.length; i++) {
+              next_index = object.bones[ i + 1 ] ? object.bones[ i + 1 ].parent : null;
+
+              let bone = new THREE.Bone();
+
+              bone.position.x = object.bones[ i ].pos[ 0 ];
+              bone.position.y = object.bones[ i ].pos[ 1 ];
+              bone.position.z = object.bones[ i ].pos[ 2 ];
+
+              bone.quaternion.x = object.bones[ i ].rotq[ 0 ];
+              bone.quaternion.y = object.bones[ i ].rotq[ 1 ];
+              bone.quaternion.z = object.bones[ i ].rotq[ 2 ];
+              bone.quaternion.w = object.bones[ i ].rotq[ 3 ];
+
+              bone[ 'name' ] = object.bones[ i ].name;
+              current_index = object.bones[ i ].parent;
+
+              bones.push( bone );
+
+              if (current_index === -1) {
+                root = bones[ 0 ];
+              } else if (current_index === 0) {
+                root.add( bones[ i ] );
+              } else if (current_index > previous_index) {
+                if (next_index === current_index) {
+                  bones[ previous_index + 1 ].add( bones[ i ] );
+                } else {
+                  bones[ current_index ].add( bones[ i ] );
+                }
+              } else {
+                bones[ current_index ].add( bones[ i ] );
+              }
+
+              previous_index = current_index;
+            }
+
+            skeleton = new THREE.Skeleton( bones );
+            skeleton.calculateInverses();
+            mesh.add( skeleton.bones[ 0 ] );
+            mesh.bind( skeleton );
+            mesh.normalizeSkinWeights();
+          }
+
+          if ((object.materials && object.materials.length > 0 && object.materials[ 0 ].vertexColors === true) || (object.geometry.attributes.color && object.geometry.attributes.color.array.length > 0)) {
+            vertex_colors_enabled = true;
+            document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+            document.getElementById('btn_random_vertex_colors').disabled = false;
+            random_vertex_changed();
+          }
+
+          if (mesh.morphTargetDictionary && Object.entries( mesh.morphTargetDictionary ).length > 0) {
+            // Check for morph targets
+            Object.keys( mesh.morphTargetDictionary ).forEach( ( key, index ) => {
+              extras.push( [ mesh.id, key, index ] );
+            });
+
+            if (extras.length > 0) {
+              document.getElementById('btn_extras').disabled = false;
+              current_extra = 0;
+
+              if (Array.isArray( mesh.material )) {
+                mesh.material.forEach( mtl => {
+                  mtl.morphTargets = true;
+                });
+              } else {
+                mesh.material.morphTargets = true;
+              }
+            }
+          }
+
+          await new Promise( resolve => setTimeout( resolve, 100 )); // adjust timing if necessary
+
+          let child_count = 1;
+
+          if (mesh.material && mesh.isPoints !== undefined && mesh.isPoints === false) {
+            mesh.name = 'mesh_0';
+            initial_opacity_array[ mesh.name ] = {};
+            initial_transparency_array[ mesh.name ] = {};
+            original_color_array[ mesh.name ] = {};
+            original_side_array[ mesh.name ] = {};
+
+            random_vertex_color_array[ 'mesh_0' ] = new Float32Array( Array.from( { length: mesh.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+            original_vertex_color_array[ 'mesh_0' ] = mesh.geometry.getAttribute( 'color' );
+
+            if (Object.getOwnPropertyNames( textures ).length !== 0) {
+              let child_count_array = 1;
+
+              mesh.material.forEach( mtl => {
+                mtl.vertexColors = vertex_colors_enabled;
+                mtl.format = THREE.RGBAFormat;
+                mtl.side = THREE.DoubleSide;
+                mtl.flatShading = false;
+
+                initial_opacity_array[ mesh.name ][ child_count_array ] = mtl.opacity;
+                initial_transparency_array[ mesh.name ][ child_count_array ] = mtl.transparent;
+                original_color_array[ mesh.name ][ child_count_array ] = new THREE.Color ( mtl.color );
+                original_side_array[ mesh.name ][ child_count_array ] = mtl.side;
+                child_count_array += 1;
+
+                mtl.needsUpdate = true;
+              });
+            } else {
+              mesh.material.vertexColors = vertex_colors_enabled;
+              mesh.material.format = THREE.RGBAFormat;
+              mesh.material.side = THREE.DoubleSide;
+              mesh.material.flatShading = false;
+
+              initial_opacity[ mesh.name ] = mesh.material.opacity;
+              initial_transparency[ mesh.name ] = mesh.material.transparent;
+              original_color[ mesh.name ] = new THREE.Color ( mesh.material.color );
+              original_side[ mesh.name ] = mesh.material.side;
+
+              mesh.material.needsUpdate = true;
+            }
+
+            if (mesh.geometry && mesh.geometry.attributes && mesh.geometry.attributes.position) edges[ mesh.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+          } else {
+            mesh.traverse( function( child ) {
+              if (child.name === '') {
+                child.name = 'child_' + child_count;
+                child_count += 1;
+              }
+
+              if (child.isMesh === true || child.isPoints === true) {
+                random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+                original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+
+                if (child.material) {
+                  if (Array.isArray( child.material )) {
+                    let child_count_array = 1;
+
+                    initial_opacity_array[ child.name ] = {};
+                    initial_transparency_array[ child.name ] = {};
+                    original_color_array[ child.name ] = {};
+                    original_side_array[ child.name ] = {};
+
+                    child.material.forEach( mtl => {
+                      mtl.vertexColors = vertex_colors_enabled;
+                      mtl.format = THREE.RGBAFormat;
+                      mtl.side = THREE.DoubleSide;
+                      mtl.flatShading = false;
+
+                      initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                      initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
+                      original_color_array[ child.name ][ child_count_array ] = new THREE.Color ( mtl.color );
+                      original_side_array[ child.name ][ child_count_array ] = mtl.side;
+                      child_count_array += 1;
+
+                      mtl.needsUpdate = true;
+                    });
+                  } else {
+                    child.material.vertexColors = vertex_colors_enabled;
+                    child.material.format = THREE.RGBAFormat;
+                    child.material.side = THREE.DoubleSide;
+                    child.material.flatShading = false;
+
+                    initial_opacity[ child.name ] = child.material.opacity;
+                    initial_transparency[ child.name ] = child.material.transparent;
+                    original_color[ child.name ] = new THREE.Color ( child.material.color );
+                    original_side[ child.name ] = child.material.side;
+
+                    child.material.needsUpdate = true;
+                  }
+                }
+
+                if (child.geometry.attributes && child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+              }
+            });
+          }
         }
 
         if (bones.length > 0) skeleton_helper = new THREE.SkeletonHelper( mesh );
@@ -2137,14 +2341,58 @@
 
             await new Promise( resolve => setTimeout( resolve, 1000 ) ); // adjust timing if necessary
 
-            if (fd && fd.metadata && fd.metadata.type && fd.metadata.type !== 'Geometry') {
-              handle_error( 'Try using JSON Viewer instead.' );
-              return;
+            if (fd && fd.metadata && fd.metadata.type) {
+              if (fd.metadata.type.toUpperCase() === 'BUFFERGEOMETRY') {
+                handle_error( 'Try using JSON Viewer instead!' );
+                return;
+              } else if (fd.metadata.type.toUpperCase() === 'GEOMETRY') {
+                loader = json_loader;
+                console.log( 'Trying Legacy JSON Loader' );
+              } else if (fd.metadata.type.toUpperCase() === 'OBJECT') {
+                loader = object_loader;
+                model_is_object = true;
+                console.log( 'Trying Object Loader' );
+              }
+            } else if (fd && fd.__metadata__ && fd.__metadata__.format.toUpperCase() === 'ASSIMP2JSON') {
+              loader = assimp_loader;
+              model_is_assimp = true;
+              console.log( 'Trying Assimp JSON Loader' );
+            } else {
+              // Try using assimp_loader first
+              // Will fallback to json_loader on error
+              loader = assimp_loader;
+              model_is_assimp = true;
+              console.log( 'Trying Assimp JSON Loader' );
             }
 
-            legacy_json_loader.load( selected_json_url_file, addURLFileInScene,
-            function( xhr ) { }, // onProgress
-            function ( error ) { handle_error( error ); }); // onError
+            if (model_is_object === true) {
+              loader.parse( fd, addObjectInScene,
+              function( xhr ) { }, // onProgress
+              function ( error ) { // onError
+                handle_error( error );
+              });
+            } else {
+              loader.load( selected_json_url_file, addFileInScene,
+              function( xhr ) { }, // onProgress
+              function ( error ) { // onError
+                // Check if this is coming from assimp_loader and try using json_loader instead
+
+                if (model_is_assimp === true) {
+                  loader = json_loader;
+                  model_is_assimp = false;
+                  texturePath = undefined;
+                  console.log( 'Trying Legacy JSON Loader' );
+
+                  loader.load( selected_json_url_file, addURLFileInScene,
+                  function( xhr ) { }, // onProgress
+                  function ( error ) { // onError
+                    handle_error( error );
+                  }, texturePath );
+                } else {
+                  handle_error( error );
+                }
+              }, texturePath );
+            }
           } else {
             // Launch loading of the selected file, addURLFileInScene is the callback when it's ready
             if (selected_url_file.toUpperCase().endsWith('.JS') || selected_url_file.toUpperCase().endsWith('.JSON')) {
@@ -2154,230 +2402,63 @@
 
               await new Promise( resolve => setTimeout( resolve, 1000 )); // adjust timing if necessary
 
-              if (fd && fd.metadata && fd.metadata.type && fd.metadata.type !== 'Geometry') {
-                handle_error( 'Try using JSON Viewer instead.' );
-                return;
+              if (fd && fd.metadata && fd.metadata.type) {
+                if (fd.metadata.type.toUpperCase() === 'BUFFERGEOMETRY') {
+                  handle_error( 'Try using JSON Viewer instead!' );
+                  return;
+                } else if (fd.metadata.type.toUpperCase() === 'GEOMETRY') {
+                  loader = json_loader;
+                  console.log( 'Trying Legacy JSON Loader' );
+                } else if (fd.metadata.type.toUpperCase() === 'OBJECT' || fd.objects) {
+                  loader = object_loader;
+                  model_is_object = true;
+                  console.log( 'Trying Object Loader' );
+                }
+              } else if (fd && fd.__metadata__ && fd.__metadata__.format.toUpperCase() === 'ASSIMP2JSON') {
+                loader = assimp_loader;
+                model_is_assimp = true;
+                console.log( 'Trying Assimp JSON Loader' );
+              } else {
+                // Try using assimp_loader first
+                // Will fallback to json_loader on error
+                loader = assimp_loader;
+                model_is_assimp = true;
+                console.log( 'Trying Assimp JSON Loader' );
               }
 
-              legacy_json_loader.load( selected_url_file, addURLFileInScene,
-              function( xhr ) { }, // onProgress
-              function ( error ) { handle_error( error ); }); // onError
+              if (model_is_object === true) {
+                loader.parse( fd, addObjectInScene,
+                function( xhr ) { }, // onProgress
+                function ( error ) { // onError
+                  handle_error( error );
+                });
+              } else {
+                loader.load( selected_url_file, addFileInScene,
+                function( xhr ) { }, // onProgress
+                function ( error ) { // onError
+                  // Check if this is coming from assimp_loader and try using json_loader instead
+
+                  if (model_is_assimp === true) {
+                    loader = json_loader;
+                    model_is_assimp = false;
+                    texturePath = undefined;
+                    console.log( 'Trying Legacy JSON Loader' );
+
+                    loader.load( selected_url_file, addFileInScene,
+                    function( xhr ) { }, // onProgress
+                    function ( error ) { // onError
+                      handle_error( error );
+                    }, texturePath );
+                  } else {
+                    handle_error( error );
+                  }
+                }, texturePath );
+              }
             } else {
               handle_error( 'Unsupported URL file!' );
             }
           }
         }
-      }
-
-      async function addURLFileInScene( object ) {
-        animations = object.geometry.animations;
-
-        object.geometry = new THREE.BufferGeometry().fromGeometry( object.geometry );
-
-        object.geometry.deleteAttribute('normal');
-        object.geometry = THREE.BufferGeometryUtils.mergeVertices( object.geometry );
-        object.geometry.computeVertexNormals();
-        object.geometry.center();
-
-        object.geometry.computeBoundingBox();
-        object.geometry.computeBoundingSphere();
-
-        if (object.materials && object.materials.length > 0) {
-          if (object.bones && object.bones.length > 0) {
-            bones_exist = true;
-            object.materials.forEach( ( mtl ) => { mtl.skinning = true });
-            mesh = new THREE.SkinnedMesh( object.geometry, object.materials );
-          } else {
-            mesh = new THREE.Mesh( object.geometry, object.materials );
-          }
-        } else {
-          if (object.bones && object.bones.length > 0) {
-            bones_exist = true;
-            mesh = new THREE.SkinnedMesh( object.geometry, material );
-          } else {
-            mesh = new THREE.Mesh( object.geometry, material );
-          }
-        }
-
-        if (object.bones && object.bones.length > 0) {
-          document.getElementById('btn_skeleton').disabled = false;
-
-          let root, previous_index, current_index, next_index;
-
-          for (let i = 0; i < object.bones.length; i++) {
-            next_index = object.bones[ i + 1 ] ? object.bones[ i + 1 ].parent : null;
-
-            let bone = new THREE.Bone();
-
-            bone.position.x = object.bones[ i ].pos[ 0 ];
-            bone.position.y = object.bones[ i ].pos[ 1 ];
-            bone.position.z = object.bones[ i ].pos[ 2 ];
-
-            bone.quaternion.x = object.bones[ i ].rotq[ 0 ];
-            bone.quaternion.y = object.bones[ i ].rotq[ 1 ];
-            bone.quaternion.z = object.bones[ i ].rotq[ 2 ];
-            bone.quaternion.w = object.bones[ i ].rotq[ 3 ];
-
-            bone[ 'name' ] = object.bones[ i ].name;
-            current_index = object.bones[ i ].parent;
-
-            bones.push( bone );
-
-            if (current_index === -1) {
-              root = bones[ 0 ];
-            } else if (current_index === 0) {
-              root.add( bones[ i ] );
-            } else if (current_index > previous_index) {
-              if (next_index === current_index) {
-                bones[ previous_index + 1 ].add( bones[ i ] );
-              } else {
-                bones[ current_index ].add( bones[ i ] );
-              }
-            } else {
-              bones[ current_index ].add( bones[ i ] );
-            }
-
-            previous_index = current_index;
-          }
-
-          skeleton = new THREE.Skeleton( bones );
-          skeleton.calculateInverses();
-          mesh.add( skeleton.bones[ 0 ] );
-          mesh.bind( skeleton );
-          mesh.normalizeSkinWeights();
-        }
-
-        if ((object.materials && object.materials.length > 0 && object.materials[ 0 ].vertexColors === true) || (object.geometry.attributes.color && object.geometry.attributes.color.array.length > 0)) {
-          vertex_colors_enabled = true;
-          document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-          document.getElementById('btn_random_vertex_colors').disabled = false;
-          random_vertex_changed();
-        }
-
-        if (mesh.morphTargetDictionary && Object.entries( mesh.morphTargetDictionary ).length > 0) {
-          // Check for morph targets
-          Object.keys( mesh.morphTargetDictionary ).forEach( ( key, index ) => {
-            extras.push( [ mesh.id, key, index ] );
-          });
-
-          if (extras.length > 0) {
-            document.getElementById('btn_extras').disabled = false;
-            current_extra = 0;
-
-            if (Array.isArray( mesh.material )) {
-              mesh.material.forEach( mtl => {
-                mtl.morphTargets = true;
-              });
-            } else {
-              mesh.material.morphTargets = true;
-            }
-          }
-        }
-
-        await new Promise( resolve => setTimeout( resolve, 1000 )); // adjust timing if necessary
-
-        let child_count = 1;
-
-        if (mesh.material && mesh.isPoints !== undefined && mesh.isPoints === false) {
-          mesh.name = 'mesh_0';
-          initial_opacity_array[ mesh.name ] = {};
-          initial_transparency_array[ mesh.name ] = {};
-          original_color_array[ mesh.name ] = {};
-          original_side_array[ mesh.name ] = {};
-
-          mesh.material.vertexColors = vertex_colors_enabled;
-          mesh.material.format = THREE.RGBAFormat;
-          mesh.material.flatShading = false;
-
-          random_vertex_color_array[ 'mesh_0' ] = new Float32Array( Array.from( { length: mesh.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-          original_vertex_color_array[ 'mesh_0' ] = mesh.geometry.getAttribute( 'color' );
-
-          initial_opacity[ mesh.name ] = mesh.material.opacity;
-          initial_transparency[ mesh.name ] = mesh.material.transparent;
-          original_color[ mesh.name ] = new THREE.Color ( mesh.material.color );
-          original_side[ mesh.name ] = mesh.material.side;
-
-          mesh.material.needsUpdate = true;
-
-          if (mesh.geometry && mesh.geometry.attributes && mesh.geometry.attributes.position) edges[ mesh.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
-        } else {
-          mesh.traverse( function( child ) {
-            if (child.name === '') {
-              child.name = 'child_' + child_count;
-              child_count += 1;
-            }
-
-            if (child.isMesh === true || child.isPoints === true) {
-              random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-              original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
-
-              if (child.material) {
-                if (Array.isArray( child.material )) {
-                  let child_count_array = 1;
-
-                  initial_opacity_array[ child.name ] = {};
-                  initial_transparency_array[ child.name ] = {};
-                  original_color_array[ child.name ] = {};
-                  original_side_array[ child.name ] = {};
-
-                  child.material.forEach( mtl => {
-                    mtl.vertexColors = vertex_colors_enabled;
-                    mtl.format = THREE.RGBAFormat;
-                    mtl.flatShading = false;
-
-                    initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
-                    initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
-                    original_color_array[ child.name ][ child_count_array ] = new THREE.Color ( mtl.color );
-                    original_side_array[ child.name ][ child_count_array ] = mtl.side;
-                    child_count_array += 1;
-
-                    mtl.needsUpdate = true;
-                  });
-                } else {
-                  child.material.vertexColors = vertex_colors_enabled;
-                  child.material.format = THREE.RGBAFormat;
-                  child.material.flatShading = false;
-
-                  initial_opacity[ child.name ] = child.material.opacity;
-                  initial_transparency[ child.name ] = child.material.transparent;
-                  original_color[ child.name ] = new THREE.Color ( child.material.color );
-                  original_side[ child.name ] = child.material.side;
-
-                  child.material.needsUpdate = true;
-                }
-              }
-
-              if (child.geometry.attributes && child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
-            }
-          });
-        }
-
-        if (bones.length > 0) skeleton_helper = new THREE.SkeletonHelper( mesh );
-
-        initial_rotation = mesh.rotation;
-
-        // Add mesh to the scene
-        scene.add( mesh );
-        camera.lookAt( mesh.position );
-
-        set_initial_scale();
-        resize();
-
-        if (animations && animations.length > 0) {
-          animation_mixer = new THREE.AnimationMixer( mesh );
-          current_animation = 0;
-          animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; });
-          animation_mixer.clipAction( animations[ 0 ] ).play();
-          document.getElementById('btn_animate').disabled = false;
-          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
-          document.getElementById('btn_animate').innerHTML = 'A0';
-          animation_running = true;
-        }
-
-        console.timeEnd( 'Loading Time' );
-        document.getElementById('div_loading').style.display = 'none';
-
-        disabled_changed();
       }
 
       function handle_error( error ) {
@@ -2386,11 +2467,6 @@
         console.log( error );
         render_requested = false;
         enable_disable( true );
-
-        if (gizmo) {
-          document.getElementById('gizmo').removeChild( gizmo.domElement );
-          gizmo.dispose();
-        }
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
@@ -2681,9 +2757,9 @@
         mesh.traverse( function( child ) {
     	    if (child.isMesh || child.isPoints) {
             if (random_vertex_colors_enabled) {
-              child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3, false ) );
+              child.geometry.attributes[ 'color' ] = new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3, false );
             } else {
-              original_vertex_color_array[ child.name ] ? child.geometry.setAttribute( 'color', original_vertex_color_array[ child.name ] ) : child.geometry.deleteAttribute( 'color' );
+              original_vertex_color_array[ child.name ] ? child.geometry.attributes[ 'color' ] = original_vertex_color_array[ child.name ] : child.geometry.deleteAttribute( 'color' );
             }
 
             if (Array.isArray( child.material )) {
@@ -2765,7 +2841,6 @@
           }
 
           controls.update();
-          if (gizmo) gizmo.update();
 
           renderer.clear();
           renderer.render( scene, camera );
@@ -2882,6 +2957,7 @@
 
         gif_export = false;
         reset_rotation = true;
+        model_is_object = false;
 
         // Reset the view
         if (reset === true) {
@@ -2910,11 +2986,6 @@
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
           enable_disable( true );
-
-          if (gizmo) {
-            document.getElementById('gizmo').removeChild( gizmo.domElement );
-            gizmo.dispose();
-          }
         }
 
         disabled_changed();
