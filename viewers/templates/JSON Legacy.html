@@ -536,9 +536,9 @@
     <script>
       const image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJP', '.PJPEG', '.BMP', '.GIF', '.SVG', '.WEBP' ];
 
-      var manager, file_loader, texture_loader, equi_loader, loader, assimp_loader, json_loader, object_loader;
+      var manager, file_loader, texture_loader, equi_loader, loader, assimp_loader, json_loader, object_loader, bg_loader;
       var animations, animation_mixer, animation_running, current_animation, extras, extra_running, current_extra;
-      var renderer, scene, camera, mesh, model_is_object, model_is_assimp, edges, edges_visible;
+      var renderer, scene, camera, mesh, model_is_object, model_is_assimp, buffer_geometry, edges, edges_visible;
       var controls, grid, polar_grid, grid_visible, polar_grid_visible;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var resource_path, texturePath, render_requested, clock;
@@ -1643,12 +1643,15 @@
 
         if (object_loader === undefined) object_loader = new THREE.ObjectLoader( manager );
 
+        if (bg_loader === undefined) bg_loader = new THREE.BufferGeometryLoader( manager );
+
         if (zip === undefined) zip = new JSZip();
 
         selected_json_file = null;
         selected_json_url_file = null;
         model_is_object = false;
         model_is_assimp = false;
+        buffer_geometry = false;
         resource_path = '';
         mouse_down = false;
         mouse_wheel = false;
@@ -1732,27 +1735,30 @@
 
           if (fd && fd.metadata && fd.metadata.type) {
             if (fd.metadata.type.toUpperCase() === 'BUFFERGEOMETRY') {
-              handle_error( 'Try using JSON Viewer instead!' );
-              return;
+              console.warn( 'Consider using JSON Viewer instead!' );
+              console.log( 'Trying Buffer Geometry Loader...' );
+              buffer_geometry = true;
+              loader = bg_loader;
             } else if (fd.metadata.type.toUpperCase() === 'GEOMETRY') {
               loader = json_loader;
-              console.log( 'Trying Legacy JSON Loader' );
+              console.log( 'Trying Legacy JSON Loader...' );
             } else if (fd.metadata.type.toUpperCase() === 'OBJECT' || fd.objects) {
               loader = object_loader;
               model_is_object = true;
-              console.log( 'Trying Object Loader' );
+              console.log( 'Trying Object Loader...' );
             }
           } else if (fd && fd.__metadata__ && fd.__metadata__.format.toUpperCase() === 'ASSIMP2JSON') {
             loader = assimp_loader;
             model_is_assimp = true;
-            console.log( 'Trying Assimp JSON Loader' );
+            console.log( 'Trying Assimp JSON Loader...' );
             if (resource_path !== '') texturePath = resource_path;
           } else {
+            console.warn( 'If the model does not load properly then consider using JSON Viewer instead!' );
             // Try using assimp_loader first
-            // Will fallback to json_loader on error
+            // Will fallback to json_loader / object_loader on error
             loader = assimp_loader;
             model_is_assimp = true;
-            console.log( 'Trying Assimp JSON Loader' );
+            console.log( 'Trying Assimp JSON Loader...' );
             if (resource_path !== '') texturePath = resource_path;
           }
 
@@ -1859,8 +1865,8 @@
             // Add local image blob URLs
             if (fd.images && fd.images.length > 0) {
               fd.images.forEach( ( img, index ) => {
-                if (textures[ img.name ]) {
-                  let url = textures[ img.name ];
+                if (textures[ img.url ]) {
+                  let url = textures[ img.url ];
                   let uuid = (url.includes( '/' ) === true) ? url.substring( url.lastIndexOf( '/' ) + 1 ) : ((url.includes( '\\' ) === true) ? url.substring( url.lastIndexOf( '\\' ) + 1 ) : '');
 
                   if (fd.textures && fd.textures.length > 0) {
@@ -1892,14 +1898,25 @@
                 loader = json_loader;
                 model_is_assimp = false;
                 texturePath = undefined;
-                console.log( 'Trying Legacy JSON Loader' );
+                console.log( 'Trying Legacy JSON Loader...' );
                 if (resource_path !== '') loader.setResourcePath( resource_path );
 
                 loader.load( URL.createObjectURL( selected_json_file ), addFileInScene,
                 function( xhr ) { }, // onProgress
                 function ( error ) { // onError
                   URL.revokeObjectURL( selected_json_file );
-                  handle_error( error );
+
+                  // Try using object_loader
+
+                  loader = object_loader;
+                  model_is_object = true;
+                  console.log( 'Trying Object Loader...' );
+
+                  loader.parse( fd, addObjectInScene,
+                  function( xhr ) { }, // onProgress
+                  function ( error ) { // onError
+                    handle_error( error );
+                  }, texturePath );
                 }, texturePath );
               } else {
                 handle_error( error );
@@ -2006,8 +2023,31 @@
       }
 
       async function addFileInScene( object ) {
-        if (model_is_assimp === true) {
-          mesh = object.clone();
+        if (model_is_assimp === true || buffer_geometry === true) {
+          if (buffer_geometry === true) {
+            object.computeBoundingBox();
+            object.computeBoundingSphere();
+
+            object.deleteAttribute( 'normal' );
+            object = THREE.BufferGeometryUtils.mergeVertices( object );
+            object.computeVertexNormals();
+            object.normalizeNormals();
+            object.center();
+
+            mesh = new THREE.Mesh( object, material );
+          } else {
+            mesh = object.clone();
+
+            if (mesh.geometry) {
+              mesh.geometry.deleteAttribute('normal');
+              mesh.geometry = THREE.BufferGeometryUtils.mergeVertices( object.geometry );
+              mesh.geometry.computeVertexNormals();
+              mesh.geometry.center();
+
+              mesh.geometry.computeBoundingBox();
+              mesh.geometry.computeBoundingSphere();
+            }
+          }
 
           // Check if animations exist
           if (object.animations) {
@@ -2015,16 +2055,6 @@
             mesh.traverse( function( child ) {
               if (child.type === 'Bone') animations = object.animations;
             });
-          }
-
-          if (mesh.geometry) {
-            mesh.geometry.deleteAttribute('normal');
-            mesh.geometry = THREE.BufferGeometryUtils.mergeVertices( object.geometry );
-            mesh.geometry.computeVertexNormals();
-            mesh.geometry.center();
-
-            mesh.geometry.computeBoundingBox();
-            mesh.geometry.computeBoundingSphere();
           }
 
           let child_count = 0;
@@ -2343,26 +2373,29 @@
 
             if (fd && fd.metadata && fd.metadata.type) {
               if (fd.metadata.type.toUpperCase() === 'BUFFERGEOMETRY') {
-                handle_error( 'Try using JSON Viewer instead!' );
-                return;
+                console.warn( 'Consider using JSON Viewer instead!' );
+                console.log( 'Trying Buffer Geometry Loader...' );
+                buffer_geometry = true;
+                loader = bg_loader;
               } else if (fd.metadata.type.toUpperCase() === 'GEOMETRY') {
                 loader = json_loader;
-                console.log( 'Trying Legacy JSON Loader' );
+                console.log( 'Trying Legacy JSON Loader...' );
               } else if (fd.metadata.type.toUpperCase() === 'OBJECT') {
                 loader = object_loader;
                 model_is_object = true;
-                console.log( 'Trying Object Loader' );
+                console.log( 'Trying Object Loader...' );
               }
             } else if (fd && fd.__metadata__ && fd.__metadata__.format.toUpperCase() === 'ASSIMP2JSON') {
               loader = assimp_loader;
               model_is_assimp = true;
-              console.log( 'Trying Assimp JSON Loader' );
+              console.log( 'Trying Assimp JSON Loader...' );
             } else {
+              console.warn( 'If the model does not load properly then consider using JSON Viewer instead!' );
               // Try using assimp_loader first
               // Will fallback to json_loader on error
               loader = assimp_loader;
               model_is_assimp = true;
-              console.log( 'Trying Assimp JSON Loader' );
+              console.log( 'Trying Assimp JSON Loader...' );
             }
 
             if (model_is_object === true) {
@@ -2381,12 +2414,22 @@
                   loader = json_loader;
                   model_is_assimp = false;
                   texturePath = undefined;
-                  console.log( 'Trying Legacy JSON Loader' );
+                  console.log( 'Trying Legacy JSON Loader...' );
 
                   loader.load( selected_json_url_file, addURLFileInScene,
                   function( xhr ) { }, // onProgress
                   function ( error ) { // onError
-                    handle_error( error );
+                    // Try using object_loader
+
+                    loader = object_loader;
+                    model_is_object = true;
+                    console.log( 'Trying Object Loader...' );
+
+                    loader.parse( fd, addObjectInScene,
+                    function( xhr ) { }, // onProgress
+                    function ( error ) { // onError
+                      handle_error( error );
+                    }, texturePath );
                   }, texturePath );
                 } else {
                   handle_error( error );
@@ -2404,26 +2447,29 @@
 
               if (fd && fd.metadata && fd.metadata.type) {
                 if (fd.metadata.type.toUpperCase() === 'BUFFERGEOMETRY') {
-                  handle_error( 'Try using JSON Viewer instead!' );
-                  return;
+                  console.warn( 'Consider using JSON Viewer instead!' );
+                  console.log( 'Trying Buffer Geometry Loader...' );
+                  buffer_geometry = true;
+                  loader = bg_loader;
                 } else if (fd.metadata.type.toUpperCase() === 'GEOMETRY') {
                   loader = json_loader;
-                  console.log( 'Trying Legacy JSON Loader' );
+                  console.log( 'Trying Legacy JSON Loader...' );
                 } else if (fd.metadata.type.toUpperCase() === 'OBJECT' || fd.objects) {
                   loader = object_loader;
                   model_is_object = true;
-                  console.log( 'Trying Object Loader' );
+                  console.log( 'Trying Object Loader...' );
                 }
               } else if (fd && fd.__metadata__ && fd.__metadata__.format.toUpperCase() === 'ASSIMP2JSON') {
                 loader = assimp_loader;
                 model_is_assimp = true;
-                console.log( 'Trying Assimp JSON Loader' );
+                console.log( 'Trying Assimp JSON Loader...' );
               } else {
+                console.warn( 'If the model does not load properly then consider using JSON Viewer instead!' );
                 // Try using assimp_loader first
                 // Will fallback to json_loader on error
                 loader = assimp_loader;
                 model_is_assimp = true;
-                console.log( 'Trying Assimp JSON Loader' );
+                console.log( 'Trying Assimp JSON Loader...' );
               }
 
               if (model_is_object === true) {
@@ -2442,12 +2488,22 @@
                     loader = json_loader;
                     model_is_assimp = false;
                     texturePath = undefined;
-                    console.log( 'Trying Legacy JSON Loader' );
+                    console.log( 'Trying Legacy JSON Loader...' );
 
                     loader.load( selected_url_file, addFileInScene,
                     function( xhr ) { }, // onProgress
                     function ( error ) { // onError
-                      handle_error( error );
+                      // Try using object_loader
+
+                      loader = object_loader;
+                      model_is_object = true;
+                      console.log( 'Trying Object Loader...' );
+
+                      loader.parse( fd, addObjectInScene,
+                      function( xhr ) { }, // onProgress
+                      function ( error ) { // onError
+                        handle_error( error );
+                      }, texturePath );
                     }, texturePath );
                   } else {
                     handle_error( error );
