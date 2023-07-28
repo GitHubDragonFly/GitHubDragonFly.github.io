@@ -381,6 +381,13 @@ THREE.AssimpJSONLoader.prototype = {
 
 						}
 
+						if ( material_url === undefined ) {
+
+							console.warn( 'THREE.AssimpJSONLoader: Cannot find or load texture ' + filename );
+							return null;
+
+						}
+
 						material_url = material_url.replace( /\\/g , '/' );
 
 						loader.load( material_url, function( tex ) {
@@ -531,7 +538,8 @@ THREE.AssimpJSONLoader.prototype = {
 
 			if ( json.animations ) {
 
-				obj.add( new THREE.Mesh( buffer_geometry, materials[ json.meshes[ idx ].materialindex ] ) ); // <- SkinnedMesh ??
+				// SkinnedMesh will cause rendering errors if bones array is not present
+				obj.add( new THREE.Mesh( buffer_geometry, materials[ json.meshes[ idx ].materialindex ] ) );
 
 			} else {
 
