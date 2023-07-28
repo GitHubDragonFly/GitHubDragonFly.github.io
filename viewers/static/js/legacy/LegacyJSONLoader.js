@@ -67,6 +67,7 @@ THREE.LegacyJSONLoader = ( function () {
 						if ( type.toLowerCase() === 'object' ) {
 
 							console.error( 'THREE.JSONLoader: ' + url + ' should be loaded with THREE.ObjectLoader instead.' );
+							if ( onError ) onError();
 							return;
 
 						}
