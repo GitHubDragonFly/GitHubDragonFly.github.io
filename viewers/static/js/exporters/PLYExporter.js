@@ -42,7 +42,7 @@
 
 						}
 
-						if ( geometry.hasAttribute( 'position' ) === true ) {
+						if ( geometry.attributes.position && geometry.attributes.position.array.length > 0 ) {
 
 							cb( mesh, geometry );
 
@@ -64,7 +64,9 @@
 			};
 
 			options = Object.assign( defaultOptions, options );
+
 			const excludeAttributes = options.excludeAttributes;
+
 			let includeIndices = true;
 			let includeNormals = false;
 			let includeColors = false;
@@ -88,11 +90,11 @@
 
 					}
 
-					const vertices = geometry.getAttribute( 'position' );
-					const normals = geometry.getAttribute( 'normal' );
-					const uvs = geometry.getAttribute( 'uv' );
-					const colors = geometry.getAttribute( 'color' );
-					const indices = geometry.getIndex();
+					const vertices = geometry.attributes.position;
+					const normals = geometry.attributes.normal;
+					const uvs = geometry.attributes.uv;
+					const colors = geometry.attributes.color;
+					const indices = geometry.index;
 
 					if ( vertices === undefined ) {
 
@@ -100,10 +102,12 @@
 
 					}
 
+					if ( child.isPoints === true ) includeIndices = false;
+
 					vertexCount += vertices.count;
 					faceCount += indices ? indices.count / 3 : vertices.count / 3;
 					if ( normals !== undefined ) includeNormals = true;
-					if ( uvs !== undefined ) includeUVs = true;
+					if ( child.isMesh === true && uvs !== undefined ) includeUVs = true;
 
 					// allow converting material color to vertex color if material texture is not used
 					if ( colors !== undefined ) {
@@ -121,7 +125,7 @@
 			} );
 
 			const tempColor = new THREE.Color();
-			includeIndices = excludeAttributes.indexOf( 'index' ) === - 1;
+			includeIndices = includeIndices && excludeAttributes.indexOf( 'index' ) === - 1;
 			includeNormals = includeNormals && excludeAttributes.indexOf( 'normal' ) === - 1;
 			includeColors = includeColors && excludeAttributes.indexOf( 'color' ) === - 1;
 			includeUVs = includeUVs && excludeAttributes.indexOf( 'uv' ) === - 1;
@@ -195,13 +199,14 @@
 				let vOffset = headerBin.length;
 				let fOffset = headerBin.length + vertexListLength;
 				let writtenVertices = 0;
+
 				traverseMeshes( function ( mesh, geometry ) {
 
-					const vertices = geometry.getAttribute( 'position' );
-					const normals = geometry.getAttribute( 'normal' );
-					const uvs = geometry.getAttribute( 'uv' );
-					const colors = geometry.getAttribute( 'color' );
-					const indices = geometry.getIndex();
+					const vertices = geometry.attributes.position;
+					const normals = geometry.attributes.normal;
+					const uvs = geometry.attributes.uv;
+					const colors = geometry.attributes.color;
+					const indices = geometry.index;
 					normalMatrixWorld.getNormalMatrix( mesh.matrixWorld );
 
 					let j = 0;
@@ -280,7 +285,11 @@
 
 							if ( colors != null ) {
 
-								tempColor.fromBufferAttribute( colors, i ).convertLinearToSRGB();
+								tempColor.x = colors.getX( i );
+								tempColor.y = colors.getY( i );
+								tempColor.z = colors.getZ( i );
+								tempColor.convertLinearToSRGB();
+
 								output.setUint8( vOffset, Math.floor( tempColor.r * 255 ) );
 								vOffset += 1;
 								output.setUint8( vOffset, Math.floor( tempColor.g * 255 ) );
@@ -383,11 +392,11 @@
 
 				traverseMeshes( function ( mesh, geometry ) {
 
-					const vertices = geometry.getAttribute( 'position' );
-					const normals = geometry.getAttribute( 'normal' );
-					const uvs = geometry.getAttribute( 'uv' );
-					const colors = geometry.getAttribute( 'color' );
-					const indices = geometry.getIndex();
+					const vertices = geometry.attributes.position;
+					const normals = geometry.attributes.normal;
+					const uvs = geometry.attributes.uv;
+					const colors = geometry.attributes.color;
+					const indices = geometry.index;
 
 					normalMatrixWorld.getNormalMatrix( mesh.matrixWorld );
 
@@ -451,7 +460,11 @@
 
 							if ( colors != null ) {
 
-								tempColor.fromBufferAttribute( colors, i ).convertLinearToSRGB();
+								tempColor.x = colors.getX( i );
+								tempColor.y = colors.getY( i );
+								tempColor.z = colors.getZ( i );
+								tempColor.convertLinearToSRGB();
+
 								line += ' ' + Math.floor( tempColor.r * 255 ) + ' ' + Math.floor( tempColor.g * 255 ) + ' ' + Math.floor( tempColor.b * 255 );
 
 							} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length <= mesh.material.length ) ) {
