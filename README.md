@@ -72,7 +72,7 @@ Number Type Converter
   - Most of the following notes do not apply to GLTF Legacy viewer in general
 
 - Menu with controls can be located either on top or on the bottom of the page
-- All viewers include the interactive [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
+- Almost all viewers include the interactive [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
 - Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers
   - do note that mobile Safari might be finicky about certain features
 - See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
@@ -167,9 +167,9 @@ Number Type Converter
 - JSON viewers support three.js and assimp JS / JSON formats:
   - JSON Viewer is currently using r147 of three.js and cannot open legacy formats
   - JSON Legacy viewer is using r111 of three.js to support legacy THREE.Geometry:
-    - It is using 3 loaders: ObjectLoader, LegacyJSONLoader and AssimpJSONLoader
-    - It cannot open but it can export to current three.js JSON format
-    - Some animated models might show as still only
+    - It is using 4 loaders: ObjectLoader, BufferGeometryLoader, LegacyJSONLoader and AssimpJSONLoader
+    - It can open and export current three.js JSON format, with limitations of r111
+    - Some old animated models might show as still only
     - It is using old version of OrbitControls
     - It does not include OrbitControlsGzmo for orientation
 - GLTF / FBX / DAE viewers will also export animations to JSON format
