@@ -279,9 +279,7 @@ THREE.AssimpJSONLoader.prototype = {
 		let mat = null, 
 		scope = this, i, prop, has_textures = [],
 
-		init_props = {
-			shading : THREE.SmoothShading
-		};
+		init_props = { color: 0xFFFFFF, flatShading: false };
 
 		function toColor( value_arr ) {
 
@@ -294,11 +292,28 @@ THREE.AssimpJSONLoader.prototype = {
 
 		function defaultTexture() {
 
-			let im = new Image();
-			im.width = 1;
-			im.height = 1;
+			// Use DataTexture as in the docs example: https://threejs.org/docs/#api/en/textures/DataTexture
 
-			return new THREE.Texture( im );
+			const width = 128;
+			const height = 128;
+
+			const size = width * height;
+			const data = new Uint8Array( 4 * size );
+			const color = new THREE.Color( 0xffffff );
+
+			const r = Math.floor( color.r * 255 );
+			const g = Math.floor( color.g * 255 );
+			const b = Math.floor( color.b * 255 );
+
+			for ( let i = 0; i < size; i ++ ) {
+				const stride = i * 4;
+				data[ stride + 0 ] = r;
+				data[ stride + 1 ] = g;
+				data[ stride + 2 ] = b;
+				data[ stride + 3 ] = 255;
+			}
+
+			return new THREE.DataTexture( data, width, height );
 
 		}
 
@@ -384,48 +399,49 @@ THREE.AssimpJSONLoader.prototype = {
 						if ( material_url === undefined ) {
 
 							console.warn( 'THREE.AssimpJSONLoader: Cannot find or load texture ' + filename );
-							return null;
 
+						} else {
+
+							material_url = material_url.replace( /\\/g , '/' );
+
+							loader.load( material_url, function( tex ) {
+	
+								if ( tex ) {
+	
+									// TODO: read texture settings from assimp.
+									// Wrapping is the default, though.
+									tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+	
+									mat[ keyname ] = tex;
+									mat.needsUpdate = true;
+	
+								}
+	
+							});
+	
 						}
-
-						material_url = material_url.replace( /\\/g , '/' );
-
-						loader.load( material_url, function( tex ) {
-
-							if ( tex ) {
-
-								// TODO: read texture settings from assimp.
-								// Wrapping is the default, though.
-								tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-
-								mat[ keyname ] = tex;
-								mat.needsUpdate = true;
-
-							}
-
-						});
 
 					})( prop.semantic );
 				}
 			}
 			else if ( prop.key === '?mat.name' ) {
 
-				init_props.name = prop.value;
+				init_props[ 'name' ] = prop.value;
 
 			}
 			else if ( prop.key === '$clr.diffuse' ) {
 
-				init_props.color = toColor( prop.value );
+				init_props[ 'color' ] = toColor( prop.value );
 
 			}
 			else if ( prop.key === '$clr.specular' ) {
 
-				init_props.specular = toColor( prop.value );
+				init_props[ 'specular' ] = toColor( prop.value );
 
 			}
 			else if ( prop.key === '$clr.emissive' ) {
 
-				init_props.emissive = toColor( prop.value );
+				init_props[ 'emissive' ] = toColor( prop.value );
 
 			}
 			else if ( prop.key === '$mat.shadingm' ) {
@@ -433,40 +449,34 @@ THREE.AssimpJSONLoader.prototype = {
 				// aiShadingMode_Flat
 				if ( prop.value >= 1 ) {
 
-					init_props.flatShading = true;
+					init_props[ 'flatShading' ] = true;
 
 				}
 
 			}
 			else if ( prop.key === '$mat.shininess' ) {
 
-				init_props.shininess = prop.value;
+				init_props[ 'shininess' ] = prop.value;
 
 			}
 
-		}
+			// note: three.js does not like it when a texture is added after the geometry
+			// has been rendered once, see http://stackoverflow.com/questions/16531759/.
+			// for this reason we fill all slots upfront with default textures
 
-		if ( !init_props.ambient ) {
+			if ( has_textures.length ) {
 
-			init_props.ambient = init_props.color;
+				for ( i = 0, e = has_textures.length; i < e; i++ ) {
 
-		}
+					init_props[ has_textures[ i ] ] = defaultTexture();
 
-		// note: three.js does not like it when a texture is added after the geometry
-		// has been rendered once, see http://stackoverflow.com/questions/16531759/.
-		// for this reason we fill all slots upfront with default textures
-
-		if ( has_textures.length ) {
-
-			for ( i = has_textures.length-1; i >= 0; --i ) {
-
-				init_props[ has_textures[ i ] ] = defaultTexture();
+				}
 
 			}
 
+			mat = new THREE.MeshPhongMaterial( init_props );
+
 		}
-		
-		mat = new THREE.MeshPhongMaterial( init_props );
 
 		return mat;
 
