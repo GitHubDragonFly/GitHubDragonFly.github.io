@@ -4,3 +4,5 @@ Legacy JSON examples are from r68 and r69 releases of the three.js and were modi
 
 - adjusted positions of the root bone - all models
 - changed `transparency` to `opacity` - marine / human_walk_0_female.js models
+
+Some additional legacy models can also be found here: `http://geoffair.org/fg/globe/`.
