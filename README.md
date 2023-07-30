@@ -164,14 +164,14 @@ Number Type Converter
   - `BG` - background color
   - `Eq` - equirectangular background
     - `R` - reflectivity (envMap + metalness)
-- JSON viewers support three.js and assimp JS / JSON formats:
+- JSON viewers support three.js and assimp JS / JSON formats with limitations:
   - JSON Viewer is currently using r147 of three.js and cannot open legacy formats
   - JSON Legacy viewer is using r111 of three.js to support legacy THREE.Geometry:
     - It is using 4 loaders: ObjectLoader, BufferGeometryLoader, LegacyJSONLoader and AssimpJSONLoader
     - It can open and export current three.js JSON format, with limitations of r111
-    - Some old animated models might show as still only
+    - Some animated models might show as still only
     - It is using old version of OrbitControls
-    - It does not include OrbitControlsGzmo for orientation
+    - It does not include OrbitControlsGizmo for orientation
 - GLTF / FBX / DAE viewers will also export animations to JSON format
 - PLY+STL / PRWM / VTK viewers can also show a points version of the loaded model and export it as such
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
