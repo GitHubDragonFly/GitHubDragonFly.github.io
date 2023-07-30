@@ -12,6 +12,8 @@
  */
 
 var blobs = null;
+const root = new THREE.Object3D();
+var bones = [];
 
 THREE.AssimpJSONLoader = function ( manager ) {
 
@@ -99,6 +101,10 @@ THREE.AssimpJSONLoader.prototype = {
 			}
 
 			scene = scope.parse( json );
+
+			if ( json.animations ) scene[ 'animations' ] = json.animations;
+			if ( bones.length > 0 ) scene[ 'bones' ] = bones;
+
 			onLoad( scene );
 
 		}, onProgress, onError );
@@ -124,6 +130,7 @@ THREE.AssimpJSONLoader.prototype = {
 
 		let meshes = this.parseList ( json.meshes, this.parseMesh );
 		let materials = this.parseList ( json.materials, this.parseMaterial );
+		this.parseBones( json, json.rootnode );
 
 		return this.parseObject( json, json.rootnode, meshes, materials );
 
@@ -325,8 +332,8 @@ THREE.AssimpJSONLoader.prototype = {
 
 				// prop.semantic gives the type of the texture
 				// 1: diffuse
-				// 2: specular mao
-				// 4: emissive mao
+				// 2: specular map
+				// 4: emissive map
 				// 5: height map (bumps)
 				// 6: normal map
 				// more values (i.e. emissive, environment) are known by assimp and may be relevant
@@ -482,50 +489,95 @@ THREE.AssimpJSONLoader.prototype = {
 
 	},
 
-	parseAnimations : function( json, geometry ) {
+	parseBones : function( json, node ) {
 
-		var outputAnimations = [];
+		// Not really sure how to use 'transformation' / 'offsetMatrix' / 'weights'
+		if ( json.animations ) {
 
-		// parse old style Bone/Hierarchy animations
-		var animations = [];
+			for ( i = 0; node.children && i < node.children.length; i++ ) {
 
-		if ( json.animation !== undefined ) {
+				if ( json.meshes[ 0 ].bones && node.children[ i ].name && node.children[ i ].name.toUpperCase() === 'ROOT' ) {
 
-			animations.push( json.animation );
+					let previous_bone, root_id = 0, child_id = 0;
 
-		}
+					function traverse( node ) {
 
-		if ( json.animations !== undefined ) {
+						node.forEach( child_2 => {
 
-			if ( json.animations.length ) {
+							let new_bone_2 = new THREE.Bone();
 
-				animations = animations.concat( json.animations );
+							new_bone_2[ 'name' ] = child_2.name;
+							new_bone_2[ 'transformation' ] = child_2.transformation;
 
-			} else {
+							json.meshes[ 0 ].bones.every( bone => {
 
-				animations.push( json.animations );
+								if ( bone.name === child_2.name ) {
+
+									if ( bone.offsetmatrix ) new_bone_2[ 'offsetMatrix' ] = bone.offsetmatrix;
+									if ( bone.weights ) new_bone_2[ 'weights' ] = bone.weights;
+									return false;
+
+								}
+
+								return true;
+
+							});
+
+							bones.push( new_bone_2 );
+							previous_bone.add( new_bone_2 );
+
+							if ( child_2.children && child_2.children.length > 0 ) {
+
+								previous_bone = previous_bone.children[ 0 ];
+								traverse( child_2.children );
+
+							}
+
+							child_id += 1;
+						});
+
+						return;
+					}
+
+					node.children[ i ].children.forEach( child_1 => {
+
+						let new_bone_1 = new THREE.Bone();
+						new_bone_1[ 'name' ] = child_1.name;
+						new_bone_1[ 'transformation' ] = child_1.transformation;
+
+						json.meshes[ 0 ].bones.every( bone => {
+
+							if ( bone.name === child_1.name ) {
+
+								if ( bone.offsetmatrix ) new_bone_1[ 'offsetMatrix' ] = bone.offsetmatrix;
+								if ( bone.weights ) new_bone_1[ 'weights' ] = bone.weights;
+								return false;
+
+							}
+
+							return true;
+
+						});
+
+						bones.push( new_bone_1 );
+						root.add( new_bone_1 );
+
+						if ( child_1.children && child_1.children.length > 0 ) {
+
+							previous_bone = root.children[ root_id ];
+							traverse( child_1.children );
+
+						}
+
+						root_id += 1;
+
+					});
+
+				}
 
 			}
 
 		}
-
-		for ( var i = 0; i < animations.length; i ++ ) {
-
-			var clip = THREE.AnimationClip.parseAnimation( animations[ i ], geometry.bones );
-			if ( clip ) outputAnimations.push( clip );
-
-		}
-
-		// parse implicit morph animations
-		if ( geometry.morphTargets ) {
-
-			// TODO: Figure out what an appropraite FPS is for morph target animations -- defaulting to 10, but really it is completely arbitrary.
-			var morphAnimationClips = THREE.AnimationClip.CreateClipsFromMorphTargetSequences( geometry.morphTargets, 10 );
-			outputAnimations = outputAnimations.concat( morphAnimationClips );
-
-		}
-
-		if ( outputAnimations.length > 0 ) geometry.animations = outputAnimations;
 
 	},
 
@@ -539,23 +591,14 @@ THREE.AssimpJSONLoader.prototype = {
 		obj.name = node.name || '';
 		obj.matrix = new THREE.Matrix4().fromArray( node.transformation ).transpose();
 		obj.matrix.decompose( obj.position, obj.quaternion, obj.scale );
-		if ( json.animations ) obj[ 'animations' ] = json.animations;
 
 		for ( i = 0; node.meshes && i < node.meshes.length; i++ ) {
 
 			idx = node.meshes[ i ];
+
 			let buffer_geometry = meshes[ idx ].type === 'Geometry' ? new THREE.BufferGeometry().fromGeometry( meshes[ idx ] ) : meshes[ idx ];
 
-			if ( json.animations ) {
-
-				// SkinnedMesh will cause rendering errors if bones array is not present
-				obj.add( new THREE.Mesh( buffer_geometry, materials[ json.meshes[ idx ].materialindex ] ) );
-
-			} else {
-
-				obj.add( new THREE.Mesh( buffer_geometry, materials[ json.meshes[ idx ].materialindex ] ) );
-
-			}
+			obj.add( new THREE.Mesh( buffer_geometry, materials[ json.meshes[ idx ].materialindex ] ) );
 
 		}
 
@@ -570,5 +613,3 @@ THREE.AssimpJSONLoader.prototype = {
 	},
 
 };
-
-

@@ -66,8 +66,16 @@ THREE.LegacyJSONLoader = ( function () {
 
 						if ( type.toLowerCase() === 'object' ) {
 
-							console.error( 'THREE.JSONLoader: ' + url + ' should be loaded with THREE.ObjectLoader instead.' );
-							if ( onError ) onError();
+							if ( onError ) {
+
+								onError();
+
+							} else {
+
+								console.error( 'THREE.JSONLoader: ' + url + ' should be loaded with THREE.ObjectLoader instead.' );
+
+							}
+
 							return;
 
 						}
@@ -403,7 +411,6 @@ THREE.LegacyJSONLoader = ( function () {
 					scale = json.scale,
 
 					nUvLayers = 0;
-
 
 				if ( json.uvs !== undefined ) {
 
