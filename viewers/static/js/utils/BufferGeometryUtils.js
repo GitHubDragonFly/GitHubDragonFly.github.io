@@ -336,12 +336,12 @@
 
 			for ( const name in geometry.attributes ) {
 
-				const attr = geometry.getAttribute( name );
+				const attr = geometry.attributes[ name ];
 				mem += attr.count * attr.itemSize * attr.array.BYTES_PER_ELEMENT;
 
 			}
 
-			const indices = geometry.getIndex();
+			const indices = geometry.index;
 			mem += indices ? indices.count * indices.itemSize * indices.array.BYTES_PER_ELEMENT : 0;
 			return mem;
 
@@ -359,8 +359,8 @@
 			// if it's already available.
 
 			const hashToIndex = {};
-			const indices = geometry.getIndex();
-			const positions = geometry.getAttribute( 'position' );
+			const indices = geometry.index;
+			const positions = geometry.attributes[ 'position' ];
 			const vertexCount = indices ? indices.count : positions.count; // next value for triangle indices
 
 			let nextIndex = 0; // attributes and new attribute arrays
@@ -398,7 +398,7 @@
 				for ( let j = 0, l = attributeNames.length; j < l; j ++ ) {
 
 					const name = attributeNames[ j ];
-					const attribute = geometry.getAttribute( name );
+					const attribute = geometry.attributes[ name ];
 					const itemSize = attribute.itemSize;
 
 					for ( let k = 0; k < itemSize; k ++ ) {
@@ -422,7 +422,7 @@
 					for ( let j = 0, l = attributeNames.length; j < l; j ++ ) {
 
 						const name = attributeNames[ j ];
-						const attribute = geometry.getAttribute( name );
+						const attribute = geometry.attributes[ name ];
 						const morphAttr = geometry.morphAttributes[ name ];
 						const itemSize = attribute.itemSize;
 						const newarray = attrArrays[ name ];
@@ -462,7 +462,7 @@
 			for ( let i = 0, l = attributeNames.length; i < l; i ++ ) {
 
 				const name = attributeNames[ i ];
-				const oldAttribute = geometry.getAttribute( name );
+				const oldAttribute = geometry.attributes[ name ];
 				const buffer = new oldAttribute.array.constructor( attrArrays[ name ] );
 				const attribute = new THREE.BufferAttribute( buffer, oldAttribute.itemSize, oldAttribute.normalized );
 				result.setAttribute( name, attribute ); // Update the attribute arrays
@@ -505,12 +505,12 @@
 
 			if ( drawMode === THREE.TriangleFanDrawMode || drawMode === THREE.TriangleStripDrawMode ) {
 
-				let index = geometry.getIndex(); // generate index if not present
+				let index = geometry.index; // generate index if not present
 
 				if ( index === null ) {
 
 					const indices = [];
-					const position = geometry.getAttribute( 'position' );
+					const position = geometry.attributes[ 'position' ];
 
 					if ( position !== undefined ) {
 
@@ -521,7 +521,7 @@
 						}
 
 						geometry.setIndex( indices );
-						index = geometry.getIndex();
+						index = geometry.index;
 
 					} else {
 
