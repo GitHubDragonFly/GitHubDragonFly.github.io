@@ -809,7 +809,13 @@ THREE.LegacyJSONLoader = ( function () {
 				if ( geometry.morphTargets ) {
 
 					// TODO: Figure out what an appropraite FPS is for morph target animations -- defaulting to 10, but really it is completely arbitrary.
-					var morphAnimationClips = THREE.AnimationClip.CreateClipsFromMorphTargetSequences( geometry.morphTargets, 10 );
+					let morphAnimationClips = THREE.AnimationClip.CreateClipsFromMorphTargetSequences( geometry.morphTargets, 10 );
+					outputAnimations = outputAnimations.concat( morphAnimationClips );
+
+				} else if ( geometry.morphAttributes.position ) {
+
+					// TODO: Figure out what an appropraite FPS is for morph target animations -- defaulting to 10, but really it is completely arbitrary.
+					let morphAnimationClips = THREE.AnimationClip.CreateClipsFromMorphTargetSequences( geometry.morphAttributes.position, 10 );
 					outputAnimations = outputAnimations.concat( morphAnimationClips );
 
 				}
