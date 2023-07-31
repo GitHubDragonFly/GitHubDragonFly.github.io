@@ -129,7 +129,7 @@ THREE.AssimpJSONLoader.prototype = {
 	parse: function ( json ) {
 
 		let meshes = this.parseList ( json.meshes, this.parseMesh );
-		let materials = this.parseList ( json.materials, this.parseMaterial );
+		let materials = this.parseMaterialList ( json, this.parseMaterial );
 		this.parseBones( json, json.rootnode );
 
 		return this.parseObject( json, json.rootnode, meshes, materials );
@@ -147,6 +147,19 @@ THREE.AssimpJSONLoader.prototype = {
 		}
 
 		return meshes;
+	},
+
+	parseMaterialList : function( json, handler ) {
+
+		let materials = new Array( json.materials.length );
+
+		for( let i = 0; i < json.materials.length; i++ ) {
+
+			materials[ i ] = handler.call( this, json.materials[ i ], json.textures );
+
+		}
+
+		return materials;
 	},
 
 	parseMesh : function( json ) {
@@ -281,7 +294,7 @@ THREE.AssimpJSONLoader.prototype = {
 
 	},
 
-	parseMaterial : function( json ) {
+	parseMaterial : function( material, textures ) {
 
 		let mat = null, 
 		scope = this, i, prop, has_textures = [],
@@ -324,9 +337,9 @@ THREE.AssimpJSONLoader.prototype = {
 
 		}
 
-		for ( i in json.properties ) {
+		for ( i in material.properties ) {
 
-			prop = json.properties[ i ];
+			prop = material.properties[ i ];
 
 			if ( prop.key === '$tex.file' ) {
 
@@ -389,17 +402,37 @@ THREE.AssimpJSONLoader.prototype = {
 
 						}
 
+						if ( filename.includes( '*' ) === true ) {
+
+							try {
+
+								let texture_index = parseInt( filename.substring( filename.lastIndexOf( '*' ) + 1 ) );
+
+								if ( textures && textures[ texture_index ] && textures[ texture_index ].data ) {
+
+									material_url = 'data:image/' + textures[ texture_index ].formathint + ';base64,' + textures[ texture_index ].data;
+
+								}
+
+							} catch (error) {
+
+								console.warn( 'THREE.AssimpJSONLoader: Texture name is not numeric ' + filename );
+
+							}
+
+						}
+
 						if ( blobs !== null ) {
 
 							for ( j = 0, ee = blobs.length; j < ee; j += 2 ) {
 
-								if ( blobs[ j ] === filename || filename.includes( '*' ) === true ) material_url = blobs[ j + 1 ];
+								if ( blobs[ j ] === filename ) material_url = blobs[ j + 1 ];
 
 							}
 
 						} else {
 
-							material_url = scope.texturePath + '/' + filename;
+							if ( material_url === undefined ) material_url = scope.texturePath + '/' + filename;
 
 						}
 
@@ -412,20 +445,20 @@ THREE.AssimpJSONLoader.prototype = {
 							material_url = material_url.replace( /\\/g , '/' );
 
 							loader.load( material_url, function( tex ) {
-	
+
 								if ( tex ) {
-	
+
 									// TODO: read texture settings from assimp.
 									// Wrapping is the default, though.
 									tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
-	
+
 									mat[ keyname ] = tex;
 									mat.needsUpdate = true;
-	
+
 								}
-	
+
 							});
-	
+
 						}
 
 					})( prop.semantic );
@@ -542,6 +575,7 @@ THREE.AssimpJSONLoader.prototype = {
 					node.children[ i ].children.forEach( child_1 => {
 
 						let new_bone_1 = new THREE.Bone();
+
 						new_bone_1[ 'name' ] = child_1.name;
 						new_bone_1[ 'transformation' ] = child_1.transformation;
 
