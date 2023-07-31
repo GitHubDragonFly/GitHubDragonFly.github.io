@@ -539,7 +539,7 @@
       var manager, file_loader, texture_loader, equi_loader, loader, assimp_loader, json_loader, object_loader, bg_loader;
       var animations, animation_mixer, animation_running, current_animation, extras, extra_running, current_extra;
       var renderer, scene, camera, mesh, model_is_object, model_is_assimp, buffer_geometry, edges, edges_visible;
-      var controls, grid, polar_grid, grid_visible, polar_grid_visible, merged_geometries;
+      var controls, grid, polar_grid, grid_visible, polar_grid_visible;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var resource_path, texturePath, render_requested, clock;
       var ambientLight, hemisphereLight, directionalLight;
@@ -2092,15 +2092,17 @@
           } else {
             mesh = object.clone();
 
-            if (mesh.geometry) {
-              if (mesh.geometry.attributes && mesh.geometry.attributes[ 'normal' ]) delete mesh.geometry.attributes[ 'normal' ];
-              if (mesh.geometry.attributes) mesh.geometry = THREE.BufferGeometryUtils.mergeVertices( object.geometry );
-              mesh.geometry.computeVertexNormals();
-              mesh.geometry.center();
+            let merged_geometries = await merge_meshes();
 
-              mesh.geometry.computeBoundingBox();
-              mesh.geometry.computeBoundingSphere();
-            }
+            if (merged_geometries.attributes && merged_geometries.attributes[ 'normal' ]) delete merged_geometries.attributes[ 'normal' ];
+            if (merged_geometries.attributes) merged_geometries = THREE.BufferGeometryUtils.mergeVertices( merged_geometries );
+            merged_geometries.computeVertexNormals();
+            merged_geometries.center();
+
+            merged_geometries.computeBoundingBox();
+            merged_geometries.computeBoundingSphere();
+
+            mesh = new THREE.Mesh( merged_geometries, merged_geometries.userData.materials );
           }
 
           // Animations don't work properly but the model should show
@@ -2109,19 +2111,10 @@
           if (object.animations) {
             // Check if the model has any bones
             if (object.bones) {
-              let geometry = object.children[ 0 ].children[ 0 ].geometry;
-              let mesh_material = object.children[ 0 ].children[ 0 ].material;
+              let geometry = mesh.geometry;
+              let mesh_material = mesh.material;
 
-              mesh_material.skinning = true;
-
-              geometry.computeBoundingBox();
-              geometry.computeBoundingSphere();
-
-              if (geometry.attributes && geometry.attributes[ 'normal' ]) delete geometry.attributes[ 'normal' ];
-              if (geometry.attributes) geometry = THREE.BufferGeometryUtils.mergeVertices( geometry );
-              geometry.computeVertexNormals();
-              geometry.normalizeNormals();
-              geometry.center();
+              mesh_material.forEach( mtl => { mtl.skinning = true });
 
               geometry[ 'bones' ] = object.bones;
 
@@ -2135,9 +2128,6 @@
 
               mesh.add( skeleton.bones[ 0 ].parent );
               mesh.bind( skeleton );
-
-              skeleton_helper = new THREE.SkeletonHelper( mesh );
-              document.getElementById('reset').disabled = true;
 
               // Parse Animations (functionality from LegacyJSONLoader.js)
 
@@ -2153,12 +2143,19 @@
                 // TODO: Figure out what an appropraite FPS is for morph target animations -- defaulting to 10, but really it is completely arbitrary.
                 let morphAnimationClips = THREE.AnimationClip.CreateClipsFromMorphTargetSequences( geometry.morphTargets, 10 );
                 outputAnimations = outputAnimations.concat( morphAnimationClips );
+              } else if ( geometry.morphAttributes.position ) {
+                // TODO: Figure out what an appropraite FPS is for morph target animations -- defaulting to 10, but really it is completely arbitrary.
+                let morphAnimationClips = THREE.AnimationClip.CreateClipsFromMorphTargetSequences( geometry.morphAttributes.position, 10 );
+                outputAnimations = outputAnimations.concat( morphAnimationClips );
               }
 
               if ( outputAnimations.length > 0 ) {
                 geometry[ 'animations' ] = outputAnimations;
                 animations = outputAnimations;
               }
+
+              skeleton_helper = new THREE.SkeletonHelper( mesh );
+              document.getElementById('reset').disabled = true;
             }
           }
 
@@ -2688,6 +2685,32 @@
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
+      }
+
+      // Merge multiple meshes into a single mesh, thanks to manthrax:
+      // https://discourse.threejs.org/t/merge-multiple-mesh-into-a-single-one/35971/6
+
+      function merge_meshes() {
+        let merged_geometries;
+        let geometries = [];
+        let meshes = [];
+
+        let m_meshes = mesh.clone();
+        m_meshes.updateMatrixWorld( true, true );
+
+        m_meshes.traverse( function( child ) {
+          if (child.isMesh) {
+            meshes.push( child );
+            geometries.push( child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone() );
+          }
+        });
+
+        geometries.forEach( ( geo, index ) => geo.applyMatrix( meshes[ index ].matrixWorld ) );
+        merged_geometries = THREE.BufferGeometryUtils.mergeBufferGeometries( geometries, true );
+        merged_geometries.applyMatrix( m_meshes.matrix.getInverse( m_meshes.matrix.clone() ) );
+        merged_geometries.userData.materials = meshes.map( m => m.material );
+
+        return merged_geometries;
       }
 
       function show_polar_grid() {
