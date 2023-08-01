@@ -10,6 +10,7 @@
     <script src="../static/js/legacy/LegacyJSONLoader.js" defer></script>
     <script src="../static/js/legacy/AssimpJSONLoader.js" defer></script>
     <script src="../static/js/legacy/OrbitControls.js" defer></script>
+    <script src="../static/js/legacy/OrbitControlsGizmo.js" defer></script>
     <script src="../static/js/upng/UPNG.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
     <script src="../static/js/omggif/omggif.js" defer></script>
@@ -201,7 +202,8 @@
         height: 15px;
       }
 
-      .fm { color: navy; width: calc(100% - 4px); border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+      .fm { color: navy; width: calc(100% - 86px); border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+      .fm_gizmo { width: 63px; height: 63px; padding: 4px; margin: 2px; }
 
       .fixed-menu {
         background-color: whitesmoke;
@@ -227,8 +229,9 @@
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
+      <div class="fm_gizmo" id="gizmo" title="Interactive Orbit Controls Gizmo" style="float: right; background-color: black;"></div>
       <div class="fm">
-        <label for="file_input" title="Supported Formats: JS, JSON" style="color: #553801; margin-left: 3px;">JSON</label>
+        <label for="file_input" title="Supported three.js and ASSIMP Formats: JS, JSON" style="color: #553801; margin-left: 3px;">JSON</label>
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".js, .json, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
         <label for="file_image_input" title="Background Image" style="color: #553801;">BGND</label>
@@ -539,7 +542,7 @@
       var manager, file_loader, texture_loader, equi_loader, loader, assimp_loader, json_loader, object_loader, bg_loader;
       var animations, animation_mixer, animation_running, current_animation, extras, extra_running, current_extra;
       var renderer, scene, camera, mesh, model_is_object, model_is_assimp, buffer_geometry, edges, edges_visible;
-      var controls, grid, polar_grid, grid_visible, polar_grid_visible;
+      var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var resource_path, texturePath, render_requested, clock;
       var ambientLight, hemisphereLight, directionalLight;
@@ -1858,9 +1861,9 @@
         if (controls === undefined) {
           controls = new THREE.OrbitControls(camera, renderer.domElement);
           controls.zoomSpeed = 0.8;
-          controls.rotateSpeed = 0.25;
-          controls.keyPanSpeed = 0.4; 
-          controls.panSpeed = 0.4;
+          controls.rotateSpeed = 0.8;
+          controls.keyPanSpeed = 0.8; 
+          controls.panSpeed = 0.8;
           controls.enableDamping = true;
           controls.dampingFactor = 0.3;
           //controls.enableKeys = false;
@@ -1870,6 +1873,21 @@
           //controls.rotateSpeed = 0.2;
           //controls.minDistance = 2;
           //controls.maxDistance = 500;
+        }
+
+        if (gizmo === undefined) {
+          gizmo = new OrbitControlsGizmo( controls, {
+            size: 65,
+            padding: 4,
+            bubbleSizePrimary: 7,
+            bubbleSizeSecondary: 3,
+            lineWidth: 1,
+            fontSize: '8px',
+            fontColor: 'black',
+            fontWeight: 'bold'
+          });
+
+          document.getElementById('gizmo').appendChild( gizmo.domElement );
         }
 
         if (material === undefined) {
@@ -2092,18 +2110,27 @@
           } else {
             mesh = object.clone();
 
-            if (object.isPoints === undefined) {
-              let merged_geometries = await merge_meshes();
+            if (object.has_points_or_lines === false) {
+              let merged_geometries;
 
-              if (merged_geometries.attributes && merged_geometries.attributes[ 'normal' ]) delete merged_geometries.attributes[ 'normal' ];
-              if (merged_geometries.attributes) merged_geometries = THREE.BufferGeometryUtils.mergeVertices( merged_geometries );
-              merged_geometries.computeVertexNormals();
-              merged_geometries.center();
+              try {
+                merged_geometries = await merge_meshes();
 
-              merged_geometries.computeBoundingBox();
-              merged_geometries.computeBoundingSphere();
+                if (merged_geometries.attributes && merged_geometries.attributes[ 'normal' ]) {
+                  delete merged_geometries.attributes[ 'normal' ];
+                  merged_geometries = THREE.BufferGeometryUtils.mergeVertices( merged_geometries );
+                }
 
-              mesh = new THREE.Mesh( merged_geometries, merged_geometries.userData.materials );
+                merged_geometries.computeVertexNormals();
+                merged_geometries.center();
+
+                merged_geometries.computeBoundingBox();
+                merged_geometries.computeBoundingSphere();
+
+                mesh = new THREE.Mesh( merged_geometries, merged_geometries.userData.materials );
+              } catch (error) {
+                console.log( 'Continuing processing in an attempt to show the model regardless of the error.' );
+              }
             }
           }
 
@@ -2161,15 +2188,19 @@
             }
           }
 
-          let child_count = 0;
+          let child_count = 1;
 
           mesh.traverse( function( child ) {
-            if (child.name === '') {
-              child.name = 'child_' + child_count;
-              child_count += 1;
+            if (child.isLineSegments === true ) {
+              if (child.name === '') child.name = 'childLines_' + child_count;
+
+              random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+              original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
             }
 
             if (child.isMesh === true || child.isPoints === true) {
+              if (child.name === '') child.name = 'child_' + child_count;
+
               if (child.geometry.attributes && child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
                 vertex_colors_enabled = true;
                 document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
@@ -2214,6 +2245,7 @@
                     initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
                     original_color_array[ child.name ][ child_count_array ] = new THREE.Color ( mtl.color );
                     original_side_array[ child.name ][ child_count_array ] = mtl.side;
+
                     child_count_array += 1;
 
                     mtl.needsUpdate = true;
@@ -2233,14 +2265,19 @@
                 }
               }
             }
+
+            child_count += 1;
           });
         } else {
           animations = object.geometry.animations;
 
           object.geometry = new THREE.BufferGeometry().fromGeometry( object.geometry );
 
-          if (object.geometry.attributes && object.geometry.attributes[ 'normal' ]) delete object.geometry.attributes[ 'normal' ];
-          if (object.geometry.attributes) object.geometry = THREE.BufferGeometryUtils.mergeVertices( object.geometry );
+          if (object.geometry.attributes && object.geometry.attributes[ 'normal' ]) {
+            delete object.geometry.attributes[ 'normal' ];
+            object.geometry = THREE.BufferGeometryUtils.mergeVertices( object.geometry );
+          }
+
           object.geometry.computeVertexNormals();
           object.geometry.center();
 
@@ -2252,7 +2289,7 @@
               bones_exist = true;
               object.materials.forEach( ( mtl ) => { mtl.skinning = true });
               mesh = new THREE.SkinnedMesh( object.geometry, object.materials );
-            } else if (object.geometry.morphAttributes) {
+            } else if (object.geometry.morphAttributes && object.geometry.morphAttributes.length > 0) {
               object.materials.forEach( ( mtl ) => { mtl.morphTargets = true });
               mesh = new THREE.Mesh( object.geometry, object.materials );
             } else {
@@ -2262,7 +2299,7 @@
             if (object.bones && object.bones.length > 0) {
               bones_exist = true;
               mesh = new THREE.SkinnedMesh( object.geometry, material );
-            } else if (object.geometry.morphAttributes) {
+            } else if (object.geometry.morphAttributes && object.geometry.morphAttributes.length > 0) {
               material.morphTargets = true;
               mesh = new THREE.Mesh( object.geometry, material );
             } else {
@@ -2685,6 +2722,11 @@
         render_requested = false;
         enable_disable( true );
 
+        if (gizmo) {
+          document.getElementById('gizmo').removeChild( gizmo.domElement );
+          gizmo.dispose();
+        }
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
       }
@@ -3087,6 +3129,7 @@
           }
 
           controls.update();
+          if (gizmo !== undefined) gizmo.update();
 
           renderer.clear();
           renderer.render( scene, camera );
@@ -3245,6 +3288,11 @@
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
           enable_disable( true );
+
+          if (gizmo) {
+            document.getElementById('gizmo').removeChild( gizmo.domElement );
+            gizmo.dispose();
+          }
         }
 
         disabled_changed();
