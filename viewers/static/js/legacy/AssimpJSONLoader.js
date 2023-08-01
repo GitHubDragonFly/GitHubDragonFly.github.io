@@ -14,7 +14,9 @@
 var blobs = null;
 const root = new THREE.Object3D();
 var bones = [];
+var has_points_or_lines = false;
 var isPoints = false;
+var isLines = false;
 
 THREE.AssimpJSONLoader = function ( manager ) {
 
@@ -165,11 +167,23 @@ THREE.AssimpJSONLoader.prototype = {
 
 	parseMesh : function( json ) {
 
-		if ( json.primitivetypes === 1 ) isPoints = true;
-
 		var geometry, i, j, e, ee, face, src, a, b, c;
 
 		geometry = new THREE.Geometry();
+
+		if ( json.primitivetypes === 1 ) {
+
+			isPoints = true;
+			has_points_or_lines = true;
+			geometry[ 'isPoints' ] = true;
+
+		} else if ( json.primitivetypes === 2 ) {
+
+			isLines = true;
+			has_points_or_lines = true;
+			geometry[ 'isLines' ] = true;
+
+		}
 
 		// read vertex positions
 
@@ -187,9 +201,9 @@ THREE.AssimpJSONLoader.prototype = {
 
 			src = json.faces[ i ];
 
-			face.a = isPoints === true ? src[ 0 ] : src[ 0 ];
+			face.a = src[ 0 ];
 			face.b = isPoints === true ? src[ 0 ] : src[ 1 ];
-			face.c = isPoints === true ? src[ 0 ] : src[ 2 ];
+			face.c = isPoints === true || isLines === true ? src[ 0 ] : src[ 2 ];
 
 			face.materialIndex = 0; //json.materialindex;
 
@@ -201,7 +215,11 @@ THREE.AssimpJSONLoader.prototype = {
 
 		json.texturecoords = json.texturecoords || [];
 
+		if ( geometry.faceVertexUvs === undefined ) geometry.faceVertexUvs = {};
+
 		for ( i = 0, e = json.texturecoords.length; i < e; i++ ) {
+
+			if ( geometry.faceVertexUvs[ i ] === undefined ) geometry.faceVertexUvs[ i ] = [];
 
 			function convertTextureCoords( in_uv, out_faces, out_vertex_uvs ) {
 
@@ -291,6 +309,9 @@ THREE.AssimpJSONLoader.prototype = {
 		geometry.computeVertexNormals();
 		geometry.computeBoundingBox();
 		geometry.computeBoundingSphere();
+
+		isPoints = false;
+		isLines = false;
 
 		return geometry;
 
@@ -627,7 +648,7 @@ THREE.AssimpJSONLoader.prototype = {
 		obj.name = node.name || '';
 		obj.matrix = new THREE.Matrix4().fromArray( node.transformation ).transpose();
 		obj.matrix.decompose( obj.position, obj.quaternion, obj.scale );
-		if ( isPoints === true ) obj[ 'isPoints' ] = true;
+		obj[ 'has_points_or_lines' ] = has_points_or_lines;
 
 		for ( i = 0; node.meshes && i < node.meshes.length; i++ ) {
 
@@ -635,9 +656,13 @@ THREE.AssimpJSONLoader.prototype = {
 
 			let buffer_geometry = meshes[ idx ].type === 'Geometry' ? new THREE.BufferGeometry().fromGeometry( meshes[ idx ] ) : meshes[ idx ];
 
-			if ( isPoints === true ) {
+			if ( meshes[ idx ].isPoints && meshes[ idx ].isPoints === true ) {
 
 				obj.add( new THREE.Points( buffer_geometry, new THREE.PointsMaterial( { size: 0.02, color: materials[ json.meshes[ idx ].materialindex ].color } ) ) );
+
+			} else if ( meshes[ idx ].isLines && meshes[ idx ].isLines === true ) {
+
+				obj.add( new THREE.LineSegments( buffer_geometry, new THREE.LineBasicMaterial( { color: materials[ json.meshes[ idx ].materialindex ].color } ) ) );
 
 			} else {
 

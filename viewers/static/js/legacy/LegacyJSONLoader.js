@@ -460,8 +460,6 @@ THREE.LegacyJSONLoader = ( function () {
 					hasFaceColor = isBitSet( type, 6 );
 					hasFaceVertexColor = isBitSet( type, 7 );
 
-					// console.log("type", type, "bits", isQuad, hasMaterial, hasFaceVertexUv, hasFaceNormal, hasFaceVertexNormal, hasFaceColor, hasFaceVertexColor);
-
 					if ( isQuad ) {
 
 						faceA = new THREE.Face3();
