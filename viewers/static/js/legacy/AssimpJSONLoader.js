@@ -14,6 +14,7 @@
 var blobs = null;
 const root = new THREE.Object3D();
 var bones = [];
+var isPoints = false;
 
 THREE.AssimpJSONLoader = function ( manager ) {
 
@@ -164,6 +165,8 @@ THREE.AssimpJSONLoader.prototype = {
 
 	parseMesh : function( json ) {
 
+		if ( json.primitivetypes === 1 ) isPoints = true;
+
 		var geometry, i, j, e, ee, face, src, a, b, c;
 
 		geometry = new THREE.Geometry();
@@ -184,9 +187,9 @@ THREE.AssimpJSONLoader.prototype = {
 
 			src = json.faces[ i ];
 
-			face.a = src[ 0 ];
-			face.b = src[ 1 ];
-			face.c = src[ 2 ];
+			face.a = isPoints === true ? src[ 0 ] : src[ 0 ];
+			face.b = isPoints === true ? src[ 0 ] : src[ 1 ];
+			face.c = isPoints === true ? src[ 0 ] : src[ 2 ];
 
 			face.materialIndex = 0; //json.materialindex;
 
@@ -283,7 +286,6 @@ THREE.AssimpJSONLoader.prototype = {
 
 			convertColors( json.colors[ 0 ], geometry.faces );
 		}
-
 
 		geometry.computeFaceNormals();
 		geometry.computeVertexNormals();
@@ -625,6 +627,7 @@ THREE.AssimpJSONLoader.prototype = {
 		obj.name = node.name || '';
 		obj.matrix = new THREE.Matrix4().fromArray( node.transformation ).transpose();
 		obj.matrix.decompose( obj.position, obj.quaternion, obj.scale );
+		if ( isPoints === true ) obj[ 'isPoints' ] = true;
 
 		for ( i = 0; node.meshes && i < node.meshes.length; i++ ) {
 
@@ -632,7 +635,15 @@ THREE.AssimpJSONLoader.prototype = {
 
 			let buffer_geometry = meshes[ idx ].type === 'Geometry' ? new THREE.BufferGeometry().fromGeometry( meshes[ idx ] ) : meshes[ idx ];
 
-			obj.add( new THREE.Mesh( buffer_geometry, materials[ json.meshes[ idx ].materialindex ] ) );
+			if ( isPoints === true ) {
+
+				obj.add( new THREE.Points( buffer_geometry, new THREE.PointsMaterial( { size: 0.02, color: materials[ json.meshes[ idx ].materialindex ].color } ) ) );
+
+			} else {
+
+				obj.add( new THREE.Mesh( buffer_geometry, materials[ json.meshes[ idx ].materialindex ] ) );
+
+			}
 
 		}
 
