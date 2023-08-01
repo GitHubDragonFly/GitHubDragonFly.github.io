@@ -42,6 +42,9 @@ Number Type Converter
   - This is a revamped version of my GLTF v2.0 Viewer and is a sort of ASSIMP(JS) / three.js hybrid
   - It can be used instead of GLTF v2.0 and GLTF v1.0 Legacy viewers and also provides more export options
   - Might have bugs and interface / library related limitations and slow to load some models
+  - Has multiple export options available, with special notes about JSON formats:
+    - Use JSON Viewer to see all models exported as `JSON`
+    - Use JSON Legacy viewer to see all models exported as `ASSJSON`
   - GLTF / GLB v2.0 and DRC models will be handled by three.js, as originally intended
   - All other formats, including GLTF / GLB v1.0, will be handled by ASSIMP(JS)
   - Supported formats: 3D, 3DS, 3MF, A3D, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IFC, IQM, IRR, IRRMESH, KMZ, LWO, LWS, LXO, M3D, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NDO, NFF, OBJ + MTL, OFF, OGEX, PLY, PMX, Q3O, Q3S, RAW, SIB, SMD, STL, TER, X, X3D, XGL, XML, ZAE, ZGL
