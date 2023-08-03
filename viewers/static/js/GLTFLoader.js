@@ -3162,7 +3162,7 @@ class GLTFMeshQuantizationExtension {
 					source.uri = options.resourcePath + source.uri;
 					( source.name === undefined ) ? source[ 'name' ] = source.uri : source.name = source.uri;
 
-				} else if ( source.uri && source.uri[ 1 ] && source.uri[ 1 ] === ':' ) {
+				} else if ( source.uri && source.uri[ 1 ] && source.uri[ 1 ] === ':' ) { // Local drives, like C: or Z:
 
 					if ( source.uri[ 2 ] && source.uri[ 2 ] === '/' ) {
 
@@ -3224,6 +3224,17 @@ class GLTFMeshQuantizationExtension {
 
 			const parser = this;
 			const json = this.json;
+
+			if ( ! source.uri && ! source.bufferView ) {
+
+				if ( typeof source === 'number' ) {
+
+					source = json.images[ source ];
+
+				}
+
+			}
+
 			const options = this.options;
 			const textureDef = json.textures[ textureIndex ];
 			const cacheKey = ( source.uri || source.bufferView ) + ':' + textureDef.sampler;
