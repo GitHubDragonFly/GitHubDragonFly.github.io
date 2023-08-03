@@ -1744,7 +1744,9 @@
           var fi = document.getElementById('file_input');
 
           for (let i = 0; i < fi.files.length; i++) {
-            if (fi.files[ i ].name.toUpperCase().endsWith('.JS') || fi.files[ i ].name.toUpperCase().endsWith('.JSON')) { selected_json_file = fi.files[ i ]; }
+            let fn_uc = fi.files[ i ].name.toUpperCase();
+
+            if (fn_uc.endsWith('.JS') || fn_uc.endsWith('.JSON')) { selected_json_file = fi.files[ i ]; }
             else if (fi.files[ i ].type.startsWith('image/')) {
               let url = URL.createObjectURL( fi.files[ i ] );
               textures[ fi.files[ i ].name ] =  url;
@@ -1891,7 +1893,7 @@
         }
 
         if (material === undefined) {
-          material = new THREE.MeshStandardMaterial( {
+          material = new THREE.MeshPhongMaterial( {
             side: THREE.DoubleSide,
             transparent: true,
             skinning: true,
@@ -1997,13 +1999,6 @@
               child.geometry = new THREE.BufferGeometry().fromGeometry( child.geometry );
             }
 
-            if (child.geometry.attributes && child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-              vertex_colors_enabled = true;
-              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-              document.getElementById('btn_random_vertex_colors').disabled = false;
-              random_vertex_changed();
-            }
-
             if (child.isSkinnedMesh === true) child.frustumCulled = false;
 
             if (child.geometry.attributes && child.geometry.attributes[ 'normal' ]) delete child.geometry.attributes[ 'normal' ];
@@ -2011,6 +2006,13 @@
             child.geometry.computeVertexNormals();
             child.geometry.computeBoundingBox();
             child.geometry.computeBoundingSphere();
+
+            if (child.geometry.attributes && child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+              vertex_colors_enabled = true;
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+              random_vertex_changed();
+            }
 
             if (child.geometry.attributes && child.geometry.attributes.position && child.geometry.attributes.position.array.length > 0) {
               random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
@@ -2110,7 +2112,7 @@
           } else {
             mesh = object.clone();
 
-            if (object.has_points_or_lines === false) {
+            if (object.has_points_or_lines === false && object.has_bones === false) {
               let merged_geometries;
 
               try {
@@ -2129,62 +2131,82 @@
 
                 mesh = new THREE.Mesh( merged_geometries, merged_geometries.userData.materials );
               } catch (error) {
-                console.log( 'Continuing processing in an attempt to show the model regardless of the error.' );
+                console.log( 'Error occurred: ' + error.message );
+                console.log( 'Attempting to show the model regardless of the error.' );
               }
             }
           }
 
-          // Animations don't work properly but the model should show
+          // Animations for ASSIMP models don't work properly but the model should show
+          // Some incorrect skeleton might be present and allow to be animated with skeleton demo
 
           // Check if animations exist
           if (object.animations) {
             // Check if the model has any bones
-            if (object.bones) {
-              let geometry = mesh.geometry;
-              let mesh_material = mesh.material;
+            if (object.has_bones === true) {
+              let skinned_model = new THREE.Object3D();
 
-              mesh_material.forEach( mtl => { mtl.skinning = true });
+              mesh.traverse( child => {
+                if (child.isMesh === true) {
+                  if (child.geometry.bones) {
+                    let geometry = child.geometry;
+                    let mesh_material = child.material;
 
-              geometry[ 'bones' ] = object.bones;
+                    if (Array.isArray( mesh_material )) {
+                      mesh_material.forEach( mtl => { mtl.skinning = true });
+                    } else {
+                      mesh_material.skinning = true;
+                    }
+ 
+                    let new_mesh = new THREE.SkinnedMesh( geometry, mesh_material );
 
-              mesh = new THREE.SkinnedMesh( geometry, mesh_material );
+                    if (skeleton === null) {
+                      document.getElementById('btn_skeleton').disabled = false;
+                      skeleton = new THREE.Skeleton( new_mesh.geometry.bones );
+                      skeleton.calculateInverses();
+                    }
 
-              if (skeleton === null) {
-                document.getElementById('btn_skeleton').disabled = false;
-                skeleton = new THREE.Skeleton( geometry.bones );
-                skeleton.calculateInverses();
-              }
+                    new_mesh.add( skeleton.bones[ 0 ].parent );
+                    new_mesh.bind( skeleton );
 
-              mesh.add( skeleton.bones[ 0 ].parent );
-              mesh.bind( skeleton );
+                    // Parse Animations (functionality from LegacyJSONLoader.js)
 
-              // Parse Animations (functionality from LegacyJSONLoader.js)
+                    let outputAnimations = [];
 
-              let outputAnimations = [];
+                    for ( let i = 0; i < object.animations.length; i ++ ) {
+                      var clip = THREE.AnimationClip.parseAnimation( object.animations[ i ], new_mesh.geometry.bones );
+                      if ( clip ) outputAnimations.push( clip );
+                    }
 
-              for ( let i = 0; i < object.animations.length; i ++ ) {
-                var clip = THREE.AnimationClip.parseAnimation( object.animations[ i ], geometry.bones );
-                if ( clip ) outputAnimations.push( clip );
-              }
+                    // parse implicit morph animations
+                    if ( geometry.morphTargets ) {
+                      // TODO: Figure out what an appropraite FPS is for morph target animations -- defaulting to 10, but really it is completely arbitrary.
+                      let morphAnimationClips = THREE.AnimationClip.CreateClipsFromMorphTargetSequences( geometry.morphTargets, 10 );
+                      outputAnimations = outputAnimations.concat( morphAnimationClips );
+                    } else if ( geometry.morphAttributes.position ) {
+                      // TODO: Figure out what an appropraite FPS is for morph target animations -- defaulting to 10, but really it is completely arbitrary.
+                      let morphAnimationClips = THREE.AnimationClip.CreateClipsFromMorphTargetSequences( geometry.morphAttributes.position, 10 );
+                      outputAnimations = outputAnimations.concat( morphAnimationClips );
+                    }
 
-              // parse implicit morph animations
-              if ( geometry.morphTargets ) {
-                // TODO: Figure out what an appropraite FPS is for morph target animations -- defaulting to 10, but really it is completely arbitrary.
-                let morphAnimationClips = THREE.AnimationClip.CreateClipsFromMorphTargetSequences( geometry.morphTargets, 10 );
-                outputAnimations = outputAnimations.concat( morphAnimationClips );
-              } else if ( geometry.morphAttributes.position ) {
-                // TODO: Figure out what an appropraite FPS is for morph target animations -- defaulting to 10, but really it is completely arbitrary.
-                let morphAnimationClips = THREE.AnimationClip.CreateClipsFromMorphTargetSequences( geometry.morphAttributes.position, 10 );
-                outputAnimations = outputAnimations.concat( morphAnimationClips );
-              }
+                    if ( outputAnimations.length > 0 ) {
+                      geometry[ 'animations' ] = outputAnimations;
+                      animations = outputAnimations;
+                    }
 
-              if ( outputAnimations.length > 0 ) {
-                geometry[ 'animations' ] = outputAnimations;
-                animations = outputAnimations;
-              }
+                    console.log( 'new_mesh ', new_mesh );
 
-              skeleton_helper = new THREE.SkeletonHelper( mesh );
+                    skinned_model.add( new_mesh );
+                  }
+                }
+              });
+
+              console.log( skinned_model );
+
+              skeleton_helper = new THREE.SkeletonHelper( skinned_model );
               document.getElementById('reset').disabled = true;
+
+              mesh.add( skinned_model );
             }
           }
 
@@ -3106,24 +3128,29 @@
           }
 
           if (skeleton_demo === false && skeleton_demo_running === true) {
-            mesh.skeleton.bones.forEach( bone => {
-              if (count < 500) {
-                bone.rotation.x += 0.0005;
-                bone.rotation.z -= 0.0005;
-              } else {
-                bone.rotation.x -= 0.0005;
-                bone.rotation.z += 0.0005;
-              }
+            mesh.traverse( child => {
+              if (child.isSkinnedMesh) {
+                child.skeleton.bones.forEach( bone => {
+                  if (count < 500) {
+                    bone.rotation.x += 0.0005;
+                    bone.rotation.z -= 0.0005;
+                  } else {
+                    bone.rotation.x -= 0.0005;
+                    bone.rotation.z += 0.0005;
+                  }
 
-              if (bone.children && bone.children.length > 0) {
-                bone.children.forEach( child => {
-                  if (child.isBone) { (count < 500) ? child.rotation.x += 0.0005 : child.rotation.x -= 0.0005; }
+                  if (bone.children && bone.children.length > 0) {
+                    bone.children.forEach( child => {
+                      if (child.isBone) { (count < 500) ? child.rotation.x += 0.0005 : child.rotation.x -= 0.0005; }
+                    });
+                  }
                 });
+
+                count += 1;
+
+                if (count === 1000) count = 0;
               }
             });
-
-            count += 1;
-            if (count === 1000) count = 0;
           } else {
             if (animation_running === true) animation_mixer.update( clock.getDelta() );
           }
