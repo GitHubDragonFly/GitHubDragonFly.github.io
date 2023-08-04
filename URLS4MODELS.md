@@ -35,6 +35,9 @@ Else, copy any of the following links and then paste it within the `URL` option 
   - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/IQM/mrfixit.iqm`
   - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/BVH/01_01.bvh`
   - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/glTF/TwoBoxes/TwoBoxes.gltf, https://raw.githubusercontent.com/assimp/assimp/master/test/models/glTF/TwoBoxes/Box.bin`
+- access to some BIM example files at [dotbim](https://github.com/paireks/dotbim/tree/master/test/ExampleFiles):
+  - `https://raw.githubusercontent.com/paireks/dotbim/master/test/ExampleFiles/TestFilesFromArchicad/MulticolorHouse.bim`
+  - `https://raw.githubusercontent.com/paireks/dotbim/master/test/ExampleFiles/TestFilesFromBlender/Armchair.bim`
 - access to some PCD example files at [Point Cloud Library (PCL)](https://github.com/PointCloudLibrary):
   - `https://raw.githubusercontent.com/PointCloudLibrary/pcl/master/test/office1.pcd`
   - `https://raw.githubusercontent.com/PointCloudLibrary/pcl/master/test/five_people.pcd`
