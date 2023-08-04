@@ -94,8 +94,8 @@ Number Type Converter
   - GCODE supported formats: GCODE, NCC, NGC
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
-  - OCCT supported formats: STEP, STP, IGES, IGS, BREP, BRP
-    - STEP+IGES+BREP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js)
+  - OCCT supported formats: STEP, STP, IGES, IGS, BREP, BRP, BIM
+    - STEP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js) and modified version of [dotbim.three.js](https://github.com/ricaun/dotbim.three.js)
 - Export formats, where applicable:
   - 3DM, DAE, APNG, FBX, M3D, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, PRWM
     - Try not to change file names when saving files during initial export
