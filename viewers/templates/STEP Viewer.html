@@ -2,11 +2,12 @@
 <html lang="en">
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
-    <meta name="description" content="STEP + IGES + BREP Viewer">
+    <meta name="description" content="STEP + IGES + BREP + BIM Viewer">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.149.0" defer></script>
+    <script src="../static/dotbim/dotbim.three.min.js" defer></script>
     <script src="../static/assimpjs/assimpjs.js" defer></script>
     <script src="../static/js/RGBELoader.js" defer></script>
     <script src="../static/js/upng/UPNG.js" defer></script>
@@ -224,6 +225,7 @@
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/ThreeOrbitControlsGizmo -->
     <!-- Using occt-import-js library: https://github.com/kovacsv/occt-import-js -->
+    <!-- Using dotbim library: https://github.com/ricaun/dotbim.three.js -->
     <!-- PRWM export powered by: https://github.com/kchapelier/PRWM -->
     <!-- Animated GIF export is based on the following example and library: -->
     <!--   https://github.com/mrdoob/omggif-example  -->
@@ -232,15 +234,15 @@
     <!--   https://github.com/photopea/UPNG.js -->
     <!--   https://github.com/nodeca/pako -->
 
-    <title>STEP+IGES+BREP Viewer</title>
+    <title>STEP Viewer</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm_gizmo" id="gizmo" title="Interactive Orbit Controls Gizmo" style="float: right; background-color: black;"></div>
       <div class="fm">
-        <label for="file_input" title="STEP, IGES, BREP Formats" style="color: #553801; margin-left: 3px;">STEP</label>
+        <label for="file_input" title="STEP, IGES, BREP, BIM Formats" style="color: #553801; margin-left: 3px;">3D</label>
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".stp, .step, .igs, .iges, .brp, .brep" />
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".stp, .step, .igs, .iges, .brp, .brep, .bim" />
         <label for="file_image_input" title="Background Image" style="color: #553801;">BGND</label>
         <input type="file" id="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
         <button title="Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
@@ -542,7 +544,7 @@
     </script>
 
     <script>
-      var manager, texture_loader, equi_loader, rgbe_loader;
+      var manager, file_loader, texture_loader, equi_loader, rgbe_loader;
       var renderer, scene, camera, mesh, render_requested;
       var controls, gizmo, edges, edges_visible, outline_material;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
@@ -552,7 +554,7 @@
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
       var bounding_box, gif_export, bgnd_linear_gradient;
       var selected_step_file, selected_url_file = '', filename;
-      var multi_mesh_model, iges, brep, tex;
+      var multi_mesh_model, iges, brep, bim, tex;
       var response, result, buffer, fileBuffer, indices, vertices, normals, model_colors;
       var pmremGenerator, flat_shading_enabled, material_extra_enabled, enable_opacity, zip;
       var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
@@ -1527,6 +1529,12 @@
         // Manager from ThreeJs to track a loader and its status
         if (manager === undefined) manager = new THREE.LoadingManager();
 
+        if (file_loader === undefined) {
+          file_loader = new THREE.FileLoader( manager );
+          file_loader.setMimeType( 'text/plain' );
+          file_loader.setResponseType( 'text' );
+        }
+
         if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
 
         if (equi_loader === undefined) equi_loader = new THREE.CubeTextureLoader();
@@ -1542,6 +1550,7 @@
         selected_step_file = null;
         mouse_down = false;
         mouse_wheel = false;
+        bim = false;
         iges = false;
         brep = false;
         response = null;
@@ -1571,6 +1580,13 @@
         initial_rotation = new THREE.Vector3();
         outline_material = new THREE.LineBasicMaterial( { color: 0xFF0000 } );
 
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_spinner').style.display = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
         if (url_loading === false) {
           // Loaded file
           var fi = document.getElementById('file_input');
@@ -1586,15 +1602,14 @@
             } else if (fn_uc.endsWith('.BRP') || fn_uc.endsWith('.BREP')) {
               brep = true;
               selected_step_file = fi.files[ i ];
+            } else if (fn_uc.endsWith('.BIM')) {
+              bim = true;
+              selected_step_file = fi.files[ i ];
             }
           };
 
           if (selected_step_file === null) {
-            console.log( 'No valid STEP / IGES / BREP file selected!' );
-            document.body.style.backgroundImage = 'none';
-            document.getElementById('div_spinner').style.display = 'none';
-            document.getElementById('div_loading').style.display = 'none';
-            document.getElementById('div_error').style.display = 'block';
+            handle_error( 'No valid STEP / IGES / BREP / BIM file selected!' );
             return;
           }
 
@@ -1604,12 +1619,6 @@
           document.getElementById('file_input').value = '';
           url_loading = false;
         }
-
-        document.body.style.backgroundImage = 'none';
-        document.getElementById('div_spinner').style.display = 'none';
-        document.getElementById('div_loading').innerHTML = 'Loading';
-        document.getElementById('div_error').style.display = 'none';
-        enable_disable( false );
 
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
@@ -1699,17 +1708,50 @@
           texture.dispose();
         });
 
-        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+        enable_disable( false );
+        disabled_changed();
 
         // Load the model
-        selected_step_file !== null ? loadFile() : loadURLFile();
+        selected_step_file !== null ? ( bim === true ? loadBIM() : loadFile() ) : loadURLFile();
+      }
+
+      async function loadBIM() {
+        file_loader.load( URL.createObjectURL( selected_step_file ), async function( text ) {
+          URL.revokeObjectURL( selected_step_file );
+
+          let mesh_count = 1;
+
+          dotbim_CreateMeshes( text ).forEach( bim_mesh => {
+            if (bim_mesh.name) {
+              if (bim_mesh.name === '') {
+                bim_mesh.name = 'mesh_' + mesh_count;
+                mesh_count += 1;
+              }
+            } else {
+              bim_mesh[ 'name' ] = 'mesh_' + mesh_count;
+              mesh_count += 1;
+            }
+
+            if ( bim_mesh.edges ) edges.add( bim_mesh.edges );
+
+            let geometry = bim_mesh.geometry;
+
+            random_vertex_color_array[ bim_mesh.name ] = new Float32Array( Array.from( { length: geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+            original_vertex_color_array[ bim_mesh.name ] = geometry.getAttribute( 'color' );
+
+            mesh.add( bim_mesh );
+          });
+
+          mesh.rotateX( - Math.PI / 2 );
+
+          multi_mesh_model = true;
+
+          await addFileInScene();
+        });
       }
 
       async function loadFile() {
         if (selected_step_file !== null) {
-          console.time( 'Loading Time' );
-          document.getElementById('div_loading').style.display = 'block';
-
           occtimportjs().then( async function( occt ) {
             response = await fetch( URL.createObjectURL( selected_step_file ) );
             URL.revokeObjectURL( selected_step_file );
@@ -1804,18 +1846,7 @@
 
               await addFileInScene();
             } else {
-              console.timeEnd( 'Loading Time' );
-              console.log( 'No mesh detected!' );
-              render_requested = false;
-              enable_disable( true );
-
-              if (gizmo) {
-                document.getElementById('gizmo').removeChild( gizmo.domElement );
-                gizmo.dispose();
-              }
-
-              document.getElementById('div_loading').style.display = 'none';
-              document.getElementById('div_error').style.display = 'block';
+              handle_error( 'No mesh detected!' );
             }
           });
         }
@@ -1846,15 +1877,16 @@
         if (selected_url_file != '') {
           let url_uc = selected_url_file.toUpperCase();
 
-          if (url_uc.endsWith('.STP') || url_uc.endsWith('.STEP') || url_uc.endsWith('.IGS') || url_uc.endsWith('.IGES') || url_uc.endsWith('.BRP') || url_uc.endsWith('.BREP')) {
+          if (url_uc.endsWith('.STP') || url_uc.endsWith('.STEP') || url_uc.endsWith('.IGS') || url_uc.endsWith('.IGES') || url_uc.endsWith('.BRP') || url_uc.endsWith('.BREP') || url_uc.endsWith('.BIM')) {
             if (url_uc.endsWith('.IGS') || url_uc.endsWith('.IGES')) {
               iges = true;
             } else if (url_uc.endsWith('.BRP') || url_uc.endsWith('.BREP')) {
               brep = true;
+            } else if (url_uc.endsWith('.BIM')) {
+              bim = true;
+              loadURLBIM();
+              return;
             }
-
-            console.time( 'Loading Time' );
-            document.getElementById('div_loading').style.display = 'block';
 
             occtimportjs().then( async function( occt ) {
               response = await fetch( selected_url_file );
@@ -1965,34 +1997,46 @@
 
                 await addURLFileInScene();
               } else {
-                console.timeEnd( 'Loading Time' );
-                console.log( 'No mesh detected!' );
-                render_requested = false;
-                enable_disable( true );
-
-                if (gizmo) {
-                  document.getElementById('gizmo').removeChild( gizmo.domElement );
-                  gizmo.dispose();
-                }
-
-                document.getElementById('div_loading').style.display = 'none';
-                document.getElementById('div_error').style.display = 'block';
+                handle_error( 'No mesh detected!' );
               }
             });
           } else {
-            console.log( 'Unsupported URL file!' );
-            render_requested = false;
-            enable_disable( true );
-
-            if (gizmo) {
-              document.getElementById('gizmo').removeChild( gizmo.domElement );
-              gizmo.dispose();
-            }
-
-            document.getElementById('div_loading').style.display = 'none';
-            document.getElementById('div_error').style.display = 'block';
+            handle_error( 'Unsupported URL file!' );
           }
         }
+      }
+
+      async function loadURLBIM() {
+        file_loader.load( selected_url_file, async function( text ) {
+          let mesh_count = 1;
+
+          dotbim_CreateMeshes( text ).forEach( bim_mesh => {
+            if (bim_mesh.name) {
+              if (bim_mesh.name === '') {
+                bim_mesh.name = 'mesh_' + mesh_count;
+                mesh_count += 1;
+              }
+            } else {
+              bim_mesh[ 'name' ] = 'mesh_' + mesh_count;
+              mesh_count += 1;
+            }
+
+            if ( bim_mesh.edges ) edges.add( bim_mesh.edges );
+
+            let geometry = bim_mesh.geometry;
+
+            random_vertex_color_array[ bim_mesh.name ] = new Float32Array( Array.from( { length: geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+            original_vertex_color_array[ bim_mesh.name ] = geometry.getAttribute( 'color' );
+
+            mesh.add( bim_mesh );
+          });
+
+          mesh.rotateX( - Math.PI / 2 );
+
+          multi_mesh_model = true;
+
+          await addURLFileInScene();
+        });
       }
 
       function addURLFileInScene( object ) {
@@ -2014,6 +2058,22 @@
         document.getElementById('div_loading').style.display = 'none';
 
         disabled_changed();
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        render_requested = false;
+        enable_disable( true );
+
+        if (gizmo) {
+          document.getElementById('gizmo').removeChild( gizmo.domElement );
+          gizmo.dispose();
+        }
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
       }
 
       // Used for PRWM exports
@@ -2450,11 +2510,11 @@
                 // Let GPU cool down a bit
                 let count = 0;
 
-                while (count < 10) {
+                while (count < 15) {
                   await new Promise( resolve => setTimeout( resolve, 20 ) ).then( () => {
                     if (mouse_down === true || mouse_wheel === true) {
                       if (mouse_wheel === true) mouse_wheel = false;
-                      count = 10;
+                      count = 15;
                     } else {
                       count ++;
                     }
@@ -2511,9 +2571,11 @@
 
         reset_all( true );
 
+        console.time( 'Loading Time' );
+
         document.getElementById('div_loading').innerHTML = 'Reload';
 
-        selected_step_file !== null ? loadFile() : loadURLFile();
+        selected_step_file !== null ? ( bim === true ? loadBIM() : loadFile() ) : loadURLFile();
       }
 
       function reset_all( reset = false ) {
