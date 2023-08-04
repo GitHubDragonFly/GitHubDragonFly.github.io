@@ -50,7 +50,8 @@ Else, copy any of the following links and then paste it within the `URL` option 
 - example for JSON Legacy viewer (see [#25](https://github.com/leapmotion/leapjs-rigged-hand/pull/25) with suggestion to correct original files):
   - `https://raw.githubusercontent.com/GitHubDragonFly/leapjs-rigged-hand/master/models/Game%20Quality%20Hand/Handsolo/Leapmotion_Handsolo_Rig_Left.json`
   - `https://raw.githubusercontent.com/GitHubDragonFly/leapjs-rigged-hand/master/models/Game%20Quality%20Hand/Handsolo/Leapmotion_Handsolo_Rig_Right.json`
-  - some legacy models from r68 and r69 releases of the three.js are available in the `viewers/examples/legacy_json` folder
+  - some legacy models from r68 and r69 releases of the three.js are available in the `viewers/examples/legacy_json` folder, here is the link to one of them:
+    - `https://raw.githubusercontent.com/GitHubDragonFly/GitHubDragonFly.github.io/main/viewers/examples/legacy_json/marine/marine.js`
 - other examples:
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.obj`
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/male02_dds.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/male02.obj`
