@@ -1,6 +1,6 @@
 # Usage
 
-If you wish to have example 3D model files on your device then just download the zip file of the [three.js](https://github.com/mrdoob/three.js/tree/master) repo (green `Code` button) and extract the `models` folder found under `examples`.
+If you wish to have some example 3D model files on your device then just download the zip file of the [three.js](https://github.com/mrdoob/three.js/tree/master) repo (green `Code` button) and extract the `models` folder found under `examples`.
 
 Else, copy any of the following links and then paste it within the `URL` option of the corresponding viewer:
 
