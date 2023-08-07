@@ -105,9 +105,6 @@
 			this.adjustmentAfterZoomNeeded = false;
 			this.maxTargetDistanceFromOrigin = Infinity;
 
-			//
-
-			// ZOOM-TO-CURSOR
 			this.adjustAfterZoom = function () {
 
 				const lastTarget = scope.target.clone();
@@ -204,7 +201,8 @@
 				const lastPosition = new THREE.Vector3();
 				const lastQuaternion = new THREE.Quaternion();
 				const twoPI = 2 * Math.PI;
-				return function update() {
+
+				return function update( deltaTime = null ) {
 
 					const position = scope.object.position;
 					offset.copy( position ).sub( scope.target ); // rotate offset to "y-axis-is-up" space
@@ -215,7 +213,7 @@
 
 					if ( scope.autoRotate && state === STATE.NONE ) {
 
-						rotateLeft( getAutoRotationAngle() );
+						rotateLeft( getAutoRotationAngle( deltaTime ) );
 
 					}
 
@@ -377,9 +375,17 @@
 			const pointers = [];
 			const pointerPositions = {};
 
-			function getAutoRotationAngle() {
+			function getAutoRotationAngle( deltaTime ) {
 
-				return 2 * Math.PI / 60 / 60 * scope.autoRotateSpeed;
+				if ( deltaTime !== null ) {
+
+					return ( 2 * Math.PI / 60 * scope.autoRotateSpeed ) * deltaTime;
+
+				} else {
+
+					return 2 * Math.PI / 60 / 60 * scope.autoRotateSpeed;
+
+				}
 
 			}
 
@@ -1169,11 +1175,13 @@
 				if ( !scope.enableZoomToCursor ) return;
 
 				scope.cursorScreen.copy(
+
 					new THREE.Vector3(
 						( ( event.clientX - scope.domElement.getBoundingClientRect().left ) / scope.domElement.clientWidth) * 2 - 1,
 						- ( (event.clientY - scope.domElement.getBoundingClientRect().top ) / scope.domElement.clientHeight) * 2 + 1,
 						scope.target.clone().project( scope.object ).z
 					)
+
 				);
 
 			});
@@ -1196,11 +1204,13 @@
 				if ( touch !== undefined ) {
 
 					scope.cursorScreen.copy(
+
 						new THREE.Vector3(
-							( (touch.x - scope.domElement.getBoundingClientRect().left ) / scope.domElement.clientWidth ) * 2 - 1,
+							( ( touch.x - scope.domElement.getBoundingClientRect().left ) / scope.domElement.clientWidth ) * 2 - 1,
 							- ( ( touch.y - scope.domElement.getBoundingClientRect().top ) / scope.domElement.clientHeight ) * 2 + 1,
 							scope.target.clone().project( scope.object ).z
 						)
+
 					);
 
 				}
