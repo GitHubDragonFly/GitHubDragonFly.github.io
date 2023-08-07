@@ -201,7 +201,7 @@
 				const lastPosition = new THREE.Vector3();
 				const lastQuaternion = new THREE.Quaternion();
 				const twoPI = 2 * Math.PI;
-				return function update() {
+				return function update( deltaTime = null ) {
 
 					const position = scope.object.position;
 					offset.copy( position ).sub( scope.target ); // rotate offset to "y-axis-is-up" space
@@ -212,7 +212,7 @@
 
 					if ( scope.autoRotate && state === STATE.NONE ) {
 
-						rotateLeft( getAutoRotationAngle() );
+						rotateLeft( getAutoRotationAngle( deltaTime ) );
 
 					}
 
@@ -374,9 +374,17 @@
 			const pointers = [];
 			const pointerPositions = {};
 
-			function getAutoRotationAngle() {
+			function getAutoRotationAngle( deltaTime ) {
 
-				return 2 * Math.PI / 60 / 60 * scope.autoRotateSpeed;
+				if ( deltaTime !== null ) {
+
+					return ( 2 * Math.PI / 60 * scope.autoRotateSpeed ) * deltaTime;
+
+				} else {
+
+					return 2 * Math.PI / 60 / 60 * scope.autoRotateSpeed;
+
+				}
 
 			}
 
