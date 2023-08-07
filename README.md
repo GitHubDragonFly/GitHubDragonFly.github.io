@@ -51,7 +51,8 @@ Number Type Converter
   - Unsupported formats: BSP, JT, M3, PK3, WRL
     - the viewer will allow you to select these files but they didn't work for me
   - When using the viewer's URL option remember the following:
-    - BIN and / or MTL file URLs need to be added alongside the model URL and comma separated, this would normally apply to GLTF and OBJ files
+    - BIN and / or MTL file URLs need to be added alongside the model URL and comma separated, this would normally apply to GLTF and OBJ files, for example:
+      - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/OBJ/spider.obj, https://raw.githubusercontent.com/assimp/assimp/master/test/models/OBJ/spider.mtl`
     - For MD2 models you will have to add their texture URL, for example:
       - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/MD2/faerie.md2, https://raw.githubusercontent.com/assimp/assimp/master/test/models/MD2/faerie2.bmp`
     - If textures are not automatically fetched with the model URL only then add the texture location URL, for example:
