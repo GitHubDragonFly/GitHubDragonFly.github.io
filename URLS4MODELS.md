@@ -61,8 +61,7 @@ Else, copy any of the following links and then paste it within the `URL` option 
   - `https://raw.githubusercontent.com/takahirox/mmd-viewer-js/master/model/default/miku_m.pmd`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/three/scene.json`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/vrml/cow.wrl`
-- FBX / OBJ / 3DS viewers also allow setting texture path with URL just like in the following examples:
-  - `https://raw.githubusercontent.com/antlafarge/ALLoader/master/examples/textures/, https://raw.githubusercontent.com/antlafarge/ALLoader/master/examples/fbx/crate.fbx`
+- FBX / OBJ / 3DS viewers also allow setting texture path with URL just like in the following example:
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3ds/portalgun/textures/, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3ds/portalgun/portalgun.3ds`
 
 For base64 string testing - copy the following, which represents the `Load Image.png` file found in the `images` folder, and then paste it within the `URL` option of the Texture Viewer:
