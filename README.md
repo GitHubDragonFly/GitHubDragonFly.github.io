@@ -47,7 +47,7 @@ Number Type Converter
     - Use JSON Legacy viewer to see all models exported as `ASSJSON`
     - Both `JSON` and `ASSJSON` exported files use the same `.json` extension
   - GLTF / GLB v2.0 and DRC models will be handled by three.js, as originally intended
-  - All other formats, including GLTF / GLB v1.0, will be handled by ASSIMP(JS)
+  - All other formats, including GLTF / GLB v1.0, will be initially handled by ASSIMP(JS), converted to `GLB2` and passed on to three.js
   - Supported formats: 3D, 3DS, 3MF, A3D, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IFC, IQM, IRR, IRRMESH, KMZ, LWO, LWS, LXO, M3D, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NDO, NFF, OBJ + MTL, OFF, OGEX, PLY, PMX, Q3O, Q3S, RAW, SIB, SMD, STL, TER, X, X3D, XGL, XML, ZAE, ZGL
   - Unsupported formats: BSP, JT, M3, PK3, WRL
     - the viewer will allow you to select these files but they didn't work for me
@@ -74,6 +74,7 @@ Number Type Converter
   - Supported formats: GLTF v1.0 + BIN
   - Unsupported formats: GLB
   - It can export to GLTF / GLB v2.0 and OBJ formats (animations are not currently supported)
+  - Use ASSIMP Viewer instead since it has less limitations and more export options
   - Most of the following notes do not apply to GLTF Legacy viewer in general
 
 - Menu with controls can be located either on top or on the bottom of the page
