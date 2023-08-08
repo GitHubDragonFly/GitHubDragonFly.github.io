@@ -45,6 +45,7 @@ Number Type Converter
   - Has multiple export options available, with special notes about JSON formats:
     - Use JSON Viewer to see all models exported as `JSON`
     - Use JSON Legacy viewer to see all models exported as `ASSJSON`
+    - Both `JSON` and `ASSJSON` exported files use the same `.json` extension
   - GLTF / GLB v2.0 and DRC models will be handled by three.js, as originally intended
   - All other formats, including GLTF / GLB v1.0, will be handled by ASSIMP(JS)
   - Supported formats: 3D, 3DS, 3MF, A3D, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IFC, IQM, IRR, IRRMESH, KMZ, LWO, LWS, LXO, M3D, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NDO, NFF, OBJ + MTL, OFF, OGEX, PLY, PMX, Q3O, Q3S, RAW, SIB, SMD, STL, TER, X, X3D, XGL, XML, ZAE, ZGL
@@ -149,6 +150,7 @@ Number Type Converter
   - `CS` - construction step (LDRAW viewer)
   - `MP` - material - Phong (MP), Standard (MS), Lambert (ML)
     - `*` - applicable to MS to provide envMap + metalness (VTK, PRWM viewers)
+  - `OL` - outline effect (MMD Viewer)
   - `OS` - material side - Original (OS), Front (FS), Back (BS), Double (DS)
   - `PM` - show model as points (PLY+STL / PRWM / VTK viewers)
   - `VC` - vertex colors
