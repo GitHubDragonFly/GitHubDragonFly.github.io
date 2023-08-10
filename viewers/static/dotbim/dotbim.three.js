@@ -62,8 +62,10 @@ function dotbim_Elemment2Mesh(element, geometrys) {
             geometry.deleteAttribute('color');
             material.vertexColors = false;
         }
+
         material.color = convertTHREEColorRGB(color.r,color.g,color.b);
         material.opacity = convertColorAlpha(color.a);
+        material.transparent = material.opacity < 1.0;
     }
 
     if (!vector) vector = { x: 0, y: 0, z: 0 };
