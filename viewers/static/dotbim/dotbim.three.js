@@ -37,6 +37,7 @@ function dotbim_Elemment2Mesh(element, geometrys) {
         side: THREE.DoubleSide,
         flatShading: false,
         transparent: true,
+        color: 0xCCCCCC
     });
 
     if (color) {
@@ -45,27 +46,26 @@ function dotbim_Elemment2Mesh(element, geometrys) {
 
     // Support `face_colors` in element
     if (face_colors) {
+        geometry = geometry.clone();
         let colors = createFaceColors(face_colors);
         geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
     }
+    else if (color)
+    {
+        geometry = geometry.clone();
+        geometry.deleteAttribute('color'); // Remove default color in the geometry
 
-    // Force geometry to change color
+        material.color = convertTHREEColorRGB(color.r,color.g,color.b);
+        material.opacity = convertColorAlpha(color.a);
+        material.transparent = material.opacity < 1.0;
+    }
+
+    // Force to use geometry color if exists ('colors')
     if (geometry.getAttribute('color')) {
         material.color = undefined;
         material.opacity = 1.0;
         material.transparent = true;
         material.vertexColors = true;
-    }
-
-    if (color) {
-        if (!face_colors) {
-            geometry.deleteAttribute('color');
-            material.vertexColors = false;
-        }
-
-        material.color = convertTHREEColorRGB(color.r,color.g,color.b);
-        material.opacity = convertColorAlpha(color.a);
-        material.transparent = material.opacity < 1.0;
     }
 
     if (!vector) vector = { x: 0, y: 0, z: 0 };
