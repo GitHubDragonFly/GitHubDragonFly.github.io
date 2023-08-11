@@ -6,7 +6,7 @@
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.149.0" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0" defer></script>
     <script src="../static/dotbim/dotbim.three.min.js" defer></script>
     <script src="../static/assimpjs/assimpjs.js" defer></script>
     <script src="../static/js/RGBELoader.js" defer></script>
@@ -556,8 +556,7 @@
       var multi_mesh_model, iges, brep, bim, tex;
       var initial_opacity, initial_opacity_array;
       var initial_transparency, initial_transparency_array;
-      var selected_step_file, selected_url_file = '', filename;
-      var response, result, buffer, fileBuffer, indices, vertices, normals, model_colors;
+      var selected_step_file, selected_url_file = '', filename, response, buffer, fileBuffer;
       var pmremGenerator, flat_shading_enabled, material_extra_enabled, enable_opacity, zip;
       var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
       var vertex_colors_enabled, original_vertex_color_array, random_vertex_colors_enabled, random_vertex_color_array;
@@ -1505,19 +1504,17 @@
 
           if (mesh) {
             mesh.traverse( function( child ) {
-              if (child.isMesh) {
-                if (child.material) {
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      if (mtl.map) mtl.map.dispose();
-                      if (mtl.envMap) mtl.envMap.dispose();
-                      mtl.dispose();
-                    });
-                  } else {
-                    if (child.material.map) child.material.map.dispose();
-                    if (child.material.envMap) child.material.envMap.dispose();
-                    child.material.dispose();
-                  }
+              if (child.isMesh && child.material) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    if (mtl.map) mtl.map.dispose();
+                    if (mtl.envMap) mtl.envMap.dispose();
+                    mtl.dispose();
+                  });
+                } else {
+                  if (child.material.map) child.material.map.dispose();
+                  if (child.material.envMap) child.material.envMap.dispose();
+                  child.material.dispose();
                 }
 
                 if (child.geometry) child.geometry.dispose();
@@ -1525,7 +1522,13 @@
             });
           }
 
+          while (mesh.children.length > 0) {
+            mesh.remove( mesh.children[ 0 ] );
+          }
+
           scene.remove( mesh );
+
+          mesh = new THREE.Object3D();
 
           // Reset all values
           reset_all( true );
@@ -1563,13 +1566,8 @@
         iges = false;
         brep = false;
         response = null;
-        result = null;
-        indices = null;
-        vertices = null;
-        normals = null;
         buffer = null;
         fileBuffer = null;
-        model_colors = null;
         edges = new THREE.Group();
         edges_visible = false;
         enable_opacity = false;
@@ -1762,9 +1760,12 @@
             mesh.add( bim_mesh );
           });
 
-          mesh.rotateX( - Math.PI / 2 );
+          THREE.Object3D.DefaultUp.set( 0, 0, 1 );
 
-          multi_mesh_model = true;
+          if (mesh_count > 2) {
+            multi_mesh_model = true;
+            mesh.rotateX( - Math.PI / 2 );
+          }
 
           await addFileInScene();
         });
@@ -1864,6 +1865,8 @@
                 mesh.add( new_mesh );
               }
 
+              THREE.Object3D.DefaultUp.set( 0, 1, 0 );
+
               await addFileInScene();
             } else {
               handle_error( 'No mesh detected!' );
@@ -1878,17 +1881,26 @@
         initial_rotation.z = mesh.rotation.z;
 
         let child_count = 1;
+        let mesh_has_colors = false, mesh_has_no_colors = false;
+
+        // Check if multiple meshes with a mix of vertex and non-vertex colors
+        mesh.traverse( function( child ) {
+          if (child.isMesh) {
+            (child.geometry.hasAttribute( 'color' ) === true) ? mesh_has_colors = true : mesh_has_no_colors = true;
+          }
+        });
+
+        if (mesh_has_colors === true && mesh_has_no_colors === false) {
+          document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_vertex_colors').disabled = false;
+          document.getElementById('btn_random_vertex_colors').disabled = false;
+          vertex_colors_enabled = true;
+          random_vertex_changed();
+        }
 
         mesh.traverse( function( child ) {
           if (child.isMesh && child.material) {
             if (child.name === '') child.name = 'child_' + child_count;
-
-            if (child.geometry.hasAttribute( 'color' ) === true) {
-              vertex_colors_enabled = true;
-              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-              document.getElementById('btn_random_vertex_colors').disabled = false;
-              random_vertex_changed();
-            }
 
             if (Array.isArray( child.material )) {
               let child_count_array = 1;
@@ -1897,7 +1909,7 @@
               initial_transparency_array[ child.name ] = {};
 
               child.material.forEach( mtl => {
-                mtl.vertexColors = vertex_colors_enabled;
+                if (child.geometry.hasAttribute( 'color' ) === true) mtl.vertexColors = true;
 
                 initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
                 initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
@@ -1908,7 +1920,7 @@
                 child_count_array += 1;
               });
             } else {
-              child.material.vertexColors = vertex_colors_enabled;
+              if (child.geometry.hasAttribute( 'color' ) === true) child.material.vertexColors = true;
 
               initial_opacity[ child.name ] = child.material.opacity;
               initial_transparency[ child.name ] = child.material.transparent;
@@ -2059,6 +2071,8 @@
                   new_mesh.geometry.dispose();
                 }
 
+                THREE.Object3D.DefaultUp.set( 0, 1, 0 );
+
                 await addURLFileInScene();
               } else {
                 handle_error( 'No mesh detected!' );
@@ -2095,9 +2109,12 @@
             mesh.add( bim_mesh );
           });
 
-          mesh.rotateX( - Math.PI / 2 );
+          THREE.Object3D.DefaultUp.set( 0, 0, 1 );
 
-          multi_mesh_model = true;
+          if (mesh_count > 2) {
+            multi_mesh_model = true;
+            mesh.rotateX( - Math.PI / 2 );
+          }
 
           await addURLFileInScene();
         });
@@ -2109,17 +2126,26 @@
         initial_rotation.z = mesh.rotation.z;
 
         let child_count = 1;
+        let mesh_has_colors = false, mesh_has_no_colors = false;
+
+        // Check if multiple meshes with a mix of vertex and non-vertex colors
+        mesh.traverse( function( child ) {
+          if (child.isMesh) {
+            (child.geometry.hasAttribute( 'color' ) === true) ? mesh_has_colors = true : mesh_has_no_colors = true;
+          }
+        });
+
+        if (mesh_has_colors === true && mesh_has_no_colors === false) {
+          document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_vertex_colors').disabled = false;
+          document.getElementById('btn_random_vertex_colors').disabled = false;
+          vertex_colors_enabled = true;
+          random_vertex_changed();
+        }
 
         mesh.traverse( function( child ) {
           if (child.isMesh && child.material) {
             if (child.name === '') child.name = 'child_' + child_count;
-
-            if (child.geometry.hasAttribute( 'color' ) === true) {
-              vertex_colors_enabled = true;
-              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-              document.getElementById('btn_random_vertex_colors').disabled = false;
-              random_vertex_changed();
-            }
 
             if (Array.isArray( child.material )) {
               let child_count_array = 1;
@@ -2128,7 +2154,7 @@
               initial_transparency_array[ child.name ] = {};
 
               child.material.forEach( mtl => {
-                mtl.vertexColors = vertex_colors_enabled;
+                if (child.geometry.hasAttribute( 'color' ) === true) mtl.vertexColors = true;
 
                 initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
                 initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
@@ -2139,7 +2165,7 @@
                 child_count_array += 1;
               });
             } else {
-              child.material.vertexColors = vertex_colors_enabled;
+              if (child.geometry.hasAttribute( 'color' ) === true) child.material.vertexColors = true;
 
               initial_opacity[ child.name ] = child.material.opacity;
               initial_transparency[ child.name ] = child.material.transparent;
@@ -2672,6 +2698,10 @@
             }
           });
 
+          while (mesh.children.length > 0) {
+            mesh.remove( mesh.children[ 0 ] );
+          }
+
           scene.remove( mesh );
 
           mesh = new THREE.Object3D();
@@ -2746,6 +2776,7 @@
         document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
         vertex_colors_enabled = false;
         document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_vertex_colors').disabled = true;
         random_vertex_colors_enabled = false;
         document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_random_vertex_colors').disabled = true;
@@ -2810,7 +2841,6 @@
         document.getElementById('btn_dc_dli').disabled = disable;
         document.getElementById('btn_dc_opacity').disabled = disable;
         document.getElementById('btn_material').disabled = disable;
-        document.getElementById('btn_vertex_colors').disabled = disable;
         document.getElementById('btn_bgnd_linear_gradient').disabled = disable;
         document.getElementById('btn_polar_grid').disabled = disable;
         document.getElementById('btn_grid').disabled = disable;
