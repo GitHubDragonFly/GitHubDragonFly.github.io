@@ -52,7 +52,6 @@ function dotbim_Elemment2Mesh(element, geometrys) {
     }
     else if (color)
     {
-        console.log('color ', color);
         geometry = geometry.clone();
         geometry.deleteAttribute('color'); // Remove default color in the geometry
 
