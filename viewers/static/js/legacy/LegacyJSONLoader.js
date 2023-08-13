@@ -314,6 +314,24 @@ THREE.LegacyJSONLoader = ( function () {
 
 							path = blobs[ i + 1 ];
 
+							if ( blobs[ i ].toLowerCase().endsWith( '.dds' ) ) {
+
+								if ( THREE.DDSLoader ) {
+
+									loader = new THREE.DDSLoader( this.manager );
+
+								}
+
+							} else if ( blobs[ i ].toLowerCase().endsWith( '.tga' ) ) {
+
+								if ( THREE.TGALoader ) {
+
+									loader = new THREE.TGALoader( this.manager );
+
+								}
+
+							}
+
 						}
 
 					}
@@ -326,7 +344,33 @@ THREE.LegacyJSONLoader = ( function () {
 
 				}
 
-				loader = manager.getHandler( fullPath );
+				if ( loader === null || loader === undefined ) {
+
+					let fp = fullPath.toLowerCase();
+
+					if ( fp.endsWith( '.tga' ) ) {
+
+						if ( THREE.TGALoader ) {
+
+							loader = new THREE.TGALoader( this.manager );
+
+						}
+
+					} else if ( fp.endsWith( '.dds' ) ) {
+
+						if ( THREE.DDSLoader ) {
+
+							loader = new THREE.DDSLoader( this.manager );
+
+						}
+
+					} else {
+
+						loader = manager.getHandler( fullPath );
+
+					}
+
+				}
 
 				if ( loader !== null ) {
 

@@ -12,8 +12,10 @@
  */
 
 var blobs = null;
-const root = new THREE.Object3D();
+var root;
 var bones = [];
+var bone_id;
+var has_bones = false;
 var has_points_or_lines = false;
 var isPoints = false;
 var isLines = false;
@@ -32,7 +34,7 @@ THREE.AssimpJSONLoader.prototype = {
 
 	load: function ( url, onLoad, onProgress, onError, texturePath ) {
 
-		var scope = this;
+		scope = this;
 
 		if ( texturePath && ( typeof texturePath === "string" ) ) {
 
@@ -105,8 +107,14 @@ THREE.AssimpJSONLoader.prototype = {
 
 			scene = scope.parse( json );
 
-			if ( json.animations ) scene[ 'animations' ] = json.animations;
-			scene[ 'has_bones' ] = ( bones.length > 0 );
+			scene[ 'has_bones' ] = has_bones;
+
+			if ( json.animations && has_bones === true ) {
+
+				scene[ 'animations' ] = json.animations;
+				//TODO: fix bones & parse animations
+
+			}
 
 			onLoad( scene );
 
@@ -131,8 +139,7 @@ THREE.AssimpJSONLoader.prototype = {
 
 	parse: function ( json ) {
 
-		this.parseBones( json, json.rootnode );
-		let meshes = this.parseMeshList ( json.meshes, this.parseMesh );
+		let meshes = this.parseMeshList ( json, this.parseMesh );
 		let materials = this.parseMaterialList ( json, this.parseMaterial );
 
 		return this.parseObject( json, json.rootnode, meshes, materials );
@@ -141,11 +148,11 @@ THREE.AssimpJSONLoader.prototype = {
 
 	parseMeshList : function( json, handler ) {
 
-		let meshes = new Array( json.length );
+		let meshes = new Array( json.meshes.length );
 
-		for( let i = 0; i < json.length; i++ ) {
+		for( let i = 0; i < json.meshes.length; i++ ) {
 
-			meshes[ i ] = handler.call( this, json[ i ] );
+			meshes[ i ] = handler.call( this, json.meshes[ i ], json );
 
 		}
 
@@ -165,19 +172,19 @@ THREE.AssimpJSONLoader.prototype = {
 		return materials;
 	},
 
-	parseMesh : function( json ) {
+	parseMesh : function( mesh, json ) {
 
 		var geometry, i, j, e, ee, face, src, a, b, c;
 
 		geometry = new THREE.Geometry();
 
-		if ( json.primitivetypes === 1 ) {
+		if ( mesh.primitivetypes === 1 ) {
 
 			isPoints = true;
 			has_points_or_lines = true;
 			geometry[ 'isPoints' ] = true;
 
-		} else if ( json.primitivetypes === 2 ) {
+		} else if ( mesh.primitivetypes === 2 ) {
 
 			isLines = true;
 			has_points_or_lines = true;
@@ -187,25 +194,25 @@ THREE.AssimpJSONLoader.prototype = {
 
 		// read vertex positions
 
-		for( i = 0, e = json.vertices.length; i < e; i += 3 ) {
+		for( i = 0, e = mesh.vertices.length; i < e; i += 3 ) {
 
-			geometry.vertices.push( new THREE.Vector3( json.vertices[ i ], json.vertices[ i + 1 ], json.vertices[ i + 2 ] ) );
+			geometry.vertices.push( new THREE.Vector3( mesh.vertices[ i ], mesh.vertices[ i + 1 ], mesh.vertices[ i + 2 ] ) );
 
 		}
 
 		// read faces
 
-		for ( i = 0, e = json.faces.length; i < e; i++ ) {
+		for ( i = 0, e = mesh.faces.length; i < e; i++ ) {
 
 			face = new THREE.Face3();
 
-			src = json.faces[ i ];
+			src = mesh.faces[ i ];
 
 			face.a = src[ 0 ];
-			face.b = isPoints === true ? src[ 0 ] : src[ 1 ];
-			face.c = isPoints === true || isLines === true ? src[ 0 ] : src[ 2 ];
+			face.b = ( isPoints === true ) ? src[ 0 ] : src[ 1 ];
+			face.c = ( isPoints === true ) ? src[ 0 ] : ( ( isLines === true ) ? src[ 1 ] : src[ 2 ] );
 
-			face.materialIndex = 0; //json.materialindex;
+			face.materialIndex = 0; //mesh.materialindex;
 
 			geometry.faces.push( face );
 
@@ -213,11 +220,11 @@ THREE.AssimpJSONLoader.prototype = {
 
 		// read texture coordinates - three.js attaches them to its faces
 
-		json.texturecoords = json.texturecoords || [];
+		mesh.texturecoords = mesh.texturecoords || [];
 
 		if ( geometry.faceVertexUvs === undefined ) geometry.faceVertexUvs = {};
 
-		for ( i = 0, e = json.texturecoords.length; i < e; i++ ) {
+		for ( i = 0, e = mesh.texturecoords.length; i < e; i++ ) {
 
 			if ( geometry.faceVertexUvs[ i ] === undefined ) geometry.faceVertexUvs[ i ] = [];
 
@@ -241,12 +248,12 @@ THREE.AssimpJSONLoader.prototype = {
 
 			}
 
-			convertTextureCoords( json.texturecoords[ i ], geometry.faces, geometry.faceVertexUvs[ i ] );
+			convertTextureCoords( mesh.texturecoords[ i ], geometry.faces, geometry.faceVertexUvs[ i ] );
 		}
 
 		// read normals - three.js also attaches them to its faces
 
-		if ( json.normals ) {
+		if ( mesh.normals ) {
 
 			function convertNormals( in_nor, out_faces ) {
 
@@ -266,12 +273,12 @@ THREE.AssimpJSONLoader.prototype = {
 				}
 			}
 
-			convertNormals( json.normals, geometry.faces );
+			convertNormals( mesh.normals, geometry.faces );
 		}
 
 		// read vertex colors - three.js also attaches them to its faces
 
-		if ( json.colors && json.colors[ 0 ] ) {
+		if ( mesh.colors && mesh.colors[ 0 ] ) {
 
 			function convertColors( in_color, out_faces) {
 
@@ -302,7 +309,15 @@ THREE.AssimpJSONLoader.prototype = {
 				}
 			}
 
-			convertColors( json.colors[ 0 ], geometry.faces );
+			convertColors( mesh.colors[ 0 ], geometry.faces );
+		}
+
+		if ( mesh.bones ) {
+
+			this.parseBones( json.rootnode, mesh.bones );
+			geometry[ 'bones' ] = bones;
+			has_bones = true;
+
 		}
 
 		geometry.computeFaceNormals();
@@ -342,7 +357,7 @@ THREE.AssimpJSONLoader.prototype = {
 
 			const size = width * height;
 			const data = new Uint8Array( 4 * size );
-			const color = new THREE.Color( 0xffffff );
+			const color = new THREE.Color( 0xFFFFFF );
 
 			const r = Math.floor( color.r * 255 );
 			const g = Math.floor( color.g * 255 );
@@ -409,8 +424,6 @@ THREE.AssimpJSONLoader.prototype = {
 
 						has_textures.push( keyname );
 
-						loader.setCrossOrigin( this.crossOrigin );
-
 						let material_url;
 
 						let filename = prop.value;
@@ -443,7 +456,25 @@ THREE.AssimpJSONLoader.prototype = {
 
 							}
 
+						} else if ( filename.toLowerCase().endsWith( '.dds' ) ) {
+
+							if ( THREE.DDSLoader ) {
+
+								loader = new THREE.DDSLoader( scope.manager );
+
+							}
+
+						} else if ( filename.toLowerCase().endsWith( '.tga' ) ) {
+
+							if ( THREE.TGALoader ) {
+
+								loader = new THREE.TGALoader( scope.manager );
+
+							}
+
 						}
+
+						loader.setCrossOrigin( this.crossOrigin );
 
 						if ( blobs !== null ) {
 
@@ -545,157 +576,115 @@ THREE.AssimpJSONLoader.prototype = {
 
 	},
 
-	parseBones : function( json, node ) {
+	parseBones : function( rootnode, mesh_bones ) {
+
+		if ( mesh_bones ) {
+
+			bones.length = 0;
+
+			for ( i = 0, il = rootnode.children.length; i < il; i++ ) {
+
+				root = new THREE.Object3D();
+
+				let root_pos = new THREE.Vector3();
+				let root_rotq = new THREE.Quaternion();
+				let root_scl = new THREE.Vector3();
+
+				new THREE.Matrix4().fromArray( rootnode.children[ i ].transformation ).transpose().decompose( root_pos, root_rotq, root_scl );
+
+				root.position.x = root_pos.x;
+				root.position.y = root_pos.y;
+				root.position.z = root_pos.z;
+
+				root.quaternion.x = root_rotq.x;
+				root.quaternion.y = root_rotq.y;
+				root.quaternion.z = root_rotq.z;
+				root.quaternion.w = root_rotq.w;
+
+				root.scale.x = root_scl.x;
+				root.scale.y = root_scl.y;
+				root.scale.z = root_scl.z;
+
+				bone_id = 0;
+				let current_index = -1;
+
+				this.traverse( rootnode.children[ i ].children, current_index, mesh_bones );
+
+			}
+
+		}
+
+	},
+
+	traverse: function( children, current_index, mesh_bones ) {
 
 		// Not really sure how to manipulate 'transformation' / 'offsetMatrix' / 'weights'
-		if ( json.animations ) {
 
-			for ( i = 0; node.children && i < node.children.length; i++ ) {
+		for ( let i = 0, il = children.length; i < il; i++ ) {
 
-				if ( json.meshes[ 0 ].bones ) {
+			let pos = new THREE.Vector3();
+			let rotq = new THREE.Quaternion();
+			let scl = new THREE.Vector3();
+	
+			let new_bone = new THREE.Bone();
 
-					let previous_bone, root_id = 0, child_id = 0;
+			new_bone[ 'name' ] = children[ i ].name;
+			new_bone[ 'transformation' ] = children[ i ].transformation;
 
-					let node_transformation = new THREE.Matrix4().fromArray( node.children[ i ].transformation ).transpose();
-					let node_inverse_transformation = node_transformation.getInverse( node_transformation );
+			let new_bone_transformation = new THREE.Matrix4().fromArray( children[ i ].transformation );
+			let new_bone_inverse_transformation = new_bone_transformation.getInverse( new_bone_transformation );
 
-					let root_pos = new THREE.Vector3();
-					let root_rotq = new THREE.Quaternion();
-					let root_scl = new THREE.Vector3();
+			mesh_bones.every( bone => {
 
-					let pos1 = new THREE.Vector3();
-					let rotq1 = new THREE.Quaternion();
-					let scl1 = new THREE.Vector3();
+				if ( bone.name === children[ i ].name ) {
 
-					let pos2 = new THREE.Vector3();
-					let rotq2 = new THREE.Quaternion();
-					let scl2 = new THREE.Vector3();
+					new_bone[ 'offsetMatrix' ] = bone.offsetmatrix;
+					new_bone[ 'weights' ] = bone.weights;
 
-					node_transformation.decompose( root_pos, root_rotq, root_scl );
+					let new_bone_offsetmatrix = new THREE.Matrix4().fromArray( bone.offsetmatrix );
+					let new_bone_inverse_offsetmatrix = new_bone_offsetmatrix.getInverse( new_bone_offsetmatrix );
 
-					function traverse( node ) {
+					new_bone_transformation.multiply( new_bone_offsetmatrix ).transpose().decompose( pos, rotq, scl );
 
-						node.forEach( child_2 => {
+					new_bone.position.x = pos.x;
+					new_bone.position.y = pos.y;
+					new_bone.position.z = pos.z;
 
-							let new_bone_2 = new THREE.Bone();
+					new_bone.quaternion.x = rotq.x;
+					new_bone.quaternion.y = rotq.y;
+					new_bone.quaternion.z = rotq.z;
+					new_bone.quaternion.w = rotq.w;
 
-							new_bone_2[ 'name' ] = child_2.name;
-							new_bone_2[ 'transformation' ] = child_2.transformation;
+					new_bone.scale.x = scl.x;
+					new_bone.scale.y = scl.y;
+					new_bone.scale.z = scl.z;
 
-							let new_bone_2_transformation = new THREE.Matrix4().fromArray( child_2.transformation ).transpose();
-							let new_bone_2_inverse_transformation = new_bone_2_transformation.getInverse( new_bone_2_transformation );
-
-							json.meshes[ 0 ].bones.every( bone => {
-
-								if ( bone.name === child_2.name ) {
-
-									new_bone_2[ 'offsetMatrix' ] = bone.offsetmatrix;
-									new_bone_2[ 'weights' ] = bone.weights;
-
-									let new_bone_2_offsetmatrix = new THREE.Matrix4().fromArray( bone.offsetmatrix ).transpose();
-									let new_bone_2_inverse_offsetmatrix = new_bone_2_offsetmatrix.getInverse( new_bone_2_offsetmatrix );
-
-									new_bone_2_transformation.decompose( pos2, rotq2, scl2 );
-
-									new_bone_2.position.x = pos2.x;
-									new_bone_2.position.y = pos2.y;
-									new_bone_2.position.z = pos2.z;
-
-									new_bone_2.quaternion.x = rotq2.x;
-									new_bone_2.quaternion.y = rotq2.y;
-									new_bone_2.quaternion.z = rotq2.z;
-									new_bone_2.quaternion.w = rotq2.w;
-
-									new_bone_2.scale.x = scl2.x;
-									new_bone_2.scale.y = scl2.y;
-									new_bone_2.scale.z = scl2.z;
-
-									return false;
-
-								}
-
-								return true;
-
-							});
-
-							bones.push( new_bone_2 );
-							previous_bone.add( new_bone_2 );
-
-							if ( child_2.children && child_2.children.length > 0 ) {
-
-								previous_bone = previous_bone.children[ 0 ];
-								traverse( child_2.children );
-
-							}
-
-							child_id += 1;
-						});
-
-						return;
-					}
-
-					if ( node.children[ i ].children && node.children[ i ].children.length > 0 ) {
-
-						node.children[ i ].children.forEach( child_1 => {
-
-							let new_bone_1 = new THREE.Bone();
-
-							new_bone_1[ 'name' ] = child_1.name;
-							new_bone_1[ 'transformation' ] = child_1.transformation;
-
-							let new_bone_1_transformation = new THREE.Matrix4().fromArray( child_1.transformation ).transpose();
-							let new_bone_1_inverse_transformation = new_bone_1_transformation.getInverse( new_bone_1_transformation );
-
-							json.meshes[ 0 ].bones.every( bone => {
-
-								if ( bone.name === child_1.name ) {
-
-									new_bone_1[ 'offsetMatrix' ] = bone.offsetmatrix;
-									new_bone_1[ 'weights' ] = bone.weights;
-
-									let new_bone_1_offsetmatrix = new THREE.Matrix4().fromArray( bone.offsetmatrix ).transpose();
-									let new_bone_1_inverse_offsetmatrix = new_bone_1_offsetmatrix.getInverse( new_bone_1_offsetmatrix );
-
-									new_bone_1_transformation.decompose( pos1, rotq1, scl1 );
-
-									new_bone_1.position.x = pos1.x;
-									new_bone_1.position.y = pos1.y;
-									new_bone_1.position.z = pos1.z;
-
-									new_bone_1.quaternion.x = rotq1.x;
-									new_bone_1.quaternion.y = rotq1.y;
-									new_bone_1.quaternion.z = rotq1.z;
-									new_bone_1.quaternion.w = rotq1.w;
-
-									new_bone_1.scale.x = scl1.x;
-									new_bone_1.scale.y = scl1.y;
-									new_bone_1.scale.z = scl1.z;
-
-									return false;
-
-								}
-
-								return true;
-
-							});
-
-							bones.push( new_bone_1 );
-							root.add( new_bone_1 );
-
-							if ( child_1.children && child_1.children.length > 0 ) {
-
-								previous_bone = root.children[ root_id ];
-								traverse( child_1.children );
-
-							}
-
-							root_id += 1;
-
-						});
-
-					}
+					return false;
 
 				}
+
+				return true;
+
+			});
+
+			bones.push( new_bone );
+
+			if ( current_index === -1 ) {
+
+				root.add( new_bone );
+
+			} else {
+
+				bones[ bone_id - current_index - 1 ].add( new_bone );
+
+			}
+
+			bone_id += 1;
+			current_index += 1;
+
+			if ( children[ i ].children && children[ i ].children.length > 0 ) {
+	
+				this.traverse( children[ i ].children, i, mesh_bones );
 
 			}
 
@@ -713,7 +702,6 @@ THREE.AssimpJSONLoader.prototype = {
 		obj.name = node.name || '';
 		obj.matrix = new THREE.Matrix4().fromArray( node.transformation ).transpose();
 		obj.matrix.decompose( obj.position, obj.quaternion, obj.scale );
-		obj[ 'has_points_or_lines' ] = has_points_or_lines;
 
 		for ( i = 0; node.meshes && i < node.meshes.length; i++ ) {
 
@@ -728,7 +716,7 @@ THREE.AssimpJSONLoader.prototype = {
 
 			} else if ( meshes[ idx ].isLines && meshes[ idx ].isLines === true ) {
 
-				obj.add( new THREE.LineSegments( buffer_geometry, new THREE.LineBasicMaterial( { color: materials[ json.meshes[ idx ].materialindex ].color } ) ) );
+				obj.add( new THREE.LineSegments( buffer_geometry, new THREE.LineBasicMaterial( { color: materials[ json.meshes[ idx ].materialindex ].color, linewidth: 0.5 } ) ) );
 
 			} else {
 
@@ -743,6 +731,8 @@ THREE.AssimpJSONLoader.prototype = {
 			obj.add( this.parseObject( json, node.children[ i ], meshes, materials ) );
 
 		}
+
+		obj[ 'has_points_or_lines' ] = has_points_or_lines;
 
 		return obj;
 
