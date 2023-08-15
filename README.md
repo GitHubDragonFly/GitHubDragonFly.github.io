@@ -148,6 +148,7 @@ Number Type Converter
   - `S` - skeleton with demo (JSON viewers)
   - `T` - textures
   - `V` - variants (GLTF viewer)
+  - `W` - wireframe (available on simple mobile viewers only)
   - `X` - morphs
   - `C0` - camera index, with 0 being default (GLTF viewer) (`CAM` + Index in GLTF Legacy viewer)
   - `CS` - construction step (LDRAW viewer)
