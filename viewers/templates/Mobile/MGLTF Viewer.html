@@ -1,0 +1,1199 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="description" content="GLTF v2.0 (GL Transmission Format) Viewer - supported formats: GLTF + BIN, GLB, DRC">
+    <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_decoder.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0" defer></script>
+    <script src="../static/js/DRACOLoader.js" defer></script>
+    <script src="../static/js/GLTFLoader.js" defer></script>
+    <script src="../static/js/TGALoader.js" defer></script>
+    <script src="../static/js/OrbitControls.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/DDSLoader.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/RGBELoader.js" defer></script>
+
+    <style>
+      body, html {
+        position: relative;
+        display: block;
+        background-color: black;
+        width: 100%;
+        min-height: 100vh;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button {
+        border: 1px solid blue;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+        min-width: 22px;
+        height: 22px;
+        padding: 1px;
+      }
+
+      label {
+        vertical-align: middle;
+        height: 22px;
+        margin: 2px 0 2px 0;
+      }
+
+      input[type=color] {
+        border: 1px solid whitesmoke;
+        margin: 2px 3px 2px -2px;
+        vertical-align: middle;
+        background: none;
+        height: 20px;
+        width: 16px;
+        padding: 0;
+      }
+
+      input[type=file] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        max-width: 175px;
+      }
+
+      input[type=text] {
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+      }
+
+      .error_msg {
+        background-color: transparent;
+        position: absolute;
+        text-align: center;
+        font-size: x-large;
+        display: none;
+        color: red;
+        width: 240px;
+        height: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .loading_msg {
+        background-color: transparent;
+        color: greenyellow;
+        position: absolute;
+        text-align: center;
+        font-size: large;
+        display: none;
+        height: 240px;
+        width: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .fm { color: navy; width: calc(100% - 4px); border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+
+      .fixed-menu {
+        background-color: whitesmoke;
+        display: inline-block;
+        position: fixed;
+        padding: 1px;
+        width: 100%;
+        z-index: 1;
+        margin: 0;
+      }
+    </style>
+
+    <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- GLTF Examples from: https://github.com/mrdoob/three.js -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>GLTF v2.0 Viewer</title>
+  </head>
+  <body onload="reset_all(); disabled_changed();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".gltf, .glb, .drc, .bin, .dds, .ktx2, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
+        <label for="back_color" title="Background Color">BG</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Variants" id="btn_variants" onclick="switch_variant();" disabled>V</button>
+        <button title="Animations" id="btn_animate" onclick="animate_gltf();" disabled>A</button>
+        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="min-width: 70%; margin-right: 3px;" />
+        <button onclick="load_url_file();" style="min-width: 38px; margin-right: 3px;">Load</button>
+        <button onclick="clear_url();" style="min-width: 38px; margin-right: 1px;">Clear</button>
+      </div>
+    </div>
+
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">Loading</div>
+
+    <script>
+      function show_url() {
+        if (url_displayed === true) {
+          document.getElementById('url').style.display = 'none';
+          url_displayed = false;
+        } else {
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        window.addEventListener( 'mousedown', (event) => { mouse_down = true; }, false);
+        window.addEventListener( 'mouseup', (event) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
+      }
+
+      function resize() {
+        if (scene) {
+          mouse_wheel = true;
+
+          renderer.setSize( window.innerWidth, window.innerHeight );
+
+          default_camera.aspect = window.innerWidth / window.innerHeight;
+          default_camera.updateProjectionMatrix();
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          mouse_wheel = true;
+        }
+      }
+    </script>
+
+    <script>
+      var ktx2_loader, texture_loader, gltf_loader, draco_loader, tga_loader, dds_loader, rgbe_loader;
+      var gltfInstancingExtension, gltfMaterialsVariantsExtension, gltfVideoTextureExtension;
+      var manager, renderer, scene, default_camera, camera, clock, render_requested;
+      var animations, animation_mixer, animation_running, current_animation;
+      var gltf_obj, controls, wireframe_enabled, bounding_box, resource_path;
+      var variants, current_variant, variants_available, draco_material;
+      var mouse_down, mouse_wheel, events_initialized;
+      var url_displayed = false, url_loading = false, vertex_colors_enabled;
+      var ambientLight, directionalLight, ww = window.innerWidth, wh = window.innerHeight;
+      var selected_gltf_file, selected_draco_file, selected_url_file = '', selected_gltf_url_file;
+      var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif, texture_files_dds;
+      var texture_files_svg, texture_files_webp, texture_files_ktx2, texture_files_tga, bin_buffer_files;
+
+      function set_back_color() {
+        scene.background = null;
+        document.body.style.backgroundColor = document.getElementById('back_color').value;
+      }
+
+      function set_initial_scale() {
+        // Set the initial scale of the object so it comes to view
+
+        bounding_box.setFromObject( gltf_obj );
+        let size = bounding_box.getSize(new THREE.Vector3());
+
+        if ( size.y > 1 ) {
+          gltf_obj.scale.multiplyScalar( 50 / size.y );
+        } else if ( size.y > 0.02 ) {
+          gltf_obj.scale.multiplyScalar( 25 / size.y );
+        } else if ( size.y < 0.02 ) {
+          gltf_obj.scale.multiplyScalar( 1 / size.y );
+        } else {
+          gltf_obj.scale.multiplyScalar( 10 / size.y )
+        }
+
+        bounding_box.setFromObject( gltf_obj );
+        let center = bounding_box.getCenter( new THREE.Vector3() );
+        controls.target.set( center.x, center.y, center.z );
+      }
+
+      function switch_variant() {
+        if (variants_available === true) {
+          if (current_variant === variants.length - 1) {
+            current_variant = 0;
+          } else {
+            current_variant += 1;
+          }
+
+          gltf_obj.traverse( function( child ) {
+      	    if (child.isMesh && child.userData.variantMaterials) {
+              child.material = child.userData.variantMaterials[ variants[ current_variant ] ].material;
+              child.material.wireframe = wireframe_enabled; 
+              child.material.needsUpdate = true;
+            }
+          });
+        }
+      }
+
+      function animate_gltf() {
+        if (animation_running === true) {
+          animation_mixer.clipAction( animations[ current_animation ] ).stop();
+
+          if (current_animation === animations.length - 1) {
+            document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+            current_animation = 0;
+            animation_running = false;
+          } else {
+            current_animation += 1;
+            animation_mixer.clipAction( animations[ current_animation ] ).play();
+          }
+        } else {
+          animation_mixer.clipAction( animations[ current_animation ] ).play();
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          animation_running = true;
+        }
+      }
+
+      function init(){
+        if (scene) {
+          if (animation_mixer) {
+            animation_mixer.stopAllAction();
+
+            for ( let i = 0; i < animations.length; i++ ) {
+              animation_mixer.uncacheAction( animations[ i ] );
+              animation_mixer.uncacheClip( animations[ i ] );
+            }
+
+            animation_mixer.uncacheRoot( animation_mixer.getRoot() );
+          }
+
+          gltf_obj.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              if (child.material) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.dispose();
+                  });
+                } else {
+                  child.material.dispose();
+                }
+              }
+
+              child.geometry.dispose();
+            }
+          });
+
+          scene.remove( gltf_obj );
+
+          // Reset all values
+          reset_all( true );
+        }
+
+        enable_disable( true );
+        disabled_changed();
+
+        if (manager === undefined) {
+          manager = new THREE.LoadingManager();
+          manager.addHandler( /\.basis$/i, ktx2_loader );
+        }
+
+        if (default_camera === undefined) default_camera = new THREE.Object3D();
+
+        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
+
+        if (draco_loader === undefined) {
+          draco_loader = new THREE.DRACOLoader( manager );
+          draco_loader.setDecoderPath( '../static/js/libs/draco/' );
+          draco_loader.preload();
+        }
+
+        if (tga_loader === undefined) {
+          tga_loader = new THREE.TGALoader( manager );
+          manager.addHandler( /\.tga$/i, tga_loader );
+        }
+
+        if (dds_loader === undefined) {
+          dds_loader = new THREE.DDSLoader( manager );
+          manager.addHandler( /\.dds$/i, dds_loader );
+        }
+
+        if (rgbe_loader === undefined) {
+          rgbe_loader = new THREE.RGBELoader();
+          rgbe_loader.setDataType( THREE.HalfFloatType );
+        }
+
+        selected_gltf_file = null;
+        selected_gltf_url_file = null;
+        selected_draco_file = null;
+        mouse_down = false;
+        mouse_wheel = true;
+        bin_buffer_files = [];
+        texture_files_png = [];
+        texture_files_jpg = [];
+        texture_files_bmp = [];
+        texture_files_gif = [];
+        texture_files_svg = [];
+        texture_files_dds = [];
+        texture_files_tga = [];
+        texture_files_webp = [];
+        texture_files_ktx2 = [];
+        resource_path = '';
+        variants = null;
+        animations = [];
+        animation_mixer = null;
+        animation_running = false;
+        vertex_colors_enabled = false;
+        render_requested = false;
+        bounding_box = new THREE.Box3();
+
+        document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+        document.getElementById('btn_animate').disabled = true;
+        document.getElementById('btn_variants').style.backgroundColor = 'transparent';
+        document.getElementById('btn_variants').disabled = true;
+
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (url_loading === false) {
+          // Loaded file(s)
+          let fi = document.getElementById('file_input');
+
+          for (let i = 0; i < fi.files.length; i++) {
+            let fn_uc = fi.files[ i ].name.toUpperCase();
+
+            if (fn_uc.endsWith('.GLB') || fn_uc.endsWith('.GLTF')) { selected_gltf_file = fi.files[ i ]; }
+            else if (fn_uc.endsWith('.DRC')) { selected_draco_file = fi.files[ i ]; }
+            else if (fn_uc.endsWith('.BIN')) { bin_buffer_files.push( fi.files[ i ] ); }
+            else if (fn_uc.endsWith('.DDS')) { texture_files_dds.push( fi.files[ i ] ); }
+            else if (fn_uc.endsWith('.TGA')) { texture_files_tga.push( fi.files[ i ] ); }
+            else if (fn_uc.endsWith('.KTX2')) { texture_files_ktx2.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type === 'image/jpeg') { texture_files_jpg.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type === 'image/png') { texture_files_png.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type === 'image/bmp') { texture_files_bmp.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type === 'image/gif') { texture_files_gif.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type === 'image/svg+xml') { texture_files_svg.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type === 'image/webp') { texture_files_webp.push( fi.files[ i ] ); }
+          };
+
+          if (selected_gltf_file === null && selected_draco_file === null) {
+            handle_error( 'No valid GLTF / GLB or DRACO file selected!' );
+            return;
+          }
+
+          if (bin_buffer_files.length > 0) {
+            bin_buffer_files.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_png.length > 0) {
+            texture_files_png.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_jpg.length > 0) {
+            texture_files_jpg.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_bmp.length > 0) {
+            texture_files_bmp.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_gif.length > 0) {
+            texture_files_gif.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_svg.length > 0) {
+            texture_files_svg.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_dds.length > 0) {
+            texture_files_dds.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_tga.length > 0) {
+            texture_files_tga.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_ktx2.length > 0) {
+            texture_files_ktx2.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_webp.length > 0) {
+            texture_files_webp.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          selected_url_file = '';
+        } else {
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          url_loading = false;
+        }
+
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.outputEncoding = THREE.sRGBEncoding;
+          renderer.setSize( ww, wh );
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
+          renderer.autoClear = false;
+
+          document.body.appendChild( renderer.domElement );
+
+          ktx2_loader.detectSupport( renderer );
+        }
+
+        if (gltf_loader === undefined) {
+          // Loader for selected file from Three.js
+          gltf_loader = new THREE.GLTFLoader( manager );
+          gltf_loader.setKTX2Loader( ktx2_loader );
+          gltf_loader.setDRACOLoader( draco_loader );
+          gltf_loader.setMeshoptDecoder( MeshoptDecoder );
+          gltf_loader.register( parser => new gltfInstancingExtension( parser, THREE ) );
+          gltf_loader.register( parser => new gltfMaterialsVariantsExtension( parser ) );
+          gltf_loader.register( parser => new gltfVideoTextureExtension( parser, THREE ) );
+        }
+
+        if (selected_url_file === '') {
+          if (resource_path !== '') gltf_loader.setResourcePath( resource_path.substring( 0, resource_path.length - 1 ) );
+        } else {
+          gltf_loader.setResourcePath( '' );
+        }
+
+        if (clock === undefined) clock = new THREE.Clock();
+
+        if (scene === undefined) scene = new THREE.Scene();
+        if (gltf_obj === undefined) gltf_obj = new THREE.Object3D();
+
+        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+        if (camera === undefined) {
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 2500 );
+          camera.position.set( 0, 0, 250 );
+
+          default_camera = camera;
+          scene.add( default_camera );
+        }
+
+        // Add AmbientLight to the scene
+        if (ambientLight === undefined) {
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.05 );
+          ambientLight.position.set( 0, 0, 250 );
+          scene.add( ambientLight );
+        }
+
+        // Add DirectionalLight to the default_camera (add it to the scene instead if not using Orbit Controls)
+        if (directionalLight === undefined) {
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 1 );
+          directionalLight.position.set( 0, 0, 250 );
+          directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
+          default_camera.add( directionalLight );
+        }
+
+        if (controls === undefined) {
+          controls = new THREE.OrbitControls( default_camera, renderer.domElement );
+          controls.enableZoomToCursor = true;
+          controls.zoomSpeed = 0.8;
+          controls.rotateSpeed = 0.8;
+          controls.keyPanSpeed = 0.8; 
+          controls.panSpeed = 0.8;
+          controls.enableDamping = true;
+          controls.dampingFactor = 0.3;
+          //controls.enableKeys = false;
+          //controls.enableZoom = true;
+          //controls.maxPolarAngle = 2.2;
+          //controls.minPolarAngle = 1.1;
+          //controls.rotateSpeed = 0.2;
+          //controls.minDistance = 2;
+          //controls.maxDistance = 500;
+        }
+
+        enable_disable( false );
+        disabled_changed();
+
+        // Load DRACO or GLTF file
+        (selected_gltf_file !== null) ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : loadURLFile() );
+
+        render_requested = true;
+        render();
+      }
+
+      function loadFile() {
+        gltf_loader.load( URL.createObjectURL( selected_gltf_file ), async function( gltf ) {
+          URL.revokeObjectURL( selected_gltf_file );
+
+          animations = gltf.animations;
+
+          if (animations.length > 0) {
+            animation_mixer = new THREE.AnimationMixer( gltf.scene );
+            current_animation = 0;
+            animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+          }
+
+          variants = gltf.userData.variants;
+
+          if (variants) {
+            for (let i = variants.length - 1; i > -1; i--) {
+              await gltf.functions.selectVariant( gltf.scene, variants[ i ] );
+            }
+
+            current_variant = 0;
+            variants_available = true;
+            document.getElementById('btn_variants').disabled = false;
+            document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
+          }
+
+          gltf.scene.traverse( function( child ) {
+            if (child.isMesh || child.isPoints) {
+              child.geometry.computeBoundingBox();
+              child.geometry.computeBoundingSphere();
+
+              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+              child.geometry.normalizeNormals();
+
+              if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                vertex_colors_enabled = true;
+              }
+
+              if (child.isMesh) {
+                if (child.isSkinnedMesh) child.frustumCulled = false;
+              } else {
+                document.getElementById('btn_wireframe').disabled = true;
+              }
+
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.vertexColors = vertex_colors_enabled;
+                  mtl.format = THREE.RGBAFormat;
+                  mtl.flatShading = false;
+
+                  // Default to double side
+                  mtl.side = THREE.DoubleSide;
+
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                child.material.vertexColors = vertex_colors_enabled;
+                child.material.format = THREE.RGBAFormat;
+                child.material.flatShading = false;
+
+                // Default to double side
+                child.material.side = THREE.DoubleSide;
+
+                child.material.needsUpdate = true;
+              }
+
+              if (!gltf.parser.json.images) {
+                if (texture_files_ktx2.length > 0) {
+                  texture_files_ktx2.forEach( file => {
+                    ktx2_loader.load( URL.createObjectURL( file ) , function( texture ) {
+                      URL.revokeObjectURL( file );
+
+                      texture.encoding = THREE.sRGBEncoding;
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
+
+                      // Apply texture
+                      child.material.map = texture;
+                      child.material.needsUpdate = true;
+                    });
+                  });
+                } else if (texture_files_dds.length > 0) {
+                  texture_files_dds.forEach( file => {
+                    dds_loader.load( URL.createObjectURL( file ) , function( texture ) {
+                      URL.revokeObjectURL( file );
+
+                      texture.encoding = THREE.sRGBEncoding;
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
+                      texture.flipY = false;
+
+                      // Apply texture
+                      child.material.map = texture;
+                      child.material.needsUpdate = true;
+                    });
+                  });
+                } else if (texture_files_tga.length > 0) {
+                  texture_files_tga.forEach( file => {
+                    tga_loader.load( URL.createObjectURL( file ) , function( texture ) {
+                      URL.revokeObjectURL( file );
+
+                      texture.encoding = THREE.sRGBEncoding;
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
+                      texture.flipY = true;
+
+                      // Apply texture
+                      child.material.map = texture;
+                      child.material.needsUpdate = true;
+                    });
+                  });
+                } else if (texture_files_png.length > 0 || texture_files_jpg.length > 0 || texture_files_bmp.length > 0 || texture_files_gif.length > 0 || texture_files_svg.length > 0 || texture_files_webp.length > 0) {
+                  let files = (texture_files_png.length > 0) ? texture_files_png : ((texture_files_jpg.length > 0) ? texture_files_jpg : ((texture_files_bmp.length > 0) ? texture_files_bmp : ((texture_files_gif.length > 0) ? texture_files_gif : ((texture_files_svg.length > 0) ? texture_files_svg : texture_files_webp))));
+
+                  files.forEach( file => {
+                    texture_loader.load( URL.createObjectURL( file ) , function( texture ) {
+                      URL.revokeObjectURL( file );
+
+                      texture.encoding = THREE.sRGBEncoding;
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
+
+                      // Apply texture
+                      child.material.map = texture;
+                      child.material.needsUpdate = true;
+                    });
+                  });
+                }
+              }
+            }
+          });
+
+          gltf_obj = gltf.scene;
+          gltf_obj.name = 'local_model';
+
+          // Add gltf model to scene
+          scene.add( gltf_obj );
+          gltf_obj.position.set( 0, 0, 0 );
+          default_camera.lookAt( gltf_obj.position );
+
+          set_initial_scale();
+          resize();
+
+          if (animations.length > 0) {
+            animation_mixer.clipAction( animations[ 0 ] ).play();
+            document.getElementById('btn_animate').disabled = false;
+            document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+            animation_running = true;
+          } else {
+            mouse_wheel = true;
+          }
+
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+
+          disabled_changed();
+        }, function ( xhr ) { // onProgress
+        }, function ( error ) { // onError
+          URL.revokeObjectURL( selected_gltf_file );
+          handle_error( error );
+        });
+      }
+
+      function loadDRACO() {
+        draco_loader.load( URL.createObjectURL( selected_draco_file ), function( geometry ) {
+          URL.revokeObjectURL( selected_draco_file );
+
+          if (!geometry.attributes.normal) geometry.computeVertexNormals();
+
+          if (geometry.attributes.color && geometry.attributes.color.array.length > 0) {
+            vertex_colors_enabled = true;
+          }
+
+          if (texture_files_ktx2.length > 0) {
+            texture_files_ktx2.forEach( file => {
+              ktx2_loader.load( URL.createObjectURL( file ), function( texture ) {
+                URL.revokeObjectURL( file );
+
+                texture.encoding = THREE.sRGBEncoding;
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+
+                // Apply texture
+                draco_material = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, map: texture, opacity: 1, transparent: true, vertexColors: vertex_colors_enabled } );
+
+                gltf_obj = new THREE.Mesh( geometry, draco_material );
+
+                gltf_obj.name = 'child_0';
+
+                // Add DRACO model to scene
+                scene.add( gltf_obj );
+                gltf_obj.position.set( 0, 0, 0 );
+                default_camera.lookAt( gltf_obj.position );
+
+                set_initial_scale();
+                resize();
+              });
+            });
+          } else if (texture_files_dds.length > 0) {
+            texture_files_dds.forEach( file => {
+              dds_loader.load( URL.createObjectURL( file ), function( texture ) {
+                URL.revokeObjectURL( file );
+
+                texture.encoding = THREE.sRGBEncoding;
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.flipY = false;
+
+                // Apply texture
+                draco_material = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, map: texture, opacity: 1, transparent: true, vertexColors: vertex_colors_enabled } );
+
+                gltf_obj = new THREE.Mesh( geometry, draco_material );
+
+                gltf_obj.name = 'child_0';
+
+                // Add DRACO model to scene
+                scene.add( gltf_obj );
+                gltf_obj.position.set( 0, 0, 0 );
+                default_camera.lookAt( gltf_obj.position );
+
+                set_initial_scale();
+                resize();
+              });
+            });
+          } else if (texture_files_tga.length > 0) {
+            texture_files_tga.forEach( file => {
+              tga_loader.load( URL.createObjectURL( file ), function( texture ) {
+                URL.revokeObjectURL( file );
+
+                texture.encoding = THREE.sRGBEncoding;
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.flipY = true;
+
+                // Apply texture
+                draco_material = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, map: texture, opacity: 1, transparent: true, vertexColors: vertex_colors_enabled } );
+
+                gltf_obj = new THREE.Mesh( geometry, draco_material );
+
+                gltf_obj.name = 'child_0';
+
+                // Add DRACO model to scene
+                scene.add( gltf_obj );
+                gltf_obj.position.set( 0, 0, 0 );
+                default_camera.lookAt( gltf_obj.position );
+
+                set_initial_scale();
+                resize();
+              });
+            });
+          } else if (texture_files_png.length > 0 || texture_files_jpg.length > 0 || texture_files_bmp.length > 0 || texture_files_gif.length > 0 || texture_files_svg.length > 0 || texture_files_webp.length > 0) {
+            let tex_files = (texture_files_png.length > 0) ? texture_files_png : ((texture_files_jpg.length > 0) ? texture_files_jpg : ((texture_files_bmp.length > 0) ? texture_files_bmp : ((texture_files_gif.length > 0) ? texture_files_gif : ((texture_files_svg.length > 0) ? texture_files_svg : texture_files_webp))));
+
+            tex_files.forEach( file => {
+              texture_loader.load( URL.createObjectURL( file ), function( texture ) {
+                URL.revokeObjectURL( file );
+
+                texture.encoding = THREE.sRGBEncoding;
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.flipY = false;
+
+                // Apply texture
+                draco_material = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, map: texture, opacity: 1, transparent: true, vertexColors: vertex_colors_enabled } );
+
+                gltf_obj = new THREE.Mesh( geometry, draco_material );
+
+                gltf_obj.name = 'child_0';
+
+                // Add DRACO model to scene
+                scene.add( gltf_obj );
+                gltf_obj.position.set( 0, 0, 0 );
+                default_camera.lookAt( gltf_obj.position );
+
+                set_initial_scale();
+                resize();
+              });
+            });
+          } else {
+            let draco_texture = texture_loader.load( 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAzSURBVBhXFYrJDQAxDAIHl5tG9pWOI8/aICGunO9qP0JRNZqwltgspltKdtmfihNMoc0PFNkQjHSfyTIAAAAASUVORK5CYII=' );
+            draco_material = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, map: draco_texture, opacity: 1, transparent: true, vertexColors: vertex_colors_enabled } );
+
+            gltf_obj = new THREE.Mesh( geometry, draco_material );
+
+            gltf_obj.name = 'child_0';
+
+            // Add DRACO model to scene
+            scene.add( gltf_obj );
+            gltf_obj.position.set( 0, 0, 0 );
+            default_camera.lookAt( gltf_obj.position );
+
+            set_initial_scale();
+            resize();
+          }
+
+          mouse_wheel = true;
+
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+
+          disabled_changed();
+        }, function ( xhr ) { // onProgress
+        }, function ( error ) { // onError
+          URL.revokeObjectURL( selected_draco_file );
+          handle_error( error );
+        });
+      }
+
+      function loadURLFile() {
+        if (selected_url_file !== '') {
+          if (selected_url_file.indexOf( ',' ) > -1) {
+            let urls = selected_url_file.split( ',' );
+
+            for (let i = 0; i < urls.length; i++) {
+              let url = urls[ i ].trim();
+              let url_uc = url.toUpperCase();
+
+              if (url_uc.endsWith('.GLTF') || url_uc.endsWith('.GLB') || url_uc.endsWith('.DRC')) {
+                selected_gltf_url_file = url;
+              } else if (url.endsWith('/')) {
+                gltf_loader.setResourcePath( url );
+              }
+            }
+          } else {
+            let url_uc = selected_url_file.toUpperCase();
+
+            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+              selected_gltf_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+            } else if (selected_url_file.startsWith('https://github.com') === true) {
+              selected_gltf_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+            } else if (url_uc.endsWith('.GLTF') || url_uc.endsWith('.GLB') || url_uc.endsWith('.DRC')) {
+              selected_gltf_url_file = selected_url_file;
+            }
+          }
+
+          if (selected_gltf_url_file === null) {
+            handle_error( 'Not a valid URL for supported 3D models!' );
+            return;
+          }
+
+          if (selected_gltf_url_file.toUpperCase().endsWith('.DRC')) {
+            draco_loader.load( selected_gltf_url_file, function( geometry ) {
+              if (!geometry.attributes.normal) geometry.computeVertexNormals();
+
+              if (geometry.attributes.color && geometry.attributes.color.array.length > 0) {
+                vertex_colors_enabled = true;
+              }
+
+              let draco_texture = texture_loader.load( 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAzSURBVBhXFYrJDQAxDAIHl5tG9pWOI8/aICGunO9qP0JRNZqwltgspltKdtmfihNMoc0PFNkQjHSfyTIAAAAASUVORK5CYII=' );
+              draco_material = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, map: draco_texture, opacity: 1, transparent: true, vertexColors: vertex_colors_enabled } );
+
+              gltf_obj = new THREE.Mesh( geometry, draco_material );
+
+              gltf_obj.name = 'child_0';
+
+              // Add DRACO model to scene
+              scene.add( gltf_obj );
+              gltf_obj.position.set( 0, 0, 0 );
+              default_camera.lookAt( gltf_obj.position );
+
+              set_initial_scale();
+              resize();
+
+              mouse_wheel = true;
+
+              console.timeEnd( 'Loading Time' );
+              document.getElementById('div_loading').style.display = 'none';
+
+              disabled_changed();
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              handle_error( error );
+            });
+          } else {
+            gltf_loader.load( selected_gltf_url_file, async gltf => {
+              animations = gltf.animations;
+
+              if (animations.length > 0) {
+                animation_mixer = new THREE.AnimationMixer( gltf.scene );
+                current_animation = 0;
+                animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+              }
+
+              variants = gltf.userData.variants;
+
+              if (variants) {
+                for (let i = variants.length - 1; i > -1; i--) {
+                  await gltf.functions.selectVariant( gltf.scene, variants[ i ] );
+                }
+
+                current_variant = 0;
+                variants_available = true;
+                document.getElementById('btn_variants').disabled = false;
+                document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
+              }
+
+              gltf.scene.traverse( function( child ) {
+                if (child.isMesh || child.isPoints) {
+                  child.geometry.computeBoundingBox();
+                  child.geometry.computeBoundingSphere();
+
+                  if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                  child.geometry.normalizeNormals();
+
+                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                    vertex_colors_enabled = true;
+                  }
+
+                  if (child.isMesh) {
+                    if (child.isSkinnedMesh) child.frustumCulled = false;
+                  } else {
+                    document.getElementById('btn_wireframe').disabled = true;
+                  }
+
+                  if (Array.isArray( child.material )) {
+                    child.material.forEach( mtl => {
+                      mtl.vertexColors = vertex_colors_enabled;
+                      mtl.format = THREE.RGBAFormat;
+                      mtl.flatShading = false;
+
+                      // Default to double side
+                      mtl.side = THREE.DoubleSide;
+
+                      mtl.needsUpdate = true;
+
+                      child_count_array += 1;
+                    });
+                  } else {
+                    child.material.vertexColors = vertex_colors_enabled;
+                    child.material.format = THREE.RGBAFormat;
+                    child.material.flatShading = false;
+
+                    // Default to double side
+                    child.material.side = THREE.DoubleSide;
+
+                    child.material.needsUpdate = true;
+                  }
+                }
+              });
+
+              gltf_obj = gltf.scene;
+              gltf_obj.name = 'url_model';
+
+              // Add gltf model to scene
+              scene.add( gltf_obj );
+              gltf_obj.position.set( 0, 0, 0 );
+              default_camera.lookAt( gltf_obj.position );
+
+              set_initial_scale();
+              resize();
+
+              if (animations.length > 0) {
+                animation_mixer.clipAction( animations[ 0 ] ).play();
+                document.getElementById('btn_animate').disabled = false;
+                document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+                animation_running = true;
+              } else {
+                mouse_wheel = true;
+              }
+
+              console.timeEnd( 'Loading Time' );
+              document.getElementById('div_loading').style.display = 'none';
+
+              disabled_changed();
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              handle_error( error );
+            });
+          }
+        }
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        render_requested = false;
+        enable_disable( true );
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      function show_wireframe() {
+        if (gltf_obj) {
+          if (wireframe_enabled === true) {
+            wireframe_enabled = false;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+          } else {
+            wireframe_enabled = true;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
+          }
+
+          gltf_obj.traverse( function( child ) {
+      	    if (child.isMesh) {
+              mouse_wheel = true;
+
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.wireframe = wireframe_enabled;
+                });
+              } else {
+                child.material.wireframe = wireframe_enabled;
+              }
+            }
+      	  });
+        }
+      }
+
+      async function render() {
+        if (gltf_obj) {
+          if (animation_running === true || mouse_down === true || mouse_wheel === true) {
+            if (animation_running === true) animation_mixer.update( clock.getDelta() );
+
+            controls.update();
+
+            renderer.clear();
+            renderer.render( scene, default_camera );
+
+            scene.updateMatrixWorld();
+            default_camera.updateMatrixWorld();
+
+            mouse_wheel = false;
+          }
+
+          if (render_requested === true) requestAnimationFrame( render );
+        }
+      }
+
+      function reset_all( reset = false ) {
+        document.getElementById('back_color').value = '#000000';
+        document.getElementById('back_color').disabled = false;
+
+        animation_running = false;
+        document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+        document.getElementById('btn_variants').style.backgroundColor = 'transparent';
+
+        // Reset the view
+        if (reset === true) {
+          controls.reset();
+          if (wireframe_enabled === true) show_wireframe();
+          set_back_color();
+
+          if (variants_available === true) {
+            current_variant = variants.length - 1;
+            switch_variant();
+          }
+        } else {
+          // Page (re)loading
+          if (scene) {
+            if (gltf_obj) {
+              if (animation_mixer) animation_mixer.stopAllAction();
+
+              gltf_obj.traverse( ( child ) => {
+                if (child.isMesh || child.isPoints) {
+                  if (child.material) {
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        mtl.dispose();
+                      });
+                    } else {
+                      child.material.dispose();
+                    }
+                  }
+
+                  child.geometry.dispose();
+                }
+              });
+
+              while (gltf_obj.children.length > 0) {
+                gltf_obj.remove( gltf_obj.children[ 0 ] );
+              }
+
+              gltf_obj.children.length = 0;
+
+              scene.remove( gltf_obj );
+            }
+
+            scene.environment = null;
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+          }
+
+          document.getElementById('file_input').value = '';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('btn_animate').disabled = true;
+          document.getElementById('btn_variants').disabled = true;
+          document.getElementById('btn_variants').style.backgroundColor = 'transparent';
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+          enable_disable( true );
+        }
+
+        disabled_changed();
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('btn_wireframe').disabled = disable;
+        document.getElementById('back_color').disabled = disable;
+      }
+    </script>
+
+    <script>
+      function disabled_changed() {
+        $('button').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+
+        $('input[type=color]').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+      }
+    </script>
+
+    <script type="module">
+      import { KTX2Loader } from '../static/jsm/KTX2Loader.js';
+      import GLTFInstancingExtension from '../static/jsm/extensions/loaders/EXT_mesh_gpu_instancing/EXT_mesh_gpu_instancing.js';
+      import GLTFVideoTextureExtension from '../static/jsm/extensions/loaders/EXT_texture_video/EXT_texture_video.js';
+      import GLTFMaterialsVariantsExtension from '../static/jsm/extensions/loaders/KHR_materials_variants/KHR_materials_variants.js';
+
+      gltfInstancingExtension = GLTFInstancingExtension;
+      gltfVideoTextureExtension = GLTFVideoTextureExtension;
+      gltfMaterialsVariantsExtension = GLTFMaterialsVariantsExtension;
+
+      ktx2_loader = new KTX2Loader( manager );
+      ktx2_loader.setTranscoderPath( '../static/jsm/libs/basis/' );
+    </script>
+  </body>
+</html>
