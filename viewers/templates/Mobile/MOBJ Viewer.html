@@ -1,0 +1,1017 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no">
+    <meta name="description" content="OBJ + MTL (Wavefront Technologies) Viewer">
+    <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.149.0" defer></script>
+    <script src="../../static/js/MTLLoader.js" defer></script>
+    <script src="../../static/js/OBJLoader.js" defer></script>
+    <script src="../../static/js/TGALoader.js" defer></script>
+    <script src="../../static/js/DDSLoader.js" defer></script>
+    <script src="../../static/js/OrbitControls.js" defer></script>
+
+    <style>
+      body, html {
+        position: relative;
+        display: block;
+        background-color: black;
+        width: 100%;
+        min-height: 100vh;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button {
+        border: 1px solid blue;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+        min-width: 22px;
+        height: 22px;
+        padding: 1px;
+      }
+
+      label {
+        vertical-align: middle;
+        height: 22px;
+        margin: 2px 0 2px 0;
+      }
+
+      input[type=color] {
+        border: 1px solid whitesmoke;
+        margin: 2px 3px 2px -2px;
+        vertical-align: middle;
+        background: none;
+        height: 20px;
+        width: 16px;
+        padding: 0;
+      }
+
+      input[type=file] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        max-width: 175px;
+      }
+
+      input[type=text] {
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+      }
+
+      .error_msg {
+        background-color: transparent;
+        position: absolute;
+        text-align: center;
+        font-size: x-large;
+        display: none;
+        color: red;
+        width: 240px;
+        height: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .loading_msg {
+        background-color: transparent;
+        color: greenyellow;
+        position: absolute;
+        text-align: center;
+        font-size: large;
+        display: none;
+        height: 240px;
+        width: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .fm { color: navy; width: calc(100% - 4px); border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+
+      .fixed-menu {
+        background-color: whitesmoke;
+        display: inline-block;
+        position: fixed;
+        padding: 1px;
+        width: 100%;
+        z-index: 1;
+        margin: 0;
+      }
+    </style>
+
+    <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- OBJ Examples from: https://github.com/mrdoob/three.js -->
+    <!-- More OBJ examples: -->
+    <!--   https://people.math.sc.edu/Burkardt/data/data.html -->
+    <!--   http://casual-effects.com/data/index.html -->
+    <!--   https://www.videocopilot.net/blog/2016/05/free-star-wars-model-pack/ -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>OBJ Viewer</title>
+  </head>
+  <body onload="reset_all();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".obj, .mtl, .dib, .dds, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
+        <label for="back_color" title="Background Color">BG</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="width: 70%;" />
+        <button onclick="load_url_file();" style="min-width: 38px;">Load</button>
+        <button onclick="clear_url();" style="min-width: 38px;">Clear</button>
+      </div>
+    </div>
+
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">Loading</div>
+
+    <script>
+      function show_url() {
+        if (url_displayed === true) {
+          document.getElementById('url').style.display = 'none';
+          url_displayed = false;
+        } else {
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        window.addEventListener( 'mousedown', (event) => { mouse_down = true; }, false);
+        window.addEventListener( 'mouseup', (event) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
+      }
+
+      function resize() {
+        if (scene) {
+          mouse_wheel = true;
+
+          renderer.setSize( window.innerWidth, window.innerHeight );
+
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          mouse_wheel = true;
+        }
+      }
+    </script>
+
+    <script>
+      var manager, texture_loader, obj_loader, mtl_loader, tga_loader, dds_loader;
+      var renderer, scene, camera, Obj, render_requested, wireframe_enabled;
+      var ambientLight, directionalLight, bounding_box;
+      var controls, mouse_down, mouse_wheel, events_initialized;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var selected_url_file = '', selected_obj_url_file;
+      var selected_mtl_file, selected_mtl_url_file, selected_obj_file;
+      var url_displayed = false, url_loading = false, vertex_colors_enabled;
+      var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif;
+      var texture_files_svg, texture_files_dds, texture_files_tga, texture_files_webp;
+
+      function set_back_color() {
+        scene.background = null;
+        document.body.style.backgroundColor = document.getElementById('back_color').value;
+      }
+
+      function set_initial_scale() {
+        // Set the initial scale of the object so it comes to view
+
+        bounding_box.setFromObject( Obj );
+        let size = bounding_box.getSize(new THREE.Vector3());
+
+        if ( size.y > 1 ) {
+          Obj.scale.multiplyScalar( 50 / size.y );
+        } else if ( size.y > 0.02 ) {
+          Obj.scale.multiplyScalar( 25 / size.y );
+        } else if ( size.y < 0.02 ) {
+          Obj.scale.multiplyScalar( 1 / size.y );
+        } else {
+          Obj.scale.multiplyScalar( 10 / size.y )
+        }
+
+        bounding_box.setFromObject( Obj );
+        let center = bounding_box.getCenter(new THREE.Vector3());
+        controls.target.set( center.x, center.y, center.z );
+      }
+
+      function init(){
+        if (scene) {
+          Obj.traverse( function( child ) {
+            if (child.isMesh || child.isPoints) {
+              if (child.material) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.dispose();
+                  });
+                } else {
+                  child.material.dispose();
+                }
+              }
+
+              child.geometry.dispose();
+            }
+          });
+
+          scene.remove( Obj );
+
+          // Reset all values
+          reset_all( true );
+        }
+
+        enable_disable( true );
+        disabled_changed();
+
+        if (manager === undefined) manager = new THREE.LoadingManager();
+
+        manager.onProgress = function ( item, loaded, total ) {
+          if ( loaded === total ) {
+            console.timeEnd( 'Loading Time' );
+            document.getElementById('div_loading').style.display = 'none';
+
+            enable_disable( false );
+            disabled_changed();
+
+            render_requested = true;
+            mouse_wheel = true;
+            render();
+          }
+        }
+
+        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
+
+        if (obj_loader === undefined) obj_loader = new THREE.OBJLoader( manager );
+
+        if (mtl_loader === undefined) mtl_loader = new THREE.MTLLoader( manager );
+
+        if (tga_loader === undefined) {
+          tga_loader = new THREE.TGALoader( manager );
+          manager.addHandler( /\.tga$/i, tga_loader );
+        }
+
+        if (dds_loader === undefined) {
+          dds_loader = new THREE.DDSLoader( manager );
+          manager.addHandler( /\.dds$/i, dds_loader );
+        }
+
+        obj_loader.setMaterials( null );
+
+        selected_obj_file = null;
+        selected_obj_url_file = null;
+        selected_mtl_file = null;
+        selected_mtl_url_file = null;
+        mouse_down = false;
+        mouse_wheel = true;
+        texture_files_jpg = [];
+        texture_files_png = [];
+        texture_files_bmp = [];
+        texture_files_gif = [];
+        texture_files_svg = [];
+        texture_files_webp = [];
+        texture_files_dds = [];
+        texture_files_tga = [];
+        vertex_colors_enabled = false;
+        wireframe_enabled = false;
+        render_requested = false;
+        bounding_box = new THREE.Box3();
+
+        console.time( 'Loading Time' );
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (url_loading === false) {
+          // Loaded file(s)
+          let fi = document.getElementById('file_input');
+
+          // Include check for JPG/PNG/BMP/GIF/TIF, SVG, TGA and DDS (DirectDraw Surface container file format)
+          for (let i = 0; i < fi.files.length; i++) {
+            let fn_uc = fi.files[ i ].name.toUpperCase();
+
+            if (fn_uc.endsWith('.OBJ')) { selected_obj_file = fi.files[ i ]; }
+            else if (fn_uc.endsWith('.MTL')) { selected_mtl_file = fi.files[ i ]; }
+            else if (fn_uc.endsWith('.TGA')) { texture_files_tga.push( fi.files[ i ] ); }
+            else if (fn_uc.endsWith('.DDS')) { texture_files_dds.push( fi.files[ i ] ); }
+            else if (fn_uc.endsWith('.DIB')) { texture_files_bmp.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type.startsWith('image/png')) { texture_files_png.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type.startsWith('image/jpeg')) { texture_files_jpg.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type.startsWith('image/bmp')) { texture_files_bmp.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type.startsWith('image/gif')) { texture_files_gif.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type.startsWith('image/svg+xml')) { texture_files_svg.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type.startsWith('image/webp')) { texture_files_webp.push( fi.files[ i ] ); }
+          };
+
+          if (selected_obj_file === null) {
+            handle_error( 'No valid OBJ file selected!' );
+            return;
+          }
+
+          selected_url_file = '';
+        } else {
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          url_loading = false;
+        }
+
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.outputColorSpace = THREE.LinearSRGBColorSpace; // THREE.SRGBColorSpace
+          renderer.setSize( ww, wh );
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
+          renderer.autoClear = false;
+
+          document.body.appendChild( renderer.domElement );
+        }
+
+        if (scene === undefined) scene = new THREE.Scene();
+
+        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+        if (camera === undefined) {
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 2500 );
+          camera.position.set( 0, 0, 250 );
+          scene.add( camera );
+        }
+
+        // Add AmbientLight to the scene
+        if (ambientLight === undefined) {
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.05 );
+          ambientLight.position.set( 0, 0, 250 );
+          scene.add( ambientLight );
+        }
+
+        // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
+        if (directionalLight === undefined) {
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 1 );
+          directionalLight.position.set( 0, 0, 250 );
+          directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
+          camera.add( directionalLight );
+        }
+
+        if (controls === undefined) {
+          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls.enableZoomToCursor = true;
+          controls.zoomSpeed = 0.8;
+          controls.rotateSpeed = 0.8;
+          controls.keyPanSpeed = 0.8; 
+          controls.panSpeed = 0.8;
+          controls.enableDamping = true;
+          controls.dampingFactor = 0.3;
+          //controls.enableKeys = false;
+          //controls.enableZoom = true;
+          //controls.maxPolarAngle = 2.2;
+          //controls.minPolarAngle = 1.1;
+          //controls.rotateSpeed = 0.2;
+          //controls.minDistance = 2;
+          //controls.maxDistance = 500;
+        }
+
+        // Load the Obj file
+        selected_obj_file !== null ? loadFile() : loadURLFile();
+      }
+
+      function loadFile() {
+        if (selected_mtl_file) {
+          document.getElementById('div_loading').style.display = 'block';
+
+          mtl_loader.load( URL.createObjectURL( selected_mtl_file ), ( mtl ) => {
+            URL.revokeObjectURL( selected_mtl_file );
+
+            if (texture_files_png.length > 0 || texture_files_jpg.length > 0 || texture_files_bmp.length > 0 || texture_files_gif.length > 0 || texture_files_svg.length > 0 || texture_files_webp.length > 0 || texture_files_tga.length > 0 || texture_files_dds.length > 0) {
+              if (texture_files_png.length > 0) {
+                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
+                  texture_files_png.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
+                }
+              }
+
+              if (texture_files_jpg.length > 0) {
+                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
+                  texture_files_jpg.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
+                }
+              }
+
+              if (texture_files_bmp.length > 0) {
+                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
+                  texture_files_bmp.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
+                }
+              }
+
+              if (texture_files_gif.length > 0) {
+                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
+                  texture_files_gif.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
+                }
+              }
+
+              if (texture_files_svg.length > 0) {
+                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
+                  texture_files_svg.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
+                }
+              }
+
+              if (texture_files_webp.length > 0) {
+                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
+                  texture_files_webp.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
+                }
+              }
+
+              if (texture_files_tga.length > 0) {
+                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
+                  mtl.materialsInfo[ key ][ 'ext' ] = '.tga';
+
+                  texture_files_tga.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
+                }
+              }
+
+              if (texture_files_dds.length > 0) {
+                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
+                  mtl.materialsInfo[ key ][ 'ext' ] = '.dds';
+
+                  texture_files_dds.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
+                }
+              }
+            } else {
+              mtl.preload();
+            }
+
+            obj_loader.setMaterials( mtl );
+
+            // Launch loading of the selected file
+            obj_loader.load( URL.createObjectURL( selected_obj_file ), function ( object ) {
+              URL.revokeObjectURL( selected_obj_file );
+
+              Obj = object;
+
+              Obj.traverse( function( child ) {
+                if (child.isMesh || child.isPoints) {
+                  if (child.geometry.isBufferGeometry) child.geometry.computeBoundingBox();
+                  if (child.geometry.isBufferGeometry) child.geometry.computeBoundingSphere();
+
+                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                    vertex_colors_enabled = true;
+                  }
+
+                  if (child.isPoints) document.getElementById('btn_wireframe').disabled = true;
+
+                  if (Array.isArray( child.material )) {
+                    child.material.forEach( mtrl => {
+                      mtrl.vertexColors = vertex_colors_enabled;
+
+                      // Default to double side
+                      mtrl.side = THREE.DoubleSide;
+                    });
+                  } else {
+                    child.material.vertexColors = vertex_colors_enabled;
+
+                    // Default to double side
+                    child.material.side = THREE.DoubleSide;
+
+                    if (child.isPoints) child.material.size = 0.01;
+                  }
+                }
+              });
+
+              // Add 3D object to scene
+              scene.add( Obj );
+              Obj.position.set( 0, 0, 0 );
+              camera.lookAt( Obj.position );
+
+              set_initial_scale();
+              resize();
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              handle_error( error );
+              URL.revokeObjectURL( selected_obj_file );
+            });
+          }, function ( xhr ) {  // onProgress
+          }, function ( error ) { // onError
+            handle_error( error );
+            URL.revokeObjectURL( selected_mtl_file );
+          });
+        } else {
+          document.getElementById('div_loading').style.display = 'block';
+
+          // Launch loading of the selected file
+          obj_loader.load( URL.createObjectURL( selected_obj_file ), function( object ) {
+            URL.revokeObjectURL( selected_obj_file );
+
+            Obj = object;
+
+            Obj.traverse( function( child ) {
+              if (child.isMesh || child.isPoints) {
+                if (child.geometry.isBufferGeometry) child.geometry.computeBoundingBox();
+                if (child.geometry.isBufferGeometry) child.geometry.computeBoundingSphere();
+
+                if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                  vertex_colors_enabled = true;
+                }
+
+                if (child.isPoints) document.getElementById('btn_wireframe').disabled = true;
+
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtrl => {
+                    mtrl.vertexColors = vertex_colors_enabled;
+
+                    // Default to double side
+                    mtrl.side = THREE.DoubleSide;
+                  });
+                } else {
+                  child.material.vertexColors = vertex_colors_enabled;
+
+                  // Default to double side
+                  child.material.side = THREE.DoubleSide;
+
+                  if (child.isPoints) child.material.size = 0.01;
+                }
+              }
+            });
+
+            // Add 3D object to scene
+            scene.add( Obj );
+            Obj.position.set( 0, 0, 0 );
+            camera.lookAt( Obj.position );
+
+            set_initial_scale();
+            resize();
+          }, function ( xhr ) { // onProgress
+          }, function ( error ) { // onError
+            handle_error( error );
+            URL.revokeObjectURL( selected_obj_file );
+          });
+        }
+      }
+
+      function set_mtl_materialsInfo( key, value, file, mtl ) {
+        if (value.map_d && (value.map_d.indexOf( ' ' ) ? file.name === value.map_d.substring( value.map_d.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_d)) {
+          mtl.materialsInfo[ key ][ 'map_d' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_kd && (value.map_kd.indexOf( ' ' ) ? file.name === value.map_kd.substring( value.map_kd.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_kd)) {
+          mtl.materialsInfo[ key ][ 'map_kd' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_ka && (value.map_ka.indexOf( ' ' ) ? file.name === value.map_ka.substring( value.map_ka.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_ka)) {
+          mtl.materialsInfo[ key ][ 'map_ka' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_ke && (value.map_ke.indexOf( ' ' ) ? file.name === value.map_ke.substring( value.map_ke.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_ke)) {
+          mtl.materialsInfo[ key ][ 'map_ke' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_emissive && (value.map_emissive.indexOf( ' ' ) ? file.name === value.map_emissive.substring( value.map_emissive.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_emissive)) {
+          mtl.materialsInfo[ key ][ 'map_emissive' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_ks && (value.map_ks.indexOf( ' ' ) ? file.name === value.map_ks.substring( value.map_ks.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_ks)) {
+          mtl.materialsInfo[ key ][ 'map_ks' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_bump && (value.map_bump.indexOf( ' ' ) ? file.name === value.map_bump.substring( value.map_bump.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_bump)) {
+          mtl.materialsInfo[ key ][ 'map_bump' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.bump && (value.bump.indexOf( ' ' ) ? file.name === value.bump.substring( value.bump.lastIndexOf( ' ' ) + 1 ) : file.name === value.bump)) {
+          mtl.materialsInfo[ key ][ 'bump' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.norm && (value.norm.indexOf( ' ' ) ? file.name === value.norm.substring( value.norm.lastIndexOf( ' ' ) + 1 ) : file.name === value.norm)) {
+          mtl.materialsInfo[ key ][ 'norm' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_kn && (value.map_kn.indexOf( ' ' ) ? file.name === value.map_kn.substring( value.map_kn.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_kn)) {
+          mtl.materialsInfo[ key ][ 'map_kn' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_pl && (value.map_pl.indexOf( ' ' ) ? file.name === value.map_pl.substring( value.map_pl.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_pl)) {
+          mtl.materialsInfo[ key ][ 'map_pl' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_pa && (value.map_pa.indexOf( ' ' ) ? file.name === value.map_pa.substring( value.map_pa.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_pa)) {
+          mtl.materialsInfo[ key ][ 'map_pa' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_pm && (value.map_pm.indexOf( ' ' ) ? file.name === value.map_pm.substring( value.map_pm.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_pm)) {
+          mtl.materialsInfo[ key ][ 'map_pm' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_pr && (value.map_pr.indexOf( ' ' ) ? file.name === value.map_pr.substring( value.map_pr.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_pr)) {
+          mtl.materialsInfo[ key ][ 'map_pr' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.disp && (value.disp.indexOf( ' ' ) ? file.name === value.disp.substring( value.disp.lastIndexOf( ' ' ) + 1 ) : file.name === value.disp)) {
+          mtl.materialsInfo[ key ][ 'disp' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_disp && (value.map_disp.indexOf( ' ' ) ? file.name === value.map_disp.substring( value.map_disp.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_disp)) {
+          mtl.materialsInfo[ key ][ 'map_disp' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_pccm && (value.map_pccm.indexOf( ' ' ) ? file.name === value.map_pccm.substring( value.map_pccm.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_pccm)) {
+          mtl.materialsInfo[ key ][ 'map_pccm' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_pccnm && (value.map_pccnm.indexOf( ' ' ) ? file.name === value.map_pccnm.substring( value.map_pccnm.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_pccnm)) {
+          mtl.materialsInfo[ key ][ 'map_pccnm' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_pccrm && (value.map_pccrm.indexOf( ' ' ) ? file.name === value.map_pccrm.substring( value.map_pccrm.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_pccrm)) {
+          mtl.materialsInfo[ key ][ 'map_pccrm' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_ps && (value.map_ps.indexOf( ' ' ) ? file.name === value.map_ps.substring( value.map_ps.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_ps)) {
+          mtl.materialsInfo[ key ][ 'map_ps' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_pshcm && (value.map_pshcm.indexOf( ' ' ) ? file.name === value.map_pshcm.substring( value.map_pshcm.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_pshcm)) {
+          mtl.materialsInfo[ key ][ 'map_pshcm' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_pshrm && (value.map_pshrm.indexOf( ' ' ) ? file.name === value.map_pshrm.substring( value.map_pshrm.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_pshrm)) {
+          mtl.materialsInfo[ key ][ 'map_pshrm' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_psim && (value.map_psim.indexOf( ' ' ) ? file.name === value.map_psim.substring( value.map_psim.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_psim)) {
+          mtl.materialsInfo[ key ][ 'map_psim' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_pscm && (value.map_pscm.indexOf( ' ' ) ? file.name === value.map_pscm.substring( value.map_pscm.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_pscm)) {
+          mtl.materialsInfo[ key ][ 'map_pscm' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_pthm && (value.map_pthm.indexOf( ' ' ) ? file.name === value.map_pthm.substring( value.map_pthm.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_pthm)) {
+          mtl.materialsInfo[ key ][ 'map_pthm' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+
+        if (value.map_ptrm && (value.map_ptrm.indexOf( ' ' ) ? file.name === value.map_ptrm.substring( value.map_ptrm.lastIndexOf( ' ' ) + 1 ) : file.name === value.map_ptrm)) {
+          mtl.materialsInfo[ key ][ 'map_ptrm' ] = URL.createObjectURL( file ).substring( mtl.baseUrl.length );
+          URL.revokeObjectURL( file );
+        }
+      }
+
+      function loadURLFile() {
+        if (selected_url_file !== '') {
+          if (selected_url_file.indexOf( ',' ) > -1) {
+            let urls = selected_url_file.split( ',' );
+
+            for (let i = 0; i < urls.length; i++) {
+              let url = urls[ i ].trim();
+              let url_uc = url.toUpperCase();
+
+              if (url_uc.endsWith('.MTL')) {
+                selected_mtl_url_file = url;
+              } else if (url_uc.endsWith('.OBJ')) {
+                selected_obj_url_file = url;
+              } else if (url.endsWith('/')) {
+                obj_loader.setResourcePath( url );
+              }
+            }
+
+            if (selected_obj_url_file) {
+              document.getElementById('div_loading').style.display = 'block';
+
+              if (selected_mtl_url_file) {
+                mtl_loader.load( selected_mtl_url_file, ( mtl ) => {
+                  mtl.preload();
+                  obj_loader.setMaterials( mtl );
+
+                  obj_loader.load( selected_obj_url_file, function( object ) {
+                    Obj = object;
+
+                    Obj.traverse( function( child ) {
+                      if (child.isMesh || child.isPoints) {
+                        if (child.geometry.isBufferGeometry) child.geometry.computeBoundingBox();
+                        if (child.geometry.isBufferGeometry) child.geometry.computeBoundingSphere();
+
+                        if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                          vertex_colors_enabled = true;
+                        }
+
+                        if (child.isPoints) document.getElementById('btn_wireframe').disabled = true;
+
+                        if (Array.isArray( child.material )) {
+                          child.material.forEach( mtrl => {
+                            if (mtrl.map) mtrl.map.generateMipmaps = true;
+
+                            mtrl.vertexColors = vertex_colors_enabled;
+
+                            // Default to double side
+                            mtrl.side = THREE.DoubleSide;
+                          });
+                        } else {
+                          if (child.material.map) child.material.map.generateMipmaps = true;
+
+                          child.material.vertexColors = vertex_colors_enabled;
+
+                          // Default to double side
+                          child.material.side = THREE.DoubleSide;
+
+                          if (child.isPoints) child.material.size = 0.01;
+                        }
+                      }
+                    });
+
+                    // Add 3D object to scene
+                    scene.add( Obj );
+                    Obj.position.set( 0, 0, 0 );
+                    camera.lookAt( Obj.position );
+
+                    set_initial_scale();
+                    resize();
+                  }, function ( xhr ) { // onProgress
+                  }, function ( error ) { handle_error( error ); }); // onError
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { handle_error( error ); }); // onError
+              } else {
+                obj_loader.load( selected_obj_url_file, function( object ) {
+                  Obj = object;
+
+                  Obj.traverse( function( child ) {
+                    if (child.isMesh || child.isPoints) {
+                      if (child.geometry.isBufferGeometry) child.geometry.computeBoundingBox();
+                      if (child.geometry.isBufferGeometry) child.geometry.computeBoundingSphere();
+
+                      if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                        vertex_colors_enabled = true;
+                      }
+
+                      if (child.isPoints) document.getElementById('btn_wireframe').disabled = true;
+
+                      if (Array.isArray( child.material )) {
+                        child.material.forEach( mtrl => {
+                          if (mtrl.map) mtrl.map.generateMipmaps = true;
+
+                          mtrl.vertexColors = vertex_colors_enabled;
+
+                          // Default to double side
+                          mtrl.side = THREE.DoubleSide;
+
+                          child_count_array += 1;
+                        });
+                      } else {
+                        if (child.material.map) child.material.map.generateMipmaps = true;
+
+                        child.material.vertexColors = vertex_colors_enabled;
+
+                        // Default to double side
+                        child.material.side = THREE.DoubleSide;
+
+                        if (child.isPoints) child.material.size = 0.01;
+                      }
+                    }
+                  });
+
+                  // Add 3D object to scene
+                  scene.add( Obj );
+                  Obj.position.set( 0, 0, 0 );
+                  camera.lookAt( Obj.position );
+
+                  set_initial_scale();
+                  resize();
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { handle_error( error ); }); // onError
+              }
+            } else {
+              handle_error( 'Unsupported URL model!' );
+            }
+          } else {
+            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+              selected_obj_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+            } else if (selected_url_file.startsWith('https://github.com') === true) {
+              selected_obj_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+            } else if (selected_url_file.toUpperCase().endsWith('.OBJ')) {
+              selected_obj_url_file = selected_url_file;
+            } else  {
+              handle_error( 'Unsupported URL file!' );
+              return;
+            }
+
+            if (selected_obj_url_file !== null) {
+              obj_loader.load( selected_obj_url_file, function ( object ) {
+                Obj = object;
+
+                Obj.traverse( function( child ) {
+                  if (child.isMesh || child.isPoints) {
+                    if (child.geometry.isBufferGeometry) child.geometry.computeBoundingBox();
+                    if (child.geometry.isBufferGeometry) child.geometry.computeBoundingSphere();
+
+                    if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                      vertex_colors_enabled = true;
+                    }
+
+                    if (child.isPoints) document.getElementById('btn_wireframe').disabled = true;
+
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtrl => {
+                        mtrl.vertexColors = vertex_colors_enabled;
+
+                        // Default to double side
+                        mtrl.side = THREE.DoubleSide;
+                      });
+                    } else {
+                      child.material.vertexColors = vertex_colors_enabled;
+
+                      // Default to double side
+                      child.material.side = THREE.DoubleSide;
+
+                      if (child.isPoints) child.material.size = 0.01;
+                    }
+                  }
+                });
+
+                // Add 3D object to scene
+                scene.add( Obj );
+                Obj.position.set( 0, 0, 0 );
+                camera.lookAt( Obj.position );
+
+                set_initial_scale();
+                resize();
+              }, function ( xhr ) { // onProgress
+              }, function ( error ) { handle_error( error ); }); // onError
+            } else {
+              handle_error( 'Unsupported URL model!' );
+            }
+          }
+        }
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        render_requested = false;
+        enable_disable( true );
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      function show_wireframe() {
+        if (Obj) {
+          if (wireframe_enabled === true) {
+            wireframe_enabled = false;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+          } else {
+            wireframe_enabled = true;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
+          }
+
+          Obj.traverse( function( child ) {
+            if (child.isMesh) {
+              mouse_wheel = true;
+
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.wireframe = wireframe_enabled;
+                });
+              } else {
+                child.material.wireframe = wireframe_enabled;
+              }
+            }
+      	  });
+        }
+      }
+
+      async function render() {
+        if (Obj) {
+          if (mouse_down === true || mouse_wheel === true) {
+            controls.update();
+
+            renderer.clear();
+            renderer.render( scene, camera );
+
+            scene.updateMatrixWorld();
+            camera.updateMatrixWorld();
+
+            mouse_wheel = false;
+          }
+        }
+
+        if (render_requested === true) requestAnimationFrame( render );
+      }
+
+      function reset_all( reset = false ) {
+        // Reset the view
+        if (reset === true) {
+          controls.reset();
+          if (wireframe_enabled === true) show_wireframe();
+          set_back_color();
+        } else {
+          // Page (re)loading
+          if (scene) {
+            if (Obj) {
+              Obj.traverse( function( child ) {
+                if (child.isMesh || child.isPoints) {
+                  if (child.material) {
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        mtl.dispose();
+                      });
+                    } else {
+                      child.material.dispose();
+                    }
+                  }
+
+                  child.geometry.dispose();
+                }
+              });
+            }
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+          }
+
+          document.getElementById('file_input').value = '';
+          document.getElementById('back_color').value = '#000000';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+          enable_disable( true );
+        }
+
+        disabled_changed();
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('btn_wireframe').disabled = disable;
+        document.getElementById('back_color').disabled = disable;
+      }
+    </script>
+
+    <script>
+      function disabled_changed() {
+        $('button').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+
+        $('input[type=color]').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+      }
+    </script>
+  </body>
+</html>
