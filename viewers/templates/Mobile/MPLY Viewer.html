@@ -3,22 +3,26 @@
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no">
-    <meta name="description" content="LDRAW (Lego 3D computer creations) Viewer - supported formats: DAT, L3B, LDR, MPD">
+    <meta name="description" content="PLY (Polygon) + STL (Stereolithography) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.145.0" defer></script>
-    <script src="../../static/js/LDrawLoader.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0" defer></script>
+    <script src="../../static/js/PLYLoader.js" defer></script>
+    <script src="../../static/js/STLLoader.js" defer></script>
+    <script src="../../static/js/TGALoader.js" defer></script>
     <script src="../../static/js/OrbitControls.js" defer></script>
+    <script src="../../static/js/utils/BufferGeometryUtils.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/DDSLoader.js" defer></script>
 
     <style>
-      body,html{
+      body, html {
         position: relative;
         display: block;
         background-color: black;
         width: 100%;
         min-height: 100vh;
-        border: 0;
+        border: none;
         padding: 0;
         margin: 0;
         overflow: hidden;
@@ -102,34 +106,34 @@
         position: fixed;
         padding: 1px;
         width: 100%;
-        margin: 0px;
         z-index: 1;
+        margin: 0;
       }
     </style>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
-    <!-- Check the official info at https://ldraw.org/ -->
+    <!-- PLY and STL Examples from: https://github.com/mrdoob/three.js -->
+    <!-- More PLY examples: https://people.math.sc.edu/Burkardt/data/data.html -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>LDRAW Viewer</title>
+    <title>PLY+STL Viewer</title>
   </head>
   <body onload="reset_all(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" title="Browse Local Files" id="file_input" onchange="init();"accept=".dat, .l3b, .ldr, .mpd" />
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".ply, .stl" />
         <label for="back_color" title="Background Color">BG</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Flat Shading" id="btn_flat" onclick="set_flat();" disabled>F</button>
         <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
-        <button title="Construction Steps" id="btn_construction_steps" onclick="construction_steps();" style="min-width: 24px;" disabled>CS</button>
-        <button title="Construction Steps Direction" id="btn_construction_steps_direction" onclick="construction_steps_direction();" style="min-width: 16px;" disabled>&#x2193</button>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
-        <input type="text" id="url_entry" value="" style="min-width: 70%; margin-right: 3px;" />
-        <button onclick="load_url_file();" style="min-width: 38px; margin-right: 3px;">Load</button>
-        <button onclick="clear_url();" style="min-width: 38px; margin-right: 1px;">Clear</button>
+        <input type="text" id="url_entry" value="" style="width: 70%;" />
+        <button onclick="load_url_file();" style="min-width: 38px;">Load</button>
+        <button onclick="clear_url();" style="min-width: 38px;">Clear</button>
       </div>
     </div>
 
@@ -155,8 +159,8 @@
       function clear_url() { document.getElementById('url_entry').value = ''; }
 
       function initialize_event_listeners() {
-        window.addEventListener( 'mousedown', (event) => { mouse_down = true; }, false);
-        window.addEventListener( 'mouseup', (event) => { mouse_down = false; }, false);
+        window.addEventListener( 'mousedown', ( event ) => { mouse_down = true; }, false);
+        window.addEventListener( 'mouseup', ( event ) => { mouse_down = false; }, false);
         window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
       }
 
@@ -178,14 +182,14 @@
     </script>
 
     <script>
-      var manager, ldraw_loader, renderer, scene, camera, ldraw_obj;
-      var controls, edges, edges_visible, render_requested;
-      var ambientLight, directionalLight, bounding_box;
-      var mouse_down, mouse_wheel, events_initialized;
+      var manager, ply_loader, stl_loader, renderer, scene, camera, render_requested;
+      var controls, mouse_down, mouse_wheel, events_initialized, vertex_colors_enabled;
+      var mesh, bounding_box, material, flat_shading_enabled;
+      var ambientLight, directionalLight, wireframe_enabled;
       var ww = window.innerWidth, wh = window.innerHeight;
-      var c_steps, count_up, wireframe_enabled;
       var url_displayed = false, url_loading = false;
-      var selected_ldraw_file, selected_ldraw_url_file, selected_url_file = '';
+      var selected_ply_file, selected_stl_file;
+      var selected_url_file = '', selected_url_ply_file, selected_url_stl_file;
 
       function set_back_color() {
         scene.background = null;
@@ -194,39 +198,38 @@
 
       function set_initial_scale() {
         // Set the initial scale of the object so it comes to view
-        bounding_box.setFromObject( ldraw_obj );
+
+        bounding_box.setFromObject( mesh );
         let size = bounding_box.getSize(new THREE.Vector3());
 
         if ( size.y > 1 ) {
-          ldraw_obj.scale.multiplyScalar( 50 / size.y );
+          mesh.scale.multiplyScalar( 50 / size.y );
         } else if ( size.y > 0.02 ) {
-          ldraw_obj.scale.multiplyScalar( 25 / size.y );
+          mesh.scale.multiplyScalar( 25 / size.y );
         } else {
-          ldraw_obj.scale.multiplyScalar( 1 / size.y );
+          mesh.scale.multiplyScalar( 1 / size.y );
         }
 
-        bounding_box.setFromObject( ldraw_obj );
+        bounding_box.setFromObject( mesh );
         let center = bounding_box.getCenter(new THREE.Vector3());
         controls.target.set( center.x, center.y, center.z );
       }
 
-      async function init() {
+      function init() {
         if (scene) {
-          ldraw_obj.traverse( function( child ) {
-            if (child.isMesh || child.isLineSegments) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.dispose();
-                });
-              } else {
-                child.material.dispose();
+          if (mesh) {
+            mesh.traverse( ( child ) => {
+              if (child.isMesh || child.isPoints) {
+                if (child.material && child.material.map) child.material.map.dispose();
+                if (child.material) child.material.dispose();
+                if (child.geometry) child.geometry.dispose();
               }
+            });
 
-              child.geometry.dispose();
-            }
-          });
+            material.dispose();
 
-          scene.remove( ldraw_obj );
+            scene.remove( mesh );
+          }
 
           // Reset all values
           reset_all( true );
@@ -235,6 +238,7 @@
         enable_disable( true );
         disabled_changed();
 
+        // Manager from ThreeJs to track a loader and its status
         if (manager === undefined) manager = new THREE.LoadingManager();
 
         manager.onProgress = function ( item, loaded, total ) {
@@ -251,38 +255,37 @@
           }
         }
 
-        if (ldraw_loader === undefined) {
-          ldraw_loader = new THREE.LDrawLoader( manager );
-          ldraw_loader.setPartsLibraryPath( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/' );
-          ldraw_loader.separateObjects = true;
-          ldraw_loader.smoothNormals = true;
-        }
+        if (ply_loader === undefined) ply_loader = new THREE.PLYLoader( manager );
 
-        selected_ldraw_file = null;
-        selected_ldraw_url_file = null;
+        if (stl_loader === undefined) stl_loader = new THREE.STLLoader( manager );
+
+        selected_ply_file = null;
+        selected_stl_file = null;
+        selected_url_ply_file = null;
+        selected_url_stl_file = null;
+        flat_shading_enabled = true;
         mouse_down = false;
-        mouse_wheel = true;
-        wireframe_enabled = false;
+        mouse_wheel = false;
+        vertex_colors_enabled = false;
         render_requested = false;
         bounding_box = new THREE.Box3();
 
         console.time( 'Loading Time' );
-        document.body.style.backgroundImage = 'none';
         document.getElementById('div_error').style.display = 'none';
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
         if (url_loading === false) {
           // Loaded file
-          let fi = document.getElementById('file_input');
-          let fn_uc = fi.files[ 0 ].name.toUpperCase();
+          var fi = document.getElementById('file_input');
 
-          if (fn_uc.endsWith('.MPD') || fn_uc.endsWith('.LDR') || fn_uc.endsWith('.L3B') || fn_uc.endsWith('.DAT')) {
-            selected_ldraw_file = fi.files[ 0 ];
-          }
+          for (let i = 0; i < fi.files.length; i++) {
+            if (fi.files[ i ].name.toUpperCase().endsWith('.PLY')) { selected_ply_file = fi.files[ i ]; }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.STL')) { selected_stl_file = fi.files[ i ]; }
+          };
 
-          if (selected_ldraw_file === null) {
-            handle_error( 'No valid LDRAW file selected!' );
+          if (selected_ply_file === null && selected_stl_file === null) {
+            handle_error( 'No valid PLY or STL file selected!' );
             return;
           }
 
@@ -296,7 +299,6 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
-          renderer.outputEncoding = THREE.sRGBEncoding;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -307,7 +309,7 @@
         }
 
         if (scene === undefined) scene = new THREE.Scene();
-        if (ldraw_obj === undefined) ldraw_obj = new THREE.Object3D();
+        if (mesh === undefined) mesh = new THREE.Object3D();
 
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
@@ -350,178 +352,199 @@
           //controls.maxDistance = 500;
         }
 
-        await ldraw_loader.preloadMaterials( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr' );
+        if (material === undefined) {
+          material = new THREE.MeshPhongMaterial( {
+            side: THREE.DoubleSide,
+            vertexColors: false,
+            flatShading: true,
+            transparent: true,
+            shininess: 50,
+            opacity: 1,
+            fog: true
+          });
+        }
 
         // Load the model
-        selected_ldraw_file !== null ? loadFile() : loadURLFile();
+        loadFile();
       }
 
       function loadFile() {
-        ldraw_loader.load( URL.createObjectURL( selected_ldraw_file ), function( object ) {
-          URL.revokeObjectURL( selected_ldraw_file );
+        // Launch loading of the selected file, addFileInScene is the callback when it's ready
+        if (selected_ply_file) {
+          ply_loader.load( URL.createObjectURL( selected_ply_file ), addFileInScene,
+          function( xhr ) { }, // onProgress
+          function ( error ) { handle_error( error ); }); // onError
+        } else if (selected_stl_file) {
+          stl_loader.load( URL.createObjectURL( selected_stl_file ), addFileInScene,
+          function( xhr ) { }, // onProgress
+          function ( error ) { handle_error( error ); }); // onError
+        } else {
+          loadURLFile();
+        }
+      }
 
-          document.getElementById('btn_construction_steps_direction').innerHTML = '&#x2193';
-          count_up = false;
+      function addFileInScene( object ) {
+        // object is geometry
 
-          if (object.userData.numConstructionSteps > 1) {
-            c_steps = object.userData.numConstructionSteps - 1;
-            document.getElementById('btn_construction_steps').disabled = false;
-            document.getElementById('btn_construction_steps_direction').disabled = false;
-          } else {
-            c_steps = 0;
-            document.getElementById('btn_construction_steps').disabled = true;
-            document.getElementById('btn_construction_steps_direction').disabled = true;
+        let smooth = object.clone();
+
+        smooth.computeBoundingBox();
+        smooth.computeBoundingSphere();
+
+        if ( smooth.index !== null ) {
+          URL.revokeObjectURL( selected_ply_file );
+
+          smooth.deleteAttribute('normal');
+          smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
+          smooth.computeVertexNormals();
+          smooth.center();
+
+          if (object.attributes.color && object.attributes.color.array.length > 0) {
+            vertex_colors_enabled = true;
           }
 
-          ldraw_obj = object.clone();
+          mesh = new THREE.InstancedMesh( smooth, material, 1 );
 
-          ldraw_obj.traverse( function( child ) {
-            if (child.isMesh) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.side = THREE.DoubleSide;
-                });
-              } else {
-                child.material.side = THREE.DoubleSide;
-              }
-            }
-          });
+          document.getElementById('btn_flat').disabled = false;
+          document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_wireframe').disabled = false;
+        } else {
+          if (selected_ply_file) {
+            URL.revokeObjectURL( selected_ply_file );
 
-          if (selected_ldraw_file.name.toUpperCase().endsWith('.DAT')) {
-            document.getElementById('directional_light_intensity').value = 0.5;
-            directionalLight.intensity = parseFloat( 0.5 );
-            ldraw_obj.rotation.x = - Math.PI / 2;
+            flat_shading_enabled = false;
+            document.getElementById('btn_flat').disabled = true;
+            document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+            document.getElementById('btn_wireframe').disabled = true;
+
+            let points_material = new THREE.PointsMaterial( { size: 0.01, transparent: true, blending: THREE.AdditiveBlending } );
+
+            if (smooth.hasAttribute( 'color' )) vertex_colors_enabled = true;
+
+            mesh = new THREE.Points( smooth, points_material );
+            mesh.sizeAttenuation = true;
+            mesh.sortPoints = true;
           } else {
-            ldraw_obj.rotation.x = Math.PI;
+            URL.revokeObjectURL( selected_stl_file );
+
+            smooth.deleteAttribute('normal');
+            smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
+            smooth.computeVertexNormals();
+            smooth.center();
+
+            if (object.hasColors) vertex_colors_enabled = true;
+
+            mesh = new THREE.Mesh( smooth, material );
           }
+        }
 
-          // Add ldraw_obj to the scene
-          scene.add( ldraw_obj );
-          camera.lookAt( ldraw_obj.position );
-
-          set_initial_scale();
-          resize();
-        }, function ( xhr ) { // onProgress
-        }, function ( error ) { // onError
-          handle_error( error );
-          URL.revokeObjectURL( selected_ldraw_file );
+        mesh.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            child.material.vertexColors = vertex_colors_enabled;
+          }
         });
+
+        // Add mesh to the scene
+        scene.add( mesh );
+        camera.lookAt( mesh.position );
+
+        set_initial_scale();
+        resize();
       }
 
       function loadURLFile() {
         if (selected_url_file !== '') {
           if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-            selected_url_file = selected_url_file.replace( 'www.dropbox.com', 'dl.dropbox.com' );
+            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
           } else if (selected_url_file.startsWith('https://github.com') === true) {
-            selected_url_file = ( selected_url_file.replace( 'github.com', 'raw.githubusercontent.com' ) ).replace( 'blob/', '' );
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          let url_uc = selected_url_file.toUpperCase();
+          if (selected_url_file.toUpperCase().endsWith('.PLY')) {
+            selected_url_ply_file = selected_url_file;
 
-          if (url_uc.endsWith('.MPD') || url_uc.endsWith('.LDR') || url_uc.endsWith('.L3B') || url_uc.endsWith('.DAT')) {
-            selected_ldraw_url_file = selected_url_file;
-          }
+            ply_loader.load( selected_url_ply_file, addURLFileInScene,
+            function( xhr ) { }, // onProgress
+            function ( error ) { handle_error( error ); }); // onError
+          } else if (selected_url_file.toUpperCase().endsWith('.STL')) {
+            selected_url_stl_file = selected_url_file;
 
-          if (selected_ldraw_url_file !== null) {
-            ldraw_loader.load( selected_ldraw_url_file, function( object ) {
-              document.getElementById('btn_construction_steps_direction').innerHTML = '&#x2193';
-              count_up = false;
-
-              if (object.userData.numConstructionSteps > 1) {
-                c_steps = object.userData.numConstructionSteps - 1;
-                document.getElementById('btn_construction_steps').disabled = false;
-                document.getElementById('btn_construction_steps_direction').disabled = false;
-              } else {
-                c_steps = 0;
-                document.getElementById('btn_construction_steps').disabled = true;
-                document.getElementById('btn_construction_steps_direction').disabled = true;
-              }
-
-              ldraw_obj = object.clone();
-
-              ldraw_obj.traverse( function( child ) {
-                if (child.isMesh) {
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      mtl.side = THREE.DoubleSide;
-                    });
-                  } else {
-                    child.material.side = THREE.DoubleSide;
-                  }
-                }
-              });
-
-              if (url_uc.endsWith('.DAT')) {
-                document.getElementById('directional_light_intensity').value = 0.5;
-                directionalLight.intensity = parseFloat( 0.5 );
-                ldraw_obj.rotation.x = - Math.PI / 2;
-              } else {
-                ldraw_obj.rotation.x = Math.PI;
-              }
-
-              // Add ldraw_obj to the scene
-              scene.add( ldraw_obj );
-              camera.lookAt( ldraw_obj.position );
-
-              set_initial_scale();
-              resize();
-            }, function ( xhr ) { // onProgress
-            }, function ( error ) { // onError
-              handle_error( error );
-            });
+            stl_loader.load( selected_url_stl_file, addURLFileInScene,
+            function( xhr ) { }, // onProgress
+            function ( error ) { handle_error( error ); }); // onError
           } else {
-            handle_error( 'Unsupported URL file!' );
+            handle_error( 'Unsupported URL model!' );
           }
         }
       }
 
-      function construction_steps_direction() {
-        mouse_wheel = true;
+      function addURLFileInScene( object ) {
+        // object is geometry
 
-        if (count_up === false) {
-          c_steps = 0;
-          count_up = true;
-          document.getElementById('btn_construction_steps_direction').innerHTML = '&#x2191';
-          document.getElementById('btn_construction_steps_direction').style.backgroundColor = 'lightgreen';
-          document.getElementById('btn_construction_steps').style.backgroundColor = 'lightgreen';
+        smooth.computeBoundingBox();
+        smooth.computeBoundingSphere();
+
+        let smooth = object.clone();
+
+        if ( smooth.index !== null ) {
+          URL.revokeObjectURL( selected_ply_file );
+
+          smooth.deleteAttribute('normal');
+          smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
+          smooth.computeVertexNormals();
+          smooth.center();
+
+          if (object.attributes.color && object.attributes.color.array.length > 0) {
+            vertex_colors_enabled = true;
+          }
+
+          mesh = new THREE.InstancedMesh( smooth, material );
+
+          document.getElementById('btn_flat').disabled = false;
+          document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_wireframe').disabled = false;
         } else {
-          c_steps = ldraw_obj.userData.numConstructionSteps - 1;
-          count_up = false;
-          document.getElementById('btn_construction_steps_direction').innerHTML = '&#x2193';
-          document.getElementById('btn_construction_steps_direction').style.backgroundColor = 'transparent';
-          document.getElementById('btn_construction_steps').style.backgroundColor = 'transparent';
+          if (selected_ply_file) {
+            URL.revokeObjectURL( selected_ply_file );
+
+            flat_shading_enabled = false;
+            document.getElementById('btn_flat').disabled = true;
+            document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+            document.getElementById('btn_wireframe').disabled = true;
+
+            let points_material = new THREE.PointsMaterial( { size: 0.01, transparent: true, blending: THREE.AdditiveBlending } );
+
+            if (smooth.hasAttribute( 'color' )) vertex_colors_enabled = true;
+
+            mesh = new THREE.Points( smooth, points_material );
+            mesh.sizeAttenuation = true;
+            mesh.sortPoints = true;
+          } else {
+            URL.revokeObjectURL( selected_stl_file );
+
+            smooth.deleteAttribute('normal');
+            smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
+            smooth.computeVertexNormals();
+            smooth.center();
+
+            if (object.hasColors) vertex_colors_enabled = true;
+
+            mesh = new THREE.Mesh( smooth, material );
+          }
         }
 
-        update_object_visibility();
-      }
-
-      function construction_steps() {
-        mouse_wheel = true;
-
-        (count_up === true) ? c_steps += 1 : c_steps -= 1;
-
-        if (c_steps === ldraw_obj.userData.numConstructionSteps - 1) {
-          count_up = false;
-          document.getElementById('btn_construction_steps').style.backgroundColor = 'transparent';
-          document.getElementById('btn_construction_steps_direction').innerHTML = '&#x2193';
-          document.getElementById('btn_construction_steps_direction').style.backgroundColor = 'transparent';
-        } else if (c_steps === 0) {
-          count_up = true;
-          document.getElementById('btn_construction_steps').style.backgroundColor = 'lightgreen';
-          document.getElementById('btn_construction_steps_direction').innerHTML = '&#x2191';
-          document.getElementById('btn_construction_steps_direction').style.backgroundColor = 'lightgreen';
-        }
-
-        update_object_visibility();
-      }
-
-      function update_object_visibility() {
-        ldraw_obj.traverse( child => {
-          if (child.isGroup === true) {
-            mouse_wheel = true;
-            child.visible = child.userData.constructionStep <= c_steps;
+        mesh.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            child.material.vertexColors = vertex_colors_enabled;
           }
         });
+
+        // Add mesh to the scene
+        scene.add( mesh );
+        camera.lookAt( mesh.position );
+
+        set_initial_scale();
+        resize();
       }
 
       function handle_error( error ) {
@@ -535,8 +558,28 @@
         document.getElementById('div_error').style.display = 'block';
       }
 
+      function set_flat() {
+        if (mesh) {
+          if (flat_shading_enabled === true) {
+            document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
+            flat_shading_enabled = false;
+          } else {
+            document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+            flat_shading_enabled = true;
+          }
+
+          mesh.traverse( ( child ) => {
+            if (child.isMesh) {
+              child.material.flatShading = flat_shading_enabled;
+              child.material.needsUpdate = true;
+              mouse_wheel = true;
+            }
+          });
+        }
+      }
+
       function show_wireframe() {
-        if (ldraw_obj) {
+        if (mesh) {
           if (wireframe_enabled === true) {
             wireframe_enabled = false;
             document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
@@ -545,24 +588,13 @@
             document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
           }
 
-          ldraw_obj.traverse( function( child ) {
-            mouse_wheel = true;
-
-            if (child.isMesh) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.wireframe = wireframe_enabled;
-                });
-              } else {
-                child.material.wireframe = wireframe_enabled;
-              }
-            }
-      	  });
+          material.wireframe = wireframe_enabled;
+          mouse_wheel = true;
         }
       }
 
       async function render() {
-        if (ldraw_obj) {
+        if (mesh) {
           if (mouse_down === true || mouse_wheel === true) {
             controls.update();
 
@@ -588,18 +620,12 @@
         } else {
           // Page (re)loading
           if (scene) {
-            if (ldraw_obj) {
-              ldraw_obj.traverse( function( child ) {
-                if (child.isMesh || child.isLineSegments) {
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      mtl.dispose();
-                    });
-                  } else {
-                    child.material.dispose();
-                  }
-
-                  child.geometry.dispose();
+            if (mesh) {
+              mesh.traverse( ( child ) => {
+                if (child.isMesh || child.isPoints) {
+                  if (child.material && child.material.map) child.material.map.dispose();
+                  if (child.material) child.material.dispose();
+                  if (child.geometry) child.geometry.dispose();
                 }
               });
             }
@@ -612,8 +638,8 @@
           document.getElementById('file_input').value = '';
           document.getElementById('back_color').value = '#000000';
           document.getElementById('div_error').style.display = 'none';
-          document.getElementById('btn_construction_steps').disabled = true;
-          document.getElementById('btn_construction_steps_direction').disabled = true;
+          document.getElementById('btn_wireframe').disabled = true;
+          document.getElementById('btn_flat').disabled = true;
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
           enable_disable( true );
@@ -625,7 +651,6 @@
       }
 
       function enable_disable( disable = false ) {
-        document.getElementById('btn_wireframe').disabled = disable;
         document.getElementById('back_color').disabled = disable;
       }
     </script>
