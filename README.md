@@ -1,7 +1,7 @@
 # GitHubDragonFly.github.io
 GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 
-Designed to serve as a hub with links to repositories, Number Type Converter and FREE online [three.js](https://threejs.org) based `3D Model` and `Texture` viewers.
+Designed to serve as a hub with links to repositories, Number Type Converter and FREE online browser based [three.js](https://threejs.org) `3D Model` and `Texture` viewers.
 
 Fit for a desktop but should be functional on mobile devices in spite of its tiny or bulky appearance. There is an `M` button that will allow you to switch to stripped down and simplified version of a more mobile friendly viewers (only a few viewers are available currently but more to come). 
 
