@@ -156,6 +156,7 @@ Number Type Converter
     - `*` - applicable to MS to provide envMap + metalness (VTK, PRWM viewers)
   - `OL` - outline effect (MMD Viewer)
   - `OS` - material side - Original (OS), Front (FS), Back (BS), Double (DS)
+  - `PC` - points color (available on simple mobile PCD+XYZ Viewer only)
   - `PM` - show model as points (PLY+STL / PRWM / VTK viewers)
   - `VC` - vertex colors
     - `!` - random vertex colors
