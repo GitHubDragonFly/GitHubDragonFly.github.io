@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no">
+    <meta name="description" content="PDB (Protein Data Bank) Viewer">
+    <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.135.0" defer></script>
+    <script src="../../static/js/renderers/CSS2DRenderer.js" defer></script>
+    <script src="../../static/js/PDBLoader.js" defer></script>
+    <script src="../../static/js/OrbitControls.js" defer></script>
+
+    <style>
+      body, html {
+        position: relative;
+        display: block;
+        background-color: black;
+        width: 100%;
+        min-height: 100vh;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button {
+        border: 1px solid blue;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+        min-width: 22px;
+        height: 22px;
+        padding: 1px;
+      }
+
+      label {
+        vertical-align: middle;
+        height: 22px;
+        margin: 2px 0 2px 0;
+      }
+
+      input[type=color] {
+        border: 1px solid whitesmoke;
+        margin: 2px 3px 2px -2px;
+        vertical-align: middle;
+        background: none;
+        height: 20px;
+        width: 16px;
+        padding: 0;
+      }
+
+      input[type=file] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        max-width: 175px;
+      }
+
+      input[type=text] {
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+      }
+
+      .error_msg {
+        background-color: transparent;
+        position: absolute;
+        text-align: center;
+        font-size: x-large;
+        display: none;
+        color: red;
+        width: 240px;
+        height: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .loading_msg {
+        background-color: transparent;
+        color: greenyellow;
+        position: absolute;
+        text-align: center;
+        font-size: large;
+        display: none;
+        height: 240px;
+        width: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .fm { color: navy; width: 99.25%; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+
+      .fixed-menu {
+        background-color: whitesmoke;
+        display: inline-block;
+        position: fixed;
+        padding: 1px;
+        width: 100%;
+        margin: 0px;
+        z-index: 1;
+      }
+    </style>
+
+    <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>PDB Viewer</title>
+  </head>
+  <body onload="reset_all(); disabled_changed();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".pdb" />
+        <label for="back_color" title="Background Color">BG</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Atoms" id="btn_atoms" onclick="show_atoms();" style="min-width: 24px;" disabled>As</button>
+        <button title="Labels" id="btn_labels" onclick="show_labels();" style="min-width: 24px;" disabled>Ls</button>
+        <button title="Bonds" id="btn_bonds" onclick="show_bonds();" style="min-width: 24px;" disabled>Bs</button>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="width: 70%; margin-right: 3px;" />
+        <button onclick="load_url_file();" style="min-width: 38px; margin-right: 3px;">Load</button>
+        <button onclick="clear_url();" style="min-width: 38px; margin-right: 1px;">Clear</button>
+      </div>
+    </div>
+
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">Loading</div>
+
+    <script>
+
+      function show_url() {
+        if (url_displayed === true) {
+          document.getElementById('url').style.display = 'none';
+          url_displayed = false;
+        } else {
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        window.addEventListener( 'mousedown', ( event ) => { mouse_down = true; }, false);
+        window.addEventListener( 'mouseup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
+      }
+
+      function resize() {
+        if (scene) {
+          mouse_wheel = true;
+
+          renderer.setSize( window.innerWidth, window.innerHeight );
+          labelRenderer.setSize( window.innerWidth, window.innerHeight );
+
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          mouse_wheel = true;
+        }
+      }
+    </script>
+
+    <script>
+      var manager, pdb_loader;
+      var renderer, labelRenderer, scene, camera, pdb_obj, controls, render_requested;
+      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
+      var ambientLight, directionalLight;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var rot_x = 0, rot_y = 0, rot_z = 0, bounding_box, reflect;
+      var root, position, color, offset, start, end, enable_opacity;
+      var json, positions, colors, gif_export, bgnd_linear_gradient;
+      var boxGeometry, sphereGeometry, geometryAtoms, geometryBonds;
+      var atoms, labels, bonds, atoms_visible, labels_visible, bonds_visible;
+      var selected_pdb_file, selected_pdb_url_file, selected_url_file = '', filename, zip;
+      var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
+      var vertex_colors_enabled, original_vertex_color_array, random_vertex_colors_enabled, random_vertex_color_array;
+
+      function set_back_color() {
+        scene.background = null;
+        document.body.style.backgroundColor = document.getElementById('back_color').value;
+        mouse_wheel = true;
+      }
+
+      function set_initial_scale() {
+        // Set the initial scale of the object so it comes to view
+
+        bounding_box.setFromObject( pdb_obj );
+        let size = bounding_box.getSize(new THREE.Vector3());
+
+        if ( size.y > 1 ) {
+          pdb_obj.scale.multiplyScalar( 50 / size.y );
+        } else if ( size.y > 0.02 ) {
+          pdb_obj.scale.multiplyScalar( 25 / size.y );
+        } else {
+          pdb_obj.scale.multiplyScalar( 1 / size.y )
+        }
+
+        bounding_box.setFromObject( pdb_obj );
+        let center = bounding_box.getCenter(new THREE.Vector3());
+        controls.target.set( center.x, center.y, center.z );
+      }
+
+      function init(){
+        if (scene) {
+          if (pdb_obj) {
+            while ( pdb_obj.children.length > 0 ) {
+              let object = pdb_obj.children[ 0 ];
+
+              if (object.material && object.material.map) object.material.map.dispose();
+              if (object.material) object.material.dispose();
+              if (object.geometry) object.geometry.dispose();
+
+              object.parent.remove( object );
+            }
+
+            scene.remove( pdb_obj );
+          }
+
+          reset_all( true );
+        }
+
+        enable_disable( true );
+        disabled_changed();
+
+        if (manager === undefined) manager = new THREE.LoadingManager();
+
+        manager.onProgress = function ( item, loaded, total ) {
+          if ( loaded === total ) {
+            console.timeEnd( 'Loading Time' );
+            document.getElementById('div_loading').style.display = 'none';
+
+            enable_disable( false );
+            disabled_changed();
+
+            render_requested = true;
+            mouse_wheel = true;
+            render();
+          }
+        }
+
+        if (pdb_loader === undefined) pdb_loader = new THREE.PDBLoader( manager );
+
+        selected_pdb_file = null;
+        selected_pdb_url_file = null;
+        mouse_down = false;
+        mouse_wheel = true;
+        vertex_colors_enabled = false;
+        render_requested = false;
+        atoms = [];
+        labels = [];
+        bonds = [];
+        atoms_visible = false;
+        labels_visible = false;
+        bonds_visible = false;
+        bounding_box = new THREE.Box3();
+        position = new THREE.Vector3();
+        offset = new THREE.Vector3();
+        start = new THREE.Vector3();
+        end = new THREE.Vector3();
+        color = new THREE.Color();
+        root = new THREE.Group();
+        boxGeometry = new THREE.BoxGeometry( 1, 1, 1 );
+        sphereGeometry = new THREE.IcosahedronGeometry( 1, 2 );
+
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (url_loading === false) {
+          // Loaded file
+          var fi = document.getElementById('file_input');
+
+          if (fi.files[ 0 ].name.toUpperCase().endsWith('.PDB')) selected_pdb_file = fi.files[ 0 ];
+
+          if (selected_pdb_file === null) {
+            handle_error( 'No valid PDB file selected!' );
+            return;
+          }
+
+          selected_url_file = '';
+        } else {
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          url_loading = false;
+        }
+
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.gammaFactor = 2.2;
+          renderer.setSize( ww, wh );
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
+          renderer.autoClear = false;
+
+          document.body.appendChild( renderer.domElement );
+        }
+
+        if (labelRenderer === undefined) {
+          labelRenderer = new THREE.CSS2DRenderer();
+          labelRenderer.setSize( ww, wh );
+          labelRenderer.domElement.style.position = 'absolute';
+          labelRenderer.domElement.style.top = '0px';
+          labelRenderer.domElement.style.pointerEvents = 'none';
+
+          document.body.appendChild( labelRenderer.domElement );
+        }
+
+        if (scene === undefined) scene = new THREE.Scene();
+        if (pdb_obj === undefined) pdb_obj = new THREE.Object3D();
+
+        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+        if (camera === undefined) {
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 2500 );
+          camera.position.set( 0, 0, 250 );
+          scene.add( camera );
+        }
+
+        // Add AmbientLight to the scene
+        if (ambientLight === undefined) {
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.05 );
+          ambientLight.position.set( 0, 0, 250 );
+          scene.add( ambientLight );
+        }
+
+        // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
+        if (directionalLight === undefined) {
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 1 );
+          directionalLight.position.set( 0, 0, 250 );
+          directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
+          camera.add( directionalLight );
+        }
+
+        if (controls === undefined) {
+          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls.enableZoomToCursor = true;
+          controls.enableDamping = true;
+          //controls.enableKeys = false;
+          //controls.enableZoom = true;
+          //controls.maxPolarAngle = 2.2;
+          //controls.minPolarAngle = 1.1;
+          //controls.dampingFactor = 0.1;
+          //controls.rotateSpeed = 0.2;
+          //controls.minDistance = 2;
+          //controls.maxDistance = 500;
+        }
+
+        // Load PDB file
+        selected_pdb_file !== null ? loadFile() : loadURLFile();
+      }
+
+      function loadFile(){
+        pdb_loader.load( URL.createObjectURL( selected_pdb_file ), function( pdb ) {
+          URL.revokeObjectURL( selected_pdb_file );
+
+          set_atoms_labels_bonds( pdb );
+
+          pdb_obj = root;
+
+          // Add pdb_obj to the scene
+          scene.add( pdb_obj );
+          camera.lookAt( pdb_obj.position );
+
+          set_initial_scale();
+          resize();
+        }, function ( xhr ) { // onProgress
+        }, function ( error ) { // onError
+          handle_error( error );
+          URL.revokeObjectURL( selected_pdb_file );
+        });
+      }
+
+      function loadURLFile() {
+        if (selected_url_file !== '') {
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_url_file = selected_url_file.replace( 'www.dropbox.com', 'dl.dropbox.com' );
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace( 'github.com', 'raw.githubusercontent.com' ) ).replace( 'blob/', '' );
+          }
+
+          if (selected_url_file.toUpperCase().endsWith('.PDB')) selected_pdb_url_file = selected_url_file;
+
+          if (selected_pdb_url_file === null) {
+            handle_error( 'Unsupported URL file!' );
+            return;
+          }
+
+          pdb_loader.load( selected_pdb_url_file, function( pdb ) {
+            set_atoms_labels_bonds( pdb );
+
+            pdb_obj = root;
+
+            // Add pdb_obj to the scene
+            scene.add( pdb_obj );
+            camera.lookAt( pdb_obj.position );
+
+            set_initial_scale();
+            resize();
+          }, function ( xhr ) { // onProgress
+          }, function ( error ) { // onError
+            handle_error( error );
+          });
+        }
+      }
+
+      function set_atoms_labels_bonds( pdb ) {
+        // Get atom related data
+        geometryAtoms = pdb.geometryAtoms;
+        // Get the data of the bond between atoms
+        geometryBonds = pdb.geometryBonds;
+        // Get data of atomic text
+        json = pdb.json;
+
+        // Center the model
+        geometryAtoms.computeBoundingBox();
+        geometryAtoms.boundingBox.getCenter( offset ).negate();
+        geometryAtoms.translate( offset.x, offset.y, offset.z );
+        geometryBonds.translate( offset.x, offset.y, offset.z );
+
+        // Add atoms and atomic text to the model group
+        positions = geometryAtoms.getAttribute( 'position' );
+        colors = geometryAtoms.getAttribute( 'color' );
+        let positions_count = positions.count;
+
+        for ( var i = 0; i < positions.count; i ++ ) {
+          position.x = positions.getX( i );
+          position.y = positions.getY( i );
+          position.z = positions.getZ( i );
+
+          color.r = colors.getX( i );
+          color.g = colors.getY( i );
+          color.b = colors.getZ( i );
+
+          let object = new THREE.Mesh( sphereGeometry, new THREE.MeshPhongMaterial( { color: color, transparent: true } ) );
+          object[ 'name' ] = 'atom_' + i;
+
+          object.position.copy( position );
+          object.position.multiplyScalar( 75 );
+          object.scale.multiplyScalar( 25 );
+
+          atoms.push( object );
+          root.add( object );
+
+          let atom = json.atoms[ i ];
+
+          let text = document.createElement( 'div' );
+
+          text.className = 'label';
+          text.style.zIndex = '-1';
+          text.style.color = 'rgb(' + atom[ 3 ][ 0 ] + ',' + atom[ 3 ][ 1 ] + ',' + atom[ 3 ][ 2 ] + ')';
+          text.style.textShadow = '1px 1px 1px #000';
+          text.textContent = atom[ 4 ];
+
+          let label = new THREE.CSS2DObject( text );
+
+          label.position.copy( object.position );
+          labels.push( label );
+
+          // Don't automatically add labels if atom count > 100
+          if (positions_count < 100) root.add( label );
+        }
+
+        // Add bonds between atoms to the model group
+        positions = geometryBonds.getAttribute( 'position' );
+
+        for ( var i = 0; i < positions.count; i += 2 ) {
+          start.x = positions.getX( i );
+          start.y = positions.getY( i );
+          start.z = positions.getZ( i );
+
+          end.x = positions.getX( i + 1 );
+          end.y = positions.getY( i + 1 );
+          end.z = positions.getZ( i + 1 );
+
+          start.multiplyScalar( 75 );
+          end.multiplyScalar( 75 );
+
+          let object = new THREE.Mesh( boxGeometry, new THREE.MeshPhongMaterial( { color: 0xFFFFFF, transparent: true } ) );
+          object[ 'name' ] = 'bond_' + parseInt( i / 2 );
+
+          object.position.copy( start );
+          object.position.lerp( end, 0.5 );
+          object.scale.set( 5, 5, start.distanceTo( end ) );
+          object.lookAt( end );
+
+          bonds.push( object );
+          root.add( object );
+        }
+
+        // Scale and add model groups to the scene
+        root.scale.set( 0.1, 0.1, 0.1 );
+
+        atoms_visible = true;
+        document.getElementById('btn_atoms').style.backgroundColor = 'lightgreen';
+        bonds_visible = true;
+        document.getElementById('btn_bonds').style.backgroundColor = 'lightgreen';
+
+        // Don't automatically show labels if atom count > 100
+        if (positions_count < 100) {
+          labels_visible = true;
+          document.getElementById('btn_labels').style.backgroundColor = 'lightgreen';
+        }
+      }
+
+      function show_atoms() {
+        if (atoms_visible === true) {
+          atoms_visible = false;
+          document.getElementById('btn_atoms').style.backgroundColor = 'transparent';
+
+          atoms.forEach( element => { pdb_obj.remove( element ); });
+        } else {
+          atoms_visible = true;
+          document.getElementById('btn_atoms').style.backgroundColor = 'lightgreen';
+
+          atoms.forEach( element => { pdb_obj.add( element ); });
+        }
+
+        mouse_wheel = true;
+      }
+
+      function show_labels() {
+        if (labels_visible === true) {
+          labels_visible = false;
+          document.getElementById('btn_labels').style.backgroundColor = 'transparent';
+
+          labels.forEach( element => { pdb_obj.remove( element ); });
+        } else {
+          labels_visible = true;
+          document.getElementById('btn_labels').style.backgroundColor = 'lightgreen';
+
+          labels.forEach( element => { pdb_obj.add( element ); });
+        }
+
+        mouse_wheel = true;
+      }
+
+      function show_bonds() {
+        if (bonds_visible === true) {
+          bonds_visible = false;
+          document.getElementById('btn_bonds').style.backgroundColor = 'transparent';
+
+          bonds.forEach( element => { pdb_obj.remove( element ); });
+        } else {
+          bonds_visible = true;
+          document.getElementById('btn_bonds').style.backgroundColor = 'lightgreen';
+
+          bonds.forEach( element => { pdb_obj.add( element ); });
+        }
+
+        mouse_wheel = true;
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        render_requested = false;
+        enable_disable( true );
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      async function render() {
+        if (pdb_obj) {
+          if (labels_visible === true || mouse_down === true || mouse_wheel === true) {
+            controls.update();
+
+            if (labels_visible === true) labelRenderer.render( scene, camera );
+
+            renderer.clear();
+            renderer.render( scene, camera );
+
+            scene.updateMatrixWorld();
+            camera.updateMatrixWorld();
+
+            mouse_wheel = false;
+          }
+        }
+
+        if (render_requested === true) requestAnimationFrame( render );
+      }
+
+      function reset_all( reset = false ) {
+        // Reset atoms, labels, bonds values
+        document.getElementById('btn_atoms').style.backgroundColor = 'transparent';
+        document.getElementById('btn_labels').style.backgroundColor = 'transparent';
+        document.getElementById('btn_bonds').style.backgroundColor = 'transparent';
+
+        // Reset the view
+        if (reset === true) {
+          controls.reset();
+          set_back_color();
+        } else {
+          // Page (re)loading
+          if (scene) {
+            if (pdb_obj) {
+              while ( pdb_obj.children.length > 0 ) {
+                let object = pdb_obj.children[ 0 ];
+
+                if (object.material && object.material.map) object.material.map.dispose();
+                if (object.material) object.material.dispose();
+                if (object.geometry) object.geometry.dispose();
+
+                object.parent.remove( object );
+              }
+            }
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+          }
+
+          document.getElementById('file_input').value = '';
+          document.getElementById('back_color').value = '#000000';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+          enable_disable( true );
+        }
+
+        disabled_changed();
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('back_color').disabled = disable;
+        document.getElementById('btn_atoms').disabled = disable;
+        document.getElementById('btn_labels').disabled = disable;
+        document.getElementById('btn_bonds').disabled = disable;
+      }
+    </script>
+
+    <script>
+      function disabled_changed() {
+        $('button').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+
+        $('input[type=color]').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+      }
+    </script>
+  </body>
+</html>
