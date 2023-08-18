@@ -150,8 +150,11 @@ Number Type Converter
   - `V` - variants (GLTF viewer)
   - `W` - wireframe (available on simple mobile viewers only)
   - `X` - morphs
+  - `As` - atoms (available on simple mobile PDB Viewer only)
+  - `Bs` - bonds (available on simple mobile PDB Viewer only)
   - `C0` - camera index, with 0 being default (GLTF viewer) (`CAM` + Index in GLTF Legacy viewer)
   - `CS` - construction step (LDRAW viewer)
+  - `Ls` - labels (available on simple mobile PDB Viewer only)
   - `MP` - material - Phong (MP), Standard (MS), Lambert (ML)
     - `*` - applicable to MS to provide envMap + metalness (VTK, PRWM viewers)
   - `OL` - outline effect (MMD Viewer)
