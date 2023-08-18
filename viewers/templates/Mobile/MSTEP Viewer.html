@@ -1,0 +1,831 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no">
+    <meta name="description" content="STEP + IGES + BREP + BIM Viewer">
+    <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0" defer></script>
+    <script src="../../static/dotbim/dotbim.three.min.js" defer></script>
+    <script src="../../static/js/OrbitControls.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/occt-import-js@0.0.21/dist/occt-import-js.js" defer></script>
+
+    <style>
+      body, html {
+        position: relative;
+        display: block;
+        background-color: black;
+        width: 100%;
+        min-height: 100vh;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button {
+        border: 1px solid blue;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+        min-width: 22px;
+        height: 22px;
+        padding: 1px;
+      }
+
+      label {
+        vertical-align: middle;
+        height: 22px;
+        margin: 2px 0 2px 0;
+      }
+
+      input[type=color] {
+        border: 1px solid whitesmoke;
+        margin: 2px 3px 2px -2px;
+        vertical-align: middle;
+        background: none;
+        height: 20px;
+        width: 16px;
+        padding: 0;
+      }
+
+      input[type=file] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        max-width: 175px;
+      }
+
+      input[type=text] {
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+      }
+
+      .error_msg {
+        background-color: transparent;
+        position: absolute;
+        text-align: center;
+        font-size: x-large;
+        display: none;
+        color: red;
+        width: 240px;
+        height: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .loading_msg {
+        background-color: transparent;
+        color: greenyellow;
+        position: absolute;
+        text-align: center;
+        font-size: large;
+        display: none;
+        height: 240px;
+        width: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .fm { color: navy; width: 99.25%; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+
+      .fixed-menu {
+        background-color: whitesmoke;
+        display: inline-block;
+        position: fixed;
+        padding: 1px;
+        width: 100%;
+        margin: 0px;
+        z-index: 1;
+      }
+    </style>
+
+    <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- Using occt-import-js library: https://github.com/kovacsv/occt-import-js -->
+    <!-- Using dotbim library: https://github.com/ricaun/dotbim.three.js -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>STEP Viewer</title>
+  </head>
+  <body onload="reset_all(); disabled_changed();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".stp, .step, .igs, .iges, .brp, .brep, .bim" />
+        <label for="back_color" title="Background Color">BG</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="width: 70%; margin-right: 3px;" />
+        <button onclick="load_url_file();" style="min-width: 38px; margin-right: 3px;">Load</button>
+        <button onclick="clear_url();" style="min-width: 38px; margin-right: 1px;">Clear</button>
+      </div>
+    </div>
+
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">Loading</div>
+
+    <script>
+      function show_url() {
+        if (url_displayed === true) {
+          document.getElementById('url').style.display = 'none';
+          url_displayed = false;
+        } else {
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        window.addEventListener( 'mousedown', ( event ) => { mouse_down = true; }, false);
+        window.addEventListener( 'mouseup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
+      }
+
+      function resize() {
+        if (scene) {
+          mouse_wheel = true;
+
+          renderer.setSize( window.innerWidth, window.innerHeight );
+
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          mouse_wheel = true;
+        }
+      }
+    </script>
+
+    <script>
+      var manager, file_loader, wireframe_enabled;
+      var renderer, scene, camera, mesh, render_requested;
+      var controls, mouse_down, mouse_wheel, events_initialized;
+      var ambientLight, directionalLight, bounding_box;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var iges, brep, bim, response, buffer, fileBuffer;
+      var selected_model_file, selected_url_file = '';
+      var url_displayed = false, url_loading = false;
+
+      function set_back_color() {
+        scene.background = null;
+        document.body.style.backgroundColor = document.getElementById('back_color').value;
+        mouse_wheel = true;
+      }
+
+      function set_initial_scale() {
+        // Set the initial scale of the object so it comes to view
+        bounding_box.setFromObject( mesh );
+        let size = bounding_box.getSize(new THREE.Vector3());
+
+        if ( size.y > 1 ) {
+          mesh.scale.multiplyScalar( 50 / size.y );
+        } else if ( size.y > 0.02 ) {
+          mesh.scale.multiplyScalar( 25 / size.y );
+        } else {
+          mesh.scale.multiplyScalar( 1 / size.y )
+        }
+
+        bounding_box.setFromObject( mesh );
+        let center = bounding_box.getCenter(new THREE.Vector3());
+        controls.target.set( center.x, center.y, center.z );
+      }
+
+      async function init() {
+        if (scene) {
+          if (mesh) {
+            mesh.traverse( function( child ) {
+              if (child.isMesh && child.material) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    if (mtl.map) mtl.map.dispose();
+                    if (mtl.envMap) mtl.envMap.dispose();
+                    mtl.dispose();
+                  });
+                } else {
+                  if (child.material.map) child.material.map.dispose();
+                  if (child.material.envMap) child.material.envMap.dispose();
+                  child.material.dispose();
+                }
+
+                if (child.geometry) child.geometry.dispose();
+              }
+            });
+          }
+
+          while (mesh.children.length > 0) {
+            mesh.remove( mesh.children[ 0 ] );
+          }
+
+          scene.remove( mesh );
+
+          mesh = new THREE.Object3D();
+
+          reset_all( true );
+        }
+
+        enable_disable( true );
+        disabled_changed();
+
+        if (manager === undefined) manager = new THREE.LoadingManager();
+
+        if (file_loader === undefined) {
+          file_loader = new THREE.FileLoader( manager );
+          file_loader.setMimeType( 'text/plain' );
+          file_loader.setResponseType( 'text' );
+        }
+
+        selected_model_file = null;
+        mouse_down = false;
+        mouse_wheel = true;
+        bim = false;
+        iges = false;
+        brep = false;
+        response = null;
+        buffer = null;
+        fileBuffer = null;
+        render_requested = false;
+        wireframe_enabled = false;
+        bounding_box = new THREE.Box3();
+
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (url_loading === false) {
+          // Loaded file
+          var fi = document.getElementById('file_input');
+
+          for (let i = 0; i < fi.files.length; i++) {
+            let fn_uc = fi.files[ i ].name.toUpperCase();
+
+            if (fn_uc.endsWith('.STP') || fn_uc.endsWith('.STEP')) {
+              selected_model_file = fi.files[ i ];
+            } else if (fn_uc.endsWith('.IGS') || fn_uc.endsWith('.IGES')) {
+              iges = true;
+              selected_model_file = fi.files[ i ];
+            } else if (fn_uc.endsWith('.BRP') || fn_uc.endsWith('.BREP')) {
+              brep = true;
+              selected_model_file = fi.files[ i ];
+            } else if (fn_uc.endsWith('.BIM')) {
+              bim = true;
+              selected_model_file = fi.files[ i ];
+            }
+          };
+
+          if (selected_model_file === null) {
+            handle_error( 'No valid STEP / IGES / BREP / BIM file selected!' );
+            return;
+          }
+
+          selected_url_file = '';
+        } else {
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          url_loading = false;
+        }
+
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.setSize( ww, wh );
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
+          renderer.autoClear = false;
+
+          document.body.appendChild( renderer.domElement );
+        }
+
+        if (scene === undefined) scene = new THREE.Scene();
+        if (mesh === undefined) mesh = new THREE.Group();
+
+        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+        if (camera === undefined) {
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 2500 );
+          camera.position.set( 0, 0, 250 );
+          scene.add( camera );
+        }
+
+        // Add AmbientLight to the scene
+        if (ambientLight === undefined) {
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.05 );
+          ambientLight.position.set( 0, 0, 250 );
+          scene.add( ambientLight );
+        }
+
+        // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
+        if (directionalLight === undefined) {
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 1 );
+          directionalLight.position.set( 0, 0, 250 );
+          directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
+          camera.add( directionalLight );
+        }
+
+        if (controls === undefined) {
+          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls.enableZoomToCursor = true;
+          controls.zoomSpeed = 0.8;
+          controls.rotateSpeed = 0.8;
+          controls.keyPanSpeed = 0.8; 
+          controls.panSpeed = 0.8;
+          //controls.enableDamping = true;
+          //controls.dampingFactor = 0.3;
+          //controls.enableKeys = false;
+          //controls.enableZoom = true;
+          //controls.maxPolarAngle = 2.2;
+          //controls.minPolarAngle = 1.1;
+          //controls.rotateSpeed = 0.2;
+          //controls.minDistance = 2;
+          //controls.maxDistance = 500;
+        }
+
+        // Load the model
+        selected_model_file !== null ? ( bim === true ? loadBIM() : loadFile() ) : loadURLFile();
+      }
+
+      async function loadBIM() {
+        file_loader.load( URL.createObjectURL( selected_model_file ), async function( text ) {
+          URL.revokeObjectURL( selected_model_file );
+
+          let mesh_count = 1;
+
+          dotbim_CreateMeshes( text ).forEach( bim_mesh => {
+            mesh.add( bim_mesh );
+            mesh_count += 1;
+          });
+
+          THREE.Object3D.DefaultUp.set( 0, 0, 1 );
+
+          if (mesh_count > 2) mesh.rotateX( - Math.PI / 2 );
+
+          await addFileInScene();
+        });
+      }
+
+      async function loadFile() {
+        if (selected_model_file !== null) {
+          occtimportjs().then( async function( occt ) {
+            response = await fetch( URL.createObjectURL( selected_model_file ) );
+            URL.revokeObjectURL( selected_model_file );
+
+            buffer = await response.arrayBuffer();
+            fileBuffer = new Uint8Array( buffer );
+
+            let result;
+
+            (iges === true) ? result = await occt.ReadIgesFile( fileBuffer, null ) : ( (brep === true) ? result = await occt.ReadBrepFile( fileBuffer, null ) : result = await occt.ReadStepFile( fileBuffer, null ));
+
+            if (result.success && result.meshes.length > 0) {
+              let mesh_count = 1;
+
+              // Modified version of the original example code at https://github.com/kovacsv/occt-import-js/blob/main/examples/three_viewer.html#L42-L89
+              for (let resultMesh of result.meshes) {
+                let geometry = new THREE.BufferGeometry();
+
+                geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( resultMesh.attributes.position.array, 3 ) );
+
+                if (resultMesh.attributes.normal) {
+                  geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( resultMesh.attributes.normal.array, 3 ) );
+                }
+
+                let index = Uint32Array.from( resultMesh.index.array );
+                geometry.setIndex( new THREE.BufferAttribute( index, 1 ) );
+            
+                let defaultMaterial;
+
+                if (resultMesh.color) {
+                  let color = new THREE.Color( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
+                  defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, color: color } );
+                } else {
+                  defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, color: 0xFFFFFF } );
+                }
+
+                let materials = defaultMaterial;
+
+                if (resultMesh.brep_faces && resultMesh.brep_faces.length > 0) {
+                  materials = [ defaultMaterial ];
+
+                  for (let faceColor of resultMesh.brep_faces) {
+                    let color = faceColor.color ? new THREE.Color( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] ) : defaultMaterial.color;
+                    materials.push( new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, color: color } ) );
+                  }
+
+                  let triangleCount = resultMesh.index.array.length / 3;
+                  let triangleIndex = 0;
+                  let faceColorGroupIndex = 0;
+
+                  while (triangleIndex < triangleCount) {
+                    let firstIndex = triangleIndex;
+                    let lastIndex = null;
+                    let materialIndex = null;
+
+                    if (faceColorGroupIndex >= resultMesh.brep_faces.length) {
+                      lastIndex = triangleCount;
+                      materialIndex = 0;
+                    } else if (triangleIndex < resultMesh.brep_faces[ faceColorGroupIndex ].first) {
+                      lastIndex = resultMesh.brep_faces[ faceColorGroupIndex ].first;
+                      materialIndex = 0;
+                    } else {
+                      lastIndex = resultMesh.brep_faces[ faceColorGroupIndex ].last + 1;
+                      materialIndex = faceColorGroupIndex + 1;
+                      faceColorGroupIndex++;
+                    }
+
+                    geometry.addGroup( firstIndex * 3, ( lastIndex - firstIndex ) * 3, materialIndex );
+                    triangleIndex = lastIndex;
+                  }
+                }
+
+                let new_mesh = new THREE.Mesh( geometry, materials );
+                new_mesh.name = 'mesh_' + mesh_count;
+                mesh_count += 1;
+
+                mesh.add( new_mesh );
+              }
+
+              THREE.Object3D.DefaultUp.set( 0, 1, 0 );
+
+              await addFileInScene();
+            } else {
+              handle_error( 'No mesh detected!' );
+            }
+          });
+        }
+      }
+
+      function addFileInScene() {
+        mesh.traverse( function( child ) {
+          if (child.isMesh && child.material) {
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtl => {
+                if (child.geometry.hasAttribute( 'color' ) === true) mtl.vertexColors = true;
+
+                // Default to double side
+                mtl.side = THREE.DoubleSide;
+              });
+            } else {
+              if (child.geometry.hasAttribute( 'color' ) === true) child.material.vertexColors = true;
+
+              // Default to double side
+              child.material.side = THREE.DoubleSide;
+            }
+          }
+        });
+
+        // Add mesh group to the scene
+        scene.add( mesh );
+        camera.lookAt( mesh.position );
+
+        finish_loading();
+      }
+
+      async function loadURLFile() {
+        if (selected_url_file != '') {
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_url_file = selected_url_file.replace( 'www.dropbox.com', 'dl.dropbox.com' );
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace( 'github.com', 'raw.githubusercontent.com' ) ).replace( 'blob/', '' );
+          }
+
+          let url_uc = selected_url_file.toUpperCase();
+
+          if (url_uc.endsWith('.STP') || url_uc.endsWith('.STEP') || url_uc.endsWith('.IGS') || url_uc.endsWith('.IGES') || url_uc.endsWith('.BRP') || url_uc.endsWith('.BREP') || url_uc.endsWith('.BIM')) {
+            if (url_uc.endsWith('.IGS') || url_uc.endsWith('.IGES')) {
+              iges = true;
+            } else if (url_uc.endsWith('.BRP') || url_uc.endsWith('.BREP')) {
+              brep = true;
+            } else if (url_uc.endsWith('.BIM')) {
+              bim = true;
+              loadURLBIM();
+              return;
+            }
+
+            occtimportjs().then( async function( occt ) {
+              response = await fetch( selected_url_file );
+
+              buffer = await response.arrayBuffer();
+              fileBuffer = new Uint8Array( buffer );
+
+              let result;
+
+              iges ? result = await occt.ReadIgesFile( fileBuffer, null ) : ( brep ? result = await occt.ReadBrepFile( fileBuffer, null ) : result = await occt.ReadStepFile( fileBuffer, null ));
+
+              if (result.success && result.meshes.length > 0) {
+                let mesh_count = 1;
+
+                // Modified version of the original example code at https://github.com/kovacsv/occt-import-js/blob/main/examples/three_viewer.html#L42-L89
+                for (let resultMesh of result.meshes) {
+                  let geometry = new THREE.BufferGeometry();
+
+                  geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( resultMesh.attributes.position.array, 3 ) );
+
+                  if (resultMesh.attributes.normal) {
+                    geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( resultMesh.attributes.normal.array, 3 ) );
+                  }
+
+                  let index = Uint32Array.from( resultMesh.index.array );
+                  geometry.setIndex( new THREE.BufferAttribute( index, 1 ) );
+
+                  let defaultMaterial;
+
+                  if (resultMesh.color) {
+                    let color = new THREE.Color( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
+                    defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, color: color } );
+                  } else {
+                    defaultMaterial = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, color: 0xFFFFFF } );
+                  }
+
+                  let materials = defaultMaterial;
+
+                  if (resultMesh.brep_faces && resultMesh.brep_faces.length > 0) {
+                    materials = [ defaultMaterial ];
+
+                    for (let faceColor of resultMesh.brep_faces) {
+                      let color = faceColor.color ? new THREE.Color( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] ) : defaultMaterial.color;
+                      materials.push( new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, shininess: 50, opacity: 1, color: color } ) );
+                    }
+
+                    let triangleCount = resultMesh.index.array.length / 3;
+                    let triangleIndex = 0;
+                    let faceColorGroupIndex = 0;
+
+                    while (triangleIndex < triangleCount) {
+                      let firstIndex = triangleIndex;
+                      let lastIndex = null;
+                      let materialIndex = null;
+
+                      if (faceColorGroupIndex >= resultMesh.brep_faces.length) {
+                        lastIndex = triangleCount;
+                        materialIndex = 0;
+                      } else if (triangleIndex < resultMesh.brep_faces[ faceColorGroupIndex ].first) {
+                        lastIndex = resultMesh.brep_faces[ faceColorGroupIndex ].first;
+                        materialIndex = 0;
+                      } else {
+                        lastIndex = resultMesh.brep_faces[ faceColorGroupIndex ].last + 1;
+                        materialIndex = faceColorGroupIndex + 1;
+                        faceColorGroupIndex++;
+                      }
+
+                      geometry.addGroup( firstIndex * 3, ( lastIndex - firstIndex ) * 3, materialIndex );
+                      triangleIndex = lastIndex;
+                    }
+                  }
+
+                  let new_mesh = new THREE.Mesh( geometry, materials );
+                  new_mesh.name = 'mesh_' + mesh_count;
+                  mesh_count += 1;
+
+                  mesh.add( new_mesh );
+
+                  if (Array.isArray( materials )) {
+                    materials.forEach( mtl => {
+                      mtl.dispose();
+                    });
+
+                    new_mesh.material.forEach( mtrl => {
+                      mtrl.dispose();
+                    });
+                  } else {
+                    materials.dispose();
+                    new_mesh.material.dispose();
+                  }
+
+                  geometry.dispose();
+                  new_mesh.geometry.dispose();
+                }
+
+                THREE.Object3D.DefaultUp.set( 0, 1, 0 );
+
+                await addURLFileInScene();
+              } else {
+                handle_error( 'No mesh detected!' );
+              }
+            });
+          } else {
+            handle_error( 'Unsupported URL file!' );
+          }
+        }
+      }
+
+      async function loadURLBIM() {
+        file_loader.load( selected_url_file, async function( text ) {
+          let mesh_count = 1;
+
+          dotbim_CreateMeshes( text ).forEach( bim_mesh => {
+            mesh.add( bim_mesh );
+            mesh_count += 1;
+          });
+
+          THREE.Object3D.DefaultUp.set( 0, 0, 1 );
+
+          if (mesh_count > 2) mesh.rotateX( - Math.PI / 2 );
+
+          await addURLFileInScene();
+        });
+      }
+
+      function addURLFileInScene( object ) {
+        mesh.traverse( function( child ) {
+          if (child.isMesh && child.material) {
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtl => {
+                if (child.geometry.hasAttribute( 'color' ) === true) mtl.vertexColors = true;
+
+                // Default to double side
+                mtl.side = THREE.DoubleSide;
+              });
+            } else {
+              if (child.geometry.hasAttribute( 'color' ) === true) child.material.vertexColors = true;
+
+              // Default to double side
+              child.material.side = THREE.DoubleSide;
+            }
+          }
+        });
+
+        // Add mesh group to the scene
+        scene.add( mesh );
+        camera.lookAt( mesh.position );
+
+        finish_loading();
+      }
+
+      function finish_loading() {
+        set_initial_scale();
+        resize();
+
+        console.timeEnd( 'Loading Time' );
+        document.getElementById('div_loading').style.display = 'none';
+
+        enable_disable( false );
+        disabled_changed();
+
+        render_requested = true;
+        mouse_wheel = true;
+        render();
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        render_requested = false;
+        enable_disable( true );
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      function show_wireframe() {
+        if (mesh) {
+          if (wireframe_enabled === true) {
+            wireframe_enabled = false;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+          } else {
+            wireframe_enabled = true;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
+          }
+
+          mesh.traverse( function( child ) {
+            if (child.isMesh) {
+              if (child.material) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.wireframe = wireframe_enabled;
+                  });
+                } else {
+                  child.material.wireframe = wireframe_enabled;
+                }
+              }
+            }
+          });
+
+          mouse_wheel = true;
+        }
+      }
+
+      async function render() {
+        if (mesh) {
+          if (mouse_down === true || mouse_wheel === true) {
+            controls.update();
+
+            renderer.clear();
+            renderer.render( scene, camera );
+
+            scene.updateMatrixWorld();
+            camera.updateMatrixWorld();
+
+            mouse_wheel = false;
+          }
+        }
+
+        if (render_requested === true) requestAnimationFrame( render );
+      }
+
+      function reset_all( reset = false ) {
+        document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+
+        // Reset the view
+        if (reset === true) {
+          controls.reset();
+          set_back_color();
+        } else {
+          // Page (re)loading
+          if (scene) {
+            if (mesh) {
+              mesh.traverse( function( child ) {
+                if (child.isMesh) {
+                  if (child.material) {
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        if (mtl.map) mtl.map.dispose();
+                        mtl.dispose();
+                      });
+                    } else {
+                      if (child.material.map) child.material.map.dispose();
+                      child.material.dispose();
+                    }
+                  }
+
+                  if (child.geometry) child.geometry.dispose();
+                }
+              });
+
+              while (mesh.children.length > 0) {
+                mesh.remove( mesh.children[ 0 ] );
+              }
+            }
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+          }
+
+          document.getElementById('file_input').value = '';
+          document.getElementById('back_color').value = '#000000';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+          enable_disable( true );
+        }
+
+        mouse_wheel = true;
+
+        disabled_changed();
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('back_color').disabled = disable;
+        document.getElementById('btn_wireframe').disabled = disable;
+      }
+    </script>
+
+    <script>
+      function disabled_changed() {
+        $('button').each( function() {
+          if (this.disabled === false) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+
+        $('input[type=color]').each( function() {
+          if (this.disabled === false) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+      }
+    </script>
+  </body>
+</html>
