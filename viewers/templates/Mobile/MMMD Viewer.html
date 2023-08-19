@@ -1,0 +1,1382 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no">
+    <meta name="description" content="MMD (Miku Miku Dance) Viewer - supported formats: PMD, PMX, VMD, VPD, SPH, SPA, MP3, OGG">
+    <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.131.0" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.131.0/examples/js/libs/ammo.wasm.js" defer></script>
+    <script src="../../static/js/effects/OutlineEffect.js" defer></script>
+    <script src="../../static/js/MMDLoader.js" defer></script>
+    <script src="../../static/js/MMDToonShader.js" defer></script>
+    <script src="../../static/js/MMDAnimationHelper.js" defer></script>
+    <script src="../../static/js/MMDPhysics.js" defer></script>
+    <script src="../../static/js/mmdparser.js" defer></script>
+    <script src="../../static/js/TGALoader.js" defer></script>
+    <script src="../../static/js/DDSLoader.js" defer></script>
+    <script src="../../static//js/CCDIKSolver.js" defer></script>
+    <script src="../../static/js/OrbitControls.js" defer></script>
+
+    <style>
+      body,html{
+        position: relative;
+        display: block;
+        background-color: black;
+        width: 100%;
+        min-height: 100vh;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button {
+        border: 1px solid blue;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        margin: 2px 2px 2px 0;
+        min-width: 19px;
+        height: 22px;
+        padding: 1px;
+        vertical-align: middle;
+      }
+
+      label {
+        vertical-align: middle;
+        height: 22px;
+        margin: 2px 0 2px 0;
+      }
+
+      input[type=color] {
+        border: 1px solid whitesmoke;
+        margin: 2px 3px 2px -2px;
+        vertical-align: middle;
+        background: none;
+        height: 20px;
+        width: 16px;
+        padding: 0;
+      }
+
+      input[type=file] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        max-width: 175px;
+      }
+
+      input[type=text] {
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+      }
+
+      .error_msg {
+        background-color: transparent;
+        position: absolute;
+        text-align: center;
+        font-size: x-large;
+        display: none;
+        color: red;
+        width: 240px;
+        height: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .loading_msg {
+        background-color: transparent;
+        color: greenyellow;
+        position: absolute;
+        text-align: center;
+        font-size: large;
+        display: none;
+        height: 240px;
+        width: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .fm { color: navy; width: 99.25%; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+
+      .fixed-menu {
+        background-color: whitesmoke;
+        display: inline-block;
+        position: fixed;
+        padding: 1px;
+        width: 100%;
+        z-index: 1;
+        margin: 0;
+      }
+    </style>
+
+    <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>MMD Viewer</title>
+  </head>
+  <body onload="reset_all(); disabled_changed(); load_ammo();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".pmd, .pmx, .vmd, .vpd, .sph, .spa, .mp3, .ogg, .tga, image/png, image/jpeg, image/bmp, image/gif" multiple />
+        <label for="back_color" title="Background Color">BG</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Poses" id="btn_poses" onclick="change_pose();" disabled>P</button>
+        <button title="Outline Effect" id="btn_outline_effect" onclick="enable_outline_effect();" style="min-width: 26px;" disabled>OL</button>
+        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="min-width: 70%; margin-right: 3px;" />
+        <button onclick="load_url_file();" style="min-width: 38px; margin-right: 3px;">Load</button>
+        <button onclick="clear_url();" style="min-width: 38px; margin-right: 1px;">Clear</button>
+      </div>
+    </div>
+
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">Loading</div>
+
+    <script>
+      async function load_ammo() { ammo = await Ammo(); }
+
+      function show_url() {
+        if (url_displayed === true) {
+          document.getElementById('url').style.display = 'none';
+          url_displayed = false;
+        } else {
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url != '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        window.addEventListener( 'mousedown', ( event ) => { mouse_down = true; }, false);
+        window.addEventListener( 'mouseup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
+      }
+
+      function resize() {
+        if (scene) {
+          mouse_wheel = true;
+
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+
+          effect.setSize( window.innerWidth, window.innerHeight );
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          mouse_wheel = true;
+        }
+      }
+    </script>
+
+    <script>
+      var manager, mmd_loader, helper, tga_loader, dds_loader, audio_loader, sound, listener;
+      var renderer, mmd_obj, scene, camera, effect, effect_enabled, render_requested;
+      var controls, ready, mouse_down, mouse_wheel, events_initialized;
+      var poses, current_pose, ammo, clock, bounding_box;
+      var ambientLight, directionalLight, resource_path;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var selected_url_file = '', url_displayed = false, url_loading = false, wireframe_enabled;
+      var selected_mmd_file, selected_vmd_file, selected_vmd_camera_file, selected_vpd_files, selected_audio_file;
+      var selected_mmd_url_file, selected_vmd_url_file, selected_vmd_camera_url_file, selected_vpd_url_files, selected_audio_url_file;
+      var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif, texture_files_tga, texture_files_sph;
+
+      function set_back_color() {
+        scene.background = null;
+        document.body.style.backgroundColor = document.getElementById('back_color').value;
+        mouse_wheel = true;
+      }
+
+      function set_initial_scale() {
+        // Set the initial scale of the object so it comes to view
+
+        bounding_box.setFromObject( mmd_obj );
+        let size = bounding_box.getSize(new THREE.Vector3());
+
+        if ( size.y > 1 ) {
+          mmd_obj.scale.multiplyScalar( 50 / size.y );
+        } else if ( size.y > 0.02 ) {
+          mmd_obj.scale.multiplyScalar( 25 / size.y );
+        } else {
+          mmd_obj.scale.multiplyScalar( 1 / size.y )
+        }
+
+        bounding_box.setFromObject( mmd_obj );
+        let center = bounding_box.getCenter(new THREE.Vector3());
+        controls.target.set( center.x, center.y, center.z );
+      }
+
+      function change_pose() {
+        if (current_pose === poses.length - 1) {
+          current_pose = -1;
+          document.getElementById('btn_poses').style.backgroundColor = 'transparent';
+          mmd_obj.pose();
+        } else {
+          current_pose += 1;
+          document.getElementById('btn_poses').style.backgroundColor = 'lightgreen';
+          helper.pose( mmd_obj, poses[ current_pose ] );
+        }
+
+        mouse_wheel = true;
+      }
+
+      function init() {
+        if (selected_audio_file || selected_audio_url_file) {
+          sound.stop();
+          if (helper && helper.audio) helper.remove( sound );
+        }
+
+        if (helper && helper.meshes.length > 0) helper.remove( mmd_obj );
+
+        if (scene) {
+          if (mmd_obj) {
+            if (effect_enabled === true) enable_outline_effect();
+
+            mmd_obj.traverse( function( child ) {
+              if (child.isMesh) {
+                if (child.material) {
+                  if (Array.isArray( child.material )) {
+                    child.material.forEach( mtl => {
+                      mtl.dispose();
+                    });
+                  } else {
+                    child.material.dispose();
+                  }
+                }
+
+                child.geometry.dispose();
+              }
+            });
+
+            scene.remove( mmd_obj );
+          }
+
+          mouse_wheel = true;
+
+          reset_all( true );
+        }
+
+        // Manager from ThreeJs to track a loader and its status
+        if (manager === undefined) manager = new THREE.LoadingManager();
+
+        manager.onLoad = function () { mouse_wheel = true; }
+
+        if (mmd_loader === undefined) mmd_loader = new THREE.MMDLoader( manager );
+
+        if (helper === undefined) helper = new THREE.MMDAnimationHelper();
+
+        if (tga_loader === undefined) {
+          tga_loader = new THREE.TGALoader( manager );
+          manager.addHandler( /\.tga$/i, tga_loader );
+        }
+
+        if (dds_loader === undefined) {
+          dds_loader = new THREE.DDSLoader( manager );
+          manager.addHandler( /\.dds$/i, dds_loader );
+        }
+
+        if (listener === undefined) listener = new THREE.AudioListener();
+        if (sound === undefined) sound = new THREE.Audio( listener );
+        if (audio_loader === undefined) audio_loader = new THREE.AudioLoader();
+
+        poses = [];
+        ready = false;
+        resource_path='';
+        mouse_down = false;
+        mouse_wheel = true;
+        effect_enabled = false;
+        render_requested = false;
+        wireframe_enabled = false;
+        bounding_box = new THREE.Box3();
+
+        document.getElementById('btn_poses').style.backgroundColor = 'transparent';
+        document.getElementById('btn_poses').disabled = true;
+
+        enable_disable( true );
+
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (url_loading === false) {
+          selected_mmd_file = null;
+          selected_vmd_file = null;
+          selected_vmd_camera_file = null;
+          selected_audio_file = null;
+          selected_vpd_files = [];
+
+          texture_files_png = [];
+          texture_files_jpg = [];
+          texture_files_bmp = [];
+          texture_files_gif = [];
+          texture_files_tga = [];
+          texture_files_sph = [];
+
+          // Loaded file
+          var fi = document.getElementById('file_input');
+
+          if (fi.files === undefined) return;
+
+          // Include check for JPG/PNG/BMP/GIF, PMD/PMX (model), VMD (motion), VPD (posing) and MP3/OGG audio
+          for (let i = 0; i < fi.files.length; i++) {
+            let fn_uc = fi.files[ i ].name.toUpperCase();
+
+            if (fn_uc.endsWith('.PMD') || fn_uc.endsWith('.PMX')) { selected_mmd_file = fi.files[ i ]; }
+            else if (fn_uc.endsWith('.VMD')) {
+              if (fn_uc.includes('CAMERA')) {
+                selected_vmd_camera_file = fi.files[ i ];
+              } else {
+                selected_vmd_file = fi.files[ i ];
+              }
+            }
+            else if (fn_uc.endsWith('.VPD')) { selected_vpd_files.push( fi.files[ i ] ); }
+            else if (fn_uc.endsWith('.MP3') || fn_uc.endsWith('.OGG')) { selected_audio_file = fi.files[ i ]; }
+            else if (fn_uc.endsWith('.SPH') || fn_uc.endsWith('.SPA')) { texture_files_sph.push( fi.files[ i ] ); }
+            else if (fn_uc.endsWith('.TGA')) { texture_files_tga.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type === 'image/jpeg') { texture_files_jpg.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type === 'image/png') { texture_files_png.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type === 'image/bmp') { texture_files_bmp.push( fi.files[ i ] ); }
+            else if (fi.files[ i ].type === 'image/gif') { texture_files_gif.push( fi.files[ i ] ); }
+          };
+
+          if (selected_mmd_file === null && selected_audio_file === null) {
+            handle_error( 'No valid PMD / PMX or MP3 / OGG file selected!' );
+            return;
+          }
+
+          if (texture_files_sph.length > 0) {
+            texture_files_sph.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_png.length > 0) {
+            texture_files_png.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_jpg.length > 0) {
+            texture_files_jpg.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_bmp.length > 0) {
+            texture_files_bmp.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_gif.length > 0) {
+            texture_files_gif.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (texture_files_tga.length > 0) {
+            texture_files_tga.forEach( file => {
+              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              URL.revokeObjectURL( file );
+            });
+          }
+
+          if (resource_path !== '') mmd_loader.setResourcePath( resource_path.substring( 0, resource_path.length - 1 ) );
+
+          selected_url_file = '';
+        } else {
+          selected_mmd_url_file = null;
+          selected_vmd_url_file = null;
+          selected_vmd_camera_url_file = null;
+          selected_audio_url_file = null;
+
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          mmd_loader.setResourcePath( '' );
+          url_loading = false;
+        }
+
+        if (selected_mmd_file || selected_url_file !== '') {
+          if (renderer === undefined) {
+            renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+            renderer.setPixelRatio( window.devicePixelRatio );
+            renderer.setSize( ww, wh );
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+            renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
+            renderer.autoClear = false;
+
+            document.body.appendChild( renderer.domElement );
+          }
+
+          if (effect === undefined) {
+            effect = new THREE.OutlineEffect( renderer );
+            effect.enabled = false;
+          }
+
+          if (clock === undefined) clock = new THREE.Clock();
+
+          if (scene === undefined) scene = new THREE.Scene();
+          if (mmd_obj === undefined) mmd_obj = new THREE.Object3D();
+
+          if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+          if (camera === undefined) {
+            camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 2500 );
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.position.set( 0, 0, 250 );
+            camera.add( listener );
+            scene.add( camera );
+          }
+
+          // Add AmbientLight to the scene
+          if (ambientLight === undefined) {
+            ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.05 );
+            ambientLight.position.set( 0, 0, 250 );
+            scene.add( ambientLight );
+          }
+
+          // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
+          if (directionalLight === undefined) {
+            directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 0.85 );
+            directionalLight.position.set( 0, 0, 250 );
+            directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
+            camera.add( directionalLight );
+          }
+
+          if (controls === undefined) {
+            controls = new THREE.OrbitControls( camera, renderer.domElement );
+            controls.enableZoomToCursor = true;
+            controls.zoomSpeed = 0.8;
+            controls.rotateSpeed = 0.8;
+            controls.keyPanSpeed = 0.8; 
+            controls.panSpeed = 0.8;
+            //controls.enableDamping = true;
+            //controls.dampingFactor = 0.3;
+            //controls.enableKeys = false;
+            //controls.enableZoom = true;
+            //controls.maxPolarAngle = 2.2;
+            //controls.minPolarAngle = 1.1;
+            //controls.rotateSpeed = 0.2;
+            //controls.minDistance = 2;
+            //controls.maxDistance = 500;
+          }
+        }
+
+        enable_disable( false );
+
+        // Load the file
+        if (selected_mmd_file && selected_vpd_files.length > 0) {
+          loadPoseFiles();
+
+          render_requested = true;
+          render();
+        } else if (selected_mmd_file && selected_vmd_file) {
+          loadMotionFiles();
+
+          render_requested = true;
+          render();
+        } else if (selected_mmd_file) {
+          loadFile();
+
+          render_requested = true;
+          render();
+        } else if (selected_audio_file) {
+          loadAudioFile();
+        } else {
+          loadURLFile();
+        }
+      }
+
+      function loadPoseFiles() {
+        current_pose = -1;
+
+        let ext = selected_mmd_file.name.toUpperCase().endsWith('.PMX') ? 'pmx' : 'pmd';
+
+        mmd_loader.load( URL.createObjectURL( selected_mmd_file ), ext, mesh => {
+          URL.revokeObjectURL( selected_mmd_file );
+
+          mesh.traverse( function( child ) {
+            if (child.isMesh) {
+              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+              if (child.isSkinnedMesh) child.frustumCulled = false;
+
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.side = THREE.DoubleSide;
+                  mtl.skinning = true;
+                  if (mtl.map) mtl.map.generateMipmaps = true;
+                });
+              } else {
+                child.material.side = THREE.DoubleSide;
+                child.material.skinning = true;
+                if (child.material.map) child.material.map.generateMipmaps = true;
+              }
+            }
+          });
+
+          selected_vpd_files.forEach( file => {
+            mmd_loader.loadVPD( URL.createObjectURL( file ), false, vpd => {
+              URL.revokeObjectURL( file );
+
+              poses.push( vpd );
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              console.log( 'Error loading Local VPD!' );
+              console.log( error );
+
+              URL.revokeObjectURL( file );
+            });
+          });
+
+          document.getElementById('btn_poses').disabled = false;
+
+          if (selected_audio_file) {
+            audio_loader.load( URL.createObjectURL( selected_audio_file ), function( buffer ) {
+              URL.revokeObjectURL( selected_audio_file );
+
+              sound.setBuffer( buffer );
+              sound.setLoop(true);
+              sound.setVolume(0.3);
+              sound.play();
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              console.log( 'Error loading Local Audio File!' );
+              console.log( error );
+
+              URL.revokeObjectURL( selected_audio_file );
+            });
+          }
+
+          mmd_obj = mesh;
+
+          scene.add( mmd_obj );
+          camera.lookAt( mmd_obj.position );
+
+          set_initial_scale();
+          resize();
+
+          ready = true;
+
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+
+          disabled_changed();
+
+          mouse_wheel = true;
+        }, function ( xhr ) { // onProgress
+        }, function ( error ) { // onError
+          handle_error( error );
+          URL.revokeObjectURL( selected_mmd_file );
+        });
+      }
+
+      function loadMotionFiles() {
+        let ext = selected_mmd_file.name.toUpperCase().endsWith('.PMX') ? 'pmx' : 'pmd';
+
+        if (selected_vmd_camera_file) {
+          mmd_loader.loadWithAnimation( URL.createObjectURL( selected_mmd_file ), URL.createObjectURL( selected_vmd_file ), ext, mmd => {
+            URL.revokeObjectURL( selected_mmd_file );
+            URL.revokeObjectURL( selected_vmd_file );
+
+            helper.add( mmd.mesh, { animation: mmd.animation,	physics: true	});
+
+            mmd.mesh.traverse( function( child ) {
+              if (child.isMesh) {
+                if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                if (child.isSkinnedMesh) child.frustumCulled = false;
+
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.side = THREE.DoubleSide;
+                    mtl.skinning = true;
+                    if (mtl.map) mtl.map.generateMipmaps = true;
+                  });
+                } else {
+                  child.material.side = THREE.DoubleSide;
+                  child.material.skinning = true;
+                  if (child.material.map) child.material.map.generateMipmaps = true;
+                }
+              }
+            });
+
+            mmd_loader.loadAnimation( URL.createObjectURL( selected_vmd_camera_file ), camera, function ( cameraAnimation ) {
+              URL.revokeObjectURL( selected_vmd_camera_file );
+
+              helper.add( camera, {	animation: cameraAnimation });
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              console.log( 'Error loading Local VMD Camera!' );
+              console.log( error );
+
+              URL.revokeObjectURL( selected_vmd_camera_file );
+            });
+
+            if (selected_audio_file) {
+              audio_loader.load( URL.createObjectURL( selected_audio_file ), function( buffer ) {
+                URL.revokeObjectURL( selected_audio_file );
+
+                sound.setBuffer( buffer );
+              	sound.setLoop( true );
+              	sound.setVolume( 0.3 );
+                helper.add(sound, { delayTime: 3.5 } );
+              }, function ( xhr ) { // onProgress
+              }, function ( error ) { // onError
+                console.log( 'Error loading Local Audio File!' );
+                console.log( error );
+
+                URL.revokeObjectURL( selected_audio_file );
+              });
+            }
+
+            mmd_obj = mmd.mesh;
+
+            scene.add( mmd_obj );
+            camera.lookAt( mmd_obj.position );
+
+            ready = true;
+
+            console.timeEnd( 'Loading Time' );
+            document.getElementById('div_loading').style.display = 'none';
+
+            disabled_changed();
+
+            mouse_wheel = true;
+          }, function ( xhr ) { // onProgress
+          }, function ( error ) { // onError
+            handle_error( error );
+            URL.revokeObjectURL( selected_mmd_file );
+            URL.revokeObjectURL( selected_vmd_file );
+          });
+        } else {
+          mmd_loader.loadWithAnimation( URL.createObjectURL( selected_mmd_file ), URL.createObjectURL( selected_vmd_file ), ext, mmd => {
+            URL.revokeObjectURL( selected_mmd_file );
+            URL.revokeObjectURL( selected_vmd_file );
+
+            helper.add( mmd.mesh, { animation: mmd.animation,	physics: true	});
+
+            // Go through all children of the loaded object and search for a Mesh
+            mmd.mesh.traverse( function( child ) {
+              // This will allow us to check if the child is an instance of the Mesh constructor
+              if (child.isMesh) {
+                if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                if (child.isSkinnedMesh) child.frustumCulled = false;
+
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.side = THREE.DoubleSide;
+                    mtl.skinning = true;
+                    if (mtl.map) mtl.map.generateMipmaps = true;
+                  });
+                } else {
+                  child.material.side = THREE.DoubleSide;
+                  child.material.skinning = true;
+                  if (child.material.map) child.material.map.generateMipmaps = true;
+                }
+              }
+            });
+
+            if (selected_audio_file) {
+              audio_loader.load( URL.createObjectURL( selected_audio_file ), function( buffer ) {
+                URL.revokeObjectURL( selected_audio_file );
+
+                sound.setBuffer( buffer );
+              	sound.setLoop( true );
+              	sound.setVolume( 0.3 );
+                helper.add(sound, { delayTime: 3.5 } );
+              }, function ( xhr ) { // onProgress
+              }, function ( error ) { // onError
+                console.log( 'Error loading Local Audio File!' );
+                console.log( error );
+
+                URL.revokeObjectURL( selected_audio_file );
+              });
+            }
+
+            mmd_obj = mmd.mesh;
+
+            scene.add( mmd_obj );
+            camera.lookAt( mmd_obj.position );
+
+            set_initial_scale();
+            resize();
+
+            ready = true;
+
+            console.timeEnd( 'Loading Time' );
+            document.getElementById('div_loading').style.display = 'none';
+
+            disabled_changed();
+
+            mouse_wheel = true;
+          }, function ( xhr ) { // onProgress
+          }, function ( error ) { // onError
+            handle_error( error );
+            URL.revokeObjectURL( selected_mmd_file );
+            URL.revokeObjectURL( selected_vmd_file );
+          });
+        }
+      }
+
+      function loadAudioFile() {
+        audio_loader.load( URL.createObjectURL( selected_audio_file ), function( buffer ) {
+          URL.revokeObjectURL( selected_audio_file );
+
+          sound.setBuffer( buffer );
+          sound.setLoop( true );
+          sound.setVolume( 0.3 );
+          sound.play();
+
+          render_requested = false;
+          ready = false;
+          enable_disable( true );
+
+          document.body.style.backgroundImage = '';
+          document.getElementById('div_loading').innerHTML = 'Audio';
+          console.timeEnd( 'Loading Time' );
+
+          mouse_wheel = true;
+        }, function ( xhr ) { // onProgress
+        }, function ( error ) { // onError
+          handle_error( error );
+          URL.revokeObjectURL( selected_audio_file );
+        });
+      }
+
+      function loadFile() {
+        let ext = selected_mmd_file.name.toUpperCase().endsWith('.PMX') ? 'pmx' : 'pmd';
+
+        mmd_loader.load( URL.createObjectURL( selected_mmd_file ), ext, mesh => {
+          URL.revokeObjectURL( selected_mmd_file );
+
+          mesh.traverse( function( child ) {
+            if (child.isMesh) {
+              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+              if (child.isSkinnedMesh) child.frustumCulled = false;
+
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.side = THREE.DoubleSide;
+                  mtl.skinning = true;
+                  if (mtl.map) mtl.map.generateMipmaps = true;
+                });
+              } else {
+                child.material.side = THREE.DoubleSide;
+                child.material.skinning = true;
+                if (child.material.map) child.material.map.generateMipmaps = true;
+              }
+            }
+          });
+
+          if (selected_audio_file) {
+            audio_loader.load( URL.createObjectURL( selected_audio_file ), function( buffer ) {
+              URL.revokeObjectURL( selected_audio_file );
+
+              sound.setBuffer( buffer );
+              sound.setLoop( true );
+              sound.setVolume( 0.3 );
+              sound.play();
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              console.log( 'Error loading Local Audio File!' );
+              console.log( error );
+
+              URL.revokeObjectURL( selected_audio_file );
+            });
+          }
+
+          mmd_obj = mesh;
+
+          // Add mmd model to scene
+          scene.add( mmd_obj );
+          camera.lookAt( mmd_obj.position );
+
+          set_initial_scale();
+          resize();
+
+          ready = true;
+
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+
+          disabled_changed();
+
+          mouse_wheel = true;
+        }, function ( xhr ) { // onProgress
+        }, function ( error ) { // onError
+          handle_error( error );
+        });
+      }
+
+      function loadURLFile() {
+        selected_vpd_url_files = [];
+
+        if (selected_url_file !== '') {
+          if (selected_url_file.indexOf( ',' ) > -1) {
+            let urls = selected_url_file.split( ',' );
+
+            for (let i = 0; i < urls.length; i++) {
+              let url = urls[ i ].trim();
+              let url_uc = url.toUpperCase();
+
+              if (url_uc.endsWith('.PMD') || url_uc.endsWith('.PMX')) { selected_mmd_url_file = url; }
+              else if (url_uc.endsWith('.VMD')) {
+                if (url_uc.includes('CAMERA')) {
+                  selected_vmd_camera_url_file = url;
+                } else {
+                  selected_vmd_url_file = url;
+                }
+              }
+              else if (url_uc.endsWith('.VPD')) { selected_vpd_url_files.push( url ); }
+              else if (url_uc.endsWith('.MP3') || url_uc.endsWith('.OGG')) { selected_audio_url_file = url; }
+            };
+
+            if (selected_mmd_url_file && selected_vpd_url_files.length > 0) {
+              document.getElementById('div_loading').style.display = 'block';
+              loadURLPoseFiles();
+
+              render_requested = true;
+              render();
+            } else if (selected_mmd_url_file && selected_vmd_url_file) {
+              document.getElementById('div_loading').style.display = 'block';
+              loadURLMotionFiles();
+
+              render_requested = true;
+              render();
+            } else if (selected_mmd_url_file) {
+              document.getElementById('div_loading').style.display = 'block';
+              loadURLMMDFile();
+
+              render_requested = true;
+              render();
+            } else if (selected_audio_url_file) {
+              document.getElementById('div_loading').style.display = 'block';
+              loadURLAudioFile();
+            }
+          } else {
+            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+              selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+            } else if (selected_url_file.startsWith('https://github.com') === true) {
+              selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+            }
+
+            let url_uc = selected_url_file.toUpperCase();
+
+            if (url_uc.endsWith('.PMD') || url_uc.endsWith('.PMX')) {
+              mmd_loader.load( selected_url_file, '', ( mesh ) => {
+                mesh.traverse( function( child ) {
+              	  if (child.isMesh) {
+                    if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                    if (child.isSkinnedMesh) child.frustumCulled = false;
+
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        mtl.side = THREE.DoubleSide;
+                        mtl.skinning = true;
+                        if (mtl.map) { mtl.map.generateMipmaps = true; }
+                      });
+                    } else {
+                      child.material.side = THREE.DoubleSide;
+                      child.material.skinning = true;
+                      if (child.material.map) { child.material.map.generateMipmaps = true; }
+                    }
+    	    	      }
+    	          });
+
+                mmd_obj = mesh;
+
+                // Add mmd model to scene
+                scene.add( mmd_obj );
+                camera.lookAt( mmd_obj.position );
+
+                set_initial_scale();
+                resize();
+
+                ready = true;
+
+                console.timeEnd( 'Loading Time' );
+                document.getElementById('div_loading').style.display = 'none';
+
+                disabled_changed();
+
+                render_requested = true;
+                render();
+
+                mouse_wheel = true;
+              }, function ( xhr ) { // onProgress
+              }, function ( error ) { // onError
+                handle_error( error );
+              });
+            } else if (url_uc.endsWith('.MP3') || url_uc.endsWith('.OGG')) {
+              document.getElementById('div_loading').style.display = 'block';
+
+              selected_audio_url_file = selected_url_file;
+              loadURLAudioFile();
+            } else {
+              handle_error( 'Unsupported URL file!' );
+            }
+          }
+        }
+      }
+
+      function loadURLPoseFiles() {
+        current_pose = -1;
+
+        let ext = selected_mmd_url_file.toUpperCase().endsWith('.PMX') ? 'pmx' : 'pmd';
+
+        mmd_loader.load( selected_mmd_url_file, ext, mesh => {
+          mesh.traverse( function( child ) {
+            if (child.isMesh) {
+              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+              if (child.isSkinnedMesh) child.frustumCulled = false;
+
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.side = THREE.DoubleSide;
+                  mtl.skinning = true;
+                  if (mtl.map) mtl.map.generateMipmaps = true;
+                });
+              } else {
+                child.material.side = THREE.DoubleSide;
+                child.material.skinning = true;
+                if (child.material.map) child.material.map.generateMipmaps = true;
+              }
+    	  	  }
+          });
+
+          selected_vpd_url_files.forEach( file => {
+            mmd_loader.loadVPD( file, false, vpd => {
+              poses.push( vpd );
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              console.log( 'Error loading URL VPD!' );
+              console.log( error );
+            });
+          });
+
+          document.getElementById('btn_poses').disabled = false;
+
+          if (selected_audio_url_file) {
+            audio_loader.load( selected_audio_url_file, function( buffer ) {
+            	sound.setBuffer( buffer );
+            	sound.setLoop( true );
+            	sound.setVolume( 0.3 );
+              sound.play();
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              console.log( 'Error loading URL Audio File!' );
+              console.log( error );
+            });
+          }
+
+          mmd_obj = mesh;
+
+          scene.add( mmd_obj );
+          camera.lookAt( mmd_obj.position );
+
+          set_initial_scale();
+          resize();
+
+          ready = true;
+
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+
+          disabled_changed();
+
+          mouse_wheel = true;
+        }, function ( xhr ) { // onProgress
+        }, function ( error ) { // onError
+          handle_error( error );
+        });
+      }
+
+      function loadURLMotionFiles() {
+        let ext = selected_mmd_url_file.toUpperCase().endsWith('.PMX') ? 'pmx' : 'pmd';
+
+        if (selected_vmd_camera_url_file) {
+          mmd_loader.loadWithAnimation( selected_mmd_url_file, selected_vmd_url_file, ext, mmd => {
+            helper.add( mmd.mesh, { animation: mmd.animation,	physics: true	});
+
+            mmd.mesh.traverse( function( child ) {
+              if (child.isMesh) {
+                if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                if (child.isSkinnedMesh) child.frustumCulled = false;
+
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.side = THREE.DoubleSide;
+                    mtl.skinning = true;
+                    if (mtl.map) mtl.map.generateMipmaps = true;
+                  });
+                } else {
+                  child.material.side = THREE.DoubleSide;
+                  child.material.skinning = true;
+                  if (child.material.map) child.material.map.generateMipmaps = true;
+                }
+    	    	  }
+            });
+
+            mmd_loader.loadAnimation( selected_vmd_camera_url_file, camera, function ( cameraAnimation ) {
+              helper.add( camera, {	animation: cameraAnimation });
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              console.log( 'Error loading URL VMD!' );
+              console.log( error );
+            });
+
+            if (selected_audio_url_file) {
+              audio_loader.load( selected_audio_url_file, function( buffer ) {
+              	sound.setBuffer( buffer );
+              	sound.setLoop( true );
+              	sound.setVolume( 0.3 );
+                helper.add(sound, { delayTime: 3.5 } );
+              }, function ( xhr ) { // onProgress
+              }, function ( error ) { // onError
+                console.log( 'Error loading URL Audio File!' );
+                console.log( error );
+              });
+            }
+
+            mmd_obj = mmd.mesh;
+
+            scene.add( mmd_obj );
+            camera.lookAt( mmd_obj.position );
+
+            ready = true;
+
+            console.timeEnd( 'Loading Time' );
+            document.getElementById('div_loading').style.display = 'none';
+
+            disabled_changed();
+
+            mouse_wheel = true;
+          }, function ( xhr ) { // onProgress
+          }, function ( error ) { // onError
+            handle_error( error );
+          });
+        } else {
+          mmd_loader.loadWithAnimation( selected_mmd_url_file, selected_vmd_url_file, ext, mmd => {
+            helper.add( mmd.mesh, { animation: mmd.animation,	physics: true	});
+
+            mmd.mesh.traverse( function( child ) {
+              if (child.isMesh) {
+                if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                if (child.isSkinnedMesh) child.frustumCulled = false;
+
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.side = THREE.DoubleSide;
+                    mtl.skinning = true;
+                    if (mtl.map) mtl.map.generateMipmaps = true;
+                  });
+                } else {
+                  child.material.side = THREE.DoubleSide;
+                  child.material.skinning = true;
+                  if (child.material.map) child.material.map.generateMipmaps = true;
+                }
+    	    	  }
+            });
+
+            if (selected_audio_url_file) {
+              audio_loader.load( selected_audio_url_file, function( buffer ) {
+              	sound.setBuffer( buffer );
+              	sound.setLoop( true );
+              	sound.setVolume( 0.3 );
+                helper.add(sound, { delayTime: 3.5 } );
+              }, function ( xhr ) { // onProgress
+              }, function ( error ) { // onError
+                console.log( 'Error loading URL Audio File!' );
+                console.log( error );
+              });
+            }
+
+            mmd_obj = mmd.mesh;
+
+            scene.add( mmd_obj );
+            camera.lookAt( mmd_obj.position );
+
+            set_initial_scale();
+            resize();
+
+            ready = true;
+
+            console.timeEnd( 'Loading Time' );
+            document.getElementById('div_loading').style.display = 'none';
+
+            disabled_changed();
+
+            mouse_wheel = true;
+          }, function ( xhr ) { // onProgress
+          }, function ( error ) { // onError
+            handle_error( error );
+          });
+        }
+      }
+
+      function loadURLMMDFile() {
+        let ext = selected_mmd_url_file.toUpperCase().endsWith('.PMX') ? 'pmx' : 'pmd';
+
+        mmd_loader.load( selected_mmd_url_file, ext, mesh => {
+          mesh.traverse( function( child ) {
+            if (child.isMesh) {
+              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+              if ( child.isSkinnedMesh ) child.frustumCulled = false;
+
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.side = THREE.DoubleSide;
+                  mtl.skinning = true;
+                  if (mtl.map) mtl.map.generateMipmaps = true;
+                });
+              } else {
+                child.material.side = THREE.DoubleSide;
+                child.material.skinning = true;
+                if (child.material.map) child.material.map.generateMipmaps = true;
+             }
+    	  	  }
+          });
+
+          if (selected_audio_url_file) {
+            audio_loader.load( selected_audio_url_file, function( buffer ) {
+              sound.setBuffer( buffer );
+            	sound.setLoop(true);
+            	sound.setVolume(0.3);
+              sound.play();
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              console.log( 'Error loading URL Audio File!' );
+              console.log( error );
+            });
+          }
+
+          mmd_obj = mesh;
+
+          // Add mmd model to scene
+          scene.add( mmd_obj );
+          camera.lookAt( mmd_obj.position );
+
+          set_initial_scale();
+          resize();
+
+          ready = true;
+
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+
+          disabled_changed();
+
+          mouse_wheel = true;
+        }, function ( xhr ) { // onProgress
+        }, function ( error ) { // onError
+          handle_error( error );
+        });
+      }
+
+      function loadURLAudioFile() {
+        audio_loader.load( selected_audio_url_file, function( buffer ) {
+          sound.setBuffer( buffer );
+          sound.setLoop(true);
+          sound.setVolume(0.3);
+          sound.play();
+
+          render_requested = false;
+          ready = false;
+          enable_disable( true );
+
+          document.body.style.backgroundImage = '';
+          document.getElementById('div_loading').innerHTML = 'Audio';
+          console.timeEnd( 'Loading Time' );
+
+          mouse_wheel = true;
+        }, function ( xhr ) { // onProgress
+        }, function ( error ) { // onError
+          handle_error( error );
+        });
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading file!' );
+        console.log( error );
+        render_requested = false;
+        enable_disable( true );
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      function show_wireframe() {
+        if (mmd_obj) {
+          if (wireframe_enabled === true) {
+            wireframe_enabled = false;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+          } else {
+            wireframe_enabled = true;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
+          }
+
+          mmd_obj.traverse( function ( child ) {
+            if (child.isMesh){
+              if (Array.isArray(child.material)) {
+                child.material.forEach( mtl => {
+                  mtl.wireframe = wireframe_enabled;
+                });
+              } else {
+                child.material.wireframe = wireframe_enabled;
+              }
+
+              mouse_wheel = true;
+            }
+          });
+        }
+      }
+
+      function enable_outline_effect() {
+        if (effect_enabled === true) {
+          effect_enabled = false;
+          effect.enabled = false;
+          document.getElementById('btn_outline_effect').style.backgroundColor = 'transparent';
+        } else {
+          effect_enabled = true;
+          effect.enabled = true;
+          document.getElementById('btn_outline_effect').style.backgroundColor = 'lightgreen';
+        }
+
+        mouse_wheel = true;
+      }
+
+      async function render() {
+        if (mmd_obj && ready === true) {
+          if (mouse_down === true || mouse_wheel === true || selected_vmd_file || selected_vmd_url_file) {
+            controls.update();
+            helper.update( clock.getDelta() );
+            effect.render( scene, camera );
+
+            scene.updateMatrixWorld();
+            camera.updateMatrixWorld();
+
+            mouse_wheel = false;
+          }
+        }
+
+        if (render_requested === true) requestAnimationFrame( render );
+      }
+
+      function reset_all( reset = false ) {
+        document.getElementById('back_color').value = '#000000';
+        document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+        document.getElementById('btn_outline_effect').style.backgroundColor = 'transparent';
+
+        // Reset the view
+        if (reset === true) {
+          controls.reset();
+          set_back_color();
+        } else {
+          // Page (re)loading
+          if (scene) {
+            if (mmd_obj) {
+              if (selected_audio_file || selected_audio_url_file) {
+                sound.stop();
+                if (helper.audio) helper.remove( sound );
+              }
+
+              if (helper.camera) helper.remove( camera );
+              if (helper.meshes.length > 0) helper.remove( mmd_obj );
+
+              mmd_obj.traverse( function( child ) {
+                if (child.isMesh) {
+                  if (child.material) {
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        mtl.dispose();
+                      });
+                    } else {
+                      child.material.dispose();
+                    }
+                  }
+
+                  child.geometry.dispose();
+                }
+              });
+            }
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+          }
+
+          mouse_wheel = true;
+
+          document.getElementById('file_input').value = '';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('btn_poses').style.backgroundColor = 'transparent';
+          document.getElementById('btn_poses').disabled = true;
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+          enable_disable( true );
+        }
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('back_color').disabled = disable;
+        document.getElementById('btn_wireframe').disabled = disable;
+        document.getElementById('btn_outline_effect').disabled = disable;
+        disabled_changed();
+      }
+    </script>
+
+    <script>
+      function disabled_changed() {
+        $('button').each( function() {
+          mouse_wheel = true;
+
+          if (this.disabled === false) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+
+        $('input[type=color]').each( function() {
+          mouse_wheel = true;
+
+          if (this.disabled === false) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+      }
+    </script>
+  </body>
+</html>
