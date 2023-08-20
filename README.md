@@ -94,7 +94,7 @@ Number Type Converter
   - Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
   - URLs should have no CORS restrictions
 - Import formats, where applicable, with any optional or required textures:
-  - 3DS, 3DM, 3MF, AMF, DAE, FBX, IFC, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, PRWM, WRL, XYZ
+  - 3DS, 3DM, 3MF, AMF, DAE, FBX, IFC, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, PRWM, USDZ, WRL, XYZ
   - GLTF supported formats: GLB, GLTF + BIN, DRC
   - GCODE supported formats: GCODE, NCC, NGC
   - LDRAW supported formats: DAT, L3B, LDR, MPD
