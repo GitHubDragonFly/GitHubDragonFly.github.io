@@ -143,6 +143,7 @@
     customLayerData = {
         string creator = "Three.js USDZExporter"
     }
+	defaultPrim = "Root"
     metersPerUnit = 1
     upAxis = "Y"
 )
