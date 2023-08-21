@@ -374,19 +374,22 @@ ${array.join( '' )}
             float outputs:r
             float outputs:g
             float outputs:b
+            float outputs:a
             float3 outputs:rgb
         }`;
 
 		}
 
+		inputs.push( `${pad}color3f inputs:diffuseColor = ${buildColor( material.color )}` );
+		inputs.push( `${pad}color3f inputs:emissiveColor = ${buildColor( material.emissive )}` );
+		inputs.push( `${pad}float inputs:roughness = ${material.roughness}` );
+		inputs.push( `${pad}float inputs:metallic = ${material.metalness}` );
+		inputs.push( `${pad}float inputs:opacity = ${material.opacity}` );
+
 		if ( material.map !== null ) {
 
 			inputs.push( `${pad}color3f inputs:diffuseColor.connect = </Materials/Material_${material.id}/Texture_${material.map.id}_diffuse.outputs:rgb>` );
 			samplers.push( buildTexture( material.map, 'diffuse', material.color ) );
-
-		} else {
-
-			inputs.push( `${pad}color3f inputs:diffuseColor = ${buildColor( material.color )}` );
 
 		}
 
@@ -394,10 +397,6 @@ ${array.join( '' )}
 
 			inputs.push( `${pad}color3f inputs:emissiveColor.connect = </Materials/Material_${material.id}/Texture_${material.emissiveMap.id}_emissive.outputs:rgb>` );
 			samplers.push( buildTexture( material.emissiveMap, 'emissive' ) );
-
-		} else if ( material.emissive.getHex() > 0 ) {
-
-			inputs.push( `${pad}color3f inputs:emissiveColor = ${buildColor( material.emissive )}` );
 
 		}
 
@@ -415,25 +414,17 @@ ${array.join( '' )}
 
 		}
 
-		if ( material.roughnessMap !== null && material.roughness === 1 ) {
+		if ( material.roughnessMap !== null ) {
 
 			inputs.push( `${pad}float inputs:roughness.connect = </Materials/Material_${material.id}/Texture_${material.roughnessMap.id}_roughness.outputs:g>` );
 			samplers.push( buildTexture( material.roughnessMap, 'roughness' ) );
 
-		} else {
-
-			inputs.push( `${pad}float inputs:roughness = ${material.roughness}` );
-
 		}
 
-		if ( material.metalnessMap !== null && material.metalness === 1 ) {
+		if ( material.metalnessMap !== null ) {
 
 			inputs.push( `${pad}float inputs:metallic.connect = </Materials/Material_${material.id}/Texture_${material.metalnessMap.id}_metallic.outputs:b>` );
 			samplers.push( buildTexture( material.metalnessMap, 'metallic' ) );
-
-		} else {
-
-			inputs.push( `${pad}float inputs:metallic = ${material.metalness}` );
 
 		}
 
@@ -443,17 +434,36 @@ ${array.join( '' )}
 			inputs.push( `${pad}float inputs:opacityThreshold = 0.0001` );
 			samplers.push( buildTexture( material.alphaMap, 'opacity' ) );
 
-		} else {
-
-			inputs.push( `${pad}float inputs:opacity = ${material.opacity}` );
-
 		}
 
 		if ( material.isMeshPhysicalMaterial ) {
 
+			inputs.push( `${pad}color3f inputs:specularColor = ${buildColor( material.specularColor )}` );
+
 			inputs.push( `${pad}float inputs:clearcoat = ${material.clearcoat}` );
 			inputs.push( `${pad}float inputs:clearcoatRoughness = ${material.clearcoatRoughness}` );
 			inputs.push( `${pad}float inputs:ior = ${material.ior}` );
+
+			if ( material.clearcoatMap !== null ) {
+
+				inputs.push( `${pad}float inputs:clearcoat.connect = </Materials/Material_${material.id}/Texture_${material.clearcoatMap.id}_clearcoat.outputs:r>` );
+				samplers.push( buildTexture( material.clearcoatMap, 'clearcoat' ) );
+
+			}
+
+			if ( material.clearcoatRoughnessMap !== null ) {
+
+				inputs.push( `${pad}float inputs:clearcoatRoughness.connect = </Materials/Material_${material.id}/Texture_${material.clearcoatRoughnessMap.id}_clearcoatRoughness.outputs:g>` );
+				samplers.push( buildTexture( material.clearcoatRoughnessMap, 'clearcoatRoughness' ) );
+
+			}
+
+			if ( material.specularColorMap !== null ) {
+
+				inputs.push( `${pad}color3f inputs:specularColor.connect = </Materials/Material_${material.id}/Texture_${material.specularColorMap.id}_specularColor.outputs:rgb>` );
+				samplers.push( buildTexture( material.specularColorMap, 'specularColor' ) );
+
+			}
 
 		}
 
