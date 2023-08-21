@@ -442,6 +442,13 @@
 
 						const surface = data[ 'def Shader "PreviewSurface"' ];
 
+						if ( 'color3f inputs:diffuseColor' in surface ) {
+
+							const color = surface[ 'color3f inputs:diffuseColor' ].replace( /[()]*/g, '' );
+							material.color.fromArray( JSON.parse( '[' + color + ']' ) );
+
+						}
+
 						if ( 'color3f inputs:diffuseColor.connect' in surface ) {
 
 							const path = surface[ 'color3f inputs:diffuseColor.connect' ];
@@ -450,10 +457,12 @@
 							material.map = buildTexture( sampler );
 							material.map.colorSpace = THREE.SRGBColorSpace;
 
-						} else if ( 'color3f inputs:diffuseColor' in surface ) {
+						}
 
-							const color = surface[ 'color3f inputs:diffuseColor' ].replace( /[()]*/g, '' );
-							material.color.fromArray( JSON.parse( '[' + color + ']' ) );
+						if ( 'color3f inputs:emissiveColor' in surface ) {
+
+							const color = surface[ 'color3f inputs:emissiveColor' ].replace( /[()]*/g, '' );
+							material.emissive.fromArray( JSON.parse( '[' + color + ']' ) );
 
 						}
 
@@ -464,12 +473,14 @@
 
 							material.emissiveMap = buildTexture( sampler );
 							material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
-							material.emissive.fromArray( JSON.parse( '[ 1, 1, 1 ]' ) );
+							if ( ( material.emissive.getHex() > 0 ) === false ) material.emissive.fromArray( [ 1, 1, 1 ] );
 
-						} else if ( 'color3f inputs:emissiveColor' in surface ) {
+						}
 
-							const color = surface[ 'color3f inputs:emissiveColor' ].replace( /[()]*/g, '' );
-							material.emissive.fromArray( JSON.parse( '[' + color + ']' ) );
+						if ( 'color3f inputs:specularColor' in surface ) {
+
+							const color = surface[ 'color3f inputs:specularColor' ].replace( /[()]*/g, '' );
+							material.specularColor.fromArray( JSON.parse( '[' + color + ']' ) );
 
 						}
 
@@ -487,7 +498,9 @@
 
 							material.roughness = parseFloat( surface[ 'float inputs:roughness' ] );
 
-						} else if ( 'float inputs:roughness.connect' in surface ) {
+						}
+
+						if ( 'float inputs:roughness.connect' in surface ) {
 
 							const path = surface[ 'float inputs:roughness.connect' ];
 							const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
@@ -511,7 +524,9 @@
 
 							material.metalness = parseFloat( surface[ 'float inputs:metallic' ] );
 
-						} else if ( 'float inputs:metallic.connect' in surface ) {
+						}
+
+						if ( 'float inputs:metallic.connect' in surface ) {
 
 							const path = surface[ 'float inputs:metallic.connect' ];
 							const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
@@ -525,7 +540,9 @@
 
 							material.opacity = parseFloat( surface[ 'float inputs:opacity' ] );
 
-						} else if ( 'float inputs:opacity.connect' in surface ) {
+						}
+
+						if ( 'float inputs:opacity.connect' in surface ) {
 
 							const path = surface[ 'float inputs:opacity.connect' ];
 							const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
@@ -541,9 +558,29 @@
 
 						}
 
+						if ( 'float inputs:clearcoat.connect' in surface ) {
+
+							const path = surface[ 'float inputs:clearcoat.connect' ];
+							const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
+
+							material.clearcoatMap = buildTexture( sampler );
+							material.clearcoatMap.colorSpace = THREE.SRGBColorSpace;
+
+						}
+
 						if ( 'float inputs:clearcoatRoughness' in surface ) {
 
 							material.clearcoatRoughness = parseFloat( surface[ 'float inputs:clearcoatRoughness' ] );
+
+						}
+
+						if ( 'float inputs:clearcoatRoughness.connect' in surface ) {
+
+							const path = surface[ 'float inputs:clearcoatRoughness.connect' ];
+							const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
+
+							material.clearcoatRoughnessMap = buildTexture( sampler );
+							material.clearcoatRoughnessMap.colorSpace = THREE.SRGBColorSpace;
 
 						}
 
