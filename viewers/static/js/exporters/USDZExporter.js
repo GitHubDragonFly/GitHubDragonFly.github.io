@@ -140,12 +140,12 @@
 
 		return `#usda 1.0
 (
-    customLayerData = {
-        string creator = "Three.js USDZExporter"
-    }
+	customLayerData = {
+		string creator = "Three.js USDZExporter"
+	}
 	defaultPrim = "Root"
-    metersPerUnit = 1
-    upAxis = "Y"
+	metersPerUnit = 1
+	upAxis = "Y"
 )
 
 `;
