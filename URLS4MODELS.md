@@ -21,9 +21,9 @@ Else, copy any of the following links and then paste it within the `URL` option 
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ifc/rac_advanced_sample_project.ifc`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.mtl, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.obj`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_v2.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_camera.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/audios/wavefile_short.mp3`
-- some of the links above might become invalid as three.js revisions progress so try using the archive:
-  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/models/json/lightmap/lightmap.json`
-  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/master/examples/models/prwm/smooth-suzanne.le.prwm`
+- some of the links above might become invalid as three.js revisions progress so try using still available older version:
+  - `https://raw.githubusercontent.com/KodyJKing/three.js/master/examples/models/json/lightmap/lightmap.json`
+  - `https://raw.githubusercontent.com/KodyJKing/three.js/master/examples/models/prwm/smooth-suzanne.le.prwm`
 - access to [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF v1.0 examples for GLTF Legacy viewer, mind the correct path after `1.0`:
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/1.0/VC/glTF-Embedded/VC.gltf`
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/1.0/Avocado/glTF-Embedded/Avocado.gltf`
