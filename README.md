@@ -102,8 +102,9 @@ Number Type Converter
   - OCCT supported formats: STEP, STP, IGES, IGS, BREP, BRP, BIM
     - STEP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js) and modified version of [dotbim.three.js](https://github.com/ricaun/dotbim.three.js)
 - Export formats, where applicable:
-  - 3DM, DAE, APNG, FBX, M3D, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, PRWM
+  - 3DM, DAE, APNG, FBX, M3D, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, PRWM, USDZ
     - Try not to change file names when saving files during initial export
+    - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, USDZ exporters are [three.js](https://github.com/mrdoob/three.js)
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
     - ASSJSON / FBX / M3D / X3D / X exports are powered by [ASSIMPJS](https://github.com/kovacsv/assimpjs) / [ASSIMP](https://github.com/assimp/assimp)
