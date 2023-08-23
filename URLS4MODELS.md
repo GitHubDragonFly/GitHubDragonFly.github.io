@@ -42,7 +42,7 @@ Else, copy any of the following links and then paste it within the `URL` option 
 - access to some PCD example files at [Point Cloud Library (PCL)](https://github.com/PointCloudLibrary):
   - `https://raw.githubusercontent.com/PointCloudLibrary/pcl/master/test/office1.pcd`
   - `https://raw.githubusercontent.com/PointCloudLibrary/pcl/master/test/five_people.pcd`
-- access to some XYZ example files, check the following pdf file which includes a link to a repository:
+- access to some XYZ example files, the pdf file includes a link to a repository on Page 4:
   - `https://orbi.uliege.be/bitstream/2268/254933/1/TDS_generate_3D_meshes_with_python.pdf`
   - `https://people.math.sc.edu/Burkardt/data/xyz/xyz.html`
 - access to some 3DS example files at [tutushubham](https://github.com/tutushubham/3D-Models---Military), mind the correct path after `master`:
