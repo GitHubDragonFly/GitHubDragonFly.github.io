@@ -1468,12 +1468,14 @@
         bounding_box.setFromObject( mesh );
         let size = bounding_box.getSize(new THREE.Vector3());
 
+        console.log(size);
+
         if ( size.y > 1 ) {
           mesh.scale.multiplyScalar( 50 / size.y );
-        } else if ( size.y < 0.02 ) {
-          mesh.scale.multiplyScalar( 1 / size.y );
+        } else if ( size.y > 0.02 ) {
+          mesh.scale.multiplyScalar( 25 / size.y );
         } else {
-          mesh.scale.multiplyScalar( 10 / size.y )
+          mesh.scale.multiplyScalar( 1 / size.y )
         }
 
         bounding_box.setFromObject( mesh );
@@ -1646,9 +1648,40 @@
           if (polar_grid_visible) show_polar_grid();
           if (grid_visible) show_grid();
 
+          if (wireframe_enabled === true) show_wireframe();
+
           if (skeleton_helper) {
             scene.remove( skeleton_helper );
           }
+
+          if (animation_mixer) {
+            animation_mixer.stopAllAction();
+
+            for ( let i = 0; i < animations.length; i++ ) {
+              animation_mixer.uncacheAction( animations[ i ] );
+              animation_mixer.uncacheClip( animations[ i ] );
+            }
+
+            animation_mixer.uncacheRoot( animation_mixer.getRoot() );
+          }
+
+          mesh.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              if (child.material) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    if (mtl.map) mtl.map.dispode();
+                    mtl.dispose();
+                  });
+                } else {
+                  if (child.material.map) child.material.map.dispode();
+                  child.material.dispose();
+                }
+              }
+
+              child.geometry.dispose();
+            }
+          });
 
           material.dispose();
 
@@ -1659,7 +1692,6 @@
         }
 
         enable_disable( true );
-        disabled_changed();
 
         // Manager from ThreeJs to track a loader and its status
         if (manager === undefined) manager = new THREE.LoadingManager();
@@ -1780,6 +1812,7 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.outputEncoding = THREE.sRGBEncoding;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1874,7 +1907,6 @@
         }
 
         enable_disable( false );
-        disabled_changed();
 
         // Load the json file
         selected_json_file !== null ? loadFile() : loadURLFile();
@@ -2205,16 +2237,27 @@
 
               if (image_extensions.some( ext => url_uc.endsWith( ext ) )) {
                 texture_loader.load( url, function( texture ) { textures.push( texture ); });
-              } else if (url.toUpperCase().endsWith('.JSON')) {
+              } else if (url_uc.endsWith('.JS') || url_uc.endsWith('.JSON')) {
                 selected_json_url_file = url;
               }
             }
+          } else {
+            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+              selected_json_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+            } else {
+              if (selected_url_file.startsWith('https://github.com') === true) {
+                selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+              }
 
-            if (selected_json_url_file === null) {
-              handle_error( 'Unsupported URL file!' );
-              return;
+              let url_uc = selected_url_file.toUpperCase();
+
+              if (url_uc.endsWith('.JS') || url_uc.endsWith('.JSON')) {
+                selected_json_url_file = selected_url_file;
+              }
             }
+          }
 
+          if (selected_json_url_file !== null) {
             file_loader.load( selected_json_url_file, async function( file_data ) { fd = file_data; } );
 
             await new Promise( resolve => setTimeout( resolve, 1000 ) ); // adjust timing if necessary
@@ -2229,32 +2272,12 @@
               loader = json_loader;
             }
 
+            // Launch loading of the selected file, addURLFileInScene is the callback when it's ready
             loader.load( selected_json_url_file, addURLFileInScene,
             function( xhr ) { }, // onProgress
             function ( error ) { handle_error( error ); }); // onError
           } else {
-            if (selected_url_file.toUpperCase().endsWith('.JS') || selected_url_file.toUpperCase().endsWith('.JSON')) {
-              file_loader.load( selected_url_file, async function( file_data ) { fd = file_data; } );
-
-              await new Promise( resolve => setTimeout( resolve, 1000 ) ); // adjust timing if necessary
-
-              if (fd && fd.metadata && fd.metadata.type && fd.metadata.type === 'BufferGeometry') {
-                buffer_geometry = true;
-                loader = bg_loader;
-              } else if (fd && fd.metadata && fd.metadata.type && fd.metadata.type === 'Geometry') {
-                handle_error( 'Try using JSON Legacy viewer instead.' );
-                return;
-              } else {
-                loader = json_loader;
-              }
-
-              // Launch loading of the selected file, addURLFileInScene is the callback when it's ready
-              loader.load( selected_url_file, addURLFileInScene,
-              function( xhr ) { }, // onProgress
-              function ( error ) { handle_error( error ); }); // onError
-            } else {
-              handle_error( 'Unsupported URL model!' );
-            }
+            handle_error( 'Unsupported URL model!' );
           }
         }
       }
@@ -2953,6 +2976,24 @@
           count = 0;
         }
 
+        mesh.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            if (child.material) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  if (mtl.map) mtl.map.dispode();
+                  mtl.dispose();
+                });
+              } else {
+                if (child.material.map) child.material.map.dispode();
+                child.material.dispose();
+              }
+            }
+
+            child.geometry.dispose();
+          }
+        });
+
         scene.remove( mesh );
 
         reset_all( true );
@@ -3060,7 +3101,57 @@
           set_directional_light_intensity();
           set_ambient_light_intensity();
         } else {
-          // Page (re)loading so reset the file input, spinner, error, URL entry and disable controls
+          // Page (re)loading
+          if (scene) {
+            if (mesh) {
+              if (skeleton_helper) {
+                skeleton_demo_running = false;
+
+                if (skeleton_visible === true) {
+                  scene.remove( skeleton_helper );
+                  skeleton_visible = false;
+                }
+
+                skeleton_helper = null;
+              }
+
+              if (animation_mixer) {
+                animation_mixer.stopAllAction();
+
+                for ( let i = 0; i < animations.length; i++ ) {
+                  animation_mixer.uncacheAction( animations[ i ] );
+                  animation_mixer.uncacheClip( animations[ i ] );
+                }
+
+                animation_mixer.uncacheRoot( animation_mixer.getRoot() );
+              }
+
+              mesh.traverse( ( child ) => {
+                if (child.isMesh || child.isPoints) {
+                  if (child.material) {
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        if (mtl.map) mtl.map.dispode();
+                        mtl.dispose();
+                      });
+                    } else {
+                      if (child.material.map) child.material.map.dispode();
+                      child.material.dispose();
+                    }
+                  }
+
+                  child.geometry.dispose();
+                }
+              });
+            }
+
+            material.dispose();
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+          }
+
           document.getElementById('file_input').value = '';
           document.getElementById('div_spinner').style.display = 'block';
           document.getElementById('div_error').style.display = 'none';
@@ -3077,8 +3168,6 @@
             gizmo.dispose();
           }
         }
-
-        disabled_changed();
       }
 
       function enable_disable( disable = false ) {
@@ -3113,6 +3202,7 @@
         document.getElementById('btn_grid').disabled = disable;
         document.getElementById('reset').disabled = disable;
         document.getElementById('export_names').disabled = disable;
+        disabled_changed();
       }
     </script>
 
