@@ -484,8 +484,8 @@
       function clear_url() { document.getElementById('url_entry').value = ''; }
 
       function initialize_event_listeners() {
-        window.addEventListener( 'mousedown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
-        window.addEventListener( 'mouseup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'pointerdown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
+        window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; }, false);
         window.addEventListener( 'wheel', ( event ) => { if (progress.value === 0) mouse_wheel = true; }, false);
       }
 
@@ -548,7 +548,7 @@
       var bounding_box, reflect, bgnd_linear_gradient, gif_export;
       var initial_opacity, initial_opacity_array, enable_opacity, slider_height = 0;
       var initial_transparency, initial_transparency_array, menu_location_bottom = false;
-      var selected_ifc_file, selected_url_file = '', url_displayed = false, url_loading = false;
+      var selected_ifc_file, selected_ifc_url_file, selected_url_file = '', url_displayed = false, url_loading = false;
       var vertex_colors_enabled, random_vertex_colors_enabled, original_vertex_color_array, random_vertex_color_array;
 
       const link = document.createElement( 'a' );
@@ -1406,6 +1406,9 @@
 
       function init() {
         if (scene) {
+          if (polar_grid_visible === true) show_polar_grid();
+          if (grid_visible === true) show_grid();
+
           if (ifc_obj) {
             if (Array.isArray( ifc_obj.material )) {
               ifc_obj.material.forEach( mtl => {
@@ -1442,6 +1445,7 @@
         if (zip === undefined) zip = new JSZip();
 
         selected_ifc_file = null;
+        selected_ifc_url_file = null;
         mouse_down = false;
         mouse_wheel = false;
         edges = {};
@@ -1462,8 +1466,12 @@
         gif_export = false;
         bounding_box = new THREE.Box3();
 
-        document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
-        document.getElementById('btn_polar_grid').style.backgroundColor = '#d1cefc';
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_spinner').style.display = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
         if (url_loading === false) {
           // Loaded file
@@ -1472,11 +1480,7 @@
           if (fi.files[ 0 ].name.toUpperCase().endsWith('.IFC')) { selected_ifc_file = fi.files[ 0 ]; }
 
           if (selected_ifc_file === null) {
-            console.log( 'No valid IFC file selected!' );
-            document.body.style.backgroundImage = 'none';
-            document.getElementById('div_spinner').style.display = 'none';
-            document.getElementById('div_loading').style.display = 'none';
-            document.getElementById('div_error').style.display = 'block';
+            handle_error( 'No valid IFC file selected!' );
             return;
           }
 
@@ -1486,12 +1490,6 @@
           document.getElementById('file_input').value = '';
           url_loading = false;
         }
-
-        document.body.style.backgroundImage = 'none';
-        document.getElementById('div_spinner').style.display = 'none';
-        document.getElementById('div_loading').innerHTML = 'Loading';
-        document.getElementById('div_error').style.display = 'none';
-        enable_disable( false );
 
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
@@ -1575,31 +1573,20 @@
           document.getElementById('gizmo').appendChild( gizmo.domElement );
         }
 
-        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
-
         if (ifc_loader) {
+          enable_disable( false );
+
           // Load the ifc file
           selected_ifc_file !== null ? loadFile() : loadURLFile();
 
           render_requested = true;
           render();
         } else {
-          console.log( 'Could not load IFCLoader!' );
-          enable_disable( true );
-
-          if (gizmo) {
-            document.getElementById('gizmo').removeChild( gizmo.domElement );
-            gizmo.dispose();
-          }
-
-          document.getElementById('div_error').style.display = 'block';
+          handle_error( 'Could not load IFCLoader!' );
         }
       }
 
       function loadFile() {
-        console.time( 'Loading Time' );
-        document.getElementById('div_loading').style.display = 'block';
-
         ifc_loader.load( URL.createObjectURL( selected_ifc_file ), function( object ) {
           URL.revokeObjectURL( selected_ifc_file );
 
@@ -1663,119 +1650,106 @@
           disabled_changed();
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
-          console.timeEnd( 'Loading Time' );
-          console.log( 'Error loading IFC!' );
-          console.log( error );
-          render_requested = false;
-          enable_disable( true );
-
-          if (gizmo) {
-            document.getElementById('gizmo').removeChild( gizmo.domElement );
-            gizmo.dispose();
-          }
-
-          document.getElementById('div_loading').style.display = 'none';
-          document.getElementById('div_error').style.display = 'block';
-
+          handle_error( error );
           URL.revokeObjectURL( selected_ifc_file );
         });
       }
 
       function loadURLFile() {
         if (selected_url_file !== '') {
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_ifc_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_ifc_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+          }
+
           if (selected_url_file.toUpperCase().endsWith('.IFC')) {
-            console.time( 'Loading Time' );
-            document.getElementById('div_loading').style.display = 'block';
+            selected_ifc_url_file = selected_url_file;
+          } else  {
+            handle_error( 'Unsupported URL file!' );
+            return;
+          }
 
-            ifc_loader.load( selected_url_file, function( object ) {
-              ifc_obj = object.clone();
+          ifc_loader.load( selected_ifc_url_file, function( object ) {
+            ifc_obj = object.clone();
 
-              if (ifc_obj.geometry) {
-                ifc_obj.geometry.computeVertexNormals();
-                ifc_obj.geometry.center();
+            if (ifc_obj.geometry) {
+              ifc_obj.geometry.computeVertexNormals();
+              ifc_obj.geometry.center();
 
-                if (ifc_obj.geometry.attributes.position) edges[ 'mesh_0' ] = new THREE.LineSegments( new THREE.EdgesGeometry( ifc_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+              if (ifc_obj.geometry.attributes.position) edges[ 'mesh_0' ] = new THREE.LineSegments( new THREE.EdgesGeometry( ifc_obj.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
 
-                random_vertex_color_array = new Float32Array( Array.from( { length: ifc_obj.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-                original_vertex_color_array = ifc_obj.geometry.getAttribute( 'color' );
-              }
+              random_vertex_color_array = new Float32Array( Array.from( { length: ifc_obj.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+              original_vertex_color_array = ifc_obj.geometry.getAttribute( 'color' );
+            }
 
-              if (ifc_obj.material) {
-                if (Array.isArray( ifc_obj.material )) {
-                  let child_count_array = 1;
+            if (ifc_obj.material) {
+              if (Array.isArray( ifc_obj.material )) {
+                let child_count_array = 1;
 
-                  initial_opacity_array[ 'mesh_0' ] = {};
-                  initial_transparency_array[ 'mesh_0' ] = {};
+                initial_opacity_array[ 'mesh_0' ] = {};
+                initial_transparency_array[ 'mesh_0' ] = {};
 
-                  ifc_obj.material.forEach( mtl => {
-                    initial_opacity_array[ 'mesh_0' ][ child_count_array ] = mtl.opacity;
-                    initial_transparency_array[ 'mesh_0' ][ child_count_array ] = mtl.transparent;
-
-                    if (ifc_obj.geometry.attributes.color && ifc_obj.geometry.attributes.color.array.length > 0) {
-                      mtl.vertexColors = true;
-                      vertex_colors_enabled = true;
-                      document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                      document.getElementById('btn_random_vertex_colors').disabled = false;
-                      random_vertex_changed();
-                    }
-
-                    child_count_array += 1;
-                  });
-                } else {
-                  initial_opacity[ 'mesh_0' ] = child.material.opacity;
-                  initial_transparency[ 'mesh_0' ] = child.material.transparent;
+                ifc_obj.material.forEach( mtl => {
+                  initial_opacity_array[ 'mesh_0' ][ child_count_array ] = mtl.opacity;
+                  initial_transparency_array[ 'mesh_0' ][ child_count_array ] = mtl.transparent;
 
                   if (ifc_obj.geometry.attributes.color && ifc_obj.geometry.attributes.color.array.length > 0) {
-                    child.material.vertexColors = true;
+                    mtl.vertexColors = true;
                     vertex_colors_enabled = true;
                     document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                     document.getElementById('btn_random_vertex_colors').disabled = false;
                     random_vertex_changed();
                   }
+
+                  child_count_array += 1;
+                });
+              } else {
+                initial_opacity[ 'mesh_0' ] = child.material.opacity;
+                initial_transparency[ 'mesh_0' ] = child.material.transparent;
+
+                if (ifc_obj.geometry.attributes.color && ifc_obj.geometry.attributes.color.array.length > 0) {
+                  child.material.vertexColors = true;
+                  vertex_colors_enabled = true;
+                  document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                  document.getElementById('btn_random_vertex_colors').disabled = false;
+                  random_vertex_changed();
                 }
               }
-
-              // Add ifc_obj to the scene
-              scene.add( ifc_obj );
-              camera.lookAt( ifc_obj.position );
-
-              set_camera_distance();
-              resize();
-
-              console.timeEnd( 'Loading Time' );
-              document.getElementById('div_loading').style.display = 'none';
-
-              disabled_changed();
-            }, function ( xhr ) { // onProgress
-            }, function ( error ) { // onError
-              console.timeEnd( 'Loading Time' );
-              console.log( 'Error loading URL IFC!' );
-              console.log( error );
-              render_requested = false;
-              enable_disable( true );
-
-              if (gizmo) {
-                document.getElementById('gizmo').removeChild( gizmo.domElement );
-                gizmo.dispose();
-              }
-
-              document.getElementById('div_loading').style.display = 'none';
-              document.getElementById('div_error').style.display = 'block';
-            });
-          } else {
-            console.log( 'Unsupported URL file!' );
-            render_requested = false;
-            enable_disable( true );
-
-            if (gizmo) {
-              document.getElementById('gizmo').removeChild( gizmo.domElement );
-              gizmo.dispose();
             }
 
+            // Add ifc_obj to the scene
+            scene.add( ifc_obj );
+            camera.lookAt( ifc_obj.position );
+
+            set_camera_distance();
+            resize();
+
+            console.timeEnd( 'Loading Time' );
             document.getElementById('div_loading').style.display = 'none';
-            document.getElementById('div_error').style.display = 'block';
-          }
+
+            disabled_changed();
+          }, function ( xhr ) { // onProgress
+          }, function ( error ) { // onError
+            handle_error( error );
+          });
         }
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        render_requested = false;
+        enable_disable( true );
+
+        if (gizmo) {
+          document.getElementById('gizmo').removeChild( gizmo.domElement );
+          gizmo.dispose();
+        }
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
       }
 
       function show_polar_grid() {
@@ -1990,6 +1964,8 @@
         scene.remove( ifc_obj );
 
         reset_all( true );
+
+        console.time( 'Loading Time' );
 
         document.getElementById('div_loading').innerHTML = 'Reload';
 
