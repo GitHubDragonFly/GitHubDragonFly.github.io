@@ -1,0 +1,1117 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no">
+    <meta name="description" content="Three.js JSON Viewer">
+    <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0" defer></script>
+    <script src="../../static/js/utils/BufferGeometryUtils.js" defer></script>
+    <script src="../../static/js/OrbitControls.js" defer></script>
+
+    <style>
+      body, html {
+        position: relative;
+        display: block;
+        background-color: black;
+        width: 100%;
+        min-height: 100vh;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button {
+        border: 1px solid blue;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+        min-width: 18px;
+        height: 22px;
+        padding: 1px;
+      }
+
+      label {
+        vertical-align: middle;
+        height: 22px;
+        margin: 2px 0 2px 0;
+      }
+
+      input[type=color] {
+        border: 1px solid whitesmoke;
+        margin: 2px 3px 2px -2px;
+        vertical-align: middle;
+        background: none;
+        height: 20px;
+        width: 16px;
+        padding: 0;
+      }
+
+      input[type=file] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        max-width: 175px;
+      }
+
+      input[type=text] {
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+      }
+
+      .error_msg {
+        background-color: transparent;
+        position: absolute;
+        text-align: center;
+        font-size: x-large;
+        display: none;
+        color: red;
+        width: 240px;
+        height: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .loading_msg {
+        background-color: transparent;
+        color: greenyellow;
+        position: absolute;
+        text-align: center;
+        font-size: large;
+        display: none;
+        height: 240px;
+        width: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .fm { color: navy; width: 99.25%; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+
+      .fixed-menu {
+        background-color: whitesmoke;
+        display: inline-block;
+        position: fixed;
+        padding: 1px;
+        width: 100%;
+        z-index: 1;
+        margin: 0;
+      }
+    </style>
+
+    <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>JSON Viewer</title>
+  </head>
+  <body onload="reset_all(); disabled_changed();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".js, .json, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
+        <label for="back_color" title="Background Color">BG</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Animations" id="btn_animate" onclick="json_animation();" disabled>A</button>
+        <button title="Flat Shading" id="btn_flat" onclick="set_flat();" disabled>F</button>
+        <button title="Skeleton" id="btn_skeleton" onclick="show_skeleton();" disabled>S</button>
+        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="min-width: 70%; margin-right: 3px;" />
+        <button onclick="load_url_file();" style="min-width: 38px; margin-right: 3px;">Load</button>
+        <button onclick="clear_url();" style="min-width: 38px; margin-right: 1px;">Clear</button>
+      </div>
+    </div>
+
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">Loading</div>
+
+    <script>
+      function show_url() {
+        if (url_displayed === true) {
+          document.getElementById('url').style.display = 'none';
+          url_displayed = false;
+        } else {
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        window.addEventListener( 'mousedown', ( event ) => { mouse_down = true; }, false);
+        window.addEventListener( 'mouseup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
+      }
+
+      function resize() {
+        if (scene) {
+          mouse_wheel = true;
+
+          renderer.setSize( window.innerWidth, window.innerHeight );
+
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          mouse_wheel = true;
+        }
+      }
+    </script>
+
+    <script>
+      const image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJP', '.PJPEG', '.BMP', '.GIF', '.SVG', '.WEBP' ];
+
+      var manager, file_loader, texture_loader, json_loader, bg_loader, clock;
+      var renderer, scene, camera, mesh, render_requested, wireframe_enabled;
+      var animations, animation_mixer, animation_running, current_animation;
+      var controls, mouse_down, mouse_wheel, events_initialized;
+      var ambientLight, directionalLight, flat_shading_enabled;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var loader, fd, material, textures, buffer_geometry, bounding_box;
+      var selected_json_file, selected_url_file = '', selected_json_url_file;
+      var url_displayed = false, url_loading = false, vertex_colors_enabled;
+      var bones, bones_exist, skeleton_helper, skeleton_visible, skeleton_demo, skeleton_demo_running, count;
+
+      function set_back_color() {
+        scene.background = null;
+        document.body.style.backgroundColor = document.getElementById('back_color').value;
+        mouse_wheel = true;
+      }
+
+      function set_initial_scale() {
+        // Set the initial scale of the object so it comes to view
+
+        bounding_box.setFromObject( mesh );
+        let size = bounding_box.getSize(new THREE.Vector3());
+
+        if ( size.y > 1 ) {
+          mesh.scale.multiplyScalar( 50 / size.y );
+        } else if ( size.y > 0.02 ) {
+          mesh.scale.multiplyScalar( 25 / size.y );
+        } else {
+          mesh.scale.multiplyScalar( 1 / size.y )
+        }
+
+        bounding_box.setFromObject( mesh );
+        let center = bounding_box.getCenter(new THREE.Vector3());
+        controls.target.set( center.x, center.y, center.z );
+      }
+
+      function json_animation() {
+        if (animation_running === true) {
+          animation_mixer.clipAction( animations[ current_animation ] ).stop();
+
+          if (current_animation === animations.length - 1) {
+            document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+            current_animation = 0;
+            animation_running = false;
+            skeleton_demo = true;
+          } else {
+            current_animation += 1;
+            animation_mixer.clipAction( animations[ current_animation ] ).play();
+          }
+        } else {
+          skeleton_demo = false;
+          animation_mixer.clipAction( animations[ current_animation ] ).play();
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          animation_running = true;
+        }
+
+        mouse_wheel = true;
+      }
+
+      async function init() {
+        if (scene) {
+          if (mesh) {
+            if (wireframe_enabled === true) show_wireframe();
+
+            if (skeleton_helper) {
+              skeleton_demo_running = false;
+
+              if (skeleton_visible === true) {
+                scene.remove( skeleton_helper );
+                skeleton_visible = false;
+              }
+
+              skeleton_helper = null;
+            }
+
+            if (animation_mixer) {
+              animation_mixer.stopAllAction();
+
+              for ( let i = 0; i < animations.length; i++ ) {
+                animation_mixer.uncacheAction( animations[ i ] );
+                animation_mixer.uncacheClip( animations[ i ] );
+              }
+
+              animation_mixer.uncacheRoot( animation_mixer.getRoot() );
+            }
+
+            mesh.traverse( ( child ) => {
+              if (child.isMesh || child.isPoints) {
+                if (child.material) {
+                  if (Array.isArray( child.material )) {
+                    child.material.forEach( mtl => {
+                      if (mtl.map) mtl.map.dispode();
+                      mtl.dispose();
+                    });
+                  } else {
+                    if (child.material.map) child.material.map.dispode();
+                    child.material.dispose();
+                  }
+                }
+
+                child.geometry.dispose();
+              }
+            });
+
+            material.dispose();
+
+            scene.remove( mesh );
+          }
+
+          mouse_wheel = true;
+
+          reset_all( true );
+        }
+
+        enable_disable( true );
+
+        if (manager === undefined) manager = new THREE.LoadingManager();
+
+        manager.onLoad = function () { mouse_wheel = true; }
+
+        if (file_loader === undefined) {
+          file_loader = new THREE.FileLoader( manager );
+          file_loader.setMimeType( 'application/json' );
+          file_loader.setResponseType( 'json' );
+        }
+
+        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
+
+        if (json_loader === undefined) json_loader = new THREE.ObjectLoader( manager );
+
+        if (bg_loader === undefined) bg_loader = new THREE.BufferGeometryLoader( manager );
+
+        selected_json_file = null;
+        selected_json_url_file = null;
+        mouse_down = false;
+        mouse_wheel = true;
+        buffer_geometry = false;
+        skeleton_helper = null;
+        skeleton_visible = false;
+        skeleton_demo = false;
+        skeleton_demo_running = false;
+        bones_exist = false;
+        bones = [];
+        count = 0;
+        loader = null;
+        fd = null;
+        animations = [];
+        animation_mixer = null;
+        animation_running = false;
+        render_requested = false;
+        wireframe_enabled = false;
+        flat_shading_enabled = false;
+        vertex_colors_enabled = false;
+        textures = {};
+        bounding_box = new THREE.Box3();
+
+        document.getElementById('btn_animate').disabled = true;
+        document.getElementById('btn_skeleton').disabled = true;
+
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (url_loading === false) {
+          // Loaded file
+          let fi = document.getElementById('file_input');
+
+          for ( let i = 0; i < fi.files.length; i++ ) {
+            let fn_uc = fi.files[ i ].name.toUpperCase();
+
+            if (fn_uc.endsWith('.JS') || fn_uc.endsWith('.JSON')) { selected_json_file = fi.files[ i ]; }
+            else if (fi.files[ i ].type.startsWith('image/')) {
+              textures[ fi.files[ i ].name ] =  URL.createObjectURL( fi.files[ i ] );
+              URL.revokeObjectURL( fi.files[ i ] );
+            }
+          };
+
+          if (selected_json_file === null) {
+            handle_error( 'No valid JSON file selected!' );
+            return;
+          }
+
+          file_loader.load( URL.createObjectURL( selected_json_file ), async function( file_data ) {
+            URL.revokeObjectURL( selected_json_file );
+
+            fd = file_data;
+          });
+
+          await new Promise( resolve => setTimeout( resolve, 500 ) ); // adjust timing if necessary
+
+          if (fd && fd.metadata && fd.metadata.type && fd.metadata.type === 'BufferGeometry') {
+            buffer_geometry = true;
+            loader = bg_loader;
+          } else if (fd && fd.metadata && fd.metadata.type && fd.metadata.type === 'Geometry') {
+            handle_error( 'Try using JSON Legacy viewer instead!' );
+            return;
+          } else {
+            loader = json_loader;
+          }
+
+          selected_url_file = '';
+        } else {
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          url_loading = false;
+        }
+
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.outputEncoding = THREE.sRGBEncoding;
+          renderer.setSize( ww, wh );
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
+          renderer.autoClear = false;
+
+          document.body.appendChild( renderer.domElement );
+        }
+
+        if (clock === undefined) clock = new THREE.Clock();
+
+        if (scene === undefined) scene = new THREE.Scene();
+        if (mesh === undefined) mesh = new THREE.Object3D();
+
+        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+        if (camera === undefined) {
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 2500 );
+          camera.position.set( 0, 0, 250 );
+          scene.add( camera );
+        }
+
+        // Add AmbientLight to the scene
+        if (ambientLight === undefined) {
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.05 );
+          ambientLight.position.set( 0, 0, 250 );
+          scene.add( ambientLight );
+        }
+
+        // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
+        if (directionalLight === undefined) {
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 1 );
+          directionalLight.position.set( 0, 0, 250 );
+          directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
+          camera.add( directionalLight );
+        }
+
+        if (controls === undefined) {
+          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls.enableZoomToCursor = true;
+          controls.zoomSpeed = 0.8;
+          controls.rotateSpeed = 0.8;
+          controls.keyPanSpeed = 0.8; 
+          controls.panSpeed = 0.8;
+          //controls.enableDamping = true;
+          //controls.dampingFactor = 0.3;
+          //controls.enableKeys = false;
+          //controls.enableZoom = true;
+          //controls.maxPolarAngle = 2.2;
+          //controls.minPolarAngle = 1.1;
+          //controls.rotateSpeed = 0.2;
+          //controls.minDistance = 2;
+          //controls.maxDistance = 500;
+        }
+
+        if (material === undefined) {
+          material = new THREE.MeshPhongMaterial( {
+            side: THREE.DoubleSide,
+            vertexColors: false,
+            flatShading: false,
+            transparent: true,
+            shininess: 50,
+            opacity: 1,
+            fog: true
+          });
+        }
+
+        enable_disable( false );
+
+        // Load the json file
+        selected_json_file !== null ? loadFile() : loadURLFile();
+
+        render_requested = true;
+        render();
+      }
+
+      function loadFile() {
+        if (selected_json_file) {
+          loader.load( URL.createObjectURL( selected_json_file ), addFileInScene,
+          function( xhr ) { }, // onProgress
+          function ( error ) { handle_error( error ); }); // onError
+        }
+      }
+
+      async function addFileInScene( object ) {
+        URL.revokeObjectURL( selected_json_file );
+
+        if (buffer_geometry === true) {
+          object.computeBoundingBox();
+          object.computeBoundingSphere();
+
+          object.deleteAttribute( 'normal' );
+          object = THREE.BufferGeometryUtils.mergeVertices( object );
+          object.computeVertexNormals();
+          object.normalizeNormals();
+          object.center();
+
+          mesh = new THREE.Mesh( object, material );
+        } else {
+          mesh = object;
+        }
+
+        if (buffer_geometry === true || (mesh.material && mesh.isPoints === undefined)) {
+          mesh.name = 'mesh_0';
+
+          if (mesh.geometry.attributes.color && mesh.geometry.attributes.color.array.length > 0) {
+            vertex_colors_enabled = true;
+          }
+
+          if (Object.getOwnPropertyNames( textures ).length !== 0) {
+            mesh.material.forEach( mtl => {
+              mtl.vertexColors = vertex_colors_enabled;
+              mtl.format = THREE.RGBAFormat;
+
+              for (const [ key, value ] of Object.entries( textures )) {
+                if (mtl.map) {
+                  if (mtl.map.image[ 'src' ].substring( mtl.map.image[ 'src' ].lastIndexOf( '/' ) + 1) === key ) mtl.map.image[ 'src' ] = value;
+                }
+
+                if (mtl.aoMap) {
+                  if (mtl.aoMap.image[ 'src' ].substring( mtl.aoMap.image[ 'src' ].lastIndexOf( '/' ) + 1) === key ) mtl.aoMap.image[ 'src' ] = value;
+                }
+
+                if (mtl.alphaMap) {
+                  if (mtl.alphaMap.image[ 'src' ].substring( mtl.alphaMap.image[ 'src' ].lastIndexOf( '/' ) + 1) === key ) mtl.alphaMap.image[ 'src' ] = value;
+                }
+
+                if (mtl.emissiveMap) {
+                  if (mtl.emissiveMap.image[ 'src' ].substring( mtl.emissiveMap.image[ 'src' ].lastIndexOf( '/' ) + 1) === key ) mtl.emissiveMap.image[ 'src' ] = value;
+                }
+
+                if (mtl.normalMap) {
+                  if (mtl.normalMap.image[ 'src' ].substring( mtl.normalMap.image[ 'src' ].lastIndexOf( '/' ) + 1) === key ) mtl.normalMap.image[ 'src' ] = value;
+                }
+
+                if (mtl.bumpMap) {
+                  if (mtl.bumpMap.image[ 'src' ].substring( mtl.bumpMap.image[ 'src' ].lastIndexOf( '/' ) + 1) === key ) mtl.bumpMap.image[ 'src' ] = value;
+                }
+
+                if (mtl.lightMap) {
+                  if (mtl.lightMap.image[ 'src' ].substring( mtl.lightMap.image[ 'src' ].lastIndexOf( '/' ) + 1) === key ) mtl.lightMap.image[ 'src' ] = value;
+                }
+
+                if (mtl.specularMap) {
+                  if (mtl.specularMap.image[ 'src' ].substring( mtl.specularMap.image[ 'src' ].lastIndexOf( '/' ) + 1) === key ) mtl.specularMap.image[ 'src' ] = value;
+                }
+
+                if (mtl.metalnessMap) {
+                  if (mtl.metalnessMap.image[ 'src' ].substring( mtl.metalnessMap.image[ 'src' ].lastIndexOf( '/' ) + 1) === key ) mtl.metalnessMap.image[ 'src' ] = value;
+                }
+
+                if (mtl.roughnessMap) {
+                  if (mtl.roughnessMap.image[ 'src' ].substring( mtl.roughnessMap.image[ 'src' ].lastIndexOf( '/' ) + 1) === key ) mtl.roughnessMap.image[ 'src' ] = value;
+                }
+              }
+
+              // Default to double side
+              mtl.side = THREE.DoubleSide;
+
+              mtl.needsUpdate = true;
+            });
+          } else {
+            mesh.material.vertexColors = vertex_colors_enabled;
+            mesh.material.format = THREE.RGBAFormat;
+            mesh.material.flatShading = false;
+
+            // Default to double side
+            mesh.material.side = THREE.DoubleSide;
+
+            mesh.material.needsUpdate = true;
+          }
+        } else {
+          mesh.traverse( function( child ) {
+            if (child.isBone) bones_exist = true;
+
+            if (child.isMesh || child.isPoints) {
+              child.geometry.computeBoundingBox();
+              child.geometry.computeBoundingSphere();
+
+              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+              child.geometry.normalizeNormals();
+
+              if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                vertex_colors_enabled = true;
+              }
+
+              if (child.isMesh) {
+                if (child.isSkinnedMesh) child.frustumCulled = false;
+              } else {
+                document.getElementById('btn_wireframe').disabled = true;
+                document.getElementById('btn_flat').disabled = true;
+              }
+
+              if (child.material) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.vertexColors = vertex_colors_enabled;
+                    mtl.format = THREE.RGBAFormat;
+                    mtl.flatShading = false;
+
+                    // Default do double side
+                    mtl.side = THREE.DoubleSide;
+
+                    mtl.needsUpdate = true;
+                  });
+                } else {
+                  child.material.vertexColors = vertex_colors_enabled;
+                  child.material.format = THREE.RGBAFormat;
+                  child.material.flatShading = false;
+
+                  // Default to double side
+                  child.material.side = THREE.DoubleSide;
+
+                  child.material.needsUpdate = true;
+                }
+              }
+            }
+          });
+        }
+
+        await new Promise( resolve => setTimeout( resolve, 100 ) );
+
+        if (bones_exist === true) {
+          skeleton_helper = new THREE.SkeletonHelper( mesh );
+
+          skeleton_helper.bones.forEach( ( bone, index ) => {
+            bones[ index ] = [ bone.rotation.x, bone.rotation.y, bone.rotation.z ];
+          });
+
+          document.getElementById('btn_skeleton').disabled = false;
+        }
+
+        // Add mesh to the scene
+        scene.add( mesh );
+        camera.lookAt( mesh.position );
+
+        set_initial_scale();
+        resize();
+
+        animations = mesh.animations;
+
+        if (animations && animations.length > 0) {
+          animation_mixer = new THREE.AnimationMixer( mesh );
+          current_animation = 0;
+          animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+          animation_mixer.clipAction( animations[ 0 ] ).play();
+          document.getElementById('btn_animate').disabled = false;
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          animation_running = true;
+        }
+
+        console.timeEnd( 'Loading Time' );
+        document.getElementById('div_loading').style.display = 'none';
+
+        disabled_changed();
+
+        mouse_wheel = true;
+      }
+
+      async function loadURLFile() {
+        if (selected_url_file != '') {
+          if (selected_url_file.indexOf( ',' ) > -1) {
+            let urls = selected_url_file.split( ',' );
+
+            for (let i = 0; i < urls.length; i++) {
+              let url = urls[ i ].trim();
+              let url_uc = url.toUpperCase();
+
+              if (image_extensions.some( ext => url_uc.endsWith( ext ) )) {
+                texture_loader.load( url, function( texture ) { textures.push( texture ); });
+              } else if (url_uc.endsWith('.JS') || url_uc.endsWith('.JSON')) {
+                selected_json_url_file = url;
+              }
+            }
+          } else {
+            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+              selected_json_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+            } else {
+              if (selected_url_file.startsWith('https://github.com') === true) {
+                selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+              }
+
+              let url_uc = selected_url_file.toUpperCase();
+
+              if (url_uc.endsWith('.JS') || url_uc.endsWith('.JSON')) {
+                selected_json_url_file = selected_url_file;
+              }
+            }
+          }
+
+          if (selected_json_url_file !== null) {
+            file_loader.load( selected_json_url_file, async function( file_data ) { fd = file_data; } );
+
+            await new Promise( resolve => setTimeout( resolve, 1000 ) ); // adjust timing if necessary
+
+            if (fd && fd.metadata && fd.metadata.type && fd.metadata.type === 'BufferGeometry') {
+              buffer_geometry = true;
+              loader = bg_loader;
+            } else if (fd && fd.metadata && fd.metadata.type && fd.metadata.type === 'Geometry') {
+              handle_error( 'Try using JSON Legacy viewer instead.' );
+              return;
+            } else {
+              loader = json_loader;
+            }
+
+            // Launch loading of the selected file, addURLFileInScene is the callback when it's ready
+            loader.load( selected_json_url_file, addURLFileInScene,
+            function( xhr ) { }, // onProgress
+            function ( error ) { handle_error( error ); }); // onError
+          } else {
+            handle_error( 'Unsupported URL model!' );
+          }
+        }
+      }
+
+      function addURLFileInScene( object ) {
+
+        if (buffer_geometry === true) {
+          object.computeBoundingBox();
+          object.computeBoundingSphere();
+
+          object.deleteAttribute( 'normal' );
+          object = THREE.BufferGeometryUtils.mergeVertices( object );
+          object.computeVertexNormals();
+          object.normalizeNormals();
+          object.center();
+
+          mesh = new THREE.Mesh( object, material );
+        } else {
+          mesh = object;
+        }
+
+        if (buffer_geometry === true || (mesh.material && mesh.isPoints === undefined)) {
+          if (mesh.geometry.attributes.color && mesh.geometry.attributes.color.array.length > 0) {
+            vertex_colors_enabled = true;
+          }
+
+          if (Array.isArray( mesh.material )) {
+            mesh.material.forEach( mtl => {
+              mtl.vertexColors = vertex_colors_enabled;
+              mtl.format = THREE.RGBAFormat;
+              mtl.flatShading = false;
+
+              // Default to double side
+              mtl.side = THREE.DoubleSide;
+
+              mtl.needsUpdate = true;
+            });
+          } else {
+            mesh.material.vertexColors = vertex_colors_enabled;
+            mesh.material.format = THREE.RGBAFormat;
+            mesh.material.flatShading = false;
+
+            // Default to double side
+            mesh.material.side = THREE.DoubleSide;
+
+            mesh.material.needsUpdate = true;
+          }
+        } else {
+          mesh.traverse( function( child ) {
+            if (child.isBone) bones_exist = true;
+
+            if (child.isMesh || child.isPoints) {
+              child.geometry.computeBoundingBox();
+              child.geometry.computeBoundingSphere();
+
+              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+              child.geometry.normalizeNormals();
+
+              if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                vertex_colors_enabled = true;
+              }
+
+              if (child.isMesh) {
+                if (child.isSkinnedMesh) child.frustumCulled = false;
+              } else {
+                document.getElementById('btn_wireframe').disabled = true;
+                document.getElementById('btn_flat').disabled = true;
+              }
+
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.vertexColors = vertex_colors_enabled;
+                  mtl.format = THREE.RGBAFormat;
+                  mtl.flatShading = false;
+
+                  // Default to double side
+                  mtl.side = THREE.DoubleSide;
+
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                child.material.vertexColors = vertex_colors_enabled;
+                child.material.format = THREE.RGBAFormat;
+                child.material.flatShading = false;
+
+                // Default to double side
+                child.material.side = THREE.DoubleSide;
+
+                child.material.needsUpdate = true;
+              }
+            }
+          });
+        }
+
+        if (bones_exist === true) {
+          skeleton_helper = new THREE.SkeletonHelper( mesh );
+
+          skeleton_helper.bones.forEach( ( bone, index ) => {
+            bones[ index ] = [ bone.rotation.x, bone.rotation.y, bone.rotation.z ];
+          });
+
+          document.getElementById('btn_skeleton').disabled = false;
+        }
+
+        // Add mesh to the scene
+        scene.add( mesh );
+        camera.lookAt( mesh.position );
+
+        set_initial_scale();
+        resize();
+
+        animations = mesh.animations;
+
+        if (animations && animations.length > 0) {
+          animation_mixer = new THREE.AnimationMixer( mesh );
+          current_animation = 0;
+          animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+          animation_mixer.clipAction( animations[ 0 ] ).play();
+          document.getElementById('btn_animate').disabled = false;
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          animation_running = true;
+        }
+
+        console.timeEnd( 'Loading Time' );
+        document.getElementById('div_loading').style.display = 'none';
+
+        disabled_changed();
+
+        mouse_wheel = true;
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        render_requested = false;
+        enable_disable( true );
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      function show_skeleton() {
+        if (skeleton_visible === true) {
+          if (skeleton_demo === true) {
+            // Run the demo with the skeleton visible
+            skeleton_demo = false;
+            skeleton_demo_running = true;
+            document.getElementById('btn_skeleton').style.backgroundColor = 'red';
+
+            if (animations && animations.length > 0) {
+              document.getElementById('btn_animate').disabled = true;
+              skeleton_animation_changed();
+            }
+          } else if (skeleton_demo_running === true) {
+            // Stop the demo and hide the skeleton, the demo will remain available
+            // Animations, if present, will control the demo availability when turned ON / OFF
+            skeleton_demo_running = false;
+
+            skeleton_helper.bones.forEach( ( bone, index ) => {
+              bone.rotation.x = bones[ index ][ 0 ];
+              bone.rotation.y = bones[ index ][ 1 ];
+              bone.rotation.z = bones[ index ][ 2 ];
+            });
+
+            skeleton_demo = true;
+            skeleton_visible = false;
+            scene.remove( skeleton_helper );
+            document.getElementById('btn_skeleton').style.backgroundColor = 'transparent';
+
+            if (animations && animations.length > 0) {
+              document.getElementById('btn_animate').disabled = false;
+              skeleton_animation_changed();
+            }
+          } else {
+            // Hide the skeleton
+            skeleton_visible = false;
+            scene.remove( skeleton_helper );
+            document.getElementById('btn_skeleton').style.backgroundColor = 'transparent';
+          }
+        } else {
+          // Show the skeleton
+          skeleton_visible = true;
+          scene.add( skeleton_helper );
+          document.getElementById('btn_skeleton').style.backgroundColor = 'lightgreen';
+        }
+
+        mouse_wheel = true;
+      }
+
+      function show_wireframe() {
+        if (mesh) {
+          if (wireframe_enabled === true) {
+            wireframe_enabled = false;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+          } else {
+            wireframe_enabled = true;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
+          }
+
+          mesh.traverse( function( child ) {
+            if (child.isMesh){
+              if (child.material) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.wireframe = wireframe_enabled;
+                  });
+                } else {
+                  child.material.wireframe = wireframe_enabled;
+                }
+              }
+
+              mouse_wheel = true;
+            }
+          });
+        }
+      }
+
+      function set_flat() {
+        if (flat_shading_enabled === true) {
+          document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+          flat_shading_enabled = false;
+        } else {
+          document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+          flat_shading_enabled = true;
+        }
+
+        mesh.traverse( function( child ) {
+          if (child.isMesh) {
+            if (child.material) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.flatShading = flat_shading_enabled;
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                child.material.flatShading = flat_shading_enabled;
+                child.material.needsUpdate = true;
+              }
+            }
+
+            mouse_wheel = true;
+          }
+    	  });
+      }
+
+      async function render() {
+        if (mesh) {
+          if (animation_running === true || mouse_down === true || mouse_wheel === true || (skeleton_demo === false && skeleton_demo_running === true)) {
+            if (skeleton_demo === false && skeleton_demo_running === true) {
+              skeleton_helper.bones.forEach( bone => {
+                if (count < 500) {
+                  bone.rotation.x += 0.0005;
+                  bone.rotation.z -= 0.0005;
+                } else {
+                  bone.rotation.x -= 0.0005;
+                  bone.rotation.z += 0.0005;
+                }
+
+                if (bone.children && bone.children.length > 0) {
+                  bone.children.forEach( child => {
+                    if (child.isBone) { (count < 500) ? child.rotation.x += 0.0005 : child.rotation.x -= 0.0005; }
+                  });
+                }
+              });
+
+              count += 1;
+              if (count === 1000) count = 0;
+            } else {
+              if (animation_running === true) animation_mixer.update( clock.getDelta() );
+            }
+
+            controls.update();
+
+            renderer.clear();
+            renderer.render( scene, camera );
+
+            scene.updateMatrixWorld();
+            camera.updateMatrixWorld();
+
+            mouse_wheel = false;
+          }
+        }
+
+        if (render_requested === true) requestAnimationFrame( render );
+      }
+
+      function reset_all( reset = false ) {
+        document.getElementById('back_color').value = '#000000';
+        document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+        document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+        document.getElementById('btn_skeleton').style.backgroundColor = 'transparent';
+        document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+
+        // Reset the view
+        if (reset === true) {
+          controls.reset();
+          set_back_color();
+        } else {
+          // Page (re)loading
+          if (scene) {
+            if (mesh) {
+              if (skeleton_helper) {
+                skeleton_demo_running = false;
+
+                if (skeleton_visible === true) {
+                  scene.remove( skeleton_helper );
+                  skeleton_visible = false;
+                }
+
+                skeleton_helper = null;
+              }
+
+              if (animation_mixer) {
+                animation_mixer.stopAllAction();
+
+                for ( let i = 0; i < animations.length; i++ ) {
+                  animation_mixer.uncacheAction( animations[ i ] );
+                  animation_mixer.uncacheClip( animations[ i ] );
+                }
+
+                animation_mixer.uncacheRoot( animation_mixer.getRoot() );
+              }
+
+              mesh.traverse( ( child ) => {
+                if (child.isMesh || child.isPoints) {
+                  if (child.material) {
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        if (mtl.map) mtl.map.dispode();
+                        mtl.dispose();
+                      });
+                    } else {
+                      if (child.material.map) child.material.map.dispode();
+                      child.material.dispose();
+                    }
+                  }
+
+                  child.geometry.dispose();
+                }
+              });
+            }
+
+            material.dispose();
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+          }
+
+          document.getElementById('file_input').value = '';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('btn_animate').disabled = true;
+          document.getElementById('btn_skeleton').disabled = true;
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+          enable_disable( true );
+        }
+
+        mouse_wheel = true;
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('back_color').disabled = disable;
+        document.getElementById('btn_flat').disabled = disable;
+        document.getElementById('btn_wireframe').disabled = disable;
+        disabled_changed();
+      }
+    </script>
+
+    <script>
+      function disabled_changed() {
+        $('button').each( function() {
+          mouse_wheel = true;
+
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+
+        $('input[type=color]').each( function() {
+          mouse_wheel = true;
+
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+      }
+
+      function skeleton_animation_changed() {
+        mouse_wheel = true;
+
+        if ($('#btn_animate')[ 0 ].disabled === true) {
+          $('#btn_animate').unbind('mouseenter mouseleave');
+        } else {
+          $('#btn_animate').hover(
+          function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+          function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+        }
+      }
+    </script>
+  </body>
+</html>
