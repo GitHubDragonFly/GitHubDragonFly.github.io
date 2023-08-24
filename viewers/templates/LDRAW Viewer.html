@@ -544,8 +544,8 @@
       var construction_steps_present, c_steps, count_up;
       var initial_transparency, initial_transparency_array;
       var initial_opacity, initial_opacity_array, enable_opacity;
-      var selected_ldraw_file, selected_url_file = '', gif_export, bgnd_linear_gradient;
       var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
+      var selected_ldraw_file, selected_ldraw_url_file, selected_url_file = '', gif_export, bgnd_linear_gradient;
       var vertex_colors_enabled, random_vertex_colors_enabled, original_vertex_color_array, random_vertex_color_array;
 
       const link = document.createElement( 'a' );
@@ -1369,7 +1369,6 @@
         }
 
         enable_disable( true );
-        disabled_changed();
 
         // Manager from ThreeJs to track a loader and its status
         if (manager === undefined) manager = new THREE.LoadingManager();
@@ -1388,6 +1387,7 @@
         if (zip === undefined) zip = new JSZip();
 
         selected_ldraw_file = null;
+        selected_ldraw_url_file = null;
         mouse_down = false;
         mouse_wheel = false;
         edges = {};
@@ -1410,6 +1410,13 @@
         render_requested = false;
         bounding_box = new THREE.Box3();
 
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_spinner').style.display = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
         if (url_loading === false) {
           // Loaded file
           let fi = document.getElementById('file_input');
@@ -1420,11 +1427,7 @@
           }
 
           if (selected_ldraw_file === null) {
-            console.log( 'No valid LDRAW file selected!' );
-            document.body.style.backgroundImage = 'none';
-            document.getElementById('div_spinner').style.display = 'none';
-            document.getElementById('div_loading').style.display = 'none';
-            document.getElementById('div_error').style.display = 'block';
+            handle_error( 'No valid LDRAW file selected!' );
             return;
           }
 
@@ -1434,12 +1437,6 @@
           document.getElementById('file_input').value = '';
           url_loading = false;
         }
-
-        document.body.style.backgroundImage = 'none';
-        document.getElementById('div_spinner').style.display = 'none';
-        document.getElementById('div_loading').innerHTML = 'Loading';
-        document.getElementById('div_error').style.display = 'none';
-        enable_disable( false );
 
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
@@ -1526,7 +1523,7 @@
 
         await ldraw_loader.preloadMaterials( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr' );
 
-        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+        enable_disable( false );
 
         // Load the model
         selected_ldraw_file !== null ? loadFile() : loadURLFile();
@@ -1536,9 +1533,6 @@
       }
 
       function loadFile() {
-        console.time( 'Loading Time' );
-        document.getElementById('div_loading').style.display = 'block';
-
         ldraw_loader.load( URL.createObjectURL( selected_ldraw_file ), function( object ) {
           URL.revokeObjectURL( selected_ldraw_file );
 
@@ -1637,20 +1631,7 @@
           disabled_changed();
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
-          console.timeEnd( 'Loading Time' );
-          console.log( 'Error loading LDRAW!' );
-          console.log( error );
-          render_requested = false;
-          enable_disable( true );
-
-          if (gizmo) {
-            document.getElementById('gizmo').removeChild( gizmo.domElement );
-            gizmo.dispose();
-          }
-
-          document.getElementById('div_loading').style.display = 'none';
-          document.getElementById('div_error').style.display = 'block';
-
+          handle_error( error );
           URL.revokeObjectURL( selected_ldraw_file );
         });
       }
@@ -1658,18 +1639,21 @@
       function loadURLFile() {
         if (selected_url_file !== '') {
           if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
-          } else if (selected_url_file.startsWith('https://github.com') === true) {
-            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+            selected_ldraw_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else {
+            if (selected_url_file.startsWith('https://github.com') === true) {
+              selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+            }
+
+            let url_uc = selected_url_file.toUpperCase();
+
+            if (url_uc.endsWith('.MPD') || url_uc.endsWith('.LDR') || url_uc.endsWith('.L3B') || url_uc.endsWith('.DAT')) {
+              selected_ldraw_url_file = selected_url_file;
+            }
           }
 
-          let url_uc = selected_url_file.toUpperCase();
-
-          if (url_uc.endsWith('.MPD') || url_uc.endsWith('.LDR') || url_uc.endsWith('.L3B') || url_uc.endsWith('.DAT')) {
-            console.time( 'Loading Time' );
-            document.getElementById('div_loading').style.display = 'block';
-
-            ldraw_loader.load( selected_url_file, function( object ) {
+          if (selected_ldraw_url_file !== null) {
+            ldraw_loader.load( selected_ldraw_url_file, function( object ) {
               document.getElementById('btn_construction_steps_direction').innerHTML = '&#x2193';
               count_up = false;
 
@@ -1742,7 +1726,7 @@
                 }
               });
 
-              if (url_uc.endsWith('.DAT')) {
+              if (selected_ldraw_url_file.endsWith('.DAT')) {
                 document.getElementById('directional_light_intensity').value = 0.5;
                 directionalLight.intensity = parseFloat( 0.5 );
                 ldraw_obj.rotation.x = - Math.PI / 2;
@@ -1765,34 +1749,28 @@
               disabled_changed();
             }, function ( xhr ) { // onProgress
             }, function ( error ) { // onError
-              console.timeEnd( 'Loading Time' );
-              console.log( 'Error loading URL LDRAW!' );
-              console.log( error );
-              render_requested = false;
-              enable_disable( true );
-
-              if (gizmo) {
-                document.getElementById('gizmo').removeChild( gizmo.domElement );
-                gizmo.dispose();
-              }
-
-              document.getElementById('div_loading').style.display = 'none';
-              document.getElementById('div_error').style.display = 'block';
+              handle_error( error );
             });
           } else {
-            console.log( 'Unsupported URL file!' );
-            render_requested = false;
-            enable_disable( true );
-
-            if (gizmo) {
-              document.getElementById('gizmo').removeChild( gizmo.domElement );
-              gizmo.dispose();
-            }
-
-            document.getElementById('div_loading').style.display = 'none';
-            document.getElementById('div_error').style.display = 'block';
+            handle_error( 'Unsupported URL file!' );
           }
         }
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        render_requested = false;
+        enable_disable( true );
+
+        if (gizmo) {
+          document.getElementById('gizmo').removeChild( gizmo.domElement );
+          gizmo.dispose();
+        }
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
       }
 
       function construction_steps_direction() {
@@ -2218,6 +2196,7 @@
         document.getElementById('btn_grid').disabled = disable;
         document.getElementById('reset').disabled = disable;
         document.getElementById('export_names').disabled = disable;
+        disabled_changed();
       }
     </script>
 
