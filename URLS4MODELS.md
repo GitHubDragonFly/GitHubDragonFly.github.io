@@ -79,7 +79,8 @@ For multiple image format testing - copy all of the following and then paste it 
 
 # Additional Resources
 
-Use the `Raw` button in any of the GitHub repositories to get the correct URL or just download the file to a hard drive and load it with the `Browse` option of the corresponding viewer:
+Most viewers will allow GitHub URLs, some viewers will allow Dropbox shared URLs. In addition, use the `Raw` button in any of the GitHub repositories to get the correct URL or just download the file to a hard drive and load it with the `Browse` option of the corresponding viewer:
+
  - check the `viewers/examples` folder in this repository for some example models
  - `https://github.com/gkjohnson/3d-demo-data/tree/main/models`
  - `https://github.com/ue4plugins/GLTFWebViewer/tree/main/public/assets`
