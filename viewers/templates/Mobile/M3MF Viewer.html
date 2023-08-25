@@ -3,14 +3,14 @@
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no">
-    <meta name="description" content="3DM (Rhino3D) Viewer">
+    <meta name="description" content="3MF (3D Manufacturing Format) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.149.0" defer></script>
-    <script src="../../static/js/3DMLoader.js" defer></script>
-    <script src="../../static/js/dat.gui.min.js" defer></script>
+    <script src="../../static/js/3MFLoader.js" defer></script>
     <script src="../../static/js/OrbitControls.js" defer></script>
+    <script src="../../static/js/libs/fflate.min.js" defer></script>
 
     <style>
       body,html{
@@ -96,16 +96,15 @@
       }
 
       .fm { color: navy; width: 99.25%; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
-      #gui_position { position: absolute; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; min-height: 22px; margin-left: 2px; }
 
       .fixed-menu {
         background-color: whitesmoke;
         display: inline-block;
         position: fixed;
-        z-index: 1;
-        margin: 0px;
         padding: 1px;
         width: 100%;
+        margin: 0px;
+        z-index: 1;
       }
     </style>
 
@@ -113,16 +112,15 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>3DM Viewer</title>
+    <title>3MF Viewer</title>
   </head>
   <body onload="reset_all(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
-        <button title="URL of the remote 3DM model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".3dm" />
+        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".3mf" />
         <label for="back_color" title="Background Color">BG</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
-        <button title="Flat Shading" id="btn_flat" onclick="set_flat();" disabled>F</button>
         <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
       </div>
       <div class="fm" id="url" style="display: none;">
@@ -144,11 +142,6 @@
         } else {
           document.getElementById('url').style.display = 'block';
           url_displayed = true;
-        }
-
-        if (gui) {
-          let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
-          document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
         }
       }
 
@@ -183,16 +176,12 @@
     </script>
 
     <script>
-      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent );
-
-      var manager, renderer, rhino_loader, rhino_obj, obj_is_mesh;
-      var scene, camera, render_requested, vertex_colors_enabled;
-      var controls, mouse_down, mouse_wheel, events_initialized;
-      var ambientLight, directionalLight, wireframe_enabled;
+      var manager, tmf_loader, renderer, scene, camera, tmf_obj, render_requested;
+      var controls, mouse_down, mouse_wheel, events_initialized, count = 0;
+      var ambientLight, directionalLight, bounding_box, wireframe_enabled;
       var ww = window.innerWidth, wh = window.innerHeight;
-      var bounding_box, flatShading_enabled, count = 0;
-      var url_displayed = false, url_loading = false, gui;
-      var selected_rhino_file, selected_url_file = '', selected_rhino_url_file;
+      var selected_tmf_file, selected_tmf_url_file, selected_url_file = '';
+      var url_displayed = false, url_loading = false, vertex_colors_enabled;
 
       function set_back_color() {
         scene.background = null;
@@ -203,26 +192,26 @@
       function set_initial_scale() {
         // Set the initial scale of the object so it comes to view
 
-        bounding_box.setFromObject( rhino_obj );
+        bounding_box.setFromObject( tmf_obj );
         let size = bounding_box.getSize(new THREE.Vector3());
 
         if ( size.y > 1 ) {
-          rhino_obj.scale.multiplyScalar( 50 / size.y );
+          tmf_obj.scale.multiplyScalar( 50 / size.y );
         } else if ( size.y > 0.02 ) {
-          rhino_obj.scale.multiplyScalar( 25 / size.y );
+          tmf_obj.scale.multiplyScalar( 25 / size.y );
         } else {
-          rhino_obj.scale.multiplyScalar( 1 / size.y )
+          tmf_obj.scale.multiplyScalar( 1 / size.y )
         }
 
-        bounding_box.setFromObject( rhino_obj );
+        bounding_box.setFromObject( tmf_obj );
         let center = bounding_box.getCenter(new THREE.Vector3());
         controls.target.set( center.x, center.y, center.z );
       }
 
       function init() {
         if (scene) {
-          rhino_obj.traverse( ( child ) => {
-            if (child.isMesh || child.isPoints) {
+          tmf_obj.traverse( ( child ) => {
+            if (child.isMesh) {
               if (child.material) {
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
@@ -237,9 +226,7 @@
             }
           });
 
-          scene.remove( rhino_obj );
-
-          if (gui) { gui.destroy(); gui = null; }
+          scene.remove( tmf_obj );
 
           mouse_wheel = true;
 
@@ -248,6 +235,7 @@
 
         enable_disable( true );
 
+        // Manager from ThreeJs to track a loader and its status
         if (manager === undefined) manager = new THREE.LoadingManager();
 
         manager.onProgress = function ( item, loaded, total ) {
@@ -261,21 +249,15 @@
           }
         }
 
-        if (rhino_loader === undefined) {
-          rhino_loader = new THREE.Rhino3dmLoader( manager );
-          rhino_loader.setLibraryPath( 'https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/' );
-          manager.addHandler(/\.3dm$/i, rhino_loader);
-        }
+        if (tmf_loader === undefined) tmf_loader = new THREE.ThreeMFLoader( manager );
 
-        selected_rhino_file = null;
-        selected_rhino_url_file = null;
-        obj_is_mesh = false;
+        selected_tmf_file = null;
+        selected_tmf_url_file = null;
         mouse_down = false;
         mouse_wheel = true;
-        render_requested = false;
         wireframe_enabled = false;
-        flatShading_enabled = false;
         vertex_colors_enabled = false;
+        render_requested = false;
         bounding_box = new THREE.Box3();
 
         console.time( 'Loading Time' );
@@ -288,12 +270,10 @@
           // Loaded file
           var fi = document.getElementById('file_input');
 
-          for (let i = 0; i < fi.files.length; i++) {
-            if (fi.files[ i ].name.toUpperCase().endsWith('.3DM')) selected_rhino_file = fi.files[ i ];
-          };
+          if (fi.files[ 0 ].name.toUpperCase().endsWith('.3MF')) selected_tmf_file = fi.files[ 0 ];
 
-          if (selected_rhino_file === null) {
-            handle_error( 'No valid 3DM file selected!' );
+          if (selected_tmf_file === null) {
+            handle_error( 'No valid 3MF file selected!' );
             return;
           }
 
@@ -317,7 +297,7 @@
         }
 
         if (scene === undefined) scene = new THREE.Scene();
-        if (rhino_obj === undefined) rhino_obj = new THREE.Object3D();
+        if (tmf_obj === undefined) tmf_obj = new THREE.Object3D();
 
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
@@ -360,82 +340,48 @@
           //controls.maxDistance = 500;
         }
 
-        // Load 3DM file
-        selected_rhino_file !== null ? loadFile() : loadURLFile();
+        // Load 3MF file
+        selected_tmf_file ? loadFile() : loadURLFile();
       }
 
-      function loadFile() {
-        rhino_loader.load( URL.createObjectURL( selected_rhino_file ), function( object ) {
-          URL.revokeObjectURL( selected_rhino_file );
+      function loadFile(){
+        tmf_loader.load( URL.createObjectURL( selected_tmf_file ), function( object ) {
+          URL.revokeObjectURL( selected_tmf_file );
 
-          rhino_obj = object.clone();
+          tmf_obj = object.clone();
 
-          rhino_obj.traverse( function( child ) {
-            if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
-              // Some models might have both meshes and points so favor mesh controls
-              if (child.type === 'Mesh' || child.isMesh) {
-                obj_is_mesh = true;
-                document.getElementById('btn_wireframe').disabled = false;
-                document.getElementById('btn_flat').disabled = false;
-
-                if (child.isSkinnedMesh) child.frustumCulled = false;
-              } else {
-                if (obj_is_mesh === false) {
-                  document.getElementById('btn_wireframe').disabled = true;
-                  document.getElementById('btn_flat').disabled = true;
+          tmf_obj.traverse( function( child ) {
+            if (child.isMesh) {
+              if (child.isMesh) {
+                if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                  vertex_colors_enabled = true;
                 }
-              }
 
-              disabled_changed();
-
-              child.geometry.computeBoundingBox();
-              child.geometry.computeBoundingSphere();
-
-              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-              child.geometry.normalizeNormals();
-
-              if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                vertex_colors_enabled = true;
-              }
-
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  if (child.type === 'Mesh' || child.isMesh) {
-                    mtl = new THREE.MeshPhongMaterial( { color: mtl.color, map: mtl.map } );
-                  } else {
-                    if (isMobile === true) mtl.size = 1;
-                  }
-
-                  mtl.side = THREE.DoubleSide;
-                  mtl.vertexColors = vertex_colors_enabled;
-                });
-              } else {
-                if (child.type === 'Mesh' || child.isMesh) {
-                  child.material = new THREE.MeshPhongMaterial( { color: child.material.color, map: child.material.map } );
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.side = THREE.DoubleSide;
+                    mtl.vertexColors = vertex_colors_enabled;
+                  });
                 } else {
-                  if (isMobile === true) child.material.size = 1;
+                  child.material.side = THREE.DoubleSide;
+                  child.material.vertexColors = vertex_colors_enabled;
                 }
-
-                child.material.side = THREE.DoubleSide;
-                child.material.vertexColors = vertex_colors_enabled;
               }
             }
           });
 
-          if (obj_is_mesh) rhino_obj.rotation.x -= Math.PI / 2;
+          tmf_obj.rotation.x -= Math.PI / 2;
 
-          // Add rhino_obj to the scene
-          scene.add( rhino_obj );
-          camera.lookAt( rhino_obj.position );
+          // Add tmf_obj to the scene
+          scene.add( tmf_obj );
+          camera.lookAt( tmf_obj.position );
 
           set_initial_scale();
           resize();
-
-          if (rhino_obj.userData.layers.length > 1) start_gui();
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
           handle_error( error );
-          URL.revokeObjectURL( selected_rhino_file );
+          URL.revokeObjectURL( selected_tmf_file );
         });
 
         mouse_wheel = true;
@@ -443,128 +389,65 @@
 
       function loadURLFile() {
         if (selected_url_file !== '') {
-          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-            selected_rhino_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
-          } else {
-            if (selected_url_file.startsWith('https://github.com') === true) {
-              selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+          if (selected_url_file.indexOf( ',' ) > -1) {
+            let urls = selected_url_file.split( ',' );
+
+            for (let i = 0; i < urls.length; i++) {
+              let url = urls[ i ].trim();
+              if (url.toUpperCase().endsWith('.3MF')) selected_tmf_url_file = url;
             }
+          } else if (selected_url_file.toUpperCase().endsWith('.3MF')) {
+            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+              selected_tmf_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+            } else {
+              if (selected_url_file.startsWith('https://github.com') === true) {
+                selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+              }
 
-            if (selected_url_file.toUpperCase().endsWith('.3DM')) selected_rhino_url_file = selected_url_file;
+              if (selected_url_file.toUpperCase().endsWith('.3MF')) selected_tmf_url_file = selected_url_file;
+            }
           }
 
-          if (selected_rhino_url_file !== null) {
-            rhino_loader.load( selected_rhino_url_file, function( object ) {
-              rhino_obj = object.clone();
+          if (selected_tmf_url_file === null) {
+            handle_error( 'Unsupported URL file!' );
+            return;
+          }
 
-              let child_count = 1;
+          tmf_loader.load( selected_tmf_url_file, function( object ) {
+            tmf_obj = object.clone();
 
-              rhino_obj.traverse( function( child ) {
-                if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
-                  if (child.name === '') child.name = 'child_' + child_count;
-
-                  // Some models might have both meshes and points so favor mesh controls
-                  if (child.type === 'Mesh' || child.isMesh) {
-                    obj_is_mesh = true;
-                    document.getElementById('btn_wireframe').disabled = false;
-                    document.getElementById('btn_flat').disabled = false;
-
-                    if (child.isSkinnedMesh) child.frustumCulled = false;
-                  } else {
-                    if (obj_is_mesh === false) {
-                      document.getElementById('btn_wireframe').disabled = true;
-                      document.getElementById('btn_flat').disabled = true;
-                    }
-                  }
-
-                  disabled_changed();
-
-                  child.geometry.computeBoundingBox();
-                  child.geometry.computeBoundingSphere();
-
-                  if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                  child.geometry.normalizeNormals();
-
-                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                    vertex_colors_enabled = true;
-                  }
-
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      if (child.type === 'Mesh' || child.isMesh) {
-                        mtl = new THREE.MeshPhongMaterial( { color: mtl.color, map: mtl.map } );
-                      } else {
-                        if (isMobile === true) mtl.size = 1;
-                      }
-
-                      mtl.side = THREE.DoubleSide;
-                      mtl.vertexColors = vertex_colors_enabled;
-                    });
-                  } else {
-                    if (child.type === 'Mesh' || child.isMesh) {
-                      child.material = new THREE.MeshPhongMaterial( { color: child.material.color, map: child.material.map } );
-                    } else {
-                      if (isMobile === true) child.material.size = 1;
-                    }
-
-                    child.material.side = THREE.DoubleSide;
-                    child.material.vertexColors = vertex_colors_enabled;
-                  }
+            tmf_obj.traverse( function( child ) {
+              if (child.isMesh) {
+                if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                  vertex_colors_enabled = true;
                 }
-              });
 
-              if (obj_is_mesh) rhino_obj.rotation.x -= Math.PI / 2;
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.side = THREE.DoubleSide;
+                    mtl.vertexColors = vertex_colors_enabled;
+                  });
+                } else {
+                  child.material.side = THREE.DoubleSide;
+                  child.material.vertexColors = vertex_colors_enabled;
+                }
+              }
+            });
 
-              // Add rhino_obj to the scene
-              scene.add( rhino_obj );
-              camera.lookAt( rhino_obj.position );
+            tmf_obj.rotation.x -= Math.PI / 2;
 
-              set_initial_scale();
-              resize();
+            // Add tmf_obj to the scene
+            scene.add( tmf_obj );
+            camera.lookAt( tmf_obj.position );
 
-              if (rhino_obj.userData.layers.length > 1) start_gui();
-            }, function ( xhr ) { // onProgress
-            }, function ( error ) { handle_error( error ); }); // onError
-          } else {
-            handle_error( 'Unsupported URL model!' );
-          }
+            set_initial_scale();
+            resize();
+          }, function ( xhr ) { // onProgress
+          }, function ( error ) { // onError
+            handle_error( error );
+          });
 
           mouse_wheel = true;
-        }
-      }
-
-      function start_gui() {
-        if (rhino_obj.userData.layers) {
-          gui = new dat.gui.GUI( { width: 150 } );
-          gui.domElement.id = 'gui_position';
-
-          let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
-          document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
-
-          const layersControl = gui.addFolder( 'layers' );
-          layersControl.open();
-
-          let layers = rhino_obj.userData.layers;
-
-          for ( let i = 0; i < layers.length; i ++ ) {
-            layersControl.add( layers[ i ], 'visible' ).name( layers[ i ].name ).onChange( function( val ) {
-              scene.traverse( function( child ) {
-                if ( child.userData.hasOwnProperty( 'attributes' ) ) {
-                  if ( 'layerIndex' in child.userData.attributes ) {
-                    const layerName = layers[ child.userData.attributes.layerIndex ].name;
-
-                    if ( layerName === layers[ i ].name ) {
-                      child.visible = val;
-                      layers[ i ].visible = val;
-                      mouse_wheel = true;
-                    }
-                  }
-                }
-              });
-            });
-          }
-
-          layersControl.updateDisplay();
         }
       }
 
@@ -579,34 +462,8 @@
         document.getElementById('div_error').style.display = 'block';
       }
 
-      function set_flat() {
-        if (flatShading_enabled === true) {
-          flatShading_enabled = false;
-          document.getElementById('btn_flat').style.backgroundColor = 'transparent';
-        } else {
-          flatShading_enabled = true;
-          document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
-        }
-
-        rhino_obj.traverse( function( child ) {
-          if (child.type === 'Mesh' || child.isMesh) {
-            if (Array.isArray( child.material )) {
-              child.material.forEach( mtl => {
-                mtl.flatShading = flatShading_enabled;
-                mtl.needsUpdate = true;
-              });
-            } else {
-              child.material.flatShading = flatShading_enabled;
-              child.material.needsUpdate = true;
-            }
-
-            mouse_wheel = true;
-          }
-        });
-      }
-
       function show_wireframe() {
-        if (rhino_obj) {
+        if (tmf_obj) {
           if (wireframe_enabled === true) {
             wireframe_enabled = false;
             document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
@@ -615,8 +472,8 @@
             document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
           }
 
-          rhino_obj.traverse( function( child ) {
-            if (child.type === 'Mesh' || child.isMesh) {
+          tmf_obj.traverse( function( child ) {
+            if (child.isMesh) {
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
                   mtl.wireframe = wireframe_enabled;
@@ -632,7 +489,7 @@
       }
 
       async function render() {
-        if (rhino_obj) {
+        if (tmf_obj) {
           if (mouse_down === true || mouse_wheel === true) {
             controls.update();
 
@@ -657,7 +514,6 @@
 
       function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
-        document.getElementById('btn_flat').style.backgroundColor = 'transparent';
         document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
 
         // Reset the view
@@ -667,9 +523,9 @@
         } else {
           // Page (re)loading
           if (scene) {
-            if (rhino_obj) {
-              rhino_obj.traverse( ( child ) => {
-                if (child.isMesh || child.isPoints) {
+            if (tmf_obj) {
+              tmf_obj.traverse( ( child ) => {
+                if (child.isMesh) {
                   if (child.material) {
                     if (Array.isArray( child.material )) {
                       child.material.forEach( mtl => {
@@ -685,8 +541,6 @@
               });
             }
 
-            if (gui) { gui.destroy(); gui = null; }
-
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
             }
@@ -696,8 +550,6 @@
 
           document.getElementById('file_input').value = '';
           document.getElementById('div_error').style.display = 'none';
-          document.getElementById('btn_wireframe').disabled = true;
-          document.getElementById('btn_flat').disabled = true;
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
           enable_disable( true );
@@ -708,6 +560,7 @@
 
       function enable_disable( disable = false ) {
         document.getElementById('back_color').disabled = disable;
+        document.getElementById('btn_wireframe').disabled = disable;
         disabled_changed();
       }
     </script>
@@ -717,7 +570,7 @@
         $('button').each( function() {
           mouse_wheel = true;
 
-          if (this.disabled === false) {
+          if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -729,7 +582,7 @@
         $('input[type=color]').each( function() {
           mouse_wheel = true;
 
-          if (this.disabled === false) {
+          if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
