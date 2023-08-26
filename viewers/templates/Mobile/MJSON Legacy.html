@@ -1,0 +1,1431 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no">
+    <meta name="description" content="Legacy Viewer for three.js and Assimp Formats: JS, JSON">
+    <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.111.0" defer></script>
+    <script src="../../static/js/utils/BufferGeometryUtils.js" defer></script>
+    <script src="../../static/js/legacy/LegacyJSONLoader.js" defer></script>
+    <script src="../../static/js/legacy/AssimpJSONLoader.js" defer></script>
+    <script src="../../static/js/legacy/OrbitControls.js" defer></script>
+    <script src="../../static/js/TGALoader.js" defer></script>
+    <script src="../../static/js/DDSLoader.js" defer></script>
+
+    <style>
+      body,html{
+        position: relative;
+        display: block;
+        background-color: black;
+        width: 100%;
+        min-height: 100vh;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button {
+        border: 1px solid blue;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        margin: 2px 2px 2px 0;
+        min-width: 18px;
+        height: 22px;
+        padding: 1px;
+        vertical-align: middle;
+      }
+
+      label {
+        vertical-align: middle;
+        height: 22px;
+        margin: 2px 0 2px 0;
+      }
+
+      input[type=color] {
+        border: 1px solid whitesmoke;
+        margin: 2px 3px 2px -2px;
+        vertical-align: middle;
+        background: none;
+        height: 20px;
+        width: 16px;
+        padding: 0;
+      }
+
+      input[type=file] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        max-width: 175px;
+      }
+
+      input[type=text] {
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+      }
+
+      .error_msg {
+        background-color: transparent;
+        position: absolute;
+        text-align: center;
+        font-size: x-large;
+        display: none;
+        color: red;
+        width: 240px;
+        height: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .loading_msg {
+        background-color: transparent;
+        color: greenyellow;
+        position: absolute;
+        text-align: center;
+        font-size: large;
+        display: none;
+        height: 240px;
+        width: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .fm { color: navy; width: 99.25%; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+
+      .fixed-menu {
+        background-color: whitesmoke;
+        display: inline-block;
+        position: fixed;
+        padding: 1px;
+        width: 100%;
+        z-index: 1;
+        margin: 0;
+      }
+    </style>
+
+    <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>JSON Legacy</title>
+  </head>
+  <body onload="reset_all(); disabled_changed();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".js, .json, .dds, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
+        <label for="back_color" title="Background Color">BG</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Animations" id="btn_animate" onclick="json_animation();" disabled>A</button>
+        <button title="Flat Shading" id="btn_flat" onclick="set_flat();" disabled>F</button>
+        <button title="Skeleton" id="btn_skeleton" onclick="show_skeleton();" disabled>S</button>
+        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="min-width: 70%; margin-right: 3px;" />
+        <button onclick="load_url_file();" style="min-width: 38px; margin-right: 3px;">Load</button>
+        <button onclick="clear_url();" style="min-width: 38px; margin-right: 1px;">Clear</button>
+      </div>
+    </div>
+
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">Loading</div>
+
+    <script>
+      function show_url() {
+        if (url_displayed === true) {
+          document.getElementById('url').style.display = 'none';
+          url_displayed = false;
+        } else {
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        window.addEventListener( 'pointerdown', (event) => { mouse_down = true; count = 0; }, false);
+        window.addEventListener( 'pointerup', (event) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; count = 0; }, false);
+      }
+
+      function resize() {
+        if (scene) {
+          mouse_wheel = true;
+
+          renderer.setSize( window.innerWidth, window.innerHeight );
+
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          mouse_wheel = true;
+        }
+      }
+    </script>
+
+    <script>
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent );
+      const image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJP', '.PJPEG', '.BMP', '.GIF', '.SVG', '.WEBP' ];
+
+      var manager, file_loader, texture_loader, loader, assimp_loader, json_loader, object_loader, bg_loader;
+      var renderer, scene, camera, mesh, model_is_object, model_is_assimp, buffer_geometry;
+      var controls, mouse_down, mouse_wheel, events_initialized, wireframe_enabled;
+      var animations, animation_mixer, animation_running, current_animation;
+      var resource_path, texturePath, render_requested, clock, count = 0;
+      var ambientLight, directionalLight, bounding_box;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var fd, material, textures, flat_shading_enabled;
+      var original_color, original_color_array;
+      var initial_transparency, initial_transparency_array;
+      var initial_opacity, initial_opacity_array, enable_opacity;
+      var original_side, original_side_array, bgnd_linear_gradient, zip;
+      var selected_json_file, selected_json_url_file, selected_url_file = '';
+      var url_displayed = false, url_loading = false;
+      var bones, bones_exist, skeleton, skeleton_helper, skeleton_visible, skeleton_demo, skeleton_demo_running, sk_count;
+      var vertex_colors_enabled, random_vertex_colors_enabled, original_vertex_color_array, random_vertex_color_array;
+
+      function set_back_color() {
+        scene.background = null;
+        document.body.style.backgroundColor = document.getElementById('back_color').value;
+        mouse_wheel = true;
+      }
+
+      function set_initial_scale() {
+        // Set the initial scale of the object so it comes to view
+
+        bounding_box.setFromObject( mesh );
+        let size = bounding_box.getSize(new THREE.Vector3());
+
+        if ( size.y > 1 ) {
+          mesh.scale.multiplyScalar( 50 / size.y );
+        } else if ( size.y > 0.02 ) {
+          mesh.scale.multiplyScalar( 25 / size.y );
+        } else {
+          mesh.scale.multiplyScalar( 1 / size.y )
+        }
+
+        bounding_box.setFromObject( mesh );
+        let center = bounding_box.getCenter(new THREE.Vector3());
+        controls.target.set( center.x, center.y, center.z );
+      }
+
+      function json_animation() {
+        if (animation_running === true) {
+          animation_mixer.clipAction( animations[ current_animation ] ).stop();
+
+          if (current_animation === animations.length - 1) {
+            document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+            current_animation = 0;
+            animation_running = false;
+            skeleton_demo = true;
+          } else {
+            current_animation += 1;
+            animation_mixer.clipAction( animations[ current_animation ] ).play();
+          }
+        } else {
+          skeleton_demo = false;
+          animation_mixer.clipAction( animations[ current_animation ] ).play();
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          animation_running = true;
+        }
+
+        mouse_wheel = true;
+      }
+
+      async function init() {
+        if (scene) {
+          if (mesh) {
+            if (wireframe_enabled === true) show_wireframe();
+
+            if (skeleton_helper) {
+              skeleton_demo_running = false;
+
+              if (skeleton_visible === true) {
+                scene.remove( skeleton_helper );
+                skeleton_visible = false;
+              }
+
+              skeleton_helper = null;
+            }
+
+            if (animation_mixer) {
+              animation_mixer.stopAllAction();
+
+              for ( let i = 0; i < animations.length; i++ ) {
+                animation_mixer.uncacheAction( animations[ i ] );
+                animation_mixer.uncacheClip( animations[ i ] );
+              }
+
+              animation_mixer.uncacheRoot( animation_mixer.getRoot() );
+            }
+
+            mesh.traverse( function( child ) {
+              if (child.isMesh || child.isPoints) {
+                if (child.material) {
+                  if (Array.isArray( child.material )) {
+                    child.material.forEach( mtl => {
+                      if (mtl.map) mtl.map.dispose();
+                      mtl.dispose();
+                    });
+                  } else {
+                    if (child.material.map) child.material.map.dispose();
+                    child.material.dispose();
+                  }
+                }
+
+                if (child.geometry) child.geometry.dispose();
+              }
+            });
+
+            while (mesh.children.length > 0) {
+              mesh.remove( mesh.children[ 0 ] );
+            }
+
+            mesh.children.length = 0;
+
+            material.dispose();
+
+            scene.remove( mesh );
+          }
+
+          mouse_wheel = true;
+
+          reset_all( true );
+        }
+
+        enable_disable( true );
+
+        if (manager === undefined) manager = new THREE.LoadingManager();
+
+        manager.onLoad = function () { mouse_wheel = true; }
+
+        if (file_loader === undefined) {
+          file_loader = new THREE.FileLoader( manager );
+          file_loader.setMimeType( 'application/json' );
+          file_loader.setResponseType( 'json' );
+        }
+
+        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
+
+        if (json_loader === undefined) json_loader = new THREE.LegacyJSONLoader( manager );
+
+        if (assimp_loader === undefined) assimp_loader = new THREE.AssimpJSONLoader( manager );
+
+        if (object_loader === undefined) object_loader = new THREE.ObjectLoader( manager );
+
+        if (bg_loader === undefined) bg_loader = new THREE.BufferGeometryLoader( manager );
+
+        selected_json_file = null;
+        selected_json_url_file = null;
+        model_is_object = false;
+        model_is_assimp = false;
+        buffer_geometry = false;
+        resource_path = '';
+        mouse_down = false;
+        mouse_wheel = true;
+        fd = null;
+        skeleton = null;
+        skeleton_demo = false;
+        skeleton_helper = null;
+        skeleton_visible = false;
+        skeleton_demo_running = false;
+        bones_exist = false;
+        sk_count = 0;
+        bones = [];
+        animations = [];
+        animation_mixer = null;
+        animation_running = false;
+        render_requested = false;
+        wireframe_enabled = false;
+        flat_shading_enabled = false;
+        vertex_colors_enabled = false;
+        textures = {};
+        bounding_box = new THREE.Box3();
+
+        document.getElementById('btn_animate').disabled = true;
+        document.getElementById('btn_skeleton').disabled = true;
+
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (url_loading === false) {
+          // Loaded file
+          var fi = document.getElementById('file_input');
+
+          for (let i = 0; i < fi.files.length; i++) {
+            let fn_uc = fi.files[ i ].name.toUpperCase();
+
+            if (fn_uc.endsWith('.JS') || fn_uc.endsWith('.JSON')) { selected_json_file = fi.files[ i ]; }
+            else if (fi.files[ i ].type.startsWith('image/')) {
+              let url = URL.createObjectURL( fi.files[ i ] );
+              textures[ fi.files[ i ].name ] =  url;
+              resource_path += fi.files[ i ].name + ',' + url + ',';
+              URL.revokeObjectURL( fi.files[ i ] );
+            }
+          };
+
+          if (selected_json_file === null) {
+            handle_error( 'No valid JSON file selected!' );
+            return;
+          }
+
+          if (resource_path !== '') resource_path = resource_path.slice( 0, -1 );
+
+          file_loader.load( URL.createObjectURL( selected_json_file ), async function( file_data ) {
+            URL.revokeObjectURL( selected_json_file );
+
+            fd = file_data;
+          });
+
+          await new Promise( resolve => setTimeout( resolve, 500 )); // adjust timing if necessary
+
+          if (fd && fd.metadata && fd.metadata.type) {
+            console.warn( 'This viewer is using r111 of the three.js for legacy THREE.Geometry support.' );
+            console.warn( 'If the model does not load properly then try using JSON Viewer instead.' );
+
+            if (fd.metadata.type.toUpperCase() === 'BUFFERGEOMETRY') {
+              console.log( 'Trying Buffer Geometry Loader...' );
+              buffer_geometry = true;
+              loader = bg_loader;
+            } else if (fd.metadata.type.toUpperCase() === 'GEOMETRY') {
+              loader = json_loader;
+              console.log( 'Trying Legacy JSON Loader...' );
+            } else if (fd.metadata.type.toUpperCase() === 'OBJECT' || fd.objects) {
+              loader = object_loader;
+              model_is_object = true;
+              console.log( 'Trying Object Loader...' );
+            }
+          } else if (fd && fd.__metadata__ && fd.__metadata__.format.toUpperCase() === 'ASSIMP2JSON') {
+            loader = assimp_loader;
+            model_is_assimp = true;
+            console.log( 'Trying Assimp JSON Loader...' );
+            if (resource_path !== '') texturePath = resource_path;
+          } else {
+            // Try using assimp_loader first
+            // Will fallback to json_loader / object_loader on error
+            loader = assimp_loader;
+            model_is_assimp = true;
+            console.log( 'Trying Assimp JSON Loader...' );
+            if (resource_path !== '') texturePath = resource_path;
+          }
+
+          selected_url_file = '';
+        } else {
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          url_loading = false;
+        }
+
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.setSize( ww, wh );
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
+          renderer.autoClear = false;
+
+          document.body.appendChild( renderer.domElement );
+        }
+
+        if (loader === json_loader) loader.setResourcePath( resource_path );
+
+        if (clock === undefined) clock = new THREE.Clock();
+
+        if (scene === undefined) scene = new THREE.Scene();
+        if (mesh === undefined) mesh = new THREE.Object3D();
+
+        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+        if (camera === undefined) {
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 2500 );
+          camera.position.set( 0, 0, 250 );
+          scene.add( camera );
+        }
+
+        // Add AmbientLight to the scene
+        if (ambientLight === undefined) {
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.05 );
+          ambientLight.position.set( 0, 0, 250 );
+          scene.add( ambientLight );
+        }
+
+        // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
+        if (directionalLight === undefined) {
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 1 );
+          directionalLight.position.set( 0, 0, 250 );
+          directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
+          camera.add( directionalLight );
+        }
+
+        if (controls === undefined) {
+          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls.zoomSpeed = 0.8;
+          controls.rotateSpeed = 0.8;
+          controls.keyPanSpeed = 0.8; 
+          controls.panSpeed = 0.8;
+          controls.enableDamping = true;
+          controls.dampingFactor = 0.3;
+          //controls.enableKeys = false;
+          //controls.enableZoom = true;
+          //controls.maxPolarAngle = 2.2;
+          //controls.minPolarAngle = 1.1;
+          //controls.rotateSpeed = 0.2;
+          //controls.minDistance = 2;
+          //controls.maxDistance = 500;
+        }
+
+        if (material === undefined) {
+          material = new THREE.MeshPhongMaterial( {
+            side: THREE.DoubleSide,
+            transparent: true,
+            skinning: true,
+            opacity: 1,
+            fog: true
+          });
+        }
+
+        enable_disable( false );
+
+        // Load the json file
+        selected_json_file !== null ? loadFile() : loadURLFile();
+
+        render_requested = true;
+        render();
+      }
+
+      function loadFile() {
+        if (selected_json_file) {
+          if (model_is_object === true) {
+            // Add local image blob URLs
+            if (fd.images && fd.images.length > 0) {
+              fd.images.forEach( ( img, index ) => {
+                if (textures[ img.url ]) {
+                  let url = textures[ img.url ];
+                  let uuid = (url.includes( '/' ) === true) ? url.substring( url.lastIndexOf( '/' ) + 1 ) : ((url.includes( '\\' ) === true) ? url.substring( url.lastIndexOf( '\\' ) + 1 ) : '');
+
+                  if (fd.textures && fd.textures.length > 0) {
+                    fd.textures.forEach( ( tex, index ) => {
+                      if (tex.image === img.uuid) fd.textures[ index ].image = uuid;
+                    });
+                  }
+
+                  fd.images[ index ].url = url;
+                  fd.images[ index ].uuid = uuid;
+                }
+              });
+            }
+
+            loader.parse( fd, addObjectInScene,
+            function( xhr ) { }, // onProgress
+            function ( error ) { // onError
+              handle_error( error );
+            });
+          } else {
+            loader.load( URL.createObjectURL( selected_json_file ), addFileInScene,
+            function( xhr ) { }, // onProgress
+            function ( error ) { // onError
+              URL.revokeObjectURL( selected_json_file );
+
+              // Check if this is coming from assimp_loader and try using json_loader instead
+
+              if (model_is_assimp === true) {
+                loader = json_loader;
+                model_is_assimp = false;
+                texturePath = undefined;
+                console.log( 'Trying Legacy JSON Loader...' );
+                if (resource_path !== '') loader.setResourcePath( resource_path );
+
+                loader.load( URL.createObjectURL( selected_json_file ), addFileInScene,
+                function( xhr ) { }, // onProgress
+                function ( error ) { // onError
+                  URL.revokeObjectURL( selected_json_file );
+
+                  // Try using object_loader as last option
+
+                  loader = object_loader;
+                  model_is_object = true;
+                  console.log( 'Trying Object Loader...' );
+
+                  loader.parse( fd, addObjectInScene,
+                  function( xhr ) { }, // onProgress
+                  function ( error ) { // onError
+                    handle_error( error );
+                  }, texturePath );
+                }, texturePath );
+              } else {
+                handle_error( error );
+              }
+            }, texturePath );
+
+            URL.revokeObjectURL( selected_json_file );
+          }
+        }
+      }
+
+      async function addObjectInScene( object ) {
+        animations = object.animations;
+        mesh = object.clone();
+
+        mesh.traverse( ( child ) => {
+          if (child.isMesh === true || child.isPoints === true) {
+            if (child.geometry.type.toUpperCase() === 'GEOMETRY') {
+              child.geometry = new THREE.BufferGeometry().fromGeometry( child.geometry );
+            }
+
+            if (child.geometry.attributes && child.geometry.attributes[ 'normal' ]) delete child.geometry.attributes[ 'normal' ];
+            if (child.geometry.attributes) child.geometry = THREE.BufferGeometryUtils.mergeVertices( child.geometry );
+            child.geometry.computeVertexNormals();
+            child.geometry.computeBoundingBox();
+            child.geometry.computeBoundingSphere();
+
+            if (child.geometry.attributes && child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+              vertex_colors_enabled = true;
+            }
+
+            if (child.isMesh === true) {
+              if (child.isSkinnedMesh === true) child.frustumCulled = false;
+            } else {
+              document.getElementById('btn_wireframe').disabled = true;
+              document.getElementById('btn_flat').disabled = true;
+            }
+
+            if (child.material) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  if (child.isPoints && isMobile === true) mtl.size = 1;
+                  mtl.vertexColors = vertex_colors_enabled;
+                  mtl.format = THREE.RGBAFormat;
+                  mtl.side = THREE.DoubleSide;
+                  mtl.flatShading = false;
+
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                if (child.isPoints && isMobile === true) child.material.size = 1;
+                child.material.vertexColors = vertex_colors_enabled;
+                child.material.format = THREE.RGBAFormat;
+                child.material.side = THREE.DoubleSide;
+                child.material.flatShading = false;
+
+                child.material.needsUpdate = true;
+              }
+            }
+          }            
+        });
+
+        // Add mesh to the scene
+        scene.add( mesh );
+        camera.lookAt( mesh.position );
+
+        set_initial_scale();
+        resize();
+
+        if (animations && animations.length > 0) {
+          animation_mixer = new THREE.AnimationMixer( mesh );
+          current_animation = 0;
+          animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; });
+          animation_mixer.clipAction( animations[ 0 ] ).play();
+          document.getElementById('btn_animate').disabled = false;
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          animation_running = true;
+        }
+
+        console.timeEnd( 'Loading Time' );
+        document.getElementById('div_loading').style.display = 'none';
+
+        disabled_changed();
+      }
+
+      async function addFileInScene( object ) {
+        if (model_is_assimp === true || buffer_geometry === true) {
+          if (buffer_geometry === true) {
+            object.computeBoundingBox();
+            object.computeBoundingSphere();
+
+            if (object.attributes && object.attributes[ 'normal' ]) delete object.attributes[ 'normal' ];
+            if (object.attributes) object = THREE.BufferGeometryUtils.mergeVertices( object );
+            object.computeVertexNormals();
+            object.normalizeNormals();
+            object.center();
+
+            mesh = new THREE.Mesh( object, material );
+          } else {
+            mesh = object.clone();
+
+            if (object.has_points_or_lines === false && object.has_bones === false) {
+              let merged_geometries;
+
+              try {
+                merged_geometries = await merge_meshes();
+
+                if (merged_geometries !== null) {
+                  if (merged_geometries.attributes && merged_geometries.attributes[ 'normal' ]) {
+                    delete merged_geometries.attributes[ 'normal' ];
+                    merged_geometries = THREE.BufferGeometryUtils.mergeVertices( merged_geometries );
+                  }
+
+                  merged_geometries.computeVertexNormals();
+                  merged_geometries.center();
+
+                  merged_geometries.computeBoundingBox();
+                  merged_geometries.computeBoundingSphere();
+
+                  mesh = new THREE.Mesh( merged_geometries, merged_geometries.userData.materials );
+                }
+              } catch ( error ) {
+                console.log( 'Error occurred: ' + error.message );
+                console.log( 'Attempting to show the model regardless of the error.' );
+              }
+            }
+          }
+
+          // Animations for ASSIMP models don't work properly but the model should show
+          // Some incorrect skeleton might be present and allow to be animated with skeleton demo
+
+          // Check if animations exist
+          if (object.animations) {
+            // Check if the model has any bones
+            if (object.has_bones === true) {
+              let skinned_model = new THREE.Object3D();
+
+              mesh.traverse( child => {
+                if (child.isMesh === true) {
+                  if (child.geometry.bones) {
+                    let geometry = child.geometry;
+                    let mesh_material = child.material;
+
+                    if (Array.isArray( mesh_material )) {
+                      mesh_material.forEach( mtl => { mtl.skinning = true });
+                    } else {
+                      mesh_material.skinning = true;
+                    }
+ 
+                    let new_mesh = new THREE.SkinnedMesh( geometry, mesh_material );
+
+                    //if (skeleton === null) {
+                      document.getElementById('btn_skeleton').disabled = false;
+                      skeleton = new THREE.Skeleton( new_mesh.geometry.bones );
+                      skeleton.calculateInverses();
+                    //}
+
+                    new_mesh.add( skeleton.bones[ 0 ].parent );
+                    new_mesh.bind( skeleton );
+
+                    // Parse Animations (functionality from LegacyJSONLoader.js)
+
+                    let outputAnimations = [];
+
+                    for ( let i = 0; i < object.animations.length; i ++ ) {
+                      var clip = THREE.AnimationClip.parseAnimation( object.animations[ i ], new_mesh.geometry.bones );
+                      if ( clip ) outputAnimations.push( clip );
+                    }
+
+                    // parse implicit morph animations
+                    if ( geometry.morphTargets ) {
+                      // TODO: Figure out what an appropraite FPS is for morph target animations -- defaulting to 10, but really it is completely arbitrary.
+                      let morphAnimationClips = THREE.AnimationClip.CreateClipsFromMorphTargetSequences( geometry.morphTargets, 10 );
+                      outputAnimations = outputAnimations.concat( morphAnimationClips );
+                    } else if ( geometry.morphAttributes.position ) {
+                      // TODO: Figure out what an appropraite FPS is for morph target animations -- defaulting to 10, but really it is completely arbitrary.
+                      let morphAnimationClips = THREE.AnimationClip.CreateClipsFromMorphTargetSequences( geometry.morphAttributes.position, 10 );
+                      outputAnimations = outputAnimations.concat( morphAnimationClips );
+                    }
+
+                    if ( outputAnimations.length > 0 ) {
+                      geometry[ 'animations' ] = outputAnimations;
+                      animations = outputAnimations;
+                    }
+
+                    skinned_model.add( new_mesh );
+                  }
+                }
+              });
+
+              skeleton_helper = new THREE.SkeletonHelper( skinned_model );
+              document.getElementById('reset').disabled = true;
+
+              mesh = skinned_model;
+            }
+          }
+
+          mesh.traverse( function( child ) {
+            if (child.isMesh === true || child.isPoints === true) {
+              if (child.geometry.attributes && child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                vertex_colors_enabled = true;
+              }
+
+              if (child.isMesh === true) {
+                if (child.isSkinnedMesh === true) child.frustumCulled = false;
+              } else {
+                document.getElementById('btn_wireframe').disabled = true;
+                document.getElementById('btn_flat').disabled = true;
+              }
+
+              if (child.material) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    if (child.isPoints && isMobile === true) mtl.size = 1;
+                    mtl.vertexColors = vertex_colors_enabled;
+                    mtl.format = THREE.RGBAFormat;
+                    mtl.side = THREE.DoubleSide;
+                    mtl.flatShading = false;
+
+                    mtl.needsUpdate = true;
+                  });
+                } else {
+                  if (child.isPoints && isMobile === true) child.material.size = 1;
+                  child.material.vertexColors = vertex_colors_enabled;
+                  child.material.format = THREE.RGBAFormat;
+                  child.material.side = THREE.DoubleSide;
+                  child.material.flatShading = false;
+
+                  child.material.needsUpdate = true;
+                }
+              }
+            }
+          });
+        } else {
+          animations = object.geometry.animations;
+
+          object.geometry = new THREE.BufferGeometry().fromGeometry( object.geometry );
+
+          if (object.geometry.attributes && object.geometry.attributes[ 'normal' ]) {
+            delete object.geometry.attributes[ 'normal' ];
+            object.geometry = THREE.BufferGeometryUtils.mergeVertices( object.geometry );
+          }
+
+          object.geometry.computeVertexNormals();
+          object.geometry.center();
+
+          object.geometry.computeBoundingBox();
+          object.geometry.computeBoundingSphere();
+
+          if (object.materials && object.materials.length > 0) {
+            if (object.bones && object.bones.length > 0) {
+              bones_exist = true;
+              object.materials.forEach( ( mtl ) => { mtl.skinning = true });
+              mesh = new THREE.SkinnedMesh( object.geometry, object.materials );
+            } else if (object.geometry.morphAttributes && object.geometry.morphAttributes.length > 0) {
+              object.materials.forEach( ( mtl ) => { mtl.morphTargets = true });
+              mesh = new THREE.Mesh( object.geometry, object.materials );
+            } else {
+              mesh = new THREE.Mesh( object.geometry, object.materials );
+            }
+          } else {
+            if (object.bones && object.bones.length > 0) {
+              bones_exist = true;
+              mesh = new THREE.SkinnedMesh( object.geometry, material );
+            } else if (object.geometry.morphAttributes && object.geometry.morphAttributes.length > 0) {
+              material.morphTargets = true;
+              mesh = new THREE.Mesh( object.geometry, material );
+            } else {
+              mesh = new THREE.Mesh( object.geometry, material );
+            }
+          }
+
+          if (bones_exist === true) {
+            document.getElementById('btn_skeleton').disabled = false;
+
+            let root = new THREE.Object3D(), previous_index = -1, current_index, next_index;
+
+            for (let i = 0, il = object.bones.length; i < il; i++) {
+              next_index = object.bones[ i + 1 ] ? object.bones[ i + 1 ].parent : null;
+
+              let bone = new THREE.Bone();
+
+              if (object.bones[ i ].pos) {
+                bone.position.x = object.bones[ i ].pos[ 0 ];
+                bone.position.y = object.bones[ i ].pos[ 1 ];
+                bone.position.z = object.bones[ i ].pos[ 2 ];
+              }
+
+              if (object.bones[ i ].rot) {
+                bone.rotation.x = object.bones[ i ].rot[ 0 ];
+                bone.rotation.y = object.bones[ i ].rot[ 1 ];
+                bone.rotation.z = object.bones[ i ].rot[ 2 ];
+              }
+
+              if (object.bones[ i ].rotq) {
+                bone.quaternion.x = object.bones[ i ].rotq[ 0 ];
+                bone.quaternion.y = object.bones[ i ].rotq[ 1 ];
+                bone.quaternion.z = object.bones[ i ].rotq[ 2 ];
+                bone.quaternion.w = object.bones[ i ].rotq[ 3 ];
+              }
+
+              if (object.bones[ i ].scl) {
+                bone.scale.x = object.bones[ i ].scl[ 0 ];
+                bone.scale.y = object.bones[ i ].scl[ 1 ];
+                bone.scale.z = object.bones[ i ].scl[ 2 ];
+              }
+
+              bone[ 'name' ] = object.bones[ i ].name;
+              current_index = object.bones[ i ].parent;
+
+              bones.push( bone );
+
+              if (current_index === -1) {
+                root.add( bones[ i ] );
+              } else if (current_index === 0) {
+                bones[ 0 ].add( bones[ i ] );
+              } else if (current_index > previous_index) {
+                if (next_index === current_index) {
+                  bones[ previous_index ].add( bones[ i ] );
+                } else {
+                  bones[ current_index ].add( bones[ i ] );
+                }
+              } else {
+                bones[ current_index ].add( bones[ i ] );
+              }
+
+              previous_index = i;
+            }
+
+            skeleton = new THREE.Skeleton( bones );
+            skeleton.calculateInverses();
+            mesh.add( skeleton.bones[ 0 ].parent );
+            mesh.bind( skeleton );
+            mesh.normalizeSkinWeights();
+          }
+
+          if ((object.materials && object.materials.length > 0 && object.materials[ 0 ].vertexColors === true) || (object.geometry.attributes.color && object.geometry.attributes.color.array.length > 0)) {
+            vertex_colors_enabled = true;
+          }
+
+          await new Promise( resolve => setTimeout( resolve, 100 )); // adjust timing if necessary
+
+          if (mesh.material && mesh.isPoints !== undefined && mesh.isPoints === false) {
+            if (Object.getOwnPropertyNames( textures ).length !== 0) {
+              mesh.material.forEach( mtl => {
+                mtl.vertexColors = vertex_colors_enabled;
+                mtl.format = THREE.RGBAFormat;
+                mtl.side = THREE.DoubleSide;
+                mtl.flatShading = false;
+
+                mtl.needsUpdate = true;
+              });
+            } else {
+              mesh.material.vertexColors = vertex_colors_enabled;
+              mesh.material.format = THREE.RGBAFormat;
+              mesh.material.side = THREE.DoubleSide;
+              mesh.material.flatShading = false;
+
+              mesh.material.needsUpdate = true;
+            }
+          } else {
+            mesh.traverse( function( child ) {
+              if (child.isMesh === true || child.isPoints === true) {
+                if (child.isMesh === true) {
+                  if (child.isSkinnedMesh) child.frustumCulled = false;
+                } else {
+                  document.getElementById('btn_wireframe').disabled = true;
+                  document.getElementById('btn_flat').disabled = true;
+                }
+
+                if (child.material) {
+                  if (Array.isArray( child.material )) {
+                    child.material.forEach( mtl => {
+                      if (child.isPoints && isMobile === true) mtl.size = 1;
+                      mtl.vertexColors = vertex_colors_enabled;
+                      mtl.format = THREE.RGBAFormat;
+                      mtl.side = THREE.DoubleSide;
+                      mtl.flatShading = false;
+
+                      mtl.needsUpdate = true;
+                    });
+                  } else {
+                    if (child.isPoints && isMobile === true) child.material.size = 1;
+                    child.material.vertexColors = vertex_colors_enabled;
+                    child.material.format = THREE.RGBAFormat;
+                    child.material.side = THREE.DoubleSide;
+                    child.material.flatShading = false;
+
+                    child.material.needsUpdate = true;
+                  }
+                }
+              }
+            });
+          }
+        }
+
+        if (bones.length > 0) {
+          skeleton_helper = new THREE.SkeletonHelper( mesh );
+          document.getElementById('reset').disabled = true;
+        }
+
+        // Add mesh to the scene
+        scene.add( mesh );
+        camera.lookAt( mesh.position );
+
+        set_initial_scale();
+        resize();
+
+        if (animations && animations.length > 0) {
+          animation_mixer = new THREE.AnimationMixer( mesh );
+          current_animation = 0;
+          animations.forEach( clip => { clip.validate(); clip.optimize(); animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; });
+          animation_mixer.clipAction( animations[ 0 ] ).play();
+          document.getElementById('btn_animate').disabled = false;
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          animation_running = true;
+        }
+
+        console.timeEnd( 'Loading Time' );
+        document.getElementById('div_loading').style.display = 'none';
+
+        disabled_changed();
+
+        mouse_wheel = true;
+      }
+
+      async function loadURLFile() {
+        if (selected_url_file !== '') {
+          if (selected_url_file.indexOf( ',' ) > -1) {
+            let urls = selected_url_file.split( ',' );
+
+            for (let i = 0; i < urls.length; i++) {
+              let url = urls[ i ].trim();
+              let url_uc = url.toUpperCase();
+
+              if (image_extensions.some( ext => url_uc.endsWith( ext ) )) {
+                texture_loader.load( url, function( texture ) { textures.push( texture ); });
+              } else if (url_uc.endsWith('.JS') || url_uc.endsWith('.JSON')) {
+                selected_json_url_file = url;
+              }
+            }
+          } else {
+            // Launch loading of the selected file, addURLFileInScene is the callback when it's ready
+            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+              selected_json_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+            } else {
+              if (selected_url_file.startsWith('https://github.com') === true) {
+                selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+              }
+
+              if (selected_url_file.toUpperCase().endsWith('.JS') || selected_url_file.toUpperCase().endsWith('.JSON')) {
+                selected_json_url_file = selected_url_file;
+              }
+            }
+          }
+
+          if (selected_json_url_file !== null) {
+            file_loader.load( selected_json_url_file, async function( file_data ) {
+              fd = file_data;
+            });
+
+            await new Promise( resolve => setTimeout( resolve, 1000 )); // adjust timing if necessary
+
+            if (fd && fd.metadata && fd.metadata.type) {
+              console.warn( 'This viewer is using r111 of the three.js for legacy THREE.Geometry support.' );
+              console.warn( 'If the model does not load properly then try using JSON Viewer instead.' );
+
+              if (fd.metadata.type.toUpperCase() === 'BUFFERGEOMETRY') {
+                console.log( 'Trying Buffer Geometry Loader...' );
+                buffer_geometry = true;
+                loader = bg_loader;
+              } else if (fd.metadata.type.toUpperCase() === 'GEOMETRY') {
+                loader = json_loader;
+                console.log( 'Trying Legacy JSON Loader...' );
+              } else if (fd.metadata.type.toUpperCase() === 'OBJECT' || fd.objects) {
+                loader = object_loader;
+                model_is_object = true;
+                console.log( 'Trying Object Loader...' );
+              }
+            } else if (fd && fd.__metadata__ && fd.__metadata__.format.toUpperCase() === 'ASSIMP2JSON') {
+              loader = assimp_loader;
+              model_is_assimp = true;
+              console.log( 'Trying Assimp JSON Loader...' );
+            } else {
+              // Try using assimp_loader first
+              // Will fallback to json_loader / object_loader on error
+              loader = assimp_loader;
+              model_is_assimp = true;
+              console.log( 'Trying Assimp JSON Loader...' );
+            }
+
+            if (model_is_object === true) {
+              loader.parse( fd, addObjectInScene,
+              function( xhr ) { }, // onProgress
+              function ( error ) { // onError
+                handle_error( error );
+              });
+            } else {
+              loader.load( selected_json_url_file, addFileInScene,
+              function( xhr ) { }, // onProgress
+              function ( error ) { // onError
+                // Check if this is coming from assimp_loader and try using json_loader instead
+
+                if (model_is_assimp === true) {
+                  loader = json_loader;
+                  model_is_assimp = false;
+                  texturePath = undefined;
+                  console.log( 'Trying Legacy JSON Loader...' );
+
+                  loader.load( selected_json_url_file, addFileInScene,
+                  function( xhr ) { }, // onProgress
+                  function ( error ) { // onError
+
+                    // Try using object_loader as last option
+
+                    loader = object_loader;
+                    model_is_object = true;
+                    console.log( 'Trying Object Loader...' );
+
+                    loader.parse( fd, addObjectInScene,
+                    function( xhr ) { }, // onProgress
+                    function ( error ) { // onError
+                      handle_error( error );
+                    }, texturePath );
+                  }, texturePath );
+                } else {
+                  handle_error( error );
+                }
+              }, texturePath );
+            }
+          } else {
+            handle_error( 'Unsupported URL file!' );
+          }
+        }
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        render_requested = false;
+        enable_disable( true );
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      // Merge multiple meshes into a single mesh, thanks to manthrax:
+      // https://discourse.threejs.org/t/merge-multiple-mesh-into-a-single-one/35971/6
+
+      function merge_meshes() {
+        let merged_geometries;
+        let geometries = [];
+        let meshes = [];
+
+        let m_meshes = mesh.clone();
+        m_meshes.updateMatrixWorld( true, true );
+
+        m_meshes.traverse( function( child ) {
+          if (child.isMesh) {
+            meshes.push( child );
+            geometries.push( child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone() );
+          }
+        });
+
+        geometries.forEach( ( geo, index ) => geo.applyMatrix( meshes[ index ].matrixWorld ) );
+        merged_geometries = THREE.BufferGeometryUtils.mergeBufferGeometries( geometries, true );
+        merged_geometries.applyMatrix( m_meshes.matrix.getInverse( m_meshes.matrix.clone() ) );
+        merged_geometries.userData.materials = meshes.map( m => m.material );
+
+        return merged_geometries;
+      }
+
+      function show_skeleton() {
+        if (skeleton_visible === true) {
+          if (skeleton_demo === true) {
+            // Run the demo with the skeleton visible
+            skeleton_demo = false;
+            skeleton_demo_running = true;
+            document.getElementById('btn_skeleton').style.backgroundColor = 'red';
+
+            if (animations && animations.length > 0) {
+              document.getElementById('btn_animate').disabled = true;
+              skeleton_animation_changed();
+            }
+          } else if (skeleton_demo_running === true) {
+            // Stop the demo and hide the skeleton, the demo will remain available
+            // Animations, if present, will control the demo availability when turned ON / OFF
+            skeleton_demo_running = false;
+            skeleton.pose();
+            skeleton_demo = true;
+            skeleton_visible = false;
+            scene.remove( skeleton_helper );
+            document.getElementById('btn_skeleton').style.backgroundColor = '#d1cefc';
+
+            if (animations && animations.length > 0) {
+              document.getElementById('btn_animate').disabled = false;
+              skeleton_animation_changed();
+            }
+          } else {
+            // Hide the skeleton
+            skeleton_visible = false;
+            scene.remove( skeleton_helper );
+            document.getElementById('btn_skeleton').style.backgroundColor = '#d1cefc';
+          }
+        } else {
+          // Show the skeleton
+          skeleton_visible = true;
+          scene.add( skeleton_helper );
+          document.getElementById('btn_skeleton').style.backgroundColor = 'lightgreen';
+          if (animation_running === false) { skeleton_demo = true; sk_count = 0; }
+        }
+
+        mouse_wheel = true;
+      }
+
+      function set_flat() {
+        if (flat_shading_enabled === true) {
+          document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+          flat_shading_enabled = false;
+        } else {
+          document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+          flat_shading_enabled = true;
+        }
+
+        mesh.traverse( function( child ) {
+          if (child.isMesh) {
+            if (child.material) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.flatShading = flat_shading_enabled;
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                child.material.flatShading = flat_shading_enabled;
+                child.material.needsUpdate = true;
+              }
+            }
+
+            mouse_wheel = true;
+          }
+    	  });
+      }
+
+      function show_wireframe() {
+        if (mesh) {
+          if (wireframe_enabled === true) {
+            wireframe_enabled = false;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+          } else {
+            wireframe_enabled = true;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
+          }
+
+          mesh.traverse( function( child ) {
+            if (child.isMesh){
+              if (child.material) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.wireframe = wireframe_enabled;
+                  });
+                } else {
+                  child.material.wireframe = wireframe_enabled;
+                }
+              }
+
+              mouse_wheel = true;
+            }
+          });
+        }
+      }
+
+      async function render() {
+        if (mesh) {
+          if (animation_running === true || mouse_down === true || mouse_wheel === true || (skeleton_demo === false && skeleton_demo_running === true)) {
+            if (skeleton_demo === false && skeleton_demo_running === true) {
+              mesh.traverse( child => {
+                if (child.isSkinnedMesh) {
+                  child.skeleton.bones.forEach( bone => {
+                    if (sk_count < 500) {
+                      bone.rotation.x += 0.0005;
+                      bone.rotation.z -= 0.0005;
+                    } else {
+                      bone.rotation.x -= 0.0005;
+                      bone.rotation.z += 0.0005;
+                    }
+
+                    if (bone.children && bone.children.length > 0) {
+                      bone.children.forEach( child => {
+                        if (child.isBone) { (sk_count < 500) ? child.rotation.x += 0.0005 : child.rotation.x -= 0.0005; }
+                      });
+                    }
+                  });
+
+                  sk_count += 1;
+
+                  if (sk_count === 1000) sk_count = 0;
+                }
+              });
+            } else {
+              if (animation_running === true) animation_mixer.update( clock.getDelta() );
+            }
+
+            controls.update();
+
+            renderer.clear();
+            renderer.render( scene, camera );
+
+            scene.updateMatrixWorld();
+            camera.updateMatrixWorld();
+
+            if (mouse_wheel === true) {
+              if (count > 2) {
+                mouse_wheel = false;
+              } else {
+                count += 1;
+              }
+            }
+          }
+        }
+
+        if (render_requested === true) requestAnimationFrame( render );
+      }
+
+      function reset_all( reset = false ) {
+        document.getElementById('back_color').value = '#000000';
+        document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+        document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+        document.getElementById('btn_skeleton').style.backgroundColor = 'transparent';
+        document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+
+        // Reset the view
+        if (reset === true) {
+          controls.reset();
+          set_back_color();
+        } else {
+          // Page (re)loading
+          if (scene) {
+            if (mesh) {
+              if (skeleton_helper) {
+                skeleton_demo_running = false;
+
+                if (skeleton_visible === true) {
+                  scene.remove( skeleton_helper );
+                  skeleton_visible = false;
+                }
+
+                skeleton_helper = null;
+              }
+
+              if (animation_mixer) {
+                animation_mixer.stopAllAction();
+
+                for ( let i = 0; i < animations.length; i++ ) {
+                  animation_mixer.uncacheAction( animations[ i ] );
+                  animation_mixer.uncacheClip( animations[ i ] );
+                }
+
+                animation_mixer.uncacheRoot( animation_mixer.getRoot() );
+              }
+
+              mesh.traverse( function( child ) {
+                if (child.isMesh || child.isPoints) {
+                  if (child.material) {
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        if (mtl.map) mtl.map.dispose();
+                        mtl.dispose();
+                      });
+                    } else {
+                      if (child.material.map) child.material.map.dispose();
+                      child.material.dispose();
+                    }
+                  }
+
+                  if (child.geometry) child.geometry.dispose();
+                }
+              });
+
+              while (mesh.children.length > 0) {
+                mesh.remove( mesh.children[ 0 ] );
+              }
+
+              mesh.children.length = 0;
+
+              material.dispose();
+
+              while (scene.children.length > 0) {
+                scene.remove( scene.children[ 0 ] );
+              }
+            }
+          }
+
+          mouse_wheel = true;
+
+          document.getElementById('file_input').value = '';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('btn_animate').disabled = true;
+          document.getElementById('btn_skeleton').disabled = true;
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+          enable_disable( true );
+        }
+
+        mouse_wheel = true;
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('back_color').disabled = disable;
+        document.getElementById('btn_flat').disabled = disable;
+        document.getElementById('btn_wireframe').disabled = disable;
+        disabled_changed();
+      }
+    </script>
+
+    <script>
+      function disabled_changed() {
+        $('button').each( function() {
+          mouse_wheel = true;
+
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+
+        $('input[type=color]').each( function() {
+          mouse_wheel = true;
+
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+      }
+
+      function skeleton_animation_changed() {
+        mouse_wheel = true;
+
+        if ($('#btn_animate')[ 0 ].disabled === true) {
+          $('#btn_animate').unbind('mouseenter mouseleave');
+        } else {
+          $('#btn_animate').hover(
+          function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+          function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+        }
+      }
+    </script>
+  </body>
+</html>
