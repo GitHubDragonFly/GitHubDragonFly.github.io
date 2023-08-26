@@ -3,7 +3,7 @@ GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 
 Designed to serve as a hub with links to repositories, Number Type Converter and FREE online browser based [three.js](https://threejs.org) `3D Model` and `Texture` viewers.
 
-Fit for a desktop but should be functional on mobile devices in spite of its tiny or bulky appearance. There is an `M` button that will allow you to switch to stripped down and simplified version of mobile friendly viewers (most viewers are currently available). 
+Fit for a desktop but should be functional on mobile devices in spite of its tiny or bulky appearance. There is the `M` button that will allow you to switch to stripped down and simplified version of mobile friendly viewers (almost all viewers are currently available). 
 
 GitHub servers are providing correct access to files, so cloning or downloading this repository will not have the same functionality if run locally without some server. These servers are setting `CacheControl` to last only for 10 minutes so you might need to refresh the current page as needed.
 
