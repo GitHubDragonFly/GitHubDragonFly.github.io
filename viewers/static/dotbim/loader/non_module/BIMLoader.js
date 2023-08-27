@@ -112,7 +112,7 @@
 			
 				if ( color ) {
 
-					if ( color.r === 0 & color.g === 0 & color.b === 0 & color.a === 0 ) color = null;
+					if ( color.r === 0 && color.g === 0 && color.b === 0 && color.a === 0 ) color = null;
 
 				}
 			
@@ -212,9 +212,9 @@
 
 				for ( let index = 0, length = color4arrary.length; index < length; index += 4 ) {
 
-					let c1 = color4arrary[index + 0];
-					let c2 = color4arrary[index + 1];
-					let c3 = color4arrary[index + 2];
+					let c1 = color4arrary[ index + 0 ];
+					let c2 = color4arrary[ index + 1 ];
+					let c3 = color4arrary[ index + 2 ];
 
 					let c4 = convertColorAlpha( color4arrary[ index + 3 ] );
 
@@ -224,7 +224,7 @@
 
 				}
 			
-				while (colors.length < max) {
+				while ( colors.length < max ) {
 
 					for ( let i = 0; i < repeat; i++ ) colors.push( colors[ 0 ], colors[ 1 ], colors[ 2 ], colors[ 3 ] );
 
