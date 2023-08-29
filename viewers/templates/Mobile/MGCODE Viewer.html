@@ -1,0 +1,507 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, user-scalable=no">
+    <meta name="description" content="GCODE (3D-printing) Viewer">
+    <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
+
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js" defer></script>
+    <script src="../../static/js/GCodeLoader.js" defer></script>
+    <script src="../../static/js/OrbitControls.js" defer></script>
+
+    <style>
+      body, html {
+        position: relative;
+        display: block;
+        background-color: black;
+        width: 100%;
+        min-height: 100vh;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button {
+        border: 1px solid blue;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+        min-width: 22px;
+        height: 22px;
+        padding: 1px;
+      }
+
+      label {
+        vertical-align: middle;
+        height: 22px;
+        margin: 2px 0 2px 0;
+      }
+
+      input[type=color] {
+        border: 1px solid whitesmoke;
+        margin: 2px 3px 2px -2px;
+        vertical-align: middle;
+        background: none;
+        height: 20px;
+        width: 16px;
+        padding: 0;
+      }
+
+      input[type=file] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        max-width: 175px;
+      }
+
+      input[type=text] {
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+      }
+
+      .error_msg {
+        background-color: transparent;
+        position: absolute;
+        text-align: center;
+        font-size: x-large;
+        display: none;
+        color: red;
+        width: 240px;
+        height: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .loading_msg {
+        background-color: transparent;
+        color: greenyellow;
+        position: absolute;
+        text-align: center;
+        font-size: large;
+        display: none;
+        height: 240px;
+        width: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .fm { color: navy; width: 99.25%; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+
+      .fixed-menu {
+        background-color: whitesmoke;
+        display: inline-block;
+        position: fixed;
+        padding: 1px;
+        width: 100%;
+        z-index: 1;
+        margin: 0;
+      }
+    </style>
+
+    <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- Updated GCODE Loader from: https://github.com/emplast/Threejs-GcodeLoaderNGCfile -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>GCODE Viewer</title>
+  </head>
+  <body onload="reset_all(); disabled_changed();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".gcode, .ncc, .ngc" />
+        <label for="back_color" title="Background Color">BG</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Path" id="btn_path" onclick="show_path()" style="min-width: 40px;" disabled>path</button>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="width: 70%; margin-right: 3px;" />
+        <button onclick="load_url_file();" style="min-width: 38px; margin-right: 3px;">Load</button>
+        <button onclick="clear_url();" style="min-width: 38px; margin-right: 1px;">Clear</button>
+      </div>
+    </div>
+
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">Loading</div>
+
+    <script>
+      function show_url() {
+        if (url_displayed === true) {
+          document.getElementById('url').style.display = 'none';
+          url_displayed = false;
+        } else {
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        window.addEventListener( 'pointerdown', (event) => { mouse_down = true; count = 0; }, false);
+        window.addEventListener( 'pointerup', (event) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; count = 0; }, false);
+      }
+
+      function resize() {
+        if (scene) {
+          mouse_wheel = true;
+
+          renderer.setSize( window.innerWidth, window.innerHeight );
+
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          mouse_wheel = true;
+        }
+      }
+    </script>
+
+    <script>
+      var manager, renderer, scene, camera, gcode_loader;
+      var gcode_obj, path, path_visible, render_requested;
+      var controls, mouse_down, mouse_wheel, events_initialized;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var url_displayed = false, url_loading = false, bounding_box, count = 0;
+      var selected_gcode_file, selected_gcode_url_file, selected_url_file = '';
+
+      function set_back_color() {
+        scene.background = null;
+        document.body.style.backgroundColor = document.getElementById('back_color').value;
+        mouse_wheel = true;
+      }
+
+      function set_initial_scale() {
+        // Set the initial scale of the object so it comes to view
+
+        bounding_box.setFromObject( gcode_obj );
+        let size = bounding_box.getSize(new THREE.Vector3());
+
+        if ( size.y > 1 ) {
+          gcode_obj.scale.multiplyScalar( 50 / size.y );
+        } else if ( size.y > 0.02 ) {
+          gcode_obj.scale.multiplyScalar( 25 / size.y );
+        } else {
+          gcode_obj.scale.multiplyScalar( 1 / size.y )
+        }
+
+        bounding_box.setFromObject( gcode_obj );
+        let center = bounding_box.getCenter(new THREE.Vector3());
+        controls.target.set( center.x, center.y, center.z );
+      }
+
+      function init() {
+        if (scene) {
+          if (gcode_obj) {
+            if (gcode_obj.material) gcode_obj.material.dispose();
+            if (gcode_obj.geometry) gcode_obj.geometry.dispose();
+            if (path.material) path.material.dispose();
+            if (path.geometry) path.geometry.dispose();
+
+            scene.remove( gcode_obj );
+          }
+
+          mouse_wheel = true;
+
+          reset_all( true );
+        }
+
+        enable_disable( true );
+
+        if (manager === undefined) manager = new THREE.LoadingManager();
+
+        manager.onProgress = function ( item, loaded, total ) {
+          if ( loaded === total ) {
+            console.timeEnd( 'Loading Time' );
+            document.getElementById('div_loading').style.display = 'none';
+            enable_disable( false );
+            render_requested = true;
+            mouse_wheel = true;
+            render();
+          }
+        }
+
+        if (gcode_loader === undefined) gcode_loader = new THREE.GCodeLoader( manager );
+
+        path = null;
+        path_visible = false;
+        selected_gcode_file = null;
+        selected_gcode_url_file = null;
+        mouse_down = false;
+        mouse_wheel = false;
+        render_requested = false;
+        bounding_box = new THREE.Box3();
+
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (url_loading === false) {
+          // Loaded file
+          let fi = document.getElementById('file_input');
+          let fn_uc = fi.files[ 0 ].name.toUpperCase();
+
+          if (fn_uc.endsWith('.GCODE') || fn_uc.endsWith('.NCC') || fn_uc.endsWith('.NGC')) selected_gcode_file = fi.files[ 0 ];
+
+          if (selected_gcode_file === null) {
+            handle_error( 'No valid GCODE file selected!' );
+            return;
+          }
+
+          selected_url_file = '';
+        } else {
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          url_loading = false;
+        }
+
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.encoding = THREE.sRGBEncoding;
+          renderer.setSize( ww, wh );
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
+          renderer.autoClear = false;
+
+          document.body.appendChild( renderer.domElement );
+        }
+
+        if (scene === undefined) scene = new THREE.Scene();
+        if (gcode_obj === undefined) gcode_obj = new THREE.Object3D();
+
+        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+        if (camera === undefined) {
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 2500 );
+          camera.position.set( 0, 0, 250 );
+          scene.add( camera );
+        }
+
+        if (controls === undefined) {
+          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          //controls.enableZoomToCursor = true;
+          controls.zoomSpeed = 0.8;
+          controls.rotateSpeed = 0.8;
+          controls.keyPanSpeed = 0.8; 
+          controls.panSpeed = 0.8;
+          //controls.enableDamping = true;
+          //controls.dampingFactor = 0.3;
+          //controls.enableKeys = false;
+          //controls.enableZoom = true;
+          //controls.maxPolarAngle = 2.2;
+          //controls.minPolarAngle = 1.1;
+          //controls.rotateSpeed = 0.2;
+          //controls.minDistance = 2;
+          //controls.maxDistance = 500;
+        }
+
+        // Load GCODE file
+        selected_gcode_file !== null ? loadFile() : loadURLFile();
+      }
+
+      function loadFile(){
+        gcode_loader.load( URL.createObjectURL( selected_gcode_file ), function( object ) {
+          URL.revokeObjectURL( selected_gcode_file );
+
+          object.children[ 0 ].name += '_extruded';
+          object.children[ 1 ].name += '_path';
+
+          path = object.children[ 1 ];
+          gcode_obj = object.children[ 0 ];
+          gcode_obj.rotation.x -= Math.PI / 2;
+
+          // Add gcode_obj to the scene
+          scene.add( gcode_obj );
+          camera.lookAt( gcode_obj.position );
+
+          set_initial_scale();
+          resize();
+        }, function ( xhr ) { // onProgress
+        }, function ( error ) { // onError
+          handle_error( error );
+          URL.revokeObjectURL( selected_gcode_file );
+        });
+      }
+
+      function loadURLFile() {
+        if (selected_url_file !== '') {
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_gcode_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+
+            let url_uc = selected_url_file.toUpperCase();
+
+            if (url_uc.endsWith('.GCODE') || url_uc.endsWith('.NCC') || url_uc.endsWith('.NGC')) selected_gcode_url_file = selected_url_file;
+          }
+
+          if (selected_gcode_url_file === null) {
+            handle_error( 'Unsupported URL file!' );
+            return;
+          }
+
+          gcode_loader.load( selected_gcode_url_file, function( object ) {
+            object.children[ 0 ].name += '_extruded';
+            object.children[ 1 ].name += '_path';
+
+            path = object.children[ 1 ];
+            gcode_obj = object.children[ 0 ];
+            gcode_obj.rotation.x -= Math.PI / 2;
+
+            console.timeEnd( 'Loading Time' );
+
+            // Add gcode_obj to the scene
+            scene.add( gcode_obj );
+            camera.lookAt( gcode_obj.position );
+
+            set_initial_scale();
+            resize();
+          }, function ( xhr ) { // onProgress
+          }, function ( error ) { // onError
+            handle_error( error );
+          });
+        }
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        render_requested = false;
+        enable_disable( true );
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      function show_path() {
+        if (path_visible === true) {
+          path_visible = false;
+          gcode_obj.remove( path );
+          document.getElementById('btn_path').style.backgroundColor = 'transparent';
+        } else {
+          path_visible = true;
+          gcode_obj.add( path );
+          document.getElementById('btn_path').style.backgroundColor = 'lightgreen';
+        }
+
+        mouse_wheel = true;
+      }
+
+      async function render() {
+        if (gcode_obj) {
+          if (mouse_down === true || mouse_wheel === true) {
+            controls.update();
+
+            renderer.clear();
+            renderer.render( scene, camera );
+
+            scene.updateMatrixWorld();
+            camera.updateMatrixWorld();
+
+            if (mouse_wheel === true) {
+              if (count > 2) {
+                mouse_wheel = false;
+              } else {
+                count += 1;
+              }
+            }
+          }
+        }
+
+        if (render_requested === true) requestAnimationFrame( render );
+      }
+
+      function reset_all( reset = false ) {
+        document.getElementById('back_color').value = '#000000';
+        document.getElementById('btn_path').style.backgroundColor = 'transparent';
+
+        // Reset the view
+        if (reset === true) {
+          controls.reset();
+          set_back_color();
+        } else {
+          // Page (re)loading
+          if (scene) {
+            if (gcode_obj) {
+              if (gcode_obj.material) gcode_obj.material.dispose();
+              if (gcode_obj.geometry) gcode_obj.geometry.dispose();
+              if (path.material) path.material.dispose();
+              if (path.geometry) path.geometry.dispose();
+            }
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+          }
+
+          mouse_wheel = true;
+
+          document.getElementById('file_input').value = '';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+          enable_disable( true );
+        }
+
+        mouse_wheel = true;
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('back_color').disabled = disable;
+        document.getElementById('btn_path').disabled = disable;
+        disabled_changed();
+      }
+    </script>
+
+    <script>
+      function disabled_changed() {
+        $('button').each( function() {
+          mouse_wheel = true;
+
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+
+        $('input[type=color]').each( function() {
+          mouse_wheel = true;
+
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+        });
+      }
+    </script>
+  </body>
+</html>
