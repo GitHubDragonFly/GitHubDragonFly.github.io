@@ -683,27 +683,7 @@
 				const geometry = buildGeometry( findMeshGeometry( data ) );
 				const material = buildMaterial( findMeshMaterial( data ) );
 
-				//const mesh = geometry ? new THREE.Mesh( geometry, material ) : new THREE.Object3D();
-
-				let mesh;
-
-				if ( geometry ) {
-
-					if ( 'matrix4d xformOp:transform.timeSamples' in data ) {
-
-						mesh = new THREE.Mesh( geometry, material );
-
-					} else {
-
-						mesh = new THREE.Mesh( geometry, material );
-
-					}
-
-				} else {
-
-					mesh = new THREE.Object3D();
-
-				}
+				const mesh = geometry ? new THREE.Mesh( geometry, material ) : new THREE.Object3D();
 
 				if ( 'matrix4d xformOp:transform' in data ) {
 
@@ -749,8 +729,6 @@
 			const group = new THREE.Group();
 
 			buildHierarchy( root, group );
-
-			console.log('group ', group);
 
 			return group;
 
