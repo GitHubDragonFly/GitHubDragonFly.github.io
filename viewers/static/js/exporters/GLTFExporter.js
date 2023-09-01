@@ -1406,7 +1406,7 @@
 
 				const metalRoughMapDef = {
 					index: this.processTexture( metalRoughTexture ),
-					channel: metalRoughTexture.channel
+					texCoord: metalRoughTexture.channel
 				};
 
 				this.applyTextureTransform( metalRoughMapDef, metalRoughTexture );
