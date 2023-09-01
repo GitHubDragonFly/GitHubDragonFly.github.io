@@ -461,7 +461,7 @@
 
 						names.push( name );
 
-						let transparency = ( mat.opacity < 1 ) ? ( 1 - mat.opacity ) : '0.0000';
+						let transparency = ( mat.opacity < 1 || ( mat.transparent && mat.transparent === true ) ) ? ( 1 - mat.opacity ) : '0.0000';
 
 						mtlOutput += '\n' + 'newmtl ' + name + '\n';
 
@@ -939,6 +939,64 @@
 								} else {
 
 									mtlOutput += 'map_Pccrm ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
+
+								}
+
+							}
+
+						}
+
+						if ( mat.iridescenceMap && mat.iridescenceMap.type === 1009 && mat.iridescenceMap.image ) {
+
+							if ( mat.iridescenceMap.image.src || mat.iridescenceMap.image.data ) {
+
+								if ( map_uuids.includes( mat.iridescenceMap.uuid ) === false ) {
+
+									name = 'iridescenceMap' + count;
+
+									map_uuids.push( mat.iridescenceMap.uuid );
+									map_names[ mat.iridescenceMap.uuid ] = name;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.iridescenceMap.image, ext )
+									});
+
+									mtlOutput += 'map_Pirm ' + name + '.png' + '\n';
+
+								} else {
+
+									mtlOutput += 'map_Pirm ' + map_names[ mat.iridescenceMap.uuid ] + '.png' + '\n';
+
+								}
+
+							}
+
+						}
+
+						if ( mat.iridescenceThicknessMap && mat.iridescenceThicknessMap.type === 1009 && mat.iridescenceThicknessMap.image ) {
+
+							if ( mat.iridescenceThicknessMap.image.src || mat.iridescenceThicknessMap.image.data ) {
+
+								if ( map_uuids.includes( mat.iridescenceThicknessMap.uuid ) === false ) {
+
+									name = 'iridescenceThicknessMap' + count;
+
+									map_uuids.push( mat.iridescenceThicknessMap.uuid );
+									map_names[ mat.iridescenceThicknessMap.uuid ] = name;
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( mat.iridescenceThicknessMap.image, ext )
+									});
+
+									mtlOutput += 'map_Pirthm ' + name + '.png' + '\n';
+
+								} else {
+
+									mtlOutput += 'map_Pirthm ' + map_names[ mat.iridescenceThicknessMap.uuid ] + '.png' + '\n';
 
 								}
 

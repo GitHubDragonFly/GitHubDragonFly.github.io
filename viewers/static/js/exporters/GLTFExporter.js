@@ -405,7 +405,7 @@
 
 		}
 
-		let quality;
+		let quality = 1.0;
 
 		// Blink's implementation of convertToBlob seems to default to a quality level of 100%
 		// Use the Blink default quality levels of toBlob instead so that file sizes are comparable.
@@ -800,13 +800,13 @@
 
 			console.warn( 'THREE.GLTFExporter: Merged metalnessMap and roughnessMap textures.' );
 
-			if ( metalnessMap instanceof THREE.CompressedTexture ) {
+			if ( metalnessMap.isCompressedTexture === true ) {
 
 				metalnessMap = decompress( metalnessMap );
 
 			}
 
-			if ( roughnessMap instanceof THREE.CompressedTexture ) {
+			if ( roughnessMap.isCompressedTexture === true ) {
 
 				roughnessMap = decompress( roughnessMap );
 
@@ -1179,7 +1179,7 @@
 		* @param  {Integer} format of the image (THREE.RGBAFormat)
 		* @param  {Boolean} flipY before writing out the image
 		* @param  {String} mimeType export format
-		* @return {Integer}     Index of the processed texture in the "images" array
+		* @return {Integer} Index of the processed texture in the "images" array
 		*/
 		processImage( image, format, flipY, mimeType = 'image/png' ) {
 
@@ -1231,18 +1231,9 @@
 
 					}
 
-					const data = new Uint8ClampedArray( image.height * image.width * 4 );
+					const imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
 
-					for ( let i = 0; i < data.length; i += 4 ) {
-
-						data[ i + 0 ] = image.data[ i + 0 ];
-						data[ i + 1 ] = image.data[ i + 1 ];
-						data[ i + 2 ] = image.data[ i + 2 ];
-						data[ i + 3 ] = image.data[ i + 3 ];
-
-					}
-
-					ctx.putImageData( new ImageData( data, image.width, image.height ), 0, 0 );
+					ctx.putImageData( imgData, 0, 0 );
 
 				} else {
 
@@ -1254,13 +1245,11 @@
 
 					pending.push(
 
-						getToBlobPromise( canvas, mimeType )
-							.then( blob => writer.processBufferViewImage( blob ) )
-							.then( bufferViewIndex => {
+						getToBlobPromise( canvas, mimeType ).then( blob => writer.processBufferViewImage( blob ) ).then( bufferViewIndex => {
 
-								imageDef.bufferView = bufferViewIndex;
+							imageDef.bufferView = bufferViewIndex;
 
-							} )
+						} )
 
 					);
 
@@ -1274,13 +1263,11 @@
 
 						pending.push(
 
-							getToBlobPromise( canvas, mimeType )
-								.then( blob => new FileReader().readAsDataURL( blob ) )
-								.then( dataURL => {
+							getToBlobPromise( canvas, mimeType ).then( blob => new FileReader().readAsDataURL( blob ) ).then( dataURL => {
 
-									imageDef.uri = dataURL;
+								imageDef.uri = dataURL;
 
-								} )
+							} )
 
 						);
 
@@ -1302,7 +1289,7 @@
 
 		/**
 		* Process sampler
-		* @param  {Texture} map Texture to process
+		* @param  {THREE.Texture} map Texture to process
 		* @return {Integer}     Index of the processed texture in the "samplers" array
 		*/
 		processSampler( map ) {
@@ -1324,7 +1311,7 @@
 
 		/**
 		* Process texture
-		* @param  {Texture} map Map to process
+		* @param  {THREE.Texture} map Map to process
 		* @return {Integer} Index of the processed texture in the "textures" array
 		*/
 		processTexture( map ) {
@@ -1339,13 +1326,13 @@
 			if ( ! json.textures ) json.textures = [];
 
 			// make non-readable textures (e.g. CompressedTexture) readable by blitting them into a new texture
-			if ( map instanceof THREE.CompressedTexture ) {
+			if ( map.isCompressedTexture === true ) {
 
 				map = decompress( map, options.maxTextureSize );
 
 			}
 
-			let mimeType = map.userData.mimeType;
+			let mimeType = map.userData ? (map.userData.mimeType || 'image/png') : 'image/png';
 
 			if ( mimeType === 'image/webp' ) mimeType = 'image/png';
 
@@ -1380,17 +1367,10 @@
 
 			if ( cache.materials.has( material ) ) return cache.materials.get( material );
 
-			if ( material.isShaderMaterial ) {
-
-				console.warn( 'GLTFExporter: THREE.ShaderMaterial not supported.' );
-				return null;
-
-			}
-
 			if ( ! json.materials ) json.materials = [];
 
 			// @QUESTION Should we avoid including any attribute that has the default value?
-			const materialDef = {	pbrMetallicRoughness: {} };
+			const materialDef = { pbrMetallicRoughness: {} };
 
 			if ( material.isMeshStandardMaterial !== true && material.isMeshBasicMaterial !== true ) {
 
@@ -1533,16 +1513,30 @@
 			if ( material.side === THREE.DoubleSide ) materialDef.doubleSided = true;
 			if ( material.name !== '' ) materialDef.name = material.name;
 
-			this.serializeUserData( material, materialDef );
+			let mtl;
+
+			if ( material.isShaderMaterial === true ) {
+
+				console.warn( 'GLTFExporter: THREE.ShaderMaterial not officially supported.' );
+				mtl = new THREE.MeshStandardMaterial();
+				//return null;
+	
+			} else {
+
+				mtl = material;
+	
+			}
+
+			this.serializeUserData( mtl, materialDef );
 
 			this._invokeAll( function ( ext ) {
 
-				ext.writeMaterial && ext.writeMaterial( material, materialDef );
+				ext.writeMaterial && ext.writeMaterial( mtl, materialDef );
 
 			} );
 
 			const index = json.materials.push( materialDef ) - 1;
-			cache.materials.set( material, index );
+			cache.materials.set( mtl, index );
 			return index;
 
 		}
