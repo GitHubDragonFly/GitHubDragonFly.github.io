@@ -21,20 +21,32 @@ function dotbim_CreateMeshes(dotbim) {
         return [];
     }
 
-    if (info[ 'Instanced' ]) {
-        elements.forEach( element => {
-            if (mesh_id_keys[ element[ 'mesh_id' ] ]) {
-                mesh_id_keys[ element[ 'mesh_id' ] ].instance_count++;
+    elements.forEach( element => {
+        if (!mesh_id_keys[ element[ 'mesh_id' ] ]) mesh_id_keys[ element[ 'mesh_id' ] ] = { face_colors_group: {}, color_group: {} };
+
+        if (element[ 'face_colors' ]) {
+            let mesh_id_key = mesh_id_keys[ element[ 'mesh_id' ] ][ 'face_colors_group' ][ element[ 'face_colors' ] ];
+
+            if (!mesh_id_key) {
+                mesh_id_keys[ element[ 'mesh_id' ] ][ 'face_colors_group' ][ element[ 'face_colors' ] ] = { instance_count: 1, current_instance: 0, mesh: null };
             } else {
-                mesh_id_keys[ element[ 'mesh_id' ] ] = { mesh_id: element[ 'mesh_id' ], instance_count: 1, current_instance: 0, mesh: null };
+                mesh_id_key.instance_count++;
             }
-        });
-    }
+        } else { // expected existing element[ 'color' ]
+            let el_color = [ element[ 'color' ].r, element[ 'color' ].g, element[ 'color' ].b, element[ 'color' ].a ];
+            let mesh_id_key = mesh_id_keys[ element[ 'mesh_id' ] ][ 'color_group' ][ el_color ];
+
+            if (!mesh_id_key) {
+                mesh_id_keys[ element[ 'mesh_id' ] ][ 'color_group' ][ el_color ] = { instance_count: 1, current_instance: 0, mesh: null };
+            } else {
+                mesh_id_key.instance_count++;
+            }
+        }
+    });
 
     let geometrys = dotbim_Meshes2Geometrys(meshes);
 
     const bim_meshes = new THREE.Group();
-    const bim_edges = new THREE.Group();
 
     dotbim_Elemments2Meshes(elements, geometrys).forEach( bim_mesh => {
         bim_mesh.geometry.computeBoundingBox();
@@ -42,11 +54,9 @@ function dotbim_CreateMeshes(dotbim) {
 
         bim_mesh[ 'name' ] = 'mesh_' + bim_mesh.id;
         bim_meshes.add( bim_mesh );
-        if ( bim_mesh.edges ) bim_edges.add( bim_mesh.edges );
     });
 
     if ( bim_meshes.children.length > 1 ) bim_meshes.rotateX( - Math.PI / 2 );
-    if ( bim_edges.children.length > 0 ) bim_meshes.userData[ 'edges' ] = bim_edges;
 
     return bim_meshes;
 }
@@ -94,6 +104,7 @@ function dotbim_Elemment2Mesh(element, geometrys) {
         material.opacity = 1.0;
         material.transparent = true;
         material.vertexColors = true;
+        material.needsUpdate = true;
     }
 
     if (!vector) vector = { x: 0, y: 0, z: 0 };
@@ -101,44 +112,46 @@ function dotbim_Elemment2Mesh(element, geometrys) {
 
     let mesh;
 
-    if (mesh_id_keys[ mesh_id ] && mesh_id_keys[ mesh_id ].instance_count > 1) {
-        if (mesh_id_keys[ mesh_id ][ 'mesh' ] === null) {
-            mesh_id_keys[ mesh_id ][ 'mesh' ] = new THREE.InstancedMesh( geometry, material, mesh_id_keys[ mesh_id ].instance_count );
+    if (face_colors && mesh_id_keys[ mesh_id ][ 'face_colors_group' ][ face_colors ]) {
+        let mesh_id_key = mesh_id_keys[ mesh_id ][ 'face_colors_group' ][ face_colors ];
+
+        if (mesh_id_key[ 'mesh' ] === null) {
+            mesh_id_key[ 'mesh' ] = new THREE.InstancedMesh( geometry, material, mesh_id_key.instance_count );
         }
+
+        mesh = mesh_id_key.mesh;
 
         let pos = new THREE.Vector3( vector.x, vector.y, vector.z );
         let rotq = new THREE.Quaternion( rotation.qx, rotation.qy, rotation.qz, rotation.qw );
 
         let matrix = new THREE.Matrix4().compose( pos, rotq, scale );
 
-        mesh_id_keys[ mesh_id ][ 'mesh' ].setMatrixAt( mesh_id_keys[ mesh_id ].current_instance, matrix );
-        mesh_id_keys[ mesh_id ][ 'mesh' ].instanceMatrix.needsUpdate = true;
+        mesh.setMatrixAt( mesh_id_key.current_instance, matrix );
+        mesh.instanceMatrix.needsUpdate = true;
 
-        if (material.color) {
-            mesh_id_keys[ mesh_id ][ 'mesh' ].setColorAt( mesh_id_keys[ mesh_id ].current_instance, material.color );
-            mesh_id_keys[ mesh_id ][ 'mesh' ].instanceColor.needsUpdate = true;
+        mesh_id_key.current_instance++;
+    } else { // expected existing 'color'
+        let el_color = [ color.r, color.g, color.b, color.a ];
+        let mesh_id_key = mesh_id_keys[ mesh_id ][ 'color_group' ][ el_color ];
+
+        if (mesh_id_key[ 'mesh' ] === null) {
+            mesh_id_key[ 'mesh' ] = new THREE.InstancedMesh( geometry, material, mesh_id_key.instance_count );
         }
 
-        mesh_id_keys[ mesh_id ].current_instance++;
+        mesh = mesh_id_key.mesh;
 
-        return mesh_id_keys[ mesh_id ].mesh;
-    } else {
-        mesh = new THREE.Mesh(geometry, material);
+        let pos = new THREE.Vector3( vector.x, vector.y, vector.z );
+        let rotq = new THREE.Quaternion( rotation.qx, rotation.qy, rotation.qz, rotation.qw );
 
-        mesh.position.set(vector.x, vector.y, vector.z);
-        mesh.quaternion.set(rotation.qx, rotation.qy, rotation.qz, rotation.qw);
+        let matrix = new THREE.Matrix4().compose( pos, rotq, scale );
 
-        let innerGeometry = new THREE.BufferGeometry();
-        innerGeometry.setAttribute( 'position', mesh.geometry.attributes.position );
-        let innerEdgesGeometry = new THREE.EdgesGeometry( innerGeometry, 30 );
-        let outline_material = new THREE.LineBasicMaterial( { color: 0xFF0000 } );
-        let edges = new THREE.LineSegments( innerEdgesGeometry, outline_material );
-        edges.position.set(vector.x, vector.y, vector.z);
-        edges.quaternion.set(rotation.qx, rotation.qy, rotation.qz, rotation.qw);
-        mesh[ 'edges' ] = edges;
+        mesh.setMatrixAt( mesh_id_key.current_instance, matrix );
+        mesh.instanceMatrix.needsUpdate = true;
 
-        return mesh;
+        mesh_id_key.current_instance++;
     }
+
+    return mesh;
 }
 
 function dotbim_Meshes2Geometrys(meshes) {
