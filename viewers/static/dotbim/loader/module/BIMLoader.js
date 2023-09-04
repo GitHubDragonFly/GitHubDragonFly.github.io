@@ -2,16 +2,16 @@ import {
 	BufferGeometry,
 	Color,
 	DoubleSide,
-	EdgesGeometry,
 	FileLoader,
 	Float32BufferAttribute,
 	Group,
-	LineBasicMaterial,
-	LineSegments,
+	InstancedMesh,
 	Loader,
-	Mesh,
+	Matrix4,
 	MeshPhongMaterial,
-	SRGBColorSpace
+	Quaternion,
+	SRGBColorSpace,
+	Vector3
 } from 'three';
 
 class BIMLoader extends Loader {
@@ -59,8 +59,9 @@ class BIMLoader extends Loader {
 
 	parse( text ) {
 
+		const mesh_id_keys = {};
 		const bim_meshes = new Group();
-		const bim_edges = new Group();
+		const scale = new Vector3( 1.0, 1.0, 1.0 );
 
 		function dotbim_CreateMeshes( dotbim ) {
 
@@ -82,6 +83,43 @@ class BIMLoader extends Loader {
 
 			}
 
+			elements.forEach( element => {
+
+				if ( ! mesh_id_keys[ element[ 'mesh_id' ] ]) mesh_id_keys[ element[ 'mesh_id' ] ] = { face_colors_group: {}, color_group: {} };
+
+				if ( element[ 'face_colors' ] ) {
+
+					let mesh_id_key = mesh_id_keys[ element[ 'mesh_id' ] ][ 'face_colors_group' ][ element[ 'face_colors' ] ];
+
+					if ( ! mesh_id_key ) {
+
+						mesh_id_keys[ element[ 'mesh_id' ] ][ 'face_colors_group' ][ element[ 'face_colors' ] ] = { instance_count: 1, current_instance: 0, mesh: null };
+
+					} else {
+
+						mesh_id_key.instance_count++;
+
+					}
+
+				} else { // expected existing element[ 'color' ]
+
+					let el_color = [ element[ 'color' ].r, element[ 'color' ].g, element[ 'color' ].b, element[ 'color' ].a ];
+					let mesh_id_key = mesh_id_keys[ element[ 'mesh_id' ] ][ 'color_group' ][ el_color ];
+
+					if ( ! mesh_id_key ) {
+
+						mesh_id_keys[ element[ 'mesh_id' ] ][ 'color_group' ][ el_color ] = { instance_count: 1, current_instance: 0, mesh: null };
+
+					} else {
+
+						mesh_id_key.instance_count++;
+
+					}
+
+				}
+
+			});
+
 			const geometries = dotbim_Meshes2Geometries( meshes );
 
 			dotbim_Elemments2Meshes( elements, geometries ).forEach( bim_mesh => {
@@ -90,12 +128,9 @@ class BIMLoader extends Loader {
 
 				bim_meshes.add( bim_mesh );
 
-				if ( bim_mesh.edges ) bim_edges.add( bim_mesh.edges );
-
 			});
 
 			if ( bim_meshes.children.length > 1 ) bim_meshes.rotateX( - Math.PI / 2 );
-			if ( bim_edges.children.length > 0 ) bim_meshes.userData[ 'edges' ] = bim_edges;
 
 			return bim_meshes;
 
@@ -166,25 +201,53 @@ class BIMLoader extends Loader {
 			if ( ! vector ) vector = { x: 0, y: 0, z: 0 };
 			if ( ! rotation ) rotation = { qx: 0, qy: 0, qz: 0, qw: 1 };
 
-			const mesh = new Mesh( geometry, material );
+			let mesh;
 
-			mesh.position.set( vector.x, vector.y, vector.z );
-			mesh.quaternion.set( rotation.qx, rotation.qy, rotation.qz, rotation.qw );
+			if ( face_colors && mesh_id_keys[ mesh_id ][ 'face_colors_group' ][ face_colors ] ) {
 
-			let innerGeometry = new BufferGeometry();
-			innerGeometry.setAttribute( 'position', mesh.geometry.attributes.position );
+				let mesh_id_key = mesh_id_keys[ mesh_id ][ 'face_colors_group' ][ face_colors ];
 
-			let innerEdgesGeometry = new EdgesGeometry( innerGeometry, 30 );
-			let outline_material = new LineBasicMaterial( { color: 0xFF0000 } );
-			let edges = new LineSegments( innerEdgesGeometry, outline_material );
+				if ( mesh_id_key[ 'mesh' ] === null ) {
 
-			edges.position.set( vector.x, vector.y, vector.z );
-			edges.quaternion.set( rotation.qx, rotation.qy, rotation.qz, rotation.qw );
+					mesh_id_key[ 'mesh' ] = new InstancedMesh( geometry, material, mesh_id_key.instance_count );
 
-			mesh[ 'edges' ] = edges;
+				}
 
-			mesh.geometry.computeBoundingBox();
-			mesh.geometry.computeBoundingSphere();
+				mesh = mesh_id_key.mesh;
+
+				let pos = new Vector3( vector.x, vector.y, vector.z );
+				let rotq = new Quaternion( rotation.qx, rotation.qy, rotation.qz, rotation.qw );
+
+				let matrix = new Matrix4().compose( pos, rotq, scale );
+
+				mesh.setMatrixAt( mesh_id_key.current_instance, matrix );
+				mesh.instanceMatrix.needsUpdate = true;
+
+				mesh_id_key.current_instance++;
+
+			} else { // expected existing 'color'
+
+				let el_color = [ color.r, color.g, color.b, color.a ];
+				let mesh_id_key = mesh_id_keys[ mesh_id ][ 'color_group' ][ el_color ];
+
+				if (mesh_id_key[ 'mesh' ] === null) {
+
+					mesh_id_key[ 'mesh' ] = new InstancedMesh( geometry, material, mesh_id_key.instance_count );
+
+				}
+
+				mesh = mesh_id_key.mesh;
+
+				let pos = new Vector3( vector.x, vector.y, vector.z );
+				let rotq = new Quaternion( rotation.qx, rotation.qy, rotation.qz, rotation.qw );
+
+				let matrix = new Matrix4().compose( pos, rotq, scale );
+
+				mesh.setMatrixAt( mesh_id_key.current_instance, matrix );
+				mesh.instanceMatrix.needsUpdate = true;
+
+				mesh_id_key.current_instance++;
+			}
 
 			return mesh;
 
