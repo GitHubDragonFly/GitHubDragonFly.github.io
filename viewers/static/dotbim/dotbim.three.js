@@ -49,9 +49,6 @@ function dotbim_CreateMeshes(dotbim) {
     const bim_meshes = new THREE.Group();
 
     dotbim_Elemments2Meshes(elements, geometrys).forEach( bim_mesh => {
-        bim_mesh.geometry.computeBoundingBox();
-        bim_mesh.geometry.computeBoundingSphere();
-
         bim_mesh[ 'name' ] = 'mesh_' + bim_mesh.id;
         bim_meshes.add( bim_mesh );
     });
