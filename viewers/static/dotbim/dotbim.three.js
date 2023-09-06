@@ -148,6 +148,9 @@ function dotbim_Elemment2Mesh(element, geometrys) {
         mesh.setMatrixAt( mesh_id_key.current_instance, matrix );
         mesh.instanceMatrix.needsUpdate = true;
 
+        mesh.setColorAt( mesh_id_key.current_instance, material.color );
+        mesh.instanceColor.needsUpdate = true;
+
         mesh_id_key.current_instance++;
     }
 
@@ -171,7 +174,7 @@ function dotbim_Mesh2GeometryColor(mesh) {
         buffer_colors = createFaceColors(colors, 3, 4 * indices.length);
         geometry.setAttribute('color', new THREE.Float32BufferAttribute(buffer_colors, 4));
     }
-    
+
     geometry.computeVertexNormals();
 
     return geometry;
