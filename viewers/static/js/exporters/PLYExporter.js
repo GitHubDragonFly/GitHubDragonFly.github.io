@@ -285,9 +285,9 @@
 
 							if ( colors != null ) {
 
-								tempColor.x = colors.getX( i );
-								tempColor.y = colors.getY( i );
-								tempColor.z = colors.getZ( i );
+								tempColor.r = colors.getX( i );
+								tempColor.g = colors.getY( i );
+								tempColor.b = colors.getZ( i );
 								tempColor.convertLinearToSRGB();
 
 								output.setUint8( vOffset, Math.floor( tempColor.r * 255 ) );
@@ -460,9 +460,9 @@
 
 							if ( colors != null ) {
 
-								tempColor.x = colors.getX( i );
-								tempColor.y = colors.getY( i );
-								tempColor.z = colors.getZ( i );
+								tempColor.r = colors.getX( i );
+								tempColor.g = colors.getY( i );
+								tempColor.b = colors.getZ( i );
 								tempColor.convertLinearToSRGB();
 
 								line += ' ' + Math.floor( tempColor.r * 255 ) + ' ' + Math.floor( tempColor.g * 255 ) + ' ' + Math.floor( tempColor.b * 255 );
