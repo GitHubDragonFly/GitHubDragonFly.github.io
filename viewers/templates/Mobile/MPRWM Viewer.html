@@ -3,13 +3,12 @@
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, user-scalable=no">
-    <meta name="description" content="VTK (Visualization Toolkit) Viewer">
+    <meta name="description" content="PRWM (Packed Raw WebGL Model) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.156.0" defer></script>
-    <script src="../../static/js/VTKLoader.js" defer></script>
-    <script src="../../static/js/libs/fflate.min.js" defer></script>
+    <script src="../../static/js/PRWMLoader.js" defer></script>
     <script src="../../static/js/OrbitControls.js" defer></script>
 
     <style>
@@ -112,13 +111,13 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>VTK Viewer</title>
+    <title>PRWM Viewer</title>
   </head>
   <body onload="reset_all(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".vtk, .vtp, .dds, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" multiple />
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".prwm, .webp, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" multiple />
         <label for="back_color" title="Background Color">BG</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Flat Shading" id="btn_flat" onclick="set_flat();" disabled >F</button>
@@ -177,12 +176,12 @@
     </script>
 
     <script>
-      var manager, renderer, scene, camera, vtk_loader, mesh, render_requested;
+      var manager, prwm_loader, renderer, scene, camera, mesh, render_requested;
       var controls, mouse_down, mouse_wheel, events_initialized, count = 0;
       var ambientLight, directionalLight, bounding_box, wireframe_enabled;
-      var ww = window.innerWidth, wh = window.innerHeight, flat_shading_enabled;
-      var selected_vtk_file, selected_vtk_url_file, selected_url_file = '';
-      var url_displayed = false, url_loading = false, material;
+      var ww = window.innerWidth, wh = window.innerHeight, material;
+      var url_displayed = false, url_loading = false, flat_shading_enabled;
+      var selected_prwm_file, selected_prwm_url_file, selected_url_file = '';
 
       function set_back_color() {
         scene.background = null;
@@ -192,7 +191,6 @@
 
       function set_initial_scale() {
         // Set the initial scale of the object so it comes to view
-
         bounding_box.setFromObject( mesh );
         let size = bounding_box.getSize(new THREE.Vector3());
 
@@ -246,15 +244,17 @@
           }
         }
 
-        if (vtk_loader === undefined) vtk_loader = new THREE.VTKLoader( manager );
+        if (prwm_loader === undefined) {
+          prwm_loader = new THREE.PRWMLoader( manager );
+        }
 
-        selected_vtk_file = null;
-        selected_vtk_url_file = null;
+        selected_prwm_file = null;
+        selected_prwm_url_file = null;
         mouse_down = false;
         mouse_wheel = true;
+        render_requested = false;
         wireframe_enabled = false;
         flat_shading_enabled = false;
-        render_requested = false;
         bounding_box = new THREE.Box3();
 
         console.time( 'Loading Time' );
@@ -264,17 +264,15 @@
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
         if (url_loading === false) {
-          // Loaded file
+          // Loaded files
           var fi = document.getElementById('file_input');
 
           for (let i = 0; i < fi.files.length; i++) {
-            let fn_uc = fi.files[ i ].name.toUpperCase();
-
-            if (fn_uc.endsWith('.VTK') || fn_uc.endsWith('.VTP')) selected_vtk_file = fi.files[ i ];
+            if (fi.files[ i ].name.toUpperCase().endsWith('.PRWM')) { selected_prwm_file = fi.files[ i ]; }
           };
 
-          if (selected_vtk_file === null) {
-            handle_error( 'No valid VTK / VTP file selected!' );
+          if (selected_prwm_file === null) {
+            handle_error( 'No valid PRWM file selected!' );
             return;
           }
 
@@ -310,21 +308,21 @@
 
         // Add AmbientLight to the scene
         if (ambientLight === undefined) {
-          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.05 );
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.15 );
           ambientLight.position.set( 0, 0, 250 );
           scene.add( ambientLight );
         }
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2.5 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2 );
           directionalLight.position.set( 0, 0, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls = new THREE.OrbitControls( camera, renderer.domElement );
           //controls.enableZoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
@@ -353,25 +351,31 @@
           });
         }
 
-        // Load the vtk file
-        selected_vtk_file !== null ? loadFile() : loadURLFile();
+        // Load the prwm file
+        selected_prwm_file !== null ? loadFile() : loadURLFile();
       }
 
       function loadFile() {
-        if (selected_vtk_file !== null) {
-          vtk_loader.load( URL.createObjectURL( selected_vtk_file ), addFileInScene,
+        if (selected_prwm_file !== null) {
+          prwm_loader.load( URL.createObjectURL( selected_prwm_file ), addFileInScene,
           function( xhr ) { }, // onProgress
           function ( error ) { // onError
             handle_error( error );
-            URL.revokeObjectURL( selected_vtk_file );
+            URL.revokeObjectURL( selected_prwm_file );
           });
         }
       }
 
       function addFileInScene( object ) {
-        if (selected_vtk_file !== null) URL.revokeObjectURL( selected_vtk_file );
+        if (selected_prwm_file !== null) URL.revokeObjectURL( selected_prwm_file );
 
         let smooth = object;
+
+        let uvs = smooth.getAttribute( 'uv' );
+
+        if (uvs && uvs.array.length > 0) {
+          if (uvs.array.some( e => e.toString() === 'NaN' || e === null )) smooth.deleteAttribute( 'uv' );
+        }
 
         smooth.computeVertexNormals();
         smooth.center();
@@ -397,26 +401,23 @@
 
             for (let i = 0; i < urls.length; i++) {
               let url = urls[ i ].trim();
-              let url_uc = url.toUpperCase();
 
-              if (url_uc.endsWith('.VTK') || url_uc.endsWith('.VTP')) selected_vtk_url_file = url;
+              if (url.toUpperCase().endsWith('.PRWM')) selected_prwm_url_file = url;
             }
           } else {
             if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-              selected_vtk_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+              selected_prwm_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
             } else {
               if (selected_url_file.startsWith('https://github.com') === true) {
                 selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
               }
 
-              if (selected_url_file.toUpperCase().endsWith('.VTK') || selected_url_file.toUpperCase().endsWith('.VTP')) {
-                selected_vtk_url_file = selected_url_file;
-              }
+              if (selected_url_file.toUpperCase().endsWith('.PRWM')) selected_prwm_url_file = selected_url_file;
             }
           }
 
-          if (selected_vtk_url_file.toUpperCase().endsWith('.VTK') || selected_url_file.toUpperCase().endsWith('.VTP')) {
-            vtk_loader.load( selected_vtk_url_file, addFileInScene,
+          if (selected_prwm_url_file !== null) {
+            prwm_loader.load( selected_prwm_url_file, addFileInScene,
             function( xhr ) { }, // onProgress
             function ( error ) { handle_error( error ); }); // onError
           } else {
@@ -521,17 +522,8 @@
             if (mesh) {
               mesh.traverse( ( child ) => {
                 if (child.isMesh) {
-                  if (child.material) {
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        mtl.dispose();
-                      });
-                    } else {
-                      child.material.dispose();
-                    }
-                  }
-
-                  child.geometry.dispose();
+                  if (child.material) child.material.dispose();
+                  if (child.geometry) child.geometry.dispose();
                 }
               });
 
@@ -566,8 +558,6 @@
     <script>
       function disabled_changed() {
         $('button').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
@@ -578,8 +568,6 @@
         });
 
         $('input[type=color]').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
