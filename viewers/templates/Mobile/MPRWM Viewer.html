@@ -10,6 +10,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.156.0" defer></script>
     <script src="../../static/js/PRWMLoader.js" defer></script>
     <script src="../../static/js/OrbitControls.js" defer></script>
+    <script src="../../static/js/utils/BufferGeometryUtils.js" defer></script>
 
     <style>
       body, html {
@@ -30,7 +31,7 @@
         border-radius: 2px;
         vertical-align: middle;
         margin: 2px 2px 2px 0;
-        min-width: 22px;
+        min-width: 18px;
         height: 22px;
         padding: 1px;
       }
@@ -117,10 +118,11 @@
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".prwm, .webp, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" multiple />
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".prwm, .dib, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
         <label for="back_color" title="Background Color">BG</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Flat Shading" id="btn_flat" onclick="set_flat();" disabled >F</button>
+        <button title="Textures" id="btn_textures" onclick="set_texture();" disabled>T</button>
         <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
       </div>
       <div class="fm" id="url" style="display: none;">
@@ -179,7 +181,8 @@
       var manager, prwm_loader, renderer, scene, camera, mesh, render_requested;
       var controls, mouse_down, mouse_wheel, events_initialized, count = 0;
       var ambientLight, directionalLight, bounding_box, wireframe_enabled;
-      var ww = window.innerWidth, wh = window.innerHeight, material;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var texture_loader, material, textures, current_texture;
       var url_displayed = false, url_loading = false, flat_shading_enabled;
       var selected_prwm_file, selected_prwm_url_file, selected_url_file = '';
 
@@ -212,6 +215,13 @@
       function init() {
         if (scene) {
           if (mesh) {
+            if (textures.length > 0) {
+              current_texture = textures.length - 1;
+              set_texture();
+            }
+
+            if (wireframe_enabled === true) show_wireframe();
+
             mesh.traverse( ( child ) => {
               if (child.isMesh) {
                 if (child.material) child.material.dispose();
@@ -220,6 +230,7 @@
             });
 
             material.dispose();
+            material = undefined;
 
             scene.remove( mesh );
           }
@@ -248,14 +259,20 @@
           prwm_loader = new THREE.PRWMLoader( manager );
         }
 
+        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
+
         selected_prwm_file = null;
         selected_prwm_url_file = null;
         mouse_down = false;
         mouse_wheel = true;
+        textures = [];
+        current_texture = -1;
         render_requested = false;
         wireframe_enabled = false;
         flat_shading_enabled = false;
         bounding_box = new THREE.Box3();
+
+        document.getElementById('btn_textures').disabled = true;
 
         console.time( 'Loading Time' );
         document.body.style.backgroundImage = 'none';
@@ -268,13 +285,18 @@
           var fi = document.getElementById('file_input');
 
           for (let i = 0; i < fi.files.length; i++) {
-            if (fi.files[ i ].name.toUpperCase().endsWith('.PRWM')) { selected_prwm_file = fi.files[ i ]; }
+            let fn_uc = fi.files[ i ].name.toUpperCase();
+
+            if (fn_uc.endsWith('.PRWM')) { selected_prwm_file = fi.files[ i ]; }
+            else if (fn_uc.endsWith('.DIB') || fi.files[ i ].type.startsWith('image/')) textures.push( fi.files[ i ] );
           };
 
           if (selected_prwm_file === null) {
             handle_error( 'No valid PRWM file selected!' );
             return;
           }
+
+          if (textures.length > 0) document.getElementById('btn_textures').disabled = false;
 
           selected_url_file = '';
         } else {
@@ -377,6 +399,8 @@
           if (uvs.array.some( e => e.toString() === 'NaN' || e === null )) smooth.deleteAttribute( 'uv' );
         }
 
+        smooth.deleteAttribute( 'normal' );
+        smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
         smooth.computeVertexNormals();
         smooth.center();
 
@@ -397,12 +421,19 @@
       function loadURLFile() {
         if (selected_url_file !== '') {
           if (selected_url_file.indexOf( ',' ) > -1) {
+            let image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF', '.SVG', '.WEBP', 'DIB' ];
             let urls = selected_url_file.split( ',' );
 
             for (let i = 0; i < urls.length; i++) {
               let url = urls[ i ].trim();
+              let url_uc = url.toUpperCase();
 
-              if (url.toUpperCase().endsWith('.PRWM')) selected_prwm_url_file = url;
+              if (image_extensions.some( ext => url_uc.endsWith( ext ) )) {
+                texture_loader.load( url, function( texture ) { textures.push( texture ); });
+                document.getElementById('btn_textures').disabled = false;
+              } else if (url_uc.endsWith('.PRWM')) {
+                selected_prwm_url_file = url;
+              }
             }
           } else {
             if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
@@ -435,6 +466,48 @@
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
+      }
+
+      async function set_texture() {
+        if (mesh) {
+          if (current_texture === textures.length - 1) {
+            document.getElementById('btn_textures').style.backgroundColor = 'transparent';
+            current_texture = -1;
+          } else {
+            current_texture += 1;
+            document.getElementById('btn_textures').style.backgroundColor = 'lightgreen';
+          }
+
+          mesh.traverse( async ( child ) => {
+            if (child.isMesh) {
+              if (current_texture === -1) {
+                // Remove texture
+                if (child.material.map) child.material.map.dispose();
+                child.material.map = null;
+                child.material.needsUpdate = true;
+              } else {
+                if (selected_prwm_url_file) {
+                  // Apply texture
+                  child.material.map = textures[ current_texture ];
+
+                  child.material.needsUpdate = true;
+                } else {
+                  texture_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
+                    URL.revokeObjectURL( textures[ current_texture ] );
+
+                    // Apply texture
+                    child.material.map = texture;
+                    child.material.needsUpdate = true;
+
+                    texture.dispose();
+                  });
+                }
+              }
+
+              mouse_wheel = true;
+            }
+          });
+        }
       }
 
       function set_flat() {
@@ -510,6 +583,7 @@
       function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
         document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+        document.getElementById('btn_textures').style.backgroundColor = 'transparent';
         document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
 
         // Reset the view
@@ -520,6 +594,12 @@
           // Page (re)loading
           if (scene) {
             if (mesh) {
+              if (textures.length > 0) {
+                current_texture = textures.length - 1;
+                set_texture();
+                textures.length = 0;
+              }
+
               mesh.traverse( ( child ) => {
                 if (child.isMesh) {
                   if (child.material) child.material.dispose();
@@ -528,6 +608,7 @@
               });
 
               material.dispose();
+              material = undefined;
             }
 
             while (scene.children.length > 0) {
@@ -540,6 +621,7 @@
           document.getElementById('file_input').value = '';
           document.getElementById('div_error').style.display = 'none';
           document.getElementById('url_entry').value = '';
+          document.getElementById('btn_textures').disabled = true;
           selected_url_file = '';
           enable_disable( true );
         }
