@@ -1,5 +1,7 @@
 ( function () {
 
+	// As for the 'decompress' function - the app implementing this exporter should import it from TextureUtils.js
+
 	class OBJExporter {
 
 		parse( object, filename = 'model' ) {
@@ -461,13 +463,16 @@
 
 						names.push( name );
 
-						let transparency = ( mat.opacity < 1 || ( mat.transparent && mat.transparent === true ) ) ? ( 1 - mat.opacity ) : '0.0000';
+						let transparency = ( mat.opacity < 1 ) ? ( 1 - mat.opacity ) : '0.0000';
 
 						mtlOutput += '\n' + 'newmtl ' + name + '\n';
 
 						mtlOutput += 'Tr ' + transparency + '\n';
 						mtlOutput += 'Tf 1.0000 1.0000 1.0000\n'; // this property is not used by the three.js MTL Loader
 						mtlOutput += 'illum 2\n'; // this property is not used by the three.js MTL Loader
+						if ( mat.aoMapIntensity ) mtlOutput += 'Ka ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + '\n';
+						if ( mat.color ) mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + '\n';
+						if ( mat.emissive ) mtlOutput += 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + '\n';
 						if ( mat.specular ) mtlOutput += 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + '\n';
 						if ( mat.shininess ) mtlOutput += 'Ns ' + mat.shininess + '\n';
 						if ( mat.refractionRatio ) mtlOutput += 'Ni ' + mat.refractionRatio + '\n';
@@ -483,6 +488,7 @@
 						if ( mat.ior ) mtlOutput += 'Pior ' + mat.ior + '\n';
 						if ( mat.anisotropy ) mtlOutput += 'Pa ' + mat.anisotropy + '\n';
 						if ( mat.anisotropyRotation ) mtlOutput += 'Par ' + mat.anisotropyRotation + '\n';
+						if ( mat.anisotropyStrength ) mtlOutput += 'Pas ' + mat.anisotropyStrength + '\n';
 						if ( mat.iridescence ) mtlOutput += 'Pir ' + mat.iridescence + '\n';
 						if ( mat.iridescenceIOR ) mtlOutput += 'Pirior ' + mat.iridescenceIOR + '\n';
 						if ( mat.iridescenceThicknessRange ) mtlOutput += 'Pirtr ' + mat.iridescenceThicknessRange[ 0 ] + ' ' + mat.iridescenceThicknessRange[ 1 ] + '\n';
@@ -493,13 +499,18 @@
 						if ( mat.specularColor ) mtlOutput += 'Psc ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
 						if ( mat.thickness ) mtlOutput += 'Pth ' + mat.thickness + '\n';
 						if ( mat.transmission ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
-						if ( mat.aoMapIntensity ) mtlOutput += 'Ka ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + ' ' + mat.aoMapIntensity + '\n';
-						if ( mat.color ) mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + '\n';
-						if ( mat.emissive ) mtlOutput += 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + '\n';
 
 						if ( mat.map && mat.map.type === 1009 && mat.map.image ) {
 
-							if ( mat.map.image.src || mat.map.image.data ) {
+							let map_to_process = mat.map;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.map, 1024 );
+
+							}
+
+							if ( mat.map.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.map.uuid ) === false ) {
 
@@ -509,7 +520,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.map.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Kd ' + name + '.png' + '\n';
@@ -526,7 +537,15 @@
 
 						if ( mat.specularMap && mat.specularMap.type === 1009 && mat.specularMap.image ) {
 
-							if ( mat.specularMap.image.src || mat.specularMap.image.data ) {
+							let map_to_process = mat.specularMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.specularMap, 1024 );
+
+							}
+
+							if ( mat.specularMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.specularMap.uuid ) === false ) {
 
@@ -538,7 +557,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.specularMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Ks ' + name + '.png' + '\n';
@@ -555,7 +574,15 @@
 
 						if ( mat.emissiveMap && mat.emissiveMap.type === 1009 && mat.emissiveMap.image ) {
 
-							if ( mat.emissiveMap.image.src || mat.emissiveMap.image.data ) {
+							let map_to_process = mat.emissiveMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.emissiveMap, 1024 );
+
+							}
+
+							if ( mat.emissiveMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.emissiveMap.uuid ) === false ) {
 
@@ -567,7 +594,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.emissiveMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Ke ' + name + '.png' + '\n';
@@ -584,7 +611,15 @@
 
 						if ( mat.bumpMap && mat.bumpMap.type === 1009 && mat.bumpMap.image ) {
 
-							if ( mat.bumpMap.image.src || mat.bumpMap.image.data ) {
+							let map_to_process = mat.bumpMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.bumpMap, 1024 );
+
+							}
+
+							if ( mat.bumpMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.bumpMap.uuid ) === false ) {
 
@@ -596,7 +631,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.bumpMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									if ( mat.bumpScale === 1 ) {
@@ -629,7 +664,15 @@
 
 						if ( mat.lightMap && mat.lightMap.type === 1009 && mat.lightMap.image ) {
 
-							if ( mat.lightMap.image.src || mat.lightMap.image.data ) {
+							let map_to_process = mat.lightMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.lightMap, 1024 );
+
+							}
+
+							if ( mat.lightMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.lightMap.uuid ) === false ) {
 
@@ -641,7 +684,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.lightMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Pl ' + name + '.png' + '\n';
@@ -658,7 +701,15 @@
 
 						if ( mat.anisotropyMap && mat.anisotropyMap.type === 1009 && mat.anisotropyMap.image ) {
 
-							if ( mat.anisotropyMap.image.src || mat.anisotropyMap.image.data ) {
+							let map_to_process = mat.anisotropyMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.anisotropyMap, 1024 );
+
+							}
+
+							if ( mat.anisotropyMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.anisotropyMap.uuid ) === false ) {
 
@@ -670,7 +721,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.anisotropyMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Pa ' + name + '.png' + '\n';
@@ -687,7 +738,15 @@
 
 						if ( mat.metalnessMap && mat.metalnessMap.type === 1009 && mat.metalnessMap.image ) {
 
-							if ( mat.metalnessMap.image.src || mat.metalnessMap.image.data ) {
+							let map_to_process = mat.metalnessMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.metalnessMap, 1024 );
+
+							}
+
+							if ( mat.metalnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.metalnessMap.uuid ) === false ) {
 
@@ -699,7 +758,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.metalnessMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Pm ' + name + '.png' + '\n';
@@ -716,7 +775,15 @@
 
 						if ( mat.roughnessMap && mat.roughnessMap.type === 1009 && mat.roughnessMap.image ) {
 
-							if ( mat.roughnessMap.image.src || mat.roughnessMap.image.data ) {
+							let map_to_process = mat.roughnessMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.roughnessMap, 1024 );
+
+							}
+
+							if ( mat.roughnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.roughnessMap.uuid ) === false ) {
 
@@ -728,7 +795,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.roughnessMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Pr ' + name + '.png' + '\n';
@@ -745,7 +812,15 @@
 
 						if ( mat.displacementMap && mat.displacementMap.type === 1009 && mat.displacementMap.image ) {
 
-							if ( mat.displacementMap.image.src || mat.displacementMap.image.data ) {
+							let map_to_process = mat.displacementMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.displacementMap, 1024 );
+
+							}
+
+							if ( mat.displacementMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.displacementMap.uuid ) === false ) {
 
@@ -757,7 +832,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.displacementMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_disp ' + name + '.png' + '\n';
@@ -774,7 +849,15 @@
 
 						if ( mat.normalMap && mat.normalMap.type === 1009 && mat.normalMap.image ) {
 
-							if ( mat.normalMap.image.src || mat.normalMap.image.data ) {
+							let map_to_process = mat.normalMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.normalMap, 1024 );
+
+							}
+
+							if ( mat.normalMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.normalMap.uuid ) === false ) {
 
@@ -786,7 +869,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.normalMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'norm ' + name + '.png' + '\n';
@@ -803,7 +886,15 @@
 
 						if ( mat.alphaMap && mat.alphaMap.type === 1009 && mat.alphaMap.image ) {
 
-							if ( mat.alphaMap.image.src || mat.alphaMap.image.data ) {
+							let map_to_process = mat.alphaMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.alphaMap, 1024 );
+
+							}
+
+							if ( mat.alphaMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.alphaMap.uuid ) === false ) {
 
@@ -815,7 +906,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.alphaMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_d ' + name + '.png' + '\n';
@@ -832,7 +923,15 @@
 
 						if ( mat.aoMap && mat.aoMap.type === 1009 && mat.aoMap.image ) {
 
-							if ( mat.aoMap.image.src || mat.aoMap.image.data ) {
+							let map_to_process = mat.aoMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.aoMap, 1024 );
+
+							}
+
+							if ( mat.aoMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.aoMap.uuid ) === false ) {
 
@@ -844,7 +943,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.aoMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Ka ' + name + '.png' + '\n';
@@ -861,7 +960,15 @@
 
 						if ( mat.clearcoatMap && mat.clearcoatMap.type === 1009 && mat.clearcoatMap.image ) {
 
-							if ( mat.clearcoatMap.image.src || mat.clearcoatMap.image.data ) {
+							let map_to_process = mat.clearcoatMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.clearcoatMap, 1024 );
+
+							}
+
+							if ( mat.clearcoatMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.clearcoatMap.uuid ) === false ) {
 
@@ -873,7 +980,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.clearcoatMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Pccm ' + name + '.png' + '\n';
@@ -890,7 +997,15 @@
 
 						if ( mat.clearcoatNormalMap && mat.clearcoatNormalMap.type === 1009 && mat.clearcoatNormalMap.image ) {
 
-							if ( mat.clearcoatNormalMap.image.src || mat.clearcoatNormalMap.image.data ) {
+							let map_to_process = mat.clearcoatNormalMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.clearcoatNormalMap, 1024 );
+
+							}
+
+							if ( mat.clearcoatNormalMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.clearcoatNormalMap.uuid ) === false ) {
 
@@ -902,7 +1017,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.clearcoatNormalMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Pccnm ' + name + '.png' + '\n';
@@ -919,7 +1034,15 @@
 
 						if ( mat.clearcoatRoughnessMap && mat.clearcoatRoughnessMap.type === 1009 && mat.clearcoatRoughnessMap.image ) {
 
-							if ( mat.clearcoatRoughnessMap.image.src || mat.clearcoatRoughnessMap.image.data ) {
+							let map_to_process = mat.clearcoatRoughnessMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.clearcoatRoughnessMap, 1024 );
+
+							}
+
+							if ( mat.clearcoatRoughnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.clearcoatRoughnessMap.uuid ) === false ) {
 
@@ -931,7 +1054,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.clearcoatRoughnessMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Pccrm ' + name + '.png' + '\n';
@@ -948,7 +1071,15 @@
 
 						if ( mat.iridescenceMap && mat.iridescenceMap.type === 1009 && mat.iridescenceMap.image ) {
 
-							if ( mat.iridescenceMap.image.src || mat.iridescenceMap.image.data ) {
+							let map_to_process = mat.iridescenceMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.iridescenceMap, 1024 );
+
+							}
+
+							if ( mat.iridescenceMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.iridescenceMap.uuid ) === false ) {
 
@@ -960,7 +1091,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.iridescenceMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Pirm ' + name + '.png' + '\n';
@@ -977,7 +1108,15 @@
 
 						if ( mat.iridescenceThicknessMap && mat.iridescenceThicknessMap.type === 1009 && mat.iridescenceThicknessMap.image ) {
 
-							if ( mat.iridescenceThicknessMap.image.src || mat.iridescenceThicknessMap.image.data ) {
+							let map_to_process = mat.iridescenceThicknessMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.iridescenceThicknessMap, 1024 );
+
+							}
+
+							if ( mat.iridescenceThicknessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.iridescenceThicknessMap.uuid ) === false ) {
 
@@ -989,7 +1128,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.iridescenceThicknessMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Pirthm ' + name + '.png' + '\n';
@@ -1006,7 +1145,15 @@
 
 						if ( mat.sheenColorMap && mat.sheenColorMap.type === 1009 && mat.sheenColorMap.image ) {
 
-							if ( mat.sheenColorMap.image.src || mat.sheenColorMap.image.data ) {
+							let map_to_process = mat.sheenColorMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.sheenColorMap, 1024 );
+
+							}
+
+							if ( mat.sheenColorMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.sheenColorMap.uuid ) === false ) {
 
@@ -1018,7 +1165,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.sheenColorMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Pshcm ' + name + '.png' + '\n';
@@ -1035,7 +1182,15 @@
 
 						if ( mat.sheenRoughnessMap && mat.sheenRoughnessMap.type === 1009 && mat.sheenRoughnessMap.image ) {
 
-							if ( mat.sheenRoughnessMap.image.src || mat.sheenRoughnessMap.image.data ) {
+							let map_to_process = mat.sheenRoughnessMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.sheenRoughnessMap, 1024 );
+
+							}
+
+							if ( mat.sheenRoughnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.sheenRoughnessMap.uuid ) === false ) {
 
@@ -1047,7 +1202,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.sheenRoughnessMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Pshrm ' + name + '.png' + '\n';
@@ -1064,7 +1219,15 @@
 
 						if ( mat.specularIntensityMap && mat.specularIntensityMap.type === 1009 && mat.specularIntensityMap.image ) {
 
-							if ( mat.specularIntensityMap.image.src || mat.specularIntensityMap.image.data ) {
+							let map_to_process = mat.specularIntensityMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.specularIntensityMap, 1024 );
+
+							}
+
+							if ( mat.specularIntensityMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.specularIntensityMap.uuid ) === false ) {
 
@@ -1076,7 +1239,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.specularIntensityMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Psim ' + name + '.png' + '\n';
@@ -1093,7 +1256,15 @@
 
 						if ( mat.specularColorMap && mat.specularColorMap.type === 1009 && mat.specularColorMap.image ) {
 
-							if ( mat.specularColorMap.image.src || mat.specularColorMap.image.data ) {
+							let map_to_process = mat.specularColorMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.specularColorMap, 1024 );
+
+							}
+
+							if ( mat.specularColorMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.specularColorMap.uuid ) === false ) {
 
@@ -1105,7 +1276,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.specularColorMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Pscm ' + name + '.png' + '\n';
@@ -1122,7 +1293,15 @@
 
 						if ( mat.thicknessMap && mat.thicknessMap.type === 1009 && mat.thicknessMap.image ) {
 
-							if ( mat.thicknessMap.image.src || mat.thicknessMap.image.data ) {
+							let map_to_process = mat.thicknessMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.thicknessMap, 1024 );
+
+							}
+
+							if ( mat.thicknessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.thicknessMap.uuid ) === false ) {
 
@@ -1134,7 +1313,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.thicknessMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Pthm ' + name + '.png' + '\n';
@@ -1151,7 +1330,15 @@
 
 						if ( mat.transmissionMap && mat.transmissionMap.type === 1009 && mat.transmissionMap.image ) {
 
-							if ( mat.transmissionMap.image.src || mat.transmissionMap.image.data ) {
+							let map_to_process = mat.transmissionMap;
+
+							if ( map_to_process.isCompressedTexture === true ) {
+
+								map_to_process = decompress( mat.transmissionMap, 1024 );
+
+							}
+
+							if ( mat.transmissionMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
 								if ( map_uuids.includes( mat.transmissionMap.uuid ) === false ) {
 
@@ -1163,7 +1350,7 @@
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( mat.transmissionMap.image, ext )
+										data: imageToData( map_to_process.image, ext )
 									});
 
 									mtlOutput += 'map_Ptrm ' + name + '.png' + '\n';
