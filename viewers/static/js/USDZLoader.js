@@ -9,92 +9,87 @@
 			const lines = text.split( '\n' );
 			const length = lines.length;
 
-			let current = 0;
+			let group, meta;
 			let string = null;
 			let target = data;
+			let lhs, rhs, assignment;
 
 			const stack = [ data ];
 
-			// debugger;
+			function parse_lines() {
 
-			function parseNextLine() {
+				for ( let i = 0; i < length; i++ ) {
 
-				const line = lines[ current ];
+					let line = lines[ i ];
 
-				// console.log( line );
+					if ( line.trim() === '' ) continue;
 
-				if ( line.includes( '=' ) ) {
+					if ( line.includes( '=' ) ) {
 
-					const assignment = line.split( '=' );
+						assignment = line.split( '=' );
 
-					const lhs = assignment[ 0 ].trim();
-					const rhs = assignment[ 1 ].trim();
+						lhs = assignment[ 0 ].trim();
+						rhs = assignment[ 1 ].trim();
 
-					if ( rhs.endsWith( '{' ) ) {
+						if ( rhs.endsWith( '{' ) ) {
 
-						const group = {};
+							group = {};
+							stack.push( group );
+
+							target[ lhs ] = group;
+							target = group;
+
+						} else {
+
+							target[ lhs ] = rhs;
+
+						}
+
+					} else if ( line.endsWith( '{' ) ) {
+
+						group = target[ string ] || {};
 						stack.push( group );
 
-						target[ lhs ] = group;
+						target[ string ] = group;
 						target = group;
+
+					} else if ( line.endsWith( '}' ) ) {
+
+						stack.pop();
+
+						if ( stack.length === 0 ) return;
+
+						target = stack[ stack.length - 1 ];
+
+					} else if ( line.endsWith( '(' ) ) {
+
+						meta = {};
+						stack.push( meta );
+
+						string = line.split( '(' )[ 0 ].trim() || string;
+
+						target[ string ] = meta;
+						target = meta;
+
+					} else if ( line.endsWith( ')' ) ) {
+
+						stack.pop();
+
+						if ( stack.length === 0 ) return;
+
+						target = stack[ stack.length - 1 ];
 
 					} else {
 
-						target[ lhs ] = rhs;
+						string = line.trim();
 
 					}
-
-				} else if ( line.endsWith( '{' ) ) {
-
-					const group = target[ string ] || {};
-					stack.push( group );
-
-					target[ string ] = group;
-					target = group;
-
-				} else if ( line.endsWith( '}' ) ) {
-
-					stack.pop();
-
-					if ( stack.length === 0 ) return;
-
-					target = stack[ stack.length - 1 ];
-
-				} else if ( line.endsWith( '(' ) ) {
-
-					const meta = {};
-					stack.push( meta );
-
-					string = line.split( '(' )[ 0 ].trim() || string;
-
-					target[ string ] = meta;
-					target = meta;
-
-				} else if ( line.endsWith( ')' ) ) {
-
-					stack.pop();
-
-					if ( stack.length === 0 ) return;
-
-					target = stack[ stack.length - 1 ];
-
-				} else {
-
-					string = line.trim();
-
-				}
-
-				current ++;
-
-				if ( current < length ) {
-
-					parseNextLine();
 
 				}
 
 			}
 
-			parseNextLine();
+			parse_lines();
 
 			return data;
 
@@ -164,7 +159,7 @@
 
 					}
 
-					if ( filename.endsWith( 'usd' ) || filename.endsWith( 'usda' ) ) {
+					if ( filename.endsWith( 'usd' ) ) {
 
 						const text = fflate.strFromU8( zip[ filename ] );
 						data[ filename ] = parser.parse( text );
