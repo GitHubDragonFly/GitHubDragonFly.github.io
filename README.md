@@ -104,7 +104,7 @@ Number Type Converter
 - Export formats, where applicable:
   - 3DM, DAE, APNG, FBX, M3D, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, PRWM, USDZ
     - Try not to change file names when saving files during initial export
-    - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, USDZ exporters are [three.js](https://github.com/mrdoob/three.js)
+    - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, USDZ exporters are [three.js](https://github.com/mrdoob/three.js) based
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
     - ASSJSON / FBX / M3D / X3D / X exports are powered by [ASSIMPJS](https://github.com/kovacsv/assimpjs) / [ASSIMP](https://github.com/assimp/assimp)
@@ -126,6 +126,10 @@ Number Type Converter
       - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
       - currently set for full color PNG but can be changed to Lossy PNG to speed up processing (see the comment in the code)
     - JSON export is actually three.js created format
+    - USDZ exporter tips:
+      - Handles GLTF / GLB formats the best due to their use of the THREE.MeshStandardMaterial
+      - Export your 3D models to GLB format first, including GLB files that might be using compressed textures, and then export it to USDZ format
+      - Exported USDZ files should work in the Apple's Quick Look (as tested on an iPad)
     - OBJ exporter might currently, along with the exported MTL file, export multiple copies of the same texture but under different names:
       - Select 1 copy of the texture and rename it if you wish, then update the corresponding MTL file entries to point to that texture
       - Delete all other copies of that same texture
@@ -221,7 +225,8 @@ PLY+STL Viewer
 - URL text box also allows entering a single base64 string of the image data, see the `URLS4MODELS.md` file for an example
 - For certain formats and their manipulation an easy alternative to this viewer would be `https://ezgif.com`
 - Most of these files can easily be viewed with some operating system applications or by the browsers themselves (like animated GIF / PNG / WEBP or MP4 / WEBM / OGV videos):
-  - all it takes in Windows, for example, is to right-click the file itself then choose `Open With` and select `Firefox` browser 
+  - all it takes in Windows, for example, is to right-click the file itself then choose `Open With` and select `Firefox` browser
+  - Windows users could also consider getting the [QuickLook](https://apps.microsoft.com/store/detail/quicklook/9NV4BS3L1H4S) app
 
 ![Texture Viewer](images/Texture%20Viewer.png?raw=true)
 
