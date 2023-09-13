@@ -308,7 +308,7 @@
 				if ( 'int[] faceVertexIndices' in data ) {
 
 					const indices = JSON.parse( data[ 'int[] faceVertexIndices' ] );
-					geometry.setIndex( new THREE.BufferAttribute( new Uint32Array( indices ), 1 ) );
+					geometry.setIndex( indices );
 
 				}
 
