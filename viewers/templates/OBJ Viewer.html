@@ -6,8 +6,10 @@
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.156.0" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0" defer></script>
+    <script src="../static/js/libs/fflate.min.js" defer></script>
     <script src="../static/assimpjs/assimpjs.js" defer></script>
+    <script src="../static/js/GLTFLoader.js" defer></script>
     <script src="../static/js/MTLLoader.js" defer></script>
     <script src="../static/js/OBJLoader.js" defer></script>
     <script src="../static/js/TGALoader.js" defer></script>
@@ -23,6 +25,7 @@
     <script src="../static/js/exporters/STLExporter.js" defer></script>
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
     <script src="../static/js/exporters/GLTFExporter.js" defer></script>
+    <script src="../static/js/exporters/USDZExporter.js" defer></script>
     <script src="../static/js/exporters/ColladaExporter.js" defer></script>
     <script src="../static/js/exporters/obj2prwm/obj2prwm.min.js" defer></script>
     <script src="../static/js/utils/BufferGeometryUtils.js" defer></script>
@@ -286,6 +289,7 @@
           <option title="PLY - Polygon File Format binary" value="ply" onclick="export_ply( true );">PLY_b</option>
           <option title="JSON - Three.js Format" value="json" onclick="export_json();">JSON</option>
           <option title="PRWM - Packed Raw WebGL Model Format" value="prwm" onclick="export_prwm();">PRWM</option>
+          <option title="USDZ - Universal Scene Description Format" value="usdz" onclick="export_usdz();">USDZ</option>
           <option title="APNG - Animated PNG" value="apng" onclick="export_animated_png();">APNG</option>
         </select>
         <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; width: 40px;" disabled>RST</button>
@@ -321,14 +325,14 @@
         </button>
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 2px; border-radius: 2px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
-            <input type="range" orient="vertical" id="directional_light_intensity" min="0.05" max="4" step="0.05" value="2.5" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
+            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="2" step="0.05" value="1" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
             <span id="dli_val">1</span>
           </div>
         </button>
         <button title="Ambient Light Intensity" id="btn_dc_ali" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 2px; border-radius: 2px;" onclick="show_hide_dropdown_ali();">ALi
           <div id="dc_ali" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_ali();">
-            <input type="range" orient="vertical" id="ambient_light_intensity" min="0.05" max="2" step="0.05" value="1.0" onkeydown="return_false();" oninput="set_ambient_light_intensity();" disabled />
-            <span id="ali_val">0.05</span>
+            <input type="range" orient="vertical" id="ambient_light_intensity" min="0" max="2" step="0.05" value="0.25" onkeydown="return_false();" oninput="set_ambient_light_intensity();" disabled />
+            <span id="ali_val">0.25</span>
           </div>
         </button>
         <label for="ambient_light_color" title="Ambient Light Color">AL</label>
@@ -882,6 +886,42 @@
 
             await process_zip( '_PRWM' );
           };
+        }
+      }
+
+      async function export_usdz() {
+        if (Obj) {
+          if (object_is_points === true) {
+            alert( 'USDZExporter: points are not supported!' );
+            return;
+          }
+
+          start_export();
+
+          await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+          // export to GLB format first
+          let gltf_exporter = new THREE.GLTFExporter( manager );
+
+          let options = { binary: true, maxTextureSize: 4096 || Infinity };
+
+          new THREE.GLTFExporter().parse( Obj, async json => {
+            let blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+
+            // load the exported GLB
+            new THREE.GLTFLoader().load( URL.createObjectURL( blob ), async function( gltf ) {
+
+              // export to USDZ format
+              let usdz_exporter = new THREE.USDZExporter();
+
+              let arraybuffer = await usdz_exporter.parse( gltf.scene );
+              let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
+
+              zip.file( filename + '.usdz', blob );
+
+              await process_zip( '_USDZ' );
+            }, function( xhr ) {}, function( error ) { console.log( error ); });
+          }, function( error ) { console.log( error ); }, options);
         }
       }
 
@@ -1586,10 +1626,10 @@
 
         if ( size.y > 1 ) {
           Obj.scale.multiplyScalar( 50 / size.y );
-        } else if ( size.y < 0.02 ) {
-          Obj.scale.multiplyScalar( 1 / size.y );
+        } else if ( size.y > 0.02 ) {
+          Obj.scale.multiplyScalar( 25 / size.y );
         } else {
-          Obj.scale.multiplyScalar( 10 / size.y )
+          Obj.scale.multiplyScalar( 1 / size.y );
         }
 
         bounding_box.setFromObject( Obj );
@@ -1827,7 +1867,6 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
-          renderer.outputColorSpace = THREE.LinearSRGBColorSpace; // THREE.SRGBColorSpace
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1853,7 +1892,7 @@
 
         // Add AmbientLight to the scene
         if (ambientLight === undefined) {
-          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 1.0 );
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.25 );
           ambientLight.position.set( 0, 0, 250 );
           scene.add( ambientLight );
         }
@@ -1867,7 +1906,7 @@
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2.5 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 1 );
           directionalLight.position.set( 0, 0, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
@@ -2051,7 +2090,11 @@
                     // Default to double side
                     child.material.side = THREE.DoubleSide;
 
-                    if (child.isPoints) child.material.size = 0.01;
+                    if (child.isPoints) {
+                      child.material.size = 0.1;
+                      child.sizeAttenuation = true;
+                      child.sortPoints = true;
+                    }
                   }
                 }
 
@@ -2179,7 +2222,11 @@
                   // Default to double side
                   child.material.side = THREE.DoubleSide;
 
-                  if (child.isPoints) child.material.size = 0.01;
+                  if (child.isPoints) {
+                    child.material.size = 0.1;
+                    child.sizeAttenuation = true;
+                    child.sortPoints = true;
+                  }
                 }
               }
 
@@ -2455,7 +2502,11 @@
                           // Default to double side
                           child.material.side = THREE.DoubleSide;
 
-                          if (child.isPoints) child.material.size = 0.01;
+                          if (child.isPoints) {
+                            child.material.size = 0.1;
+                            child.sizeAttenuation = true;
+                            child.sortPoints = true;
+                          }
                         }
                       }
 
@@ -2573,7 +2624,11 @@
                         // Default to double side
                         child.material.side = THREE.DoubleSide;
 
-                        if (child.isPoints) child.material.size = 0.01;
+                        if (child.isPoints) {
+                          child.material.size = 0.1;
+                          child.sizeAttenuation = true;
+                          child.sortPoints = true;
+                        }
                       }
                     }
 
@@ -2680,7 +2735,11 @@
                       // Default to double side
                       child.material.side = THREE.DoubleSide;
 
-                      if (child.isPoints) child.material.size = 0.01;
+                      if (child.isPoints) {
+                        child.material.size = 0.1;
+                        child.sizeAttenuation = true;
+                        child.sortPoints = true;
+                      }
                     }
                   }
 
@@ -3289,8 +3348,8 @@
 
         // Reset all range values
         document.getElementById('opacity_val').innerText = 1;
-        document.getElementById('ali_val').innerText = 1.0;
-        document.getElementById('dli_val').innerText = 2.5;
+        document.getElementById('ali_val').innerText = 0.25;
+        document.getElementById('dli_val').innerText = 1;
         document.getElementById('x_val').innerText = 0;
         document.getElementById('y_val').innerText = 0;
         document.getElementById('z_val').innerText = 0;
@@ -3305,8 +3364,8 @@
         document.getElementById('ambient_light_color').value = '#FFFFFF';
         document.getElementById('hemisphere_light_color').value = '#000000';
         document.getElementById('directional_light_color').value = '#FFFFFF';
-        document.getElementById('directional_light_intensity').value = 2.5;
-        document.getElementById('ambient_light_intensity').value = 1.0;
+        document.getElementById('directional_light_intensity').value = 1;
+        document.getElementById('ambient_light_intensity').value = 0.25;
 
         // Reset the radio inputs
         document.getElementById('rotate').checked = true;
