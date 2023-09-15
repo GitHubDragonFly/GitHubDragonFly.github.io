@@ -6,7 +6,7 @@
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.156.0" defer></script>
     <script src="../static/js/libs/fflate.min.js" defer></script>
     <script src="../static/assimpjs/assimpjs.js" defer></script>
     <script src="../static/js/GLTFLoader.js" defer></script>
@@ -32,6 +32,7 @@
     <script src="../static/three-gif-loader/lib/gif-texture.js" defer></script>
     <script src="../static/three-gif-loader/lib/gif-loader.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/rhino3dm.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/loaders/RGBELoader.js" defer></script>
 
     <style>
       body, html {
@@ -215,6 +216,7 @@
 
       .fm { color: navy; width: calc(100% - 86px); border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
       .fm_gizmo { width: 63px; height: 63px; padding: 4px; margin: 2px; }
+      #gui_position { position: absolute; display: none; min-width: 200px; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; min-height: 22px; margin-left: 2px; }
 
       .fixed-menu {
         background-color: whitesmoke;
@@ -331,8 +333,8 @@
         </button>
         <button title="Ambient Light Intensity" id="btn_dc_ali" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 2px; border-radius: 2px;" onclick="show_hide_dropdown_ali();">ALi
           <div id="dc_ali" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_ali();">
-            <input type="range" orient="vertical" id="ambient_light_intensity" min="0" max="2" step="0.05" value="0.25" onkeydown="return_false();" oninput="set_ambient_light_intensity();" disabled />
-            <span id="ali_val">0.25</span>
+            <input type="range" orient="vertical" id="ambient_light_intensity" min="0.05" max="2" step="0.05" value="0.05" onkeydown="return_false();" oninput="set_ambient_light_intensity();" disabled />
+            <span id="ali_val">0.05</span>
           </div>
         </button>
         <label for="ambient_light_color" title="Ambient Light Color">AL</label>
@@ -348,7 +350,6 @@
         <label for="edge_color" title="Edge Color">EC</label>
         <input type="color" title="Edge Color" id="edge_color" onchange="set_edge_color();" disabled />
         <button title="Edges" id="btn_edges" onclick="show_edges();" disabled>E</button>
-        <button title="Reflectivity" id="btn_reflective" onclick="set_reflectivity();" style="margin-left: 2px;" disabled>R</button>
         <button title="Flat Shading" id="btn_flat" onclick="set_flat();" disabled>F</button>
         <button title="Lines" id="btn_lines" onclick="update_line_visibility();" disabled>L</button>
         <button title="Xtra Smooth" id="btn_xtra_smooth" onclick="set_xtra_smooth();" style="min-width: 28px;" disabled>XS</button>
@@ -360,6 +361,7 @@
         <button title="Polar Grid" id="btn_polar_grid" onclick="show_polar_grid();" style="min-width: 24px;" disabled><p class="polar"></p></button>
       </div>
     </div>
+    <div id="gui_position"></div>
     <div id="gif_progress" style="display: none; background-color: whitesmoke; border: none;">
       <progress id="progress" value="0" max="1" style="width: 96%; margin-left: 3px; margin-right: 3px;"></progress>
       <label id="progress_label" style="display: inline-block; color: blue;"></label>
@@ -497,6 +499,11 @@
           document.getElementById('url').style.display = 'block';
           url_displayed = true;
         }
+
+        if (gui && menu_location_bottom === false) {
+          let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+          document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
+        }
       }
 
       function load_url_file() {
@@ -551,6 +558,11 @@
           document.getElementById('fixed_menu').style.bottom = '';
           document.getElementById('btn_menu_location').innerHTML = '&#x2193';
           document.getElementById('btn_menu_location').style.backgroundColor = 'transparent';
+
+          if (gui) {
+            let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+            document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
+          }
         } else {
           menu_location_bottom = true;
           document.getElementById('fixed_menu').style.top = '';
@@ -562,9 +574,10 @@
     </script>
 
     <script>
-      var manager, texture_loader, equi_loader, obj_loader, mtl_loader, tga_loader, dds_loader, gif_loader;
+      var manager, texture_loader, rgbe_loader, obj_loader, mtl_loader, tga_loader, dds_loader, gif_loader;
       var renderer, scene, camera, Obj, edges, edges_visible, render_requested, object_is_points;
       var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
+      var gui, gui_set = false, guiExposure, params, toneMappingOptions, tex;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
@@ -584,18 +597,18 @@
       var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif;
       var texture_files_svg, texture_files_dds, texture_files_tga, texture_files_webp;
       var url_tga_loaded, current_texture, animated_gif_texture, textures;
-      var lines_visible, lines_present, filename, reflect, outline_material, slider_height = 0;
+      var lines_visible, lines_present, filename, outline_material, slider_height = 0;
 
       const link = document.createElement( 'a' );
       link.style.display = 'none';
       document.body.appendChild( link );
 
       function start_export() {
-        render_requested = false;
         document.getElementById('export_names').selectedIndex = 0;
         document.getElementById('fixed_menu').style.display = 'none';
         document.getElementById('div_loading').innerHTML = 'Please wait ...';
         document.getElementById('div_loading').style.display = 'block';
+        if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
 
         set_filename();
       }
@@ -620,6 +633,7 @@
           document.getElementById('div_loading').innerHTML = '';
           document.getElementById('div_loading').style.display = 'none';
           document.getElementById('fixed_menu').style.display = 'block';
+          if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
           render_requested = true;
           render();
 
@@ -1142,6 +1156,7 @@
               document.getElementById('fixed_menu').style.display = 'none';
               document.getElementById('gif_progress').style.display = 'block';
               document.getElementById('div_gif_rectangle').style.display = 'block';
+              if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
 
               await new Promise( resolve => setTimeout( resolve, 100 ) );
             }
@@ -1159,6 +1174,7 @@
             document.getElementById('fixed_menu').style.display = 'block';
             document.getElementById('gif_progress').style.display = 'none';
             document.getElementById('div_gif_rectangle').style.display = 'none';
+            if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
 
             // Download
 
@@ -1275,6 +1291,7 @@
               document.getElementById('fixed_menu').style.display = 'none';
               document.getElementById('gif_progress').style.display = 'block';
               document.getElementById('div_gif_rectangle').style.display = 'block';
+              if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
             }
 
             progress.value = current / frames;
@@ -1292,6 +1309,7 @@
             document.getElementById('fixed_menu').style.display = 'block';
             document.getElementById('gif_progress').style.display = 'none';
             document.getElementById('div_gif_rectangle').style.display = 'none';
+            if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
 
             // Download
 
@@ -1439,84 +1457,67 @@
         }
       }
 
-      function set_equi() {
+      function updateGUI() {
+        if ( guiExposure !== null ) {
+          guiExposure.destroy();
+          guiExposure = null;
+        }
+
+        if ( params.toneMapping !== 'None' ) {
+          guiExposure = gui.add( params, 'exposure', 0, 2 )
+          .onChange( function () {
+            renderer.toneMappingExposure = params.exposure;
+          });
+        }
+      }
+
+      async function set_equi() {
         if (document.getElementById('equi').checked) {
+          if (gui_set === false) {
+            gui.add( params, 'toneMapping', Object.keys( toneMappingOptions ) )
+            .onChange( function () {
+              updateGUI();
+              renderer.toneMapping = toneMappingOptions[ params.toneMapping ];
+            });
 
-          //The following textures are the work of Emil Persson, aka Humus.
-          //http://www.humus.name
-          //humus@comhem.se
+            gui.add( params, 'blurriness', 0, 1 )
+            .onChange( function ( value ) {
+              scene.backgroundBlurriness = value;
+            });
 
-          let tex = equi_loader.load([
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/SwedishRoyalCastle/px.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/SwedishRoyalCastle/nx.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/SwedishRoyalCastle/py.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/SwedishRoyalCastle/ny.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/SwedishRoyalCastle/pz.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/SwedishRoyalCastle/nz.jpg',
-          ], () => {
-            document.body.style.backgroundImage = 'none';
-            document.getElementById('file_image_input').value = '';
-            document.getElementById('file_image_input').disabled = true;
-            document.getElementById('btn_reflective').disabled = false;
-            document.getElementById('back_color').disabled = true;
-            document.getElementById('back_color').value = '#000000';
-            document.body.style.backgroundColor = document.getElementById('back_color').value;
-            bgnd_linear_gradient = false;
-            document.getElementById('btn_bgnd_linear_gradient').disabled = true;
-            document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
-            scene.background = tex;
-            tex.dispose();
-          }, () => { console.log( 'Textures loaded' ) }, () => { console.log( 'Error loading textures' ) });
+            updateGUI();
+
+            gui.open();
+
+            scene.backgroundBlurriness = params.blurriness;
+            gui_set = true;
+          }
+
+          document.getElementById('gui_position').style.display = 'block';
+
+          document.getElementById('file_image_input').value = '';
+          document.getElementById('file_image_input').disabled = true;
+          document.getElementById('back_color').disabled = true;
+          document.getElementById('back_color').value = '#000000';
+          document.body.style.backgroundColor = document.getElementById('back_color').value;
+          bgnd_linear_gradient = false;
+          document.getElementById('btn_bgnd_linear_gradient').disabled = true;
+          document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+
+          scene.background = tex;
+          scene.environment = tex;
         } else {
+          document.getElementById('gui_position').style.display = 'none';
+
           scene.background = null;
+          scene.environment = null;
+
           document.getElementById('file_image_input').disabled = false;
           document.getElementById('back_color').disabled = false;
-          document.getElementById('btn_reflective').disabled = true;
-          document.getElementById('btn_reflective').style.backgroundColor = '#d1cefc';
           document.getElementById('btn_bgnd_linear_gradient').disabled = false;
-          reflect = false;
-          set_reflectivity();
         }
 
         equi_checked_changed();
-      }
-
-      function set_reflectivity() {
-        if (Obj) {
-          if (reflect === true) {
-            reflect = false;
-            document.getElementById('btn_reflective').style.backgroundColor = '#d1cefc';
-          } else {
-            if (document.getElementById('equi').checked) {
-              reflect = true;
-              document.getElementById('btn_reflective').style.backgroundColor = 'lightgreen';
-            }
-          }
-
-          Obj.traverse( function ( child ) {
-            if (child.isMesh) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.envMap = reflect ? scene.background : null;
-                  mtl.needsUpdate = true;
-                });
-              } else {
-                child.material.envMap = reflect ? scene.background : null;
-                child.material.needsUpdate = true;
-              }
-            } else if (child.isPoints) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.map = reflect ? texture_loader.load( 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/SwedishRoyalCastle/px.jpg' ) : null;
-                  mtl.needsUpdate = true;
-                });
-              } else {
-                child.material.map = reflect ? texture_loader.load( 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/SwedishRoyalCastle/px.jpg' ) : null;
-                child.material.needsUpdate = true;
-              }
-            }
-    	    });
-        }
       }
 
       function set_scene_image() {
@@ -1748,8 +1749,6 @@
 
         if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
 
-        if (equi_loader === undefined) equi_loader = new THREE.CubeTextureLoader();
-
         if (obj_loader === undefined) obj_loader = new THREE.OBJLoader( manager );
 
         if (mtl_loader === undefined) mtl_loader = new THREE.MTLLoader( manager );
@@ -1770,6 +1769,21 @@
 
         obj_loader.setMaterials( null );
 
+        if (rgbe_loader === undefined) {
+          rgbe_loader = new THREE.RGBELoader();
+          rgbe_loader.setDataType( THREE.HalfFloatType );
+        }
+
+        if (params === undefined) params = { exposure: 1.0, toneMapping: 'ACESFilmic', blurriness: 0.3 };
+
+        if (toneMappingOptions === undefined) toneMappingOptions = {
+          None: THREE.NoToneMapping,
+          Linear: THREE.LinearToneMapping,
+          Reinhard: THREE.ReinhardToneMapping,
+          Cineon: THREE.CineonToneMapping,
+          ACESFilmic: THREE.ACESFilmicToneMapping
+        };
+
         outline_material = new THREE.LineBasicMaterial( { color: 0xFF0000 } );
 
         selected_obj_file = null;
@@ -1788,6 +1802,7 @@
         texture_files_dds = [];
         texture_files_tga = [];
         textures = [];
+        guiExposure = null;
         url_tga_loaded = false;
         edges = new THREE.Group();
         edges_visible = false;
@@ -1867,6 +1882,7 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1892,7 +1908,7 @@
 
         // Add AmbientLight to the scene
         if (ambientLight === undefined) {
-          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.25 );
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.05 );
           ambientLight.position.set( 0, 0, 250 );
           scene.add( ambientLight );
         }
@@ -1943,6 +1959,16 @@
           });
 
           document.getElementById('gizmo').appendChild( gizmo.domElement );
+        }
+
+        if (tex === undefined) {
+          rgbe_loader.load( 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/venice_sunset_1k.hdr', function( texture ) {
+            tex = texture;
+            texture.dispose();
+            tex.format = THREE.RGBAFormat;
+            tex.encoding = THREE.sRGBEncoding;
+            tex.mapping = THREE.EquirectangularReflectionMapping;
+          });
         }
 
         // Load the Obj file
@@ -3348,7 +3374,7 @@
 
         // Reset all range values
         document.getElementById('opacity_val').innerText = 1;
-        document.getElementById('ali_val').innerText = 0.25;
+        document.getElementById('ali_val').innerText = 0.05;
         document.getElementById('dli_val').innerText = 1;
         document.getElementById('x_val').innerText = 0;
         document.getElementById('y_val').innerText = 0;
@@ -3365,7 +3391,7 @@
         document.getElementById('hemisphere_light_color').value = '#000000';
         document.getElementById('directional_light_color').value = '#FFFFFF';
         document.getElementById('directional_light_intensity').value = 1;
-        document.getElementById('ambient_light_intensity').value = 0.25;
+        document.getElementById('ambient_light_intensity').value = 0.05;
 
         // Reset the radio inputs
         document.getElementById('rotate').checked = true;
@@ -3394,9 +3420,6 @@
         animated_gif_texture = false;
         document.getElementById('btn_textures').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_textures').innerHTML = 'T';
-        reflect = false;
-        document.getElementById('btn_reflective').disabled = true;
-        document.getElementById('btn_reflective').style.backgroundColor = '#d1cefc';
         xtra_smooth_enabled = false;
         document.getElementById('btn_xtra_smooth').style.backgroundColor = '#d1cefc';
         bgnd_linear_gradient = false;
@@ -3409,6 +3432,15 @@
         document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
         random_vertex_changed();
         first_run = true;
+
+        if (gui_set) {
+          document.getElementById('gui_position').style.display = 'none';
+
+          if (scene) {
+            scene.background = null;
+            scene.environment = null;
+          }
+        }
 
         gif_export = false;
         reset_rotation = true;
@@ -3595,6 +3627,19 @@
 
           $('#btn_xtra_smooth').unbind('mouseenter mouseleave');
         }
+      }
+    </script>
+
+    <script type="module">
+      import { GUI } from 'https://cdn.jsdelivr.net/npm/three@0.147.0/examples/jsm/libs/lil-gui.module.min.js';
+
+      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
+
+      if (menu_location_bottom === false) {
+        let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+          document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
+      } else {
+        document.getElementById('gui_position').style.marginTop = '2px';
       }
     </script>
   </body>
