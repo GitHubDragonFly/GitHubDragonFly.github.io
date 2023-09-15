@@ -114,7 +114,7 @@
 
 				} else {
 
-					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' ) {
+					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'patc' || key === 'psc' || key === 'pshc' ) {
 
 						const ss = value.split( delimiter_pattern, 3 );
 						info[ key ] = [ parseFloat( ss[ 0 ] ), parseFloat( ss[ 1 ] ), parseFloat( ss[ 2 ] ) ];
@@ -218,7 +218,7 @@
 							// Diffuse color (color under white light) using RGB values
 							if ( this.options && this.options.normalizeRGB ) {
 
-								value = [ value[ 0 ] / 255, value[ 1 ] / 255, value[ 2 ] / 255 ];
+								value = [ value[ 0 ] / 255.0, value[ 1 ] / 255.0, value[ 2 ] / 255.0 ];
 
 							}
 
@@ -321,7 +321,7 @@
 
 				if ( params[ mapType ] ) return; // Keep the first encountered texture
 
-				const texParams = scope.getTextureParams( value, params );
+				const texParams = scope.getTextureParams( value );
 				const map = scope.loadTexture( resolveURL( scope.baseUrl, texParams.url ), null, materialName );
 				map.repeat.copy( texParams.scale );
 				map.offset.copy( texParams.offset );
@@ -395,11 +395,17 @@
 						params.transparent = true;
 						break;
 
+					case 'disp':
+					case 'map_disp':
+						// Displacement map
+						setMapForType( 'displacementMap', value );
+						break;
+		
 					case 'pli':
 						// Lightmap intensity
 						params.lightMapIntensity = parseFloat( value );
 						break;
-
+		
 					case 'pa':
 						// Anisotropy
 						params.anisotropy = parseFloat( value );
@@ -411,7 +417,25 @@
 						params.anisotropyRotation = parseFloat( value );
 						use_phong = false;
 						break;
-			
+
+					case 'pas':
+						// Anisotropy Strength
+						params.anisotropyStrength = parseFloat( value );
+						use_phong = false;
+						break;
+
+					case 'patd':
+						// Attenuation distance
+						params.attenuationDistance = parseFloat( value );
+						use_phong = false;
+						break;
+	
+					case 'patc':
+						// Attenuation color
+						params.attenuationColor = new THREE.Color().fromArray( value );
+						use_phong = false;
+						break;
+					
 					case 'pm':
 						// Metalness
 						params.metalness = parseFloat( value );
@@ -546,12 +570,6 @@
 						use_phong = false;
 						break;
 
-					case 'disp':
-					case 'map_disp':
-						// Displacement map
-						setMapForType( 'displacementMap', value );
-						break;
-
 					case 'map_pccm':
 						// Clearcoat map
 						setMapForType( 'clearcoatMap', value );
@@ -671,7 +689,7 @@
 
 		}
 
-		getTextureParams( value, matParams ) {
+		getTextureParams( value ) {
 
 			const texParams = {
 				scale: new THREE.Vector2( 1, 1 ),
