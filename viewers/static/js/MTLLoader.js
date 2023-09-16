@@ -214,7 +214,11 @@
 
 						case 'kd':
 						case 'ka':
+						case 'ke':
 						case 'ks':
+						case 'patc':
+						case 'psc':
+						case 'pshc':
 							// Diffuse color (color under white light) using RGB values
 							if ( this.options && this.options.normalizeRGB ) {
 
@@ -680,6 +684,14 @@
 				this.materials[ materialName ] = new THREE.MeshPhongMaterial( params );
 
 			} else {
+
+				if ( params.transmission && params.metalness === undefined ) {
+
+					// if material roughness is not specified then override
+					// the default value of 1.0 to allow transmission effect
+					if ( params.roughness === undefined ) params.roughness = 0.0;
+
+				}
 
 				this.materials[ materialName ] = new THREE.MeshPhysicalMaterial( params );
 
