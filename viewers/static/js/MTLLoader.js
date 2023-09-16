@@ -452,6 +452,12 @@
 						use_phong = false;
 						break;
 
+					case 'pns':
+						// Normal Scale - how much the normal map affects the material
+						params.normalScale = new THREE.Vector2().fromArray( value );
+						use_phong = false;
+						break;
+	
 					case 'disp_b':
 						// Displacement bias
 						params.displacementBias = parseFloat( value );
