@@ -110,7 +110,7 @@
 				outgoingLight = diffuseColor.rgb; // simple shader
 				gl_FragColor = vec4( outgoingLight, diffuseColor.a );
 				#include <tonemapping_fragment>
-				#include <encodings_fragment>
+				#include <colorspace_fragment>
 				#include <fog_fragment>
 				#include <premultiplied_alpha_fragment>
 			}
@@ -2050,8 +2050,26 @@
 
 				}
 
-				return material;
+				let result = material;
 
+				if ( finalMaterialPass ) {
+			
+					// Clone the material without non-serializable fields
+			
+					const edgeMaterial = material.userData.edgeMaterial;
+					const conditionalEdgeMaterial = material.userData.conditionalEdgeMaterial;
+			
+					material.userData.edgeMaterial = undefined;
+					material.userData.conditionalEdgeMaterial = undefined;
+			
+					result = material.clone();
+			
+					material.userData.edgeMaterial = edgeMaterial;
+					material.userData.conditionalEdgeMaterial = conditionalEdgeMaterial;
+			
+				}
+			
+				return result;
 			}
 
 		}
