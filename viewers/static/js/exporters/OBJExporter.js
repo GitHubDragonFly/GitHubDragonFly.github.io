@@ -478,6 +478,7 @@
 						if ( mat.refractionRatio ) mtlOutput += 'Ni ' + mat.refractionRatio + '\n';
 						if ( mat.metalness ) mtlOutput += 'Pm ' + mat.metalness + '\n';
 						if ( mat.roughness ) mtlOutput += 'Pr ' + mat.roughness + '\n';
+						if ( mat.normalScale ) mtlOutput += 'Pns ' + mat.normalScale.x + ' ' + mat.normalScale.y + '\n';
 						if ( mat.displacementBias ) mtlOutput += 'disp_b ' + mat.displacementBias + '\n';
 						if ( mat.displacementScale ) mtlOutput += 'disp_s ' + mat.displacementScale + '\n';
 						if ( mat.lightMapIntensity ) mtlOutput += 'Pli ' + mat.lightMapIntensity + '\n';
