@@ -506,7 +506,8 @@
 
 					case 'pirtr':
 						// Iridescence thickness range
-						params.iridescenceThicknessRange = new THREE.Vector2().fromArray( value );
+						const values = value.split( ' ' );
+						params.iridescenceThicknessRange = new Uint32Array( values );
 						use_phong = false;
 						break;
 
