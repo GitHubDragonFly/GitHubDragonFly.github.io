@@ -487,9 +487,6 @@
 						if ( mat.clearcoatNormalScale ) mtlOutput += 'Pccns ' + mat.clearcoatNormalScale.x + ' ' + mat.clearcoatNormalScale.y + '\n';
 						if ( mat.reflectivity ) mtlOutput += 'Prfl ' + mat.reflectivity + '\n';
 						if ( mat.ior ) mtlOutput += 'Pior ' + mat.ior + '\n';
-						if ( mat.anisotropy ) mtlOutput += 'Pa ' + mat.anisotropy + '\n';
-						if ( mat.anisotropyRotation ) mtlOutput += 'Par ' + mat.anisotropyRotation + '\n';
-						if ( mat.anisotropyStrength ) mtlOutput += 'Pas ' + mat.anisotropyStrength + '\n';
 						if ( mat.attenuationColor ) mtlOutput += 'Patc ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
 						if ( mat.attenuationDistance ) mtlOutput += 'Patd ' + mat.attenuationDistance + '\n';
 						if ( mat.iridescence ) mtlOutput += 'Pir ' + mat.iridescence + '\n';
@@ -695,43 +692,6 @@
 								} else {
 
 									mtlOutput += 'map_Pl ' + map_names[ mat.lightMap.uuid ] + '.png' + '\n';
-
-								}
-
-							}
-
-						}
-
-						if ( mat.anisotropyMap && mat.anisotropyMap.type === 1009 && mat.anisotropyMap.image ) {
-
-							let map_to_process = mat.anisotropyMap;
-
-							if ( map_to_process.isCompressedTexture === true ) {
-
-								map_to_process = decompress( mat.anisotropyMap, 1024 );
-
-							}
-
-							if ( mat.anisotropyMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
-
-								if ( map_uuids.includes( mat.anisotropyMap.uuid ) === false ) {
-
-									name = 'anisotropyMap' + count;
-
-									map_uuids.push( mat.anisotropyMap.uuid );
-									map_names[ mat.anisotropyMap.uuid ] = name;
-
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( map_to_process.image, ext )
-									});
-
-									mtlOutput += 'map_Pa ' + name + '.png' + '\n';
-
-								} else {
-
-									mtlOutput += 'map_Pa ' + map_names[ mat.anisotropyMap.uuid ] + '.png' + '\n';
 
 								}
 
