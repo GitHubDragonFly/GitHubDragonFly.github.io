@@ -512,6 +512,11 @@
 
 							if ( mat.map.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.map.repeat.x;
+								const ys = mat.map.repeat.y;
+								const xo = mat.map.offset.x;
+								const yo = mat.map.offset.y;
+
 								if ( map_uuids.includes( mat.map.uuid ) === false ) {
 
 									map_uuids.push( mat.map.uuid );
@@ -523,11 +528,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Kd ' + name + '.png' + '\n';
+									mtlOutput += 'map_Kd -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Kd ' + map_names[ mat.map.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Kd -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.map.uuid ] + '.png' + '\n';
 
 								}
 
@@ -547,6 +552,11 @@
 
 							if ( mat.specularMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.specularMap.repeat.x;
+								const ys = mat.specularMap.repeat.y;
+								const xo = mat.specularMap.offset.x;
+								const yo = mat.specularMap.offset.y;
+
 								if ( map_uuids.includes( mat.specularMap.uuid ) === false ) {
 
 									name = 'specularMap' + count;
@@ -560,11 +570,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Ks ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ks -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Ks ' + map_names[ mat.specularMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ks -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.specularMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -584,6 +594,11 @@
 
 							if ( mat.emissiveMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.emissiveMap.repeat.x;
+								const ys = mat.emissiveMap.repeat.y;
+								const xo = mat.emissiveMap.offset.x;
+								const yo = mat.emissiveMap.offset.y;
+
 								if ( map_uuids.includes( mat.emissiveMap.uuid ) === false ) {
 
 									name = 'emissiveMap' + count;
@@ -597,11 +612,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Ke ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ke -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Ke ' + map_names[ mat.emissiveMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ke -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.emissiveMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -621,6 +636,11 @@
 
 							if ( mat.bumpMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.bumpMap.repeat.x;
+								const ys = mat.bumpMap.repeat.y;
+								const xo = mat.bumpMap.offset.x;
+								const yo = mat.bumpMap.offset.y;
+
 								if ( map_uuids.includes( mat.bumpMap.uuid ) === false ) {
 
 									name = 'bumpMap' + count;
@@ -636,11 +656,11 @@
 
 									if ( mat.bumpScale === 1 ) {
 
-										mtlOutput += 'map_bump ' + name + '.png' + '\n';
+										mtlOutput += 'map_bump -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 									} else {
 
-										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' ' + name + '.png' + '\n';
+										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 									}
 
@@ -648,11 +668,11 @@
 
 									if ( mat.bumpScale === 1 ) {
 
-										mtlOutput += 'map_bump ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
+										mtlOutput += 'map_bump -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
 
 									} else {
 
-										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
+										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
 
 									}
 
@@ -674,6 +694,11 @@
 
 							if ( mat.lightMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.lightMap.repeat.x;
+								const ys = mat.lightMap.repeat.y;
+								const xo = mat.lightMap.offset.x;
+								const yo = mat.lightMap.offset.y;
+
 								if ( map_uuids.includes( mat.lightMap.uuid ) === false ) {
 
 									name = 'lightMap' + count;
@@ -687,11 +712,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pl ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pl -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pl ' + map_names[ mat.lightMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pl -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.lightMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -711,6 +736,11 @@
 
 							if ( mat.metalnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.metalnessMap.repeat.x;
+								const ys = mat.metalnessMap.repeat.y;
+								const xo = mat.metalnessMap.offset.x;
+								const yo = mat.metalnessMap.offset.y;
+
 								if ( map_uuids.includes( mat.metalnessMap.uuid ) === false ) {
 
 									name = 'metalnessMap' + count;
@@ -724,11 +754,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pm ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pm ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -748,6 +778,11 @@
 
 							if ( mat.roughnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.roughnessMap.repeat.x;
+								const ys = mat.roughnessMap.repeat.y;
+								const xo = mat.roughnessMap.offset.x;
+								const yo = mat.roughnessMap.offset.y;
+
 								if ( map_uuids.includes( mat.roughnessMap.uuid ) === false ) {
 
 									name = 'roughnessMap' + count;
@@ -761,11 +796,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pr ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pr ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -785,6 +820,11 @@
 
 							if ( mat.displacementMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.displacementMap.repeat.x;
+								const ys = mat.displacementMap.repeat.y;
+								const xo = mat.displacementMap.offset.x;
+								const yo = mat.displacementMap.offset.y;
+
 								if ( map_uuids.includes( mat.displacementMap.uuid ) === false ) {
 
 									name = 'displacementMap' + count;
@@ -798,11 +838,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_disp ' + name + '.png' + '\n';
+									mtlOutput += 'map_disp -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_disp ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_disp -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -822,6 +862,11 @@
 
 							if ( mat.normalMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.normalMap.repeat.x;
+								const ys = mat.normalMap.repeat.y;
+								const xo = mat.normalMap.offset.x;
+								const yo = mat.normalMap.offset.y;
+
 								if ( map_uuids.includes( mat.normalMap.uuid ) === false ) {
 
 									name = 'normalMap' + count;
@@ -835,11 +880,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'norm ' + name + '.png' + '\n';
+									mtlOutput += 'norm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'norm ' + map_names[ mat.normalMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'norm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.normalMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -859,6 +904,11 @@
 
 							if ( mat.alphaMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.alphaMap.repeat.x;
+								const ys = mat.alphaMap.repeat.y;
+								const xo = mat.alphaMap.offset.x;
+								const yo = mat.alphaMap.offset.y;
+
 								if ( map_uuids.includes( mat.alphaMap.uuid ) === false ) {
 
 									name = 'alphaMap' + count;
@@ -872,11 +922,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_d ' + name + '.png' + '\n';
+									mtlOutput += 'map_d -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_d ' + map_names[ mat.alphaMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_d -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.alphaMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -896,6 +946,11 @@
 
 							if ( mat.aoMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.aoMap.repeat.x;
+								const ys = mat.aoMap.repeat.y;
+								const xo = mat.aoMap.offset.x;
+								const yo = mat.aoMap.offset.y;
+
 								if ( map_uuids.includes( mat.aoMap.uuid ) === false ) {
 
 									name = 'ambientMap' + count;
@@ -909,11 +964,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Ka ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ka -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Ka ' + map_names[ mat.aoMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ka -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.aoMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -933,6 +988,11 @@
 
 							if ( mat.clearcoatMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.clearcoatMap.repeat.x;
+								const ys = mat.clearcoatMap.repeat.y;
+								const xo = mat.clearcoatMap.offset.x;
+								const yo = mat.clearcoatMap.offset.y;
+
 								if ( map_uuids.includes( mat.clearcoatMap.uuid ) === false ) {
 
 									name = 'clearcoatMap' + count;
@@ -946,11 +1006,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pccm ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pccm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pccm ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pccm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -970,6 +1030,11 @@
 
 							if ( mat.clearcoatNormalMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.clearcoatNormalMap.repeat.x;
+								const ys = mat.clearcoatNormalMap.repeat.y;
+								const xo = mat.clearcoatNormalMap.offset.x;
+								const yo = mat.clearcoatNormalMap.offset.y;
+
 								if ( map_uuids.includes( mat.clearcoatNormalMap.uuid ) === false ) {
 
 									name = 'clearcoatNormalMap' + count;
@@ -983,11 +1048,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pccnm ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pccnm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pccnm ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pccnm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1007,6 +1072,11 @@
 
 							if ( mat.clearcoatRoughnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.clearcoatRoughnessMap.repeat.x;
+								const ys = mat.clearcoatRoughnessMap.repeat.y;
+								const xo = mat.clearcoatRoughnessMap.offset.x;
+								const yo = mat.clearcoatRoughnessMap.offset.y;
+
 								if ( map_uuids.includes( mat.clearcoatRoughnessMap.uuid ) === false ) {
 
 									name = 'clearcoatRoughnessMap' + count;
@@ -1020,11 +1090,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pccrm ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pccrm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pccrm ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pccrm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1044,6 +1114,11 @@
 
 							if ( mat.iridescenceMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.iridescenceMap.repeat.x;
+								const ys = mat.iridescenceMap.repeat.y;
+								const xo = mat.iridescenceMap.offset.x;
+								const yo = mat.iridescenceMap.offset.y;
+
 								if ( map_uuids.includes( mat.iridescenceMap.uuid ) === false ) {
 
 									name = 'iridescenceMap' + count;
@@ -1057,11 +1132,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pirm ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pirm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pirm ' + map_names[ mat.iridescenceMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pirm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.iridescenceMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1081,6 +1156,11 @@
 
 							if ( mat.iridescenceThicknessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.iridescenceThicknessMap.repeat.x;
+								const ys = mat.iridescenceThicknessMap.repeat.y;
+								const xo = mat.iridescenceThicknessMap.offset.x;
+								const yo = mat.iridescenceThicknessMap.offset.y;
+
 								if ( map_uuids.includes( mat.iridescenceThicknessMap.uuid ) === false ) {
 
 									name = 'iridescenceThicknessMap' + count;
@@ -1094,11 +1174,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pirthm ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pirthm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pirthm ' + map_names[ mat.iridescenceThicknessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pirthm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.iridescenceThicknessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1118,6 +1198,11 @@
 
 							if ( mat.sheenColorMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.sheenColorMap.repeat.x;
+								const ys = mat.sheenColorMap.repeat.y;
+								const xo = mat.sheenColorMap.offset.x;
+								const yo = mat.sheenColorMap.offset.y;
+
 								if ( map_uuids.includes( mat.sheenColorMap.uuid ) === false ) {
 
 									name = 'sheenColorMap' + count;
@@ -1131,11 +1216,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pshcm ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pshcm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pshcm ' + map_names[ mat.sheenColorMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pshcm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.sheenColorMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1155,6 +1240,11 @@
 
 							if ( mat.sheenRoughnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.sheenRoughnessMap.repeat.x;
+								const ys = mat.sheenRoughnessMap.repeat.y;
+								const xo = mat.sheenRoughnessMap.offset.x;
+								const yo = mat.sheenRoughnessMap.offset.y;
+
 								if ( map_uuids.includes( mat.sheenRoughnessMap.uuid ) === false ) {
 
 									name = 'sheenRoughnessMap' + count;
@@ -1168,11 +1258,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pshrm ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pshrm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pshrm ' + map_names[ mat.sheenRoughnessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pshrm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.sheenRoughnessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1192,6 +1282,11 @@
 
 							if ( mat.specularIntensityMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.specularIntensityMap.repeat.x;
+								const ys = mat.specularIntensityMap.repeat.y;
+								const xo = mat.specularIntensityMap.offset.x;
+								const yo = mat.specularIntensityMap.offset.y;
+
 								if ( map_uuids.includes( mat.specularIntensityMap.uuid ) === false ) {
 
 									name = 'specularIntensityMap' + count;
@@ -1205,11 +1300,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Psim ' + name + '.png' + '\n';
+									mtlOutput += 'map_Psim -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Psim ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Psim -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1229,6 +1324,11 @@
 
 							if ( mat.specularColorMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.specularColorMap.repeat.x;
+								const ys = mat.specularColorMap.repeat.y;
+								const xo = mat.specularColorMap.offset.x;
+								const yo = mat.specularColorMap.offset.y;
+
 								if ( map_uuids.includes( mat.specularColorMap.uuid ) === false ) {
 
 									name = 'specularColorMap' + count;
@@ -1242,11 +1342,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pscm ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pscm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pscm ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pscm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1266,6 +1366,11 @@
 
 							if ( mat.thicknessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.thicknessMap.repeat.x;
+								const ys = mat.thicknessMap.repeat.y;
+								const xo = mat.thicknessMap.offset.x;
+								const yo = mat.thicknessMap.offset.y;
+
 								if ( map_uuids.includes( mat.thicknessMap.uuid ) === false ) {
 
 									name = 'thicknessMap' + count;
@@ -1279,11 +1384,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pthm ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pthm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pthm ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pthm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1303,6 +1408,11 @@
 
 							if ( mat.transmissionMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
+								const xs = mat.transmissionMap.repeat.x;
+								const ys = mat.transmissionMap.repeat.y;
+								const xo = mat.transmissionMap.offset.x;
+								const yo = mat.transmissionMap.offset.y;
+
 								if ( map_uuids.includes( mat.transmissionMap.uuid ) === false ) {
 
 									name = 'transmissionMap' + count;
@@ -1316,11 +1426,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Ptrm ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ptrm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Ptrm ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ptrm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
 
 								}
 

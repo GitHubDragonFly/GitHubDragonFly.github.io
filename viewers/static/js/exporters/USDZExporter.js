@@ -369,7 +369,7 @@ ${array.join( '' )}
 				1001: 'clamp', // ClampToEdgeWrapping
 				1002: 'mirror' // MirroredRepeatWrapping
 			};
-	
+
 			const id = texture.id + ( color ? '_' + color.getHexString() : '' );
 			const isRGBA = texture.format === 1023;
 			textures[ id ] = texture;
@@ -377,45 +377,45 @@ ${array.join( '' )}
 			const repeat = texture.repeat.clone();
 			const offset = texture.offset.clone();
 			const rotation = texture.rotation;
-	
+
 			// rotation is around the wrong point. after rotation we need to shift offset again so that we're rotating around the right spot
 			const xRotationOffset = Math.sin( rotation );
 			const yRotationOffset = Math.cos( rotation );
-	
+
 			// texture coordinates start in the opposite corner, need to correct
 			offset.y = 1 - offset.y - repeat.y;
-	
+
 			// turns out QuickLook is buggy and interprets texture repeat inverted/applies operations in a different order.
 			// Apple Feedback: 	FB10036297 and FB11442287
 			if ( quickLookCompatible ) {
-	
+
 				// This is NOT correct yet in QuickLook, but comes close for a range of models.
 				// It becomes more incorrect the bigger the offset is
-	
+
 				offset.x = offset.x / repeat.x;
 				offset.y = offset.y / repeat.y;
-	
+
 				offset.x += xRotationOffset / repeat.x;
 				offset.y += yRotationOffset - 1;
-	
+
 			} else {
-	
+
 				// results match glTF results exactly. verified correct in usdview.
 				offset.x += xRotationOffset * repeat.x;
 				offset.y += ( 1 - yRotationOffset ) * repeat.y;
-	
-			}
-	
-			return `
-		def Shader "PrimvarReader_${ mapType }"
-		{
-			uniform token info:id = "UsdPrimvarReader_float2"
-			float2 inputs:fallback = (0.0, 0.0)
-			token inputs:varname = "${ uv }"
-			float2 outputs:result
-		}
 
-		def Shader "Transform2d_${mapType}" (
+			}
+
+			return `
+        def Shader "PrimvarReader_${ mapType }"
+        {
+            uniform token info:id = "UsdPrimvarReader_float2"
+            float2 inputs:fallback = (0.0, 0.0)
+            token inputs:varname = "${ uv }"
+            float2 outputs:result
+        }
+
+        def Shader "Transform2d_${mapType}" (
             sdrMetadata = {
                 string role = "math"
             }
