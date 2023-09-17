@@ -78,7 +78,6 @@
    * you must call setResourcePath() explicitly prior to parse.
    */
 
-
 		parse( text, path ) {
 
 			const lines = text.split( '\n' );
@@ -110,6 +109,7 @@
 					info = {
 						name: value
 					};
+
 					materialsInfo[ value ] = info;
 
 				} else {
@@ -133,6 +133,7 @@
 			materialCreator.setCrossOrigin( this.crossOrigin );
 			materialCreator.setManager( this.manager );
 			materialCreator.setMaterials( materialsInfo );
+
 			return materialCreator;
 
 		}
@@ -160,6 +161,7 @@
 
 			this.baseUrl = baseUrl;
 			this.options = options;
+			this.orginalMaterialsInfo = {};
 			this.materialsInfo = {};
 			this.materials = {};
 			this.materialsArray = [];
@@ -185,6 +187,7 @@
 
 		setMaterials( materialsInfo ) {
 
+			this.originalMaterialsInfo = materialsInfo;
 			this.materialsInfo = this.convert( materialsInfo );
 			this.materials = {};
 			this.materialsArray = [];
@@ -307,6 +310,8 @@
 			// Create material
 			const scope = this;
 			const mat = this.materialsInfo[ materialName ];
+			const original_mat = this.originalMaterialsInfo[ materialName ];
+
 			const params = {
 				name: materialName,
 				side: this.side
@@ -321,12 +326,12 @@
 
 			}
 
-			function setMapForType( mapType, value ) {
+			function setMapForType( mapType, value, prop ) {
 
 				if ( params[ mapType ] ) return; // Keep the first encountered texture
 
-				const texParams = scope.getTextureParams( value );
-				const map = scope.loadTexture( resolveURL( scope.baseUrl, texParams.url ), null, materialName );
+				const texParams = scope.getTextureParams( original_mat[ prop ] );
+				const map = scope.loadTexture( resolveURL( scope.baseUrl, value ), null, materialName );
 				map.repeat.copy( texParams.scale );
 				map.offset.copy( texParams.offset );
 				map.wrapS = scope.wrap;
@@ -343,7 +348,9 @@
 				let n;
 				if ( value === '' ) continue;
 
-				switch ( prop.toLowerCase() ) {
+				const lprop = prop.toLowerCase();
+
+				switch ( lprop ) {
 
 					// Ns is material specular exponent
 					case 'kd':
@@ -363,46 +370,46 @@
 	
 					case 'map_ka':
 						// Ambient occlusion map
-						setMapForType( 'aoMap', value );
+						setMapForType( 'aoMap', value, lprop );
 						break;
 		
 					case 'map_kd':
 						// Diffuse texture map
-						setMapForType( 'map', value );
+						setMapForType( 'map', value, lprop );
 						break;
 
 					case 'map_ks':
 						// Specular map
-						setMapForType( 'specularMap', value );
+						setMapForType( 'specularMap', value, lprop );
 						break;
 
 					case 'map_ke':
 					case 'map_emissive':
 						// Emissive map
-						setMapForType( 'emissiveMap', value );
+						setMapForType( 'emissiveMap', value, lprop );
 						break;
 
 					case 'norm':
 					case 'map_kn':
-						setMapForType( 'normalMap', value );
+						setMapForType( 'normalMap', value, lprop );
 						break;
 
 					case 'bump':
 					case 'map_bump':
 						// Bump texture map
-						setMapForType( 'bumpMap', value );
+						setMapForType( 'bumpMap', value, lprop );
 						break;
 
 					case 'map_d':
 						// Alpha map
-						setMapForType( 'alphaMap', value );
+						setMapForType( 'alphaMap', value, lprop );
 						params.transparent = true;
 						break;
 
 					case 'disp':
 					case 'map_disp':
 						// Displacement map
-						setMapForType( 'displacementMap', value );
+						setMapForType( 'displacementMap', value, lprop );
 						break;
 
 					case 'pli':
@@ -542,85 +549,85 @@
 
 					case 'map_pl':
 						// Light map
-						setMapForType( 'lightMap', value );
+						setMapForType( 'lightMap', value, lprop );
 						break;
 
 					case 'map_pm':
 						// Metalness map
-						setMapForType( 'metalnessMap', value );
+						setMapForType( 'metalnessMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_pr':
 						// Roughness map
-						setMapForType( 'roughnessMap', value );
+						setMapForType( 'roughnessMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_pccm':
 						// Clearcoat map
-						setMapForType( 'clearcoatMap', value );
+						setMapForType( 'clearcoatMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_pccnm':
 						// Clearcoat normal map
-						setMapForType( 'clearcoatNormalMap', value );
+						setMapForType( 'clearcoatNormalMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_pccrm':
 						// Clearcoat roughness map
-						setMapForType( 'clearcoatRoughnessMap', value );
+						setMapForType( 'clearcoatRoughnessMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_pirm':
 						// Iridescence map
-						setMapForType( 'iridescenceMap', value );
+						setMapForType( 'iridescenceMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_pirthm':
 						// Iridescence thickness map
-						setMapForType( 'iridescenceThicknessMap', value );
+						setMapForType( 'iridescenceThicknessMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_ps':
 					case 'map_pshcm':
 						// Sheen layer color map
-						setMapForType( 'sheenColorMap', value );
+						setMapForType( 'sheenColorMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_pshrm':
 						// Sheen layer roughness map
-						setMapForType( 'sheenRoughnessMap', value );
+						setMapForType( 'sheenRoughnessMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_psim':
 						// Specular intensity map
-						setMapForType( 'specularIntensityMap', value );
+						setMapForType( 'specularIntensityMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_pscm':
 						// Specular color map
-						setMapForType( 'specularColorMap', value );
+						setMapForType( 'specularColorMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_pthm':
 						// Thickness map
-						setMapForType( 'thicknessMap', value );
+						setMapForType( 'thicknessMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_ptrm':
 						// Transmission map
-						setMapForType( 'transmissionMap', value );
+						setMapForType( 'transmissionMap', value, lprop );
 						use_phong = false;
 						break;
 
@@ -684,14 +691,17 @@
 
 		}
 
-		getTextureParams( value ) {
+		getTextureParams( prop ) {
 
 			const texParams = {
 				scale: new THREE.Vector2( 1, 1 ),
 				offset: new THREE.Vector2( 0, 0 )
 			};
-			const items = value.split( /\s+/ );
+
+			const items = prop.split( /\s+/ );
+
 			let pos;
+
 			pos = items.indexOf( '-bm' );
 
 			if ( pos >= 0 ) {
@@ -719,7 +729,6 @@
 
 			}
 
-			texParams.url = items.join( ' ' ).trim();
 			return texParams;
 
 		}
