@@ -435,7 +435,7 @@
 
 				if ( data_value[ 'float inputs:rotation' ] ) {
 
-					map.rotation = parseFloat( data_value[ 'float inputs:rotation' ] ) / ( 180 / Math.PI );
+					map.rotation = parseFloat( data_value[ 'float inputs:rotation' ] );
 
 				}
 
