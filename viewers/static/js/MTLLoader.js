@@ -404,28 +404,10 @@
 						// Displacement map
 						setMapForType( 'displacementMap', value );
 						break;
-		
+
 					case 'pli':
 						// Lightmap intensity
 						params.lightMapIntensity = parseFloat( value );
-						break;
-		
-					case 'pa':
-						// Anisotropy
-						params.anisotropy = parseFloat( value );
-						use_phong = false;
-						break;
-
-					case 'par':
-						// Anisotropy Rotation
-						params.anisotropyRotation = parseFloat( value );
-						use_phong = false;
-						break;
-
-					case 'pas':
-						// Anisotropy Strength
-						params.anisotropyStrength = parseFloat( value );
-						use_phong = false;
 						break;
 
 					case 'patd':
@@ -433,13 +415,13 @@
 						params.attenuationDistance = parseFloat( value );
 						use_phong = false;
 						break;
-	
+
 					case 'patc':
 						// Attenuation color
 						params.attenuationColor = new THREE.Color().fromArray( value );
 						use_phong = false;
 						break;
-					
+
 					case 'pm':
 						// Metalness
 						params.metalness = parseFloat( value );
@@ -457,7 +439,7 @@
 						params.normalScale = new THREE.Vector2().fromArray( value );
 						use_phong = false;
 						break;
-	
+
 					case 'disp_b':
 						// Displacement bias
 						params.displacementBias = parseFloat( value );
@@ -515,7 +497,7 @@
 						// Reflectivity
 						params.reflectivity = parseFloat( value );
 						break;
-	
+
 					case 'psh':
 						// The intensity of the sheen layer
 						params.sheen = parseFloat( value );
@@ -563,12 +545,6 @@
 						setMapForType( 'lightMap', value );
 						break;
 
-					case 'map_pa':
-						// Anisotropy map
-						setMapForType( 'anisotropyMap', value );
-						use_phong = false;
-						break;
-	
 					case 'map_pm':
 						// Metalness map
 						setMapForType( 'metalnessMap', value );
@@ -610,7 +586,7 @@
 						setMapForType( 'iridescenceThicknessMap', value );
 						use_phong = false;
 						break;
-		
+
 					case 'map_ps':
 					case 'map_pshcm':
 						// Sheen layer color map
@@ -647,7 +623,7 @@
 						setMapForType( 'transmissionMap', value );
 						use_phong = false;
 						break;
-									
+
 					case 'ns':
 						// The specular exponent (defines the focus of the specular highlight)
 						// A high exponent results in a tight, concentrated highlight. Ns values normally range from 0 to 1000.
