@@ -716,7 +716,7 @@
 			if ( pos >= 0 ) {
 
 				texParams.scale.set( parseFloat( items[ pos + 1 ] ), parseFloat( items[ pos + 2 ] ) );
-				items.splice( pos, 4 ); // we expect 3 parameters here!
+				items.splice( pos, 5 ); // we expect 4 parameters here!
 
 			}
 
@@ -725,7 +725,7 @@
 			if ( pos >= 0 ) {
 
 				texParams.offset.set( parseFloat( items[ pos + 1 ] ), parseFloat( items[ pos + 2 ] ) );
-				items.splice( pos, 4 ); // we expect 3 parameters here!
+				items.splice( pos, 5 ); // we expect 4 parameters here!
 
 			}
 
