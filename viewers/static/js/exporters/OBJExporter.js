@@ -528,11 +528,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Kd -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Kd -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Kd -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.map.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Kd -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.map.uuid ] + '.png' + '\n';
 
 								}
 
@@ -570,11 +570,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Ks -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ks -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Ks -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.specularMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ks -s ' + xs + ' ' + ys  + ' 1.0'+ ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -612,11 +612,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Ke -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ke -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Ke -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.emissiveMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ke -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.emissiveMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -656,11 +656,11 @@
 
 									if ( mat.bumpScale === 1 ) {
 
-										mtlOutput += 'map_bump -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+										mtlOutput += 'map_bump -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 									} else {
 
-										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 									}
 
@@ -668,11 +668,11 @@
 
 									if ( mat.bumpScale === 1 ) {
 
-										mtlOutput += 'map_bump -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
+										mtlOutput += 'map_bump -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
 
 									} else {
 
-										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
+										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
 
 									}
 
@@ -712,11 +712,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pl -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pl -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pl -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.lightMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pl -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.lightMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -754,11 +754,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -796,11 +796,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -838,11 +838,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_disp -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_disp -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_disp -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_disp -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -880,11 +880,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'norm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'norm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'norm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.normalMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'norm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.normalMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -922,11 +922,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_d -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_d -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_d -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.alphaMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_d -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.alphaMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -964,11 +964,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Ka -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ka -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Ka -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.aoMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ka -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.aoMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1006,11 +1006,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pccm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pccm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pccm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pccm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1048,11 +1048,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pccnm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pccnm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pccnm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pccnm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1090,11 +1090,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pccrm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pccrm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pccrm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pccrm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1132,11 +1132,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pirm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pirm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pirm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.iridescenceMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pirm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.iridescenceMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1174,11 +1174,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pirthm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pirthm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pirthm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.iridescenceThicknessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pirthm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.iridescenceThicknessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1216,11 +1216,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pshcm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pshcm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pshcm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.sheenColorMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pshcm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.sheenColorMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1258,11 +1258,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pshrm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pshrm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pshrm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.sheenRoughnessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pshrm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.sheenRoughnessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1300,11 +1300,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Psim -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Psim -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Psim -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Psim -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1342,11 +1342,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pscm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pscm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pscm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pscm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1384,11 +1384,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pthm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pthm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pthm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pthm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1426,11 +1426,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Ptrm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ptrm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Ptrm -s ' + xs + ' ' + ys + ' -o ' + xo + ' ' + yo + ' ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ptrm -s ' + xs + ' ' + ys + ' 1.0' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
 
 								}
 
