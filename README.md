@@ -128,8 +128,9 @@ Number Type Converter
     - JSON export is actually three.js created format
     - USDZ exporter tips:
       - Handles GLTF / GLB formats the best due to their use of the THREE.MeshStandardMaterial
-      - Export your 3D models to GLB format first, including GLB files that might be using compressed textures, and then export it to USDZ format
+      - Optionally export your 3D model to GLB format first, including GLB files that might be using compressed textures, and then export it to USDZ format
       - Exported USDZ files should work in the Apple's Quick Look (as tested on an iPad)
+      - Viewers which include this exporter will try to export the model automatically
     - OBJ exporter might currently, along with the exported MTL file, export multiple copies of the same texture but under different names:
       - Select 1 copy of the texture and rename it if you wish, then update the corresponding MTL file entries to point to that texture
       - Delete all other copies of that same texture
