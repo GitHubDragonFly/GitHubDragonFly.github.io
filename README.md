@@ -185,10 +185,10 @@ Number Type Converter
   - `Eq` - equirectangular background
     - `R` - reflectivity (envMap + metalness)
 - JSON viewers support three.js and assimp JS / JSON formats with limitations:
-  - JSON Viewer is currently using r147 of three.js and cannot open legacy formats
+  - JSON Viewer is currently using r156 of three.js and cannot open legacy formats
   - JSON Legacy viewer is using r111 of three.js to support legacy THREE.Geometry:
     - It is using 4 loaders: ObjectLoader, BufferGeometryLoader, LegacyJSONLoader and AssimpJSONLoader
-    - It can open and export current three.js JSON format, with limitations of r111
+    - It could possibly open and export current three.js JSON format, with limitations of r111
     - Some animations / skeletons might be off or missing
 - GLTF / FBX / DAE viewers will also export animations to JSON format
 - PLY+STL / PRWM / VTK viewers can also show a points version of the loaded model and export it as such (if the model is not rather large)
