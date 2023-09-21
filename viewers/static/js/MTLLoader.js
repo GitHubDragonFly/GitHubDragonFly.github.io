@@ -114,7 +114,7 @@
 
 				} else {
 
-					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'patc' || key === 'psc' || key === 'pnsc' ) {
+					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'patc' || key === 'psc' || key === 'pspc' ) {
 
 						const ss = value.split( delimiter_pattern, 3 );
 						info[ key ] = [ parseFloat( ss[ 0 ] ), parseFloat( ss[ 1 ] ), parseFloat( ss[ 2 ] ) ];
@@ -221,7 +221,7 @@
 						case 'ks':
 						case 'patc':
 						case 'psc':
-						case 'pnsc':
+						case 'pspc':
 							// Diffuse color (color under white light) using RGB values
 							if ( this.options && this.options.normalizeRGB ) {
 
@@ -536,7 +536,7 @@
 						use_phong = false;
 						break;
 
-					case 'pnsc':
+					case 'pspc':
 						// Specular color
 						params.specularColor = new THREE.Color().fromArray( value ).convertSRGBToLinear();
 						use_phong = false;
