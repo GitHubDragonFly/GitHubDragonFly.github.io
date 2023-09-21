@@ -517,18 +517,18 @@
 						if ( mat.clearcoat ) mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
 						if ( mat.clearcoatRoughness ) mtlOutput += 'Pccr ' + mat.clearcoatRoughness + '\n';
 						if ( mat.clearcoatNormalScale ) mtlOutput += 'Pccns ' + mat.clearcoatNormalScale.x + ' ' + mat.clearcoatNormalScale.y + '\n';
-						if ( mat.reflectivity ) mtlOutput += 'Prfl ' + mat.reflectivity + '\n';
+						if ( mat.reflectivity ) mtlOutput += 'Prefl ' + mat.reflectivity + '\n';
 						if ( mat.ior ) mtlOutput += 'Pior ' + mat.ior + '\n';
 						if ( mat.attenuationColor ) mtlOutput += 'Patc ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
 						if ( mat.attenuationDistance ) mtlOutput += 'Patd ' + mat.attenuationDistance + '\n';
 						if ( mat.iridescence ) mtlOutput += 'Pir ' + mat.iridescence + '\n';
 						if ( mat.iridescenceIOR ) mtlOutput += 'Pirior ' + mat.iridescenceIOR + '\n';
-						if ( mat.iridescenceThicknessRange ) mtlOutput += 'Pirtr ' + mat.iridescenceThicknessRange[ 0 ] + ' ' + mat.iridescenceThicknessRange[ 1 ] + '\n';
-						if ( mat.sheen ) mtlOutput += 'Psh ' + mat.sheen + '\n';
-						if ( mat.sheenColor ) mtlOutput += 'Pshc ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
-						if ( mat.sheenRoughness ) mtlOutput += 'Pshr ' + mat.sheenRoughness + '\n';
-						if ( mat.specularIntensity ) mtlOutput += 'Psi ' + mat.specularIntensity + '\n';
-						if ( mat.specularColor ) mtlOutput += 'Psc ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
+						if ( mat.iridescenceThicknessRange ) mtlOutput += 'Pirthr ' + mat.iridescenceThicknessRange[ 0 ] + ' ' + mat.iridescenceThicknessRange[ 1 ] + '\n';
+						if ( mat.sheen ) mtlOutput += 'Ps ' + mat.sheen + '\n';
+						if ( mat.sheenColor ) mtlOutput += 'Psc ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
+						if ( mat.sheenRoughness ) mtlOutput += 'Psr ' + mat.sheenRoughness + '\n';
+						if ( mat.specularIntensity ) mtlOutput += 'Pspi ' + mat.specularIntensity + '\n';
+						if ( mat.specularColor ) mtlOutput += 'Pspc ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
 						if ( mat.thickness ) mtlOutput += 'Pth ' + mat.thickness + '\n';
 						if ( mat.transmission ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
 
@@ -1038,11 +1038,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pccm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pcc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pccm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pcc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1080,11 +1080,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pccnm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pccn -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pccnm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pccn -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1122,11 +1122,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pccrm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pccr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pccrm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pccr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1164,11 +1164,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pirm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pir -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pirm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.iridescenceMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pir -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.iridescenceMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1206,11 +1206,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pirthm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pirth -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pirthm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.iridescenceThicknessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pirth -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.iridescenceThicknessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1248,11 +1248,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pshcm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ps -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pshcm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.sheenColorMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ps -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.sheenColorMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1290,11 +1290,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pshrm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Psr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pshrm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.sheenRoughnessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Psr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.sheenRoughnessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1332,11 +1332,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Psim -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pspi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Psim -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pspi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1374,11 +1374,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pscm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pspc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pscm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pspc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1416,11 +1416,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pthm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pth -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pthm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pth -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1458,11 +1458,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Ptrm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ptr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Ptrm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ptr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1509,7 +1509,7 @@
 				}
 
 				// Get the base64 encoded data
-				const base64data = canvas.toDataURL( `image/${ext}`, 1 ).replace( /^data:image\/(png|jpg);base64,/, '' );
+				const base64data = canvas.toDataURL( `image/${ext}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
 
 				// Convert to a uint8 array
 				return base64ToBuffer( base64data );
