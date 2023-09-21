@@ -114,7 +114,7 @@
 
 				} else {
 
-					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'patc' || key === 'psc' || key === 'pshc' ) {
+					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'patc' || key === 'psc' || key === 'pnsc' ) {
 
 						const ss = value.split( delimiter_pattern, 3 );
 						info[ key ] = [ parseFloat( ss[ 0 ] ), parseFloat( ss[ 1 ] ), parseFloat( ss[ 2 ] ) ];
@@ -161,7 +161,7 @@
 
 			this.baseUrl = baseUrl;
 			this.options = options;
-			this.orginalMaterialsInfo = {};
+			this.originalMaterialsInfo = {};
 			this.materialsInfo = {};
 			this.materials = {};
 			this.materialsArray = [];
@@ -221,7 +221,7 @@
 						case 'ks':
 						case 'patc':
 						case 'psc':
-						case 'pshc':
+						case 'pnsc':
 							// Diffuse color (color under white light) using RGB values
 							if ( this.options && this.options.normalizeRGB ) {
 
@@ -353,32 +353,39 @@
 				switch ( lprop ) {
 
 					// Ns is material specular exponent
+
+					case 'ka':
+						// Ambient occlusion map intensity
+						params.aoMapIntensity = parseFloat( value[ 0 ] );
+						break;
+
 					case 'kd':
 						// Diffuse color (color under white light) using RGB values
-						params.color = new THREE.Color().fromArray( value );
+						params.color = new THREE.Color().fromArray( value ).convertSRGBToLinear();
 						break;
 
 					case 'ks':
 						// Specular color (color when light is reflected from shiny surface) using RGB values
-						params.specular = new THREE.Color().fromArray( value );
+						params.specular = new THREE.Color().fromArray( value ).convertSRGBToLinear();
 						break;
 
 					case 'ke':
 						// Emissive using RGB values
-						params.emissive = new THREE.Color().fromArray( value );
+						params.emissive = new THREE.Color().fromArray( value ).convertSRGBToLinear();
 						break;
-	
+
 					case 'map_ka':
 						// Ambient occlusion map
 						setMapForType( 'aoMap', value, lprop );
 						break;
-		
+
 					case 'map_kd':
 						// Diffuse texture map
 						setMapForType( 'map', value, lprop );
 						break;
 
 					case 'map_ks':
+					case 'map_ns':
 						// Specular map
 						setMapForType( 'specularMap', value, lprop );
 						break;
@@ -425,7 +432,7 @@
 
 					case 'patc':
 						// Attenuation color
-						params.attenuationColor = new THREE.Color().fromArray( value );
+						params.attenuationColor = new THREE.Color().fromArray( value ).convertSRGBToLinear();
 						use_phong = false;
 						break;
 
@@ -493,31 +500,31 @@
 						use_phong = false;
 						break;
 
-					case 'pirtr':
+					case 'pirthr':
 						// Iridescence thickness range
 						const values = value.split( ' ' );
 						params.iridescenceThicknessRange = new Uint32Array( values );
 						use_phong = false;
 						break;
 
-					case 'prfl':
+					case 'prefl':
 						// Reflectivity
 						params.reflectivity = parseFloat( value );
 						break;
 
-					case 'psh':
+					case 'ps':
 						// The intensity of the sheen layer
 						params.sheen = parseFloat( value );
 						use_phong = false;
 						break;
 
-					case 'pshc':
+					case 'psc':
 						// The sheen tint
-						params.sheenColor = new THREE.Color().fromArray( value );
+						params.sheenColor = new THREE.Color().fromArray( value ).convertSRGBToLinear();
 						use_phong = false;
 						break;
 
-					case 'pshr':
+					case 'psr':
 						// Roughness of the sheen layer
 						params.sheenRoughness = parseFloat( value );
 						use_phong = false;
@@ -529,9 +536,9 @@
 						use_phong = false;
 						break;
 
-					case 'psc':
+					case 'pnsc':
 						// Specular color
-						params.specularColor = new THREE.Color().fromArray( value );
+						params.specularColor = new THREE.Color().fromArray( value ).convertSRGBToLinear();
 						use_phong = false;
 						break;
 
@@ -564,68 +571,67 @@
 						use_phong = false;
 						break;
 
-					case 'map_pccm':
+					case 'map_pcc':
 						// Clearcoat map
 						setMapForType( 'clearcoatMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'map_pccnm':
+					case 'map_pccn':
 						// Clearcoat normal map
 						setMapForType( 'clearcoatNormalMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'map_pccrm':
+					case 'map_pccr':
 						// Clearcoat roughness map
 						setMapForType( 'clearcoatRoughnessMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'map_pirm':
+					case 'map_pir':
 						// Iridescence map
 						setMapForType( 'iridescenceMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'map_pirthm':
+					case 'map_pirth':
 						// Iridescence thickness map
 						setMapForType( 'iridescenceThicknessMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_ps':
-					case 'map_pshcm':
 						// Sheen layer color map
 						setMapForType( 'sheenColorMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'map_pshrm':
+					case 'map_psr':
 						// Sheen layer roughness map
 						setMapForType( 'sheenRoughnessMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'map_psim':
+					case 'map_pspi':
 						// Specular intensity map
 						setMapForType( 'specularIntensityMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'map_pscm':
+					case 'map_pspc':
 						// Specular color map
 						setMapForType( 'specularColorMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'map_pthm':
+					case 'map_pth':
 						// Thickness map
 						setMapForType( 'thicknessMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'map_ptrm':
+					case 'map_ptr':
 						// Transmission map
 						setMapForType( 'transmissionMap', value, lprop );
 						use_phong = false;
