@@ -454,35 +454,35 @@
 						use_phong = false;
 						break;
 
-					case 'disp_b':
+					case 'disb':
 						// Displacement bias
 						params.displacementBias = parseFloat( value );
 						break;
 
-					case 'disp_s':
+					case 'diss':
 						// Displacement scale
 						params.displacementScale = parseFloat( value );
 						break;
 
-					case 'pcc':
+					case 'pc':
 						// Clearcoat
 						params.clearcoat = parseFloat( value );
 						use_phong = false;
 						break;
 
-					case 'pccr':
+					case 'pcr':
 						// Clearcoat roughness
 						params.clearcoatRoughness = parseFloat( value );
 						use_phong = false;
 						break;
 
-					case 'pccns':
+					case 'pcns':
 						// Clearcoat normal scale
 						params.clearcoatNormalScale = new THREE.Vector2().fromArray( value );
 						use_phong = false;
 						break;
 
-					case 'pior':
+					case 'ni':
 						// Index-of-refraction for non-metallic materials
 						params.ior = parseFloat( value );
 						use_phong = false;
@@ -507,7 +507,7 @@
 						use_phong = false;
 						break;
 
-					case 'prefl':
+					case 'refl':
 						// Reflectivity
 						params.reflectivity = parseFloat( value );
 						break;
@@ -571,19 +571,19 @@
 						use_phong = false;
 						break;
 
-					case 'map_pcc':
+					case 'map_pc':
 						// Clearcoat map
 						setMapForType( 'clearcoatMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'map_pccn':
+					case 'map_pcn':
 						// Clearcoat normal map
 						setMapForType( 'clearcoatNormalMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'map_pccr':
+					case 'map_pcr':
 						// Clearcoat roughness map
 						setMapForType( 'clearcoatRoughnessMap', value, lprop );
 						use_phong = false;
