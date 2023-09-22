@@ -114,7 +114,7 @@
 
 				} else {
 
-					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'patc' || key === 'psc' ) {
+					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'pac' || key === 'psc' ) {
 
 						const ss = value.split( delimiter_pattern, 3 );
 						info[ key ] = [ parseFloat( ss[ 0 ] ), parseFloat( ss[ 1 ] ), parseFloat( ss[ 2 ] ) ];
@@ -219,7 +219,7 @@
 						case 'ka':
 						case 'ke':
 						case 'ks':
-						case 'patc':
+						case 'pac':
 						case 'psc':
 							// Diffuse color (color under white light) using RGB values
 							if ( this.options && this.options.normalizeRGB ) {
