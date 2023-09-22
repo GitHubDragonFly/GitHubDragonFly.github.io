@@ -114,7 +114,7 @@
 
 				} else {
 
-					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'patc' || key === 'psc' || key === 'pspc' ) {
+					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'patc' || key === 'psc' ) {
 
 						const ss = value.split( delimiter_pattern, 3 );
 						info[ key ] = [ parseFloat( ss[ 0 ] ), parseFloat( ss[ 1 ] ), parseFloat( ss[ 2 ] ) ];
@@ -221,7 +221,6 @@
 						case 'ks':
 						case 'patc':
 						case 'psc':
-						case 'pspc':
 							// Diffuse color (color under white light) using RGB values
 							if ( this.options && this.options.normalizeRGB ) {
 
@@ -341,6 +340,12 @@
 			}
 
 			let use_phong = true;
+			let add_specular_color = false;
+			let specular_color_value = null;
+			let add_specular_map = false;
+			let specular_map_value = null;
+			let add_shininess_intensity = false;
+			let shininess_intensity_value = null;
 
 			for ( const prop in mat ) {
 
@@ -366,7 +371,8 @@
 
 					case 'ks':
 						// Specular color (color when light is reflected from shiny surface) using RGB values
-						params.specular = new THREE.Color().fromArray( value ).convertSRGBToLinear();
+						add_specular_color = true;
+						specular_color_value = value;
 						break;
 
 					case 'ke':
@@ -385,9 +391,9 @@
 						break;
 
 					case 'map_ks':
-					case 'map_ns':
 						// Specular map
-						setMapForType( 'specularMap', value, lprop );
+						add_specular_map = true;
+						specular_map_value = value;
 						break;
 
 					case 'map_ke':
@@ -424,13 +430,13 @@
 						params.lightMapIntensity = parseFloat( value );
 						break;
 
-					case 'patd':
+					case 'pad':
 						// Attenuation distance
 						params.attenuationDistance = parseFloat( value );
 						use_phong = false;
 						break;
 
-					case 'patc':
+					case 'pac':
 						// Attenuation color
 						params.attenuationColor = new THREE.Color().fromArray( value ).convertSRGBToLinear();
 						use_phong = false;
@@ -530,12 +536,6 @@
 						use_phong = false;
 						break;
 
-					case 'psi':
-						// Specular intensity
-						params.specularIntensity = parseFloat( value );
-						use_phong = false;
-						break;
-
 					case 'pspc':
 						// Specular color
 						params.specularColor = new THREE.Color().fromArray( value ).convertSRGBToLinear();
@@ -613,15 +613,9 @@
 						use_phong = false;
 						break;
 
-					case 'map_pspi':
+					case 'map_ns':
 						// Specular intensity map
 						setMapForType( 'specularIntensityMap', value, lprop );
-						use_phong = false;
-						break;
-
-					case 'map_pspc':
-						// Specular color map
-						setMapForType( 'specularColorMap', value, lprop );
 						use_phong = false;
 						break;
 
@@ -640,7 +634,8 @@
 					case 'ns':
 						// The specular exponent (defines the focus of the specular highlight)
 						// A high exponent results in a tight, concentrated highlight. Ns values normally range from 0 to 1000.
-						params.shininess = parseFloat( value );
+						add_shininess_intensity = true;
+						shininess_intensity_value = value;
 						break;
 
 					case 'd':
@@ -677,9 +672,17 @@
 
 			if ( use_phong === true ) {
 
+				if ( add_specular_color === true ) params.specular = new THREE.Color().fromArray( specular_color_value ).convertSRGBToLinear();
+				if ( add_specular_map === true ) setMapForType( 'specularMap', specular_map_value, 'map_ks' );
+				if ( add_shininess_intensity === true ) params.shininess = parseFloat( shininess_intensity_value );
+
 				this.materials[ materialName ] = new THREE.MeshPhongMaterial( params );
 
 			} else {
+
+				if ( add_specular_color === true ) params.specularColor = new THREE.Color().fromArray( specular_color_value ).convertSRGBToLinear();
+				if ( add_specular_map === true ) setMapForType( 'specularColorMap', specular_map_value, 'map_ks' );
+				if ( add_shininess_intensity === true ) params.specularIntensity = parseFloat( shininess_intensity_value );
 
 				if ( params.transmission && params.metalness === undefined ) {
 
