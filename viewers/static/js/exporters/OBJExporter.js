@@ -499,6 +499,11 @@
 
 						mtlOutput += '\n' + 'newmtl ' + name + '\n';
 
+						// it is expected that only one of the following values would be present:
+						// mat.specular vs mat.specularColor
+						// mat.shininess vs mat.specularIntensity
+						// mat.specularMap vs mat.specularColorMap
+
 						mtlOutput += 'Tr ' + transparency + '\n';
 						mtlOutput += 'Tf 1.0000 1.0000 1.0000\n'; // this property is not used by the three.js MTL Loader
 						mtlOutput += 'illum 2\n'; // this property is not used by the three.js MTL Loader
@@ -519,16 +524,16 @@
 						if ( mat.clearcoatNormalScale ) mtlOutput += 'Pcns ' + mat.clearcoatNormalScale.x + ' ' + mat.clearcoatNormalScale.y + '\n';
 						if ( mat.reflectivity ) mtlOutput += 'Refl ' + mat.reflectivity + '\n';
 						if ( mat.ior ) mtlOutput += 'Ni ' + mat.ior + '\n';
-						if ( mat.attenuationColor ) mtlOutput += 'Patc ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
-						if ( mat.attenuationDistance ) mtlOutput += 'Patd ' + mat.attenuationDistance + '\n';
+						if ( mat.attenuationColor ) mtlOutput += 'Pac ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
+						if ( mat.attenuationDistance ) mtlOutput += 'Pad ' + mat.attenuationDistance + '\n';
 						if ( mat.iridescence ) mtlOutput += 'Pir ' + mat.iridescence + '\n';
 						if ( mat.iridescenceIOR ) mtlOutput += 'Pirior ' + mat.iridescenceIOR + '\n';
 						if ( mat.iridescenceThicknessRange ) mtlOutput += 'Pirthr ' + mat.iridescenceThicknessRange[ 0 ] + ' ' + mat.iridescenceThicknessRange[ 1 ] + '\n';
 						if ( mat.sheen ) mtlOutput += 'Ps ' + mat.sheen + '\n';
 						if ( mat.sheenColor ) mtlOutput += 'Psc ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
 						if ( mat.sheenRoughness ) mtlOutput += 'Psr ' + mat.sheenRoughness + '\n';
-						if ( mat.specularIntensity ) mtlOutput += 'Pspi ' + mat.specularIntensity + '\n';
-						if ( mat.specularColor ) mtlOutput += 'Pspc ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
+						if ( mat.specularIntensity ) mtlOutput += 'Ns ' + mat.specularIntensity + '\n';
+						if ( mat.specularColor ) mtlOutput += 'Ks ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
 						if ( mat.thickness ) mtlOutput += 'Pth ' + mat.thickness + '\n';
 						if ( mat.transmission ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
 
@@ -1332,11 +1337,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pspi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ksi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pspi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ksi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1374,11 +1379,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pspc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ks -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pspc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ks -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
 
 								}
 
