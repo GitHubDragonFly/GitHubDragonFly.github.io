@@ -114,7 +114,7 @@
 
 				} else {
 
-					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'pbr_pac' || key === 'pbr_psc' || key === 'psc' ) {
+					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'pbr_pac' || key === 'pbr_psc' || key === 'ps' ) {
 
 						const ss = value.split( delimiter_pattern, 3 );
 						info[ key ] = [ parseFloat( ss[ 0 ] ), parseFloat( ss[ 1 ] ), parseFloat( ss[ 2 ] ) ];
@@ -221,7 +221,7 @@
 						case 'ks':
 						case 'pbr_pac':
 						case 'pbr_psc':
-						case 'psc':
+						case 'ps':
 							// Diffuse color (color under white light) using RGB values
 							if ( this.options && this.options.normalizeRGB ) {
 
@@ -524,7 +524,7 @@
 						use_phong = false;
 						break;
 
-					case 'pbr_psr':
+					case 'psr':
 						// Roughness of the sheen layer
 						params.sheenRoughness = parseFloat( value );
 						use_phong = false;
@@ -542,13 +542,13 @@
 						use_phong = false;
 						break;
 	
-					case 'pbr_pth':
+					case 'pth':
 						// PBR material thickness
 						params.thickness = parseFloat( value );
 						use_phong = false;
 						break;
 
-					case 'pbr_ptr':
+					case 'ptr':
 						// PBR material transmission
 						params.transmission = parseFloat( value );
 						use_phong = false;
