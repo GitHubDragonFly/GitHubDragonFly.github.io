@@ -540,14 +540,14 @@
 						if ( mat.sheen && mat.sheen > 0 ) {
 							mtlOutput += 'Pbr_ps ' + mat.sheen + '\n';
 							if ( mat.sheenColor ) mtlOutput += 'Ps ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
-							if ( mat.sheenRoughness ) mtlOutput += 'Pbr_psr ' + mat.sheenRoughness + '\n';
+							if ( mat.sheenRoughness ) mtlOutput += 'Psr ' + mat.sheenRoughness + '\n';
 						}
 						if ( mat.specularColor && mat.specularColor.getHex() > 0 ) {
 							mtlOutput += 'Pbr_psc ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
 							if ( mat.specularIntensity ) mtlOutput += 'Pbr_psi ' + mat.specularIntensity + '\n';
 						}
-						if ( mat.thickness && mat.thickness > 0 ) mtlOutput += 'Pbr_pth ' + mat.thickness + '\n';
-						if ( mat.transmission && mat.transmission > 0 ) mtlOutput += 'Pbr_ptr ' + mat.transmission + '\n';
+						if ( mat.thickness && mat.thickness > 0 ) mtlOutput += 'Pth ' + mat.thickness + '\n';
+						if ( mat.transmission && mat.transmission > 0 ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
 
 						if ( mat.alphaTest > 0 ) mtlOutput += 'Pbr_alpha ' + mat.alphaTest + '\n';
 
