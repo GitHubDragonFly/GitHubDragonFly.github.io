@@ -530,8 +530,8 @@
 						if ( mat.lightMapIntensity ) mtlOutput += 'Pli ' + mat.lightMapIntensity + '\n';
 						if ( mat.reflectivity ) mtlOutput += 'Pbr_refl ' + mat.reflectivity + '\n';
 						if ( mat.attenuationColor && mat.attenuationDistance && mat.attenuationDistance !== Infinity ) {
-							mtlOutput += 'Pbr_pac ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
-							mtlOutput += 'Pbr_pad ' + mat.attenuationDistance + '\n';
+							mtlOutput += 'Pac ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
+							mtlOutput += 'Pad ' + mat.attenuationDistance + '\n';
 						}
 						if ( mat.iridescence && mat.iridescence > 0 ) {
 							mtlOutput += 'Pbr_pir ' + mat.iridescence + '\n';
