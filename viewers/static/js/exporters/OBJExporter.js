@@ -455,6 +455,7 @@
 				output = 'mtllib ' + filename + '.mtl' + '\n' + output;
 
 				let mtlOutput = '# MTL file - created by a modified three.js OBJExporter' + '\n';
+				let map_Px_set = false;
 				let map_uuids = [];
 				let map_names = {};
 				let textures = [];
@@ -777,39 +778,61 @@
 
 						if ( mat.metalnessMap && mat.metalnessMap.type === 1009 && mat.metalnessMap.image ) {
 
-							let map_to_process = mat.metalnessMap;
+							if ( map_Px_set === false ) {
 
-							if ( map_to_process.isCompressedTexture === true ) {
+								let map_to_process = mat.metalnessMap;
 
-								map_to_process = decompress( mat.metalnessMap, 1024 );
+								if ( map_to_process.isCompressedTexture === true ) {
 
-							}
+									map_to_process = decompress( mat.metalnessMap, 1024 );
 
-							if ( mat.metalnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
+								}
 
-								const xs = mat.metalnessMap.repeat.x;
-								const ys = mat.metalnessMap.repeat.y;
-								const xo = mat.metalnessMap.offset.x;
-								const yo = mat.metalnessMap.offset.y;
+								if ( mat.metalnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
-								if ( map_uuids.includes( mat.metalnessMap.uuid ) === false ) {
+									const xs = mat.metalnessMap.repeat.x;
+									const ys = mat.metalnessMap.repeat.y;
+									const xo = mat.metalnessMap.offset.x;
+									const yo = mat.metalnessMap.offset.y;
 
-									name = 'metalnessMap' + count;
+									if ( map_uuids.includes( mat.metalnessMap.uuid ) === false ) {
 
-									map_uuids.push( mat.metalnessMap.uuid );
-									map_names[ mat.metalnessMap.uuid ] = name;
+										name = 'metalnessMap' + count;
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( map_to_process.image, ext )
-									});
+										map_uuids.push( mat.metalnessMap.uuid );
+										map_names[ mat.metalnessMap.uuid ] = name;
 
-									mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( map_to_process.image, ext )
+										});
 
-								} else {
+										if ( mat.roughnessMap && mat.roughnessMap === mat.metalnessMap ) {
 
-									mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
+											mtlOutput += 'map_Px -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+											map_Px_set = true;
+
+										} else {
+
+											mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+
+										}
+
+									} else {
+
+										if ( mat.roughnessMap && mat.roughnessMap === mat.metalnessMap ) {
+
+											mtlOutput += 'map_Px -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
+											map_Px_set = true;
+
+										} else {
+
+											mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
+
+										}
+
+									}
 
 								}
 
@@ -819,39 +842,61 @@
 
 						if ( mat.roughnessMap && mat.roughnessMap.type === 1009 && mat.roughnessMap.image ) {
 
-							let map_to_process = mat.roughnessMap;
+							if ( map_Px_set === false ) {
 
-							if ( map_to_process.isCompressedTexture === true ) {
+								let map_to_process = mat.roughnessMap;
 
-								map_to_process = decompress( mat.roughnessMap, 1024 );
+								if ( map_to_process.isCompressedTexture === true ) {
 
-							}
+									map_to_process = decompress( mat.roughnessMap, 1024 );
 
-							if ( mat.roughnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
+								}
 
-								const xs = mat.roughnessMap.repeat.x;
-								const ys = mat.roughnessMap.repeat.y;
-								const xo = mat.roughnessMap.offset.x;
-								const yo = mat.roughnessMap.offset.y;
+								if ( mat.roughnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data ) {
 
-								if ( map_uuids.includes( mat.roughnessMap.uuid ) === false ) {
+									const xs = mat.roughnessMap.repeat.x;
+									const ys = mat.roughnessMap.repeat.y;
+									const xo = mat.roughnessMap.offset.x;
+									const yo = mat.roughnessMap.offset.y;
 
-									name = 'roughnessMap' + count;
+									if ( map_uuids.includes( mat.roughnessMap.uuid ) === false ) {
 
-									map_uuids.push( mat.roughnessMap.uuid );
-									map_names[ mat.roughnessMap.uuid ] = name;
+										name = 'roughnessMap' + count;
 
-									textures.push( {
-										name,
-										ext,
-										data: imageToData( map_to_process.image, ext )
-									});
+										map_uuids.push( mat.roughnessMap.uuid );
+										map_names[ mat.roughnessMap.uuid ] = name;
 
-									mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+										textures.push( {
+											name,
+											ext,
+											data: imageToData( map_to_process.image, ext )
+										});
 
-								} else {
+										if ( mat.metalnessMap && mat.metalnessMap === mat.roughnessMap ) {
 
-									mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
+											mtlOutput += 'map_Px -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+											map_Px_set = true;
+
+										} else {
+
+											mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+
+										}
+
+									} else {
+
+										if ( mat.metalnessMap && mat.metalnessMap === mat.roughnessMap ) {
+
+											mtlOutput += 'map_Px -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
+											map_Px_set = true;
+
+										} else {
+
+											mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
+
+										}
+
+									}
 
 								}
 
@@ -1057,11 +1102,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'Pbr_pc_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'Pbr_pc_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1099,11 +1144,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'Pbr_pcn_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pcn -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'Pbr_pcn_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pcn -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1141,11 +1186,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'Pbr_pcr_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pcr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'Pbr_pcr_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pcr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1435,11 +1480,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'Pbr_pth_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pth -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'Pbr_pth_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pth -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1477,11 +1522,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'Pbr_ptr_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ptr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'Pbr_ptr_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ptr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
 
 								}
 
