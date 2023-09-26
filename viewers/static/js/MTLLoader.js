@@ -423,13 +423,13 @@
 						params.lightMapIntensity = parseFloat( value );
 						break;
 
-					case 'pbr_pad':
+					case 'pad':
 						// Attenuation distance
 						params.attenuationDistance = parseFloat( value );
 						use_phong = false;
 						break;
 
-					case 'pbr_pac':
+					case 'pac':
 						// Attenuation color
 						params.attenuationColor = new THREE.Color().fromArray( value );
 						use_phong = false;
