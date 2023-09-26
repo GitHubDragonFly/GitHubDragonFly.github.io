@@ -386,8 +386,7 @@
 
 					case 'map_ks':
 						// Specular map
-						add_specular_map = true;
-						specular_map_value = value;
+						setMapForType( 'specularMap', value, lprop );
 						break;
 
 					case 'map_ke':
@@ -555,7 +554,7 @@
 						break;
 
 					case 'pbr_alpha':
-						// PBR material transmission
+						// PBR material alphaTest
 						params.alphaTest = parseFloat( value );
 						use_phong = false;
 						break;
@@ -577,19 +576,26 @@
 						use_phong = false;
 						break;
 
-					case 'pbr_pc_map':
+					case 'map_px':
+						// RMA map
+						setMapForType( 'metalnessMap', value, lprop );
+						setMapForType( 'roughnessMap', value, lprop );
+						use_phong = false;
+						break;
+	
+					case 'map_pc':
 						// Clearcoat map
 						setMapForType( 'clearcoatMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'pbr_pcn_map':
+					case 'map_pcn':
 						// Clearcoat normal map
 						setMapForType( 'clearcoatNormalMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'pbr_pcr_map':
+					case 'map_pcr':
 						// Clearcoat roughness map
 						setMapForType( 'clearcoatRoughnessMap', value, lprop );
 						use_phong = false;
@@ -631,13 +637,13 @@
 						use_phong = false;
 						break;
 
-					case 'pbr_pth_map':
+					case 'map_pth':
 						// Thickness map
 						setMapForType( 'thicknessMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'pbr_ptr_map':
+					case 'map_ptr':
 						// Transmission map
 						setMapForType( 'transmissionMap', value, lprop );
 						use_phong = false;
