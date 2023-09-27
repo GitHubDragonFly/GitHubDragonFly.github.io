@@ -639,6 +639,8 @@
 							const path = surface[ 'float inputs:roughness.connect' ];
 							const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
 
+							if ( ! material.roughness || material.roughness === 0 ) material.roughness = 1.0;
+
 							material.roughnessMap = buildTexture( sampler );
 							material.roughnessMap.colorSpace = THREE.NoColorSpace;
 
@@ -660,6 +662,8 @@
 
 							const path = surface[ 'float inputs:metallic.connect' ];
 							const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
+
+							if ( ! material.metalness || material.metalness === 0 ) material.metalness = 1.0;
 
 							material.metalnessMap = buildTexture( sampler );
 							material.metalnessMap.colorSpace = THREE.NoColorSpace;
