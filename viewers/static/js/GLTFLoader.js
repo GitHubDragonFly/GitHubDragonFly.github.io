@@ -446,7 +446,7 @@ class GLTFLightsExtension {
 
 		const color = new THREE.Color( 0xffffff );
 
-		if ( lightDef.color !== undefined ) color.fromArray( lightDef.color );
+		if ( lightDef.color !== undefined ) color.setRGB( lightDef.color[ 0 ], lightDef.color[ 1 ], lightDef.color[ 2 ], THREE.LinearSRGBColorSpace );
 
 		const range = lightDef.range !== undefined ? lightDef.range : 0;
 
@@ -564,7 +564,7 @@ class GLTFMaterialsUnlitExtension {
 
 				const array = metallicRoughness.baseColorFactor;
 
-				materialParams.color.fromArray( array );
+				materialParams.color.setRGB( array[ 0 ], array[ 1 ], array[ 2 ], THREE.LinearSRGBColorSpace );
 				materialParams.opacity = array[ 3 ];
 
 			}
@@ -840,7 +840,8 @@ class GLTFMaterialsSheenExtension {
 
 		if ( extension.sheenColorFactor !== undefined ) {
 
-			materialParams.sheenColor.fromArray( extension.sheenColorFactor );
+			const colorFactor = extension.sheenColorFactor;
+			materialParams.sheenColor.setRGB( colorFactor[ 0 ], colorFactor[ 1 ], colorFactor[ 2 ], THREE.LinearSRGBColorSpace );
 
 		}
 
@@ -978,7 +979,7 @@ class GLTFMaterialsVolumeExtension {
 		materialParams.attenuationDistance = extension.attenuationDistance || Infinity;
 
 		const colorArray = extension.attenuationColor || [ 1, 1, 1 ];
-		materialParams.attenuationColor = new THREE.Color( colorArray[ 0 ], colorArray[ 1 ], colorArray[ 2 ] );
+		materialParams.attenuationColor = new THREE.Color().setRGB( colorArray[ 0 ], colorArray[ 1 ], colorArray[ 2 ], THREE.LinearSRGBColorSpace );
 
 		return Promise.all( pending );
 
@@ -1578,7 +1579,12 @@ class GLTFMeshGpuInstancing {
 				// Add instance attributes to the geometry, excluding TRS.
 				for ( const attributeName in attributes ) {
 
-					if ( attributeName !== 'TRANSLATION' &&
+					if ( attributeName === 'COLOR' ) {
+
+						const attr = attributes[ attributeName ];
+						instancedMesh.instanceColor = new THREE.InstancedBufferAttribute( attr.array, attr.itemSize, attr.normalized );
+
+					} else if ( attributeName !== 'TRANSLATION' &&
 						 attributeName !== 'ROTATION' &&
 						 attributeName !== 'SCALE' ) {
 
@@ -2621,9 +2627,12 @@ class GLTFMeshQuantizationExtension {
 					parser: parser,
 					userData: {}
 				};
+
 				addUnknownExtensionsToUserData( extensions, result, json );
+
 				assignExtrasToUserData( result, json );
-				Promise.all( parser._invokeAll( function ( ext ) {
+
+				return Promise.all( parser._invokeAll( function ( ext ) {
 
 					return ext.afterRoot && ext.afterRoot( result );
 
@@ -3166,13 +3175,13 @@ class GLTFMeshQuantizationExtension {
 
 					if ( source.uri[ 2 ] && source.uri[ 2 ] === '/' ) {
 
-						let delimiter = ( ( source.uri.includes( '\\') === true ) && ( source.uri.lastIndexOf( '\\') > source.uri.lastIndexOf( '/') ) ) ? '\\' : '/';
+						let delimiter = ( ( source.uri.includes( '\\' ) === true ) && ( source.uri.lastIndexOf( '\\' ) > source.uri.lastIndexOf( '/' ) ) ) ? '\\' : '/';
 						source.uri = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
 						( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
 
 					} else if ( source.uri[ 2 ] && source.uri[ 2 ] === '\\' ) {
 
-						let delimiter = ( ( source.uri.includes( '/') === true ) && ( source.uri.lastIndexOf( '/') > source.uri.lastIndexOf( '\\') ) ) ? '/' : '\\';
+						let delimiter = ( ( source.uri.includes( '/') === true ) && ( source.uri.lastIndexOf( '/' ) > source.uri.lastIndexOf( '\\' ) ) ) ? '/' : '\\';
 						source.uri = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
 						( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
 
@@ -3229,7 +3238,7 @@ class GLTFMeshQuantizationExtension {
 
 				if ( typeof source === 'number' ) {
 
-					source = json.images[ source ];
+					if ( json.images[ source ] ) source = json.images[ source ];
 
 				}
 
@@ -3635,8 +3644,10 @@ class GLTFMeshQuantizationExtension {
 
 			if ( materialDef.emissiveFactor !== undefined && materialType !== THREE.MeshBasicMaterial ) {
 
-				materialParams.emissive = new THREE.Color().fromArray( materialDef.emissiveFactor );
-
+				const emissiveFactor = materialDef.emissiveFactor;
+				materialParams.emissive = new THREE.Color().setRGB( emissiveFactor[ 0 ], emissiveFactor[ 1 ], emissiveFactor[ 2 ], THREE.LinearSRGBColorSpace );
+	
+	
 			}
 
 			if ( materialDef.emissiveTexture !== undefined && materialType !== THREE.MeshBasicMaterial ) {
