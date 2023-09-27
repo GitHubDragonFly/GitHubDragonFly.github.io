@@ -106,6 +106,12 @@
 
 			} );
 
+			this.register( function ( writer ) {
+
+				return new GLTFMeshGpuInstancing( writer );
+	
+			} );
+	
 		}
 
 		register( callback ) {
@@ -2403,7 +2409,7 @@
 				if ( light.distance > 0 ) lightDef.range = light.distance;
 
 				lightDef.spot = {};
-				lightDef.spot.innerConeAngle = ( light.penumbra - 1.0 ) * light.angle * - 1.0;
+				lightDef.spot.innerConeAngle = ( 1.0 - light.penumbra ) * light.angle;
 				lightDef.spot.outerConeAngle = light.angle;
 
 			}
@@ -2937,6 +2943,67 @@
 		}
 
 	}
+
+	/**
+	* GPU Instancing Extension
+	*
+	* Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Vendor/EXT_mesh_gpu_instancing
+	*/
+	class GLTFMeshGpuInstancing {
+
+		constructor( writer ) {
+
+			this.writer = writer;
+			this.name = 'EXT_mesh_gpu_instancing';
+
+		}
+
+		writeNode( object, nodeDef ) {
+
+			if ( ! object.isInstancedMesh ) return;
+
+			const writer = this.writer;
+
+			const mesh = object;
+
+			const translationAttr = new Float32Array( mesh.count * 3 );
+			const rotationAttr = new Float32Array( mesh.count * 4 );
+			const scaleAttr = new Float32Array( mesh.count * 3 );
+
+			const matrix = new THREE.Matrix4();
+			const position = new THREE.Vector3();
+			const quaternion = new THREE.Quaternion();
+			const scale = new THREE.Vector3();
+
+			for ( let i = 0; i < mesh.count; i ++ ) {
+
+				mesh.getMatrixAt( i, matrix );
+				matrix.decompose( position, quaternion, scale );
+
+				position.toArray( translationAttr, i * 3 );
+				quaternion.toArray( rotationAttr, i * 4 );
+				scale.toArray( scaleAttr, i * 3 );
+
+			}
+
+			const attributes = {
+				TRANSLATION: writer.processAccessor( new THREE.BufferAttribute( translationAttr, 3 ) ),
+				ROTATION: writer.processAccessor( new THREE.BufferAttribute( rotationAttr, 4 ) ),
+				SCALE: writer.processAccessor( new THREE.BufferAttribute( scaleAttr, 3 ) ),
+			};
+
+			if ( mesh.instanceColor ) attributes.COLOR = writer.processAccessor( mesh.instanceColor );
+
+			nodeDef.extensions = nodeDef.extensions || {};
+			nodeDef.extensions[ this.name ] = { attributes };
+
+			writer.extensionsUsed[ this.name ] = true;
+			writer.extensionsRequired[ this.name ] = true;
+
+		}
+
+	}
+
 
 	/**
 	 * Static utility functions
