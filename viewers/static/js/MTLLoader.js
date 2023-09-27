@@ -463,7 +463,7 @@
 						params.displacementScale = parseFloat( value );
 						break;
 
-					case 'pc':
+					case 'pcc':
 						// Clearcoat
 						params.clearcoat = parseFloat( value );
 						use_phong = false;
@@ -583,7 +583,7 @@
 						use_phong = false;
 						break;
 	
-					case 'map_pc':
+					case 'map_pcc':
 						// Clearcoat map
 						setMapForType( 'clearcoatMap', value, lprop );
 						use_phong = false;
@@ -613,13 +613,13 @@
 						use_phong = false;
 						break;
 
-					case 'map_ps':
+					case 'map_psc':
 						// PBR sheen layer color map
 						setMapForType( 'sheenColorMap', value, lprop );
 						use_phong = false;
 						break;
 
-					case 'pbr_psr_map':
+					case 'map_psr':
 						// PBR sheen layer roughness map
 						setMapForType( 'sheenRoughnessMap', value, lprop );
 						use_phong = false;
