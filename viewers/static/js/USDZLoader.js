@@ -159,7 +159,7 @@
 
 					}
 
-					if ( filename.endsWith( 'usd' ) ) {
+					if ( filename.endsWith( 'usd' ) || filename.endsWith( 'usda' ) ) {
 
 						const text = fflate.strFromU8( zip[ filename ] );
 						data[ filename ] = parser.parse( text );
@@ -180,6 +180,10 @@
 
 						return zip[ filename ];
 
+					} else if ( filename.endsWith( 'usdc' ) ) {
+
+						console.warn( 'THREE.USDZLoader: Found usdc crate file (.usdc or binary .usd) which is not supported.' );
+
 					}
 
 				}
@@ -188,11 +192,7 @@
 
 			const zip = fflate.unzipSync( new Uint8Array( buffer ) );
 
-			// console.log( zip );
-
 			const assets = parseAssets( zip );
-
-			// console.log( assets );
 
 			const file = findUSD( zip );
 
