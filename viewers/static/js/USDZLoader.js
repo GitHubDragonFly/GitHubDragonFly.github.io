@@ -182,7 +182,7 @@
 
 					} else if ( filename.endsWith( 'usdc' ) ) {
 
-						console.warn( 'THREE.USDZLoader: Found usdc crate file (.usdc or binary .usd) which is not supported.' );
+						console.warn( 'THREE.USDZLoader: Found crate file (.usdc) which is not supported.' );
 
 					}
 
