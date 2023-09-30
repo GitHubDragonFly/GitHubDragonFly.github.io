@@ -44,6 +44,7 @@ Number Type Converter
   - This is a revamped version of my GLTF v2.0 Viewer and is a sort of ASSIMP(JS) / three.js hybrid
   - It can be used instead of GLTF v2.0 and GLTF v1.0 Legacy viewers and also provides more export options
   - Might have bugs and interface / library related limitations and slow to load some models
+  - It tries to take advantage of the THREE.MeshPhysicalMaterial to bring a GLTF alike functionality for OBJ + MTL models
   - Has multiple export options available, with special notes about JSON formats:
     - Use JSON Viewer to see all models exported as `JSON`
     - Use JSON Legacy viewer to see all models exported as `ASSJSON`
