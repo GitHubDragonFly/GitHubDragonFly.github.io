@@ -341,6 +341,7 @@
 			}
 
 			let use_phong = true;
+			let iridescenceThicknessRange = [ 100, 400 ];
 
 			for ( const prop in mat ) {
 
@@ -423,6 +424,24 @@
 						params.lightMapIntensity = parseFloat( value );
 						break;
 
+					case 'pa':
+						// Anisotropy
+						params.anisotropy = parseFloat( value );
+						use_phong = false;
+						break;
+
+					case 'pas':
+						// Anisotropy Strength
+						params.anisotropyStrength = parseFloat( value );
+						use_phong = false;
+						break;
+	
+					case 'par':
+						// Anisotropy Rotation
+						params.anisotropyRotation = parseFloat( value );
+						use_phong = false;
+						break;
+		
 					case 'pad':
 						// Attenuation distance
 						params.attenuationDistance = parseFloat( value );
@@ -449,7 +468,7 @@
 
 					case 'pns':
 						// Normal Scale - how much the normal map affects the material
-						params.normalScale = new THREE.Vector2().fromArray( value );
+						params.normalScale = new THREE.Vector2().fromArray( value.split( ' ' ).map( Number ) );
 						use_phong = false;
 						break;
 
@@ -477,7 +496,7 @@
 
 					case 'pbr_pcns':
 						// Clearcoat normal scale
-						params.clearcoatNormalScale = new THREE.Vector2().fromArray( value );
+						params.clearcoatNormalScale = new THREE.Vector2().fromArray( value.split( ' ' ).map( Number ) );
 						use_phong = false;
 						break;
 
@@ -487,25 +506,30 @@
 						use_phong = false;
 						break;
 
-					case 'pbr_pir':
+					case 'pi':
 						// Iridescence
 						params.iridescence = parseFloat( value );
 						use_phong = false;
 						break;
 
-					case 'pbr_pirior':
+					case 'pii':
 						// Iridescence index-of-refraction
 						params.iridescenceIOR = parseFloat( value );
 						use_phong = false;
 						break;
 
-					case 'pbr_pirthr':
-						// Iridescence thickness range
-						const values = value.split( ' ' );
-						params.iridescenceThicknessRange = new Uint32Array( values );
+					case 'pitx':
+						// Iridescence thickness range x value
+						iridescenceThicknessRange[ 0 ] = parseFloat( value );
 						use_phong = false;
 						break;
 
+					case 'pity':
+						// Iridescence thickness range y value
+						iridescenceThicknessRange[ 1 ] = parseFloat( value );
+						use_phong = false;
+						break;
+	
 					case 'pbr_refl':
 						// Reflectivity
 						params.reflectivity = parseFloat( value );
@@ -564,6 +588,12 @@
 						setMapForType( 'lightMap', value, lprop );
 						break;
 
+					case 'map_pa':
+						// Anisotropy map
+						setMapForType( 'anisotropyMap', value, lprop );
+						use_phong = false;
+						break;
+	
 					case 'map_pm':
 						// Metalness map
 						setMapForType( 'metalnessMap', value, lprop );
@@ -601,18 +631,18 @@
 						use_phong = false;
 						break;
 
-					case 'pbr_pir_map':
-						// Iridescence map
-						setMapForType( 'iridescenceMap', value, lprop );
-						use_phong = false;
-						break;
-
-					case 'pbr_pirth_map':
+					case 'map_pit':
 						// Iridescence thickness map
 						setMapForType( 'iridescenceThicknessMap', value, lprop );
 						use_phong = false;
 						break;
 
+					case 'map_pi':
+						// Iridescence map
+						setMapForType( 'iridescenceMap', value, lprop );
+						use_phong = false;
+						break;
+	
 					case 'map_psc':
 						// PBR sheen layer color map
 						setMapForType( 'sheenColorMap', value, lprop );
@@ -692,6 +722,8 @@
 				this.materials[ materialName ] = new THREE.MeshPhongMaterial( params );
 
 			} else {
+
+				if ( params.iridescence ) params.iridescenceThicknessRange = iridescenceThicknessRange;
 
 				if ( params.transmission && params.transmission > 0 ) {
 
