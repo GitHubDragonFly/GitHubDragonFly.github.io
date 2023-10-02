@@ -583,7 +583,7 @@
 						use_phong = false;
 						break;
 	
-					case 'pl_map':
+					case 'pbr_pl_map':
 						// Light map
 						setMapForType( 'lightMap', value, lprop );
 						break;
