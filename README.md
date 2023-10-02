@@ -133,6 +133,7 @@ Number Type Converter
       - Exported USDZ files should work in the Apple's Quick Look (as tested on an iPad)
       - Viewers which include this exporter will try to export the model automatically
     - OBJ + MTL exporter and loaders try to take advantage of the THREE.MeshPhysicalMaterial to bring a GLTF alike functionality
+      - Check the `OBJ_MTL_PBR.md` file for the exported MTL entries description
     - OBJ exporter might currently, along with the exported MTL file, export multiple copies of the same texture but under different names:
       - Select 1 copy of the texture and rename it if you wish, then update the corresponding MTL file entries to point to that texture
       - Delete all other copies of that same texture
