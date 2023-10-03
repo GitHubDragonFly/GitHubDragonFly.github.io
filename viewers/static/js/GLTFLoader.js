@@ -3752,8 +3752,8 @@
 
 				// baseColorTexture, emissiveTexture and specularGlossinessTexture use sRGB encoding.
 
-				if ( material.map ) material.map.encoding = THREE.sRGBEncoding;
-				if ( material.emissiveMap ) material.emissiveMap.encoding = THREE.sRGBEncoding;
+				if ( material.map ) material.map.colorSpace = THREE.SRGBColorSpace;
+				if ( material.emissiveMap ) material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
 				assignExtrasToUserData( material, materialDef );
 
 				parser.associations.set( material, {
