@@ -2999,9 +2999,9 @@
 
 			const attributes = {};
 
-			if ( hasPosition ) attributes.TRANSLATION = writer.processAccessor( new BufferAttribute( translationAttr, 3 ) );
-			if ( hasRotation ) attributes.ROTATION = writer.processAccessor( new BufferAttribute( rotationAttr, 4 ) );
-			if ( hasScale ) attributes.SCALE = writer.processAccessor( new BufferAttribute( scaleAttr, 3 ) );
+			if ( hasPosition ) attributes.TRANSLATION = writer.processAccessor( new THREE.BufferAttribute( translationAttr, 3 ) );
+			if ( hasRotation ) attributes.ROTATION = writer.processAccessor( new THREE.BufferAttribute( rotationAttr, 4 ) );
+			if ( hasScale ) attributes.SCALE = writer.processAccessor( new THREE.BufferAttribute( scaleAttr, 3 ) );
 
 			if ( mesh.instanceColor ) attributes._COLOR_0 = writer.processAccessor( mesh.instanceColor );
 
