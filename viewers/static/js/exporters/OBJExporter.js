@@ -455,7 +455,7 @@
 				output = 'mtllib ' + filename + '.mtl' + '\n' + output;
 
 				let mtlOutput = '# MTL file - created by a modified three.js OBJExporter' + '\n';
-				let map_Px_set = false;
+				let map_Px_set;
 				let map_uuids = [];
 				let map_names = {};
 				let textures = [];
@@ -472,12 +472,14 @@
 
 						materials[ key ].forEach( ( mtl ) => {
 
+							map_Px_set = false;
 							set_mtl_params_textures( mtl );
 
 						});
 
 					} else {
 
+						map_Px_set = false;
 						set_mtl_params_textures( materials[ key ] );
 
 					}
