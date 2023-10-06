@@ -525,7 +525,6 @@
 							if ( mat.clearcoatNormalScale ) mtlOutput += 'Pbr_pcns ' + mat.clearcoatNormalScale.x + ' ' + mat.clearcoatNormalScale.y + '\n';
 						}
 						if ( mat.lightMapIntensity ) mtlOutput += 'Pli ' + mat.lightMapIntensity + '\n';
-						if ( mat.reflectivity ) mtlOutput += 'Pbr_refl ' + mat.reflectivity + '\n';
 						if ( mat.anisotropy ) {
 							mtlOutput += 'Pa ' + mat.anisotropy + '\n';
 							mtlOutput += 'Pas ' + mat.anisotropyStrength + '\n';
@@ -548,14 +547,16 @@
 							if ( mat.sheenColor ) mtlOutput += 'Ps ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
 							if ( mat.sheenRoughness ) mtlOutput += 'Psr ' + mat.sheenRoughness + '\n';
 						}
-						if ( mat.specularColor && mat.specularColor.getHex() > 0 ) {
-							mtlOutput += 'Pbr_psc ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
-							if ( mat.specularIntensity ) mtlOutput += 'Pbr_psi ' + mat.specularIntensity + '\n';
+						if ( mat.specularColorMap || mat.specularIntensityMap || ( ! ( mat.specularColor && mat.specularColor.getHex() === 16777215 && mat.specularIntensity && mat.specularIntensity === 1.0 ) ) ) {
+							if ( mat.specularColor ) mtlOutput += 'Psp ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
+							if ( mat.specularIntensity ) mtlOutput += 'Psi ' + mat.specularIntensity + '\n';
 						}
 						if ( mat.thickness && mat.thickness > 0 ) mtlOutput += 'Pth ' + mat.thickness + '\n';
 						if ( mat.transmission && mat.transmission > 0 ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
 
-						if ( mat.alphaTest > 0 ) mtlOutput += 'Pbr_alpha ' + mat.alphaTest + '\n';
+						if ( mat.reflectivity ) mtlOutput += 'Pbr_refl ' + mat.reflectivity + '\n';
+						if ( mat.alphaTest > 0 ) mtlOutput += 'a ' + mat.alphaTest + '\n';
+						mtlOutput += 'Pside ' + mat.side + '\n';
 
 						if ( mat.map && mat.map.type === 1009 && mat.map.image ) {
 
@@ -1443,11 +1444,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'Pbr_psi_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Psi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'Pbr_psi_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Psi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1485,11 +1486,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'Pbr_psc_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
+									mtlOutput += 'map_Psp -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'Pbr_psc_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Psp -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
 
 								}
 
