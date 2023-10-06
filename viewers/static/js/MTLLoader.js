@@ -114,7 +114,7 @@
 
 				} else {
 
-					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'ps' || key === 'pac' || key === 'pbr_psc' ) {
+					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'ps' || key === 'pac' || key === 'psp' ) {
 
 						const ss = value.split( delimiter_pattern, 3 );
 						info[ key ] = [ parseFloat( ss[ 0 ] ), parseFloat( ss[ 1 ] ), parseFloat( ss[ 2 ] ) ];
@@ -161,7 +161,6 @@
 
 			this.baseUrl = baseUrl;
 			this.options = options;
-			this.originalMaterialsInfo = {};
 			this.materialsInfo = {};
 			this.materials = {};
 			this.materialsArray = [];
@@ -187,12 +186,10 @@
 
 		setMaterials( materialsInfo ) {
 
-			this.originalMaterialsInfo = materialsInfo;
 			this.materialsInfo = this.convert( materialsInfo );
 			this.materials = {};
 			this.materialsArray = [];
 			this.nameLookup = {};
-
 		}
 
 		convert( materialsInfo ) {
@@ -221,7 +218,7 @@
 						case 'ks':
 						case 'ps':
 						case 'pac':
-						case 'pbr_psc':
+						case 'psp':
 							// Diffuse color (color under white light) using RGB values
 							if ( this.options && this.options.normalizeRGB ) {
 
@@ -310,7 +307,7 @@
 			// Create material
 			const scope = this;
 			const mat = this.materialsInfo[ materialName ];
-			const original_mat = this.originalMaterialsInfo[ materialName ];
+			const original_mat = this.materialsInfo[ materialName ];
 
 			const params = {
 				name: materialName,
@@ -369,7 +366,7 @@
 						// Specular color (color when light is reflected from shiny surface) using RGB values
 						params.specular = new THREE.Color().fromArray( value );
 						break;
-		
+
 					case 'ke':
 						// Emissive using RGB values
 						params.emissive = new THREE.Color().fromArray( value );
@@ -435,13 +432,13 @@
 						params.anisotropyStrength = parseFloat( value );
 						use_phong = false;
 						break;
-	
+
 					case 'par':
 						// Anisotropy Rotation
 						params.anisotropyRotation = parseFloat( value );
 						use_phong = false;
 						break;
-		
+
 					case 'pad':
 						// Attenuation distance
 						params.attenuationDistance = parseFloat( value );
@@ -529,11 +526,6 @@
 						iridescenceThicknessRange[ 1 ] = parseFloat( value );
 						use_phong = false;
 						break;
-	
-					case 'pbr_refl':
-						// Reflectivity
-						params.reflectivity = parseFloat( value );
-						break;
 
 					case 'pbr_ps':
 						// The intensity of the sheen layer
@@ -553,18 +545,18 @@
 						use_phong = false;
 						break;
 
-					case 'pbr_psc':
+					case 'psp':
 						// PBR material specular color
 						params.specularColor = new THREE.Color().fromArray( value );
 						use_phong = false;
 						break;
-	
-					case 'pbr_psi':
+
+					case 'psi':
 						// PBR material specular intensity
 						params.specularIntensity = parseFloat( value );
 						use_phong = false;
 						break;
-	
+
 					case 'pth':
 						// PBR material thickness
 						params.thickness = parseFloat( value );
@@ -576,13 +568,22 @@
 						params.transmission = parseFloat( value );
 						use_phong = false;
 						break;
-
-					case 'pbr_alpha':
-						// PBR material alphaTest
-						params.alphaTest = parseFloat( value );
-						use_phong = false;
-						break;
 	
+					case 'pside':
+						// Material side
+						params.side = parseInt( value );
+						break;
+
+					case 'pbr_refl':
+						// Reflectivity
+						params.reflectivity = parseFloat( value );
+						break;
+		
+					case 'a':
+						// Material alphaTest
+						params.alphaTest = parseFloat( value );
+						break;
+
 					case 'pbr_pl_map':
 						// Light map
 						setMapForType( 'lightMap', value, lprop );
@@ -593,7 +594,7 @@
 						setMapForType( 'anisotropyMap', value, lprop );
 						use_phong = false;
 						break;
-	
+
 					case 'map_pm':
 						// Metalness map
 						setMapForType( 'metalnessMap', value, lprop );
@@ -612,7 +613,7 @@
 						setMapForType( 'roughnessMap', value, lprop );
 						use_phong = false;
 						break;
-	
+
 					case 'map_pcc':
 						// Clearcoat map
 						setMapForType( 'clearcoatMap', value, lprop );
@@ -642,7 +643,7 @@
 						setMapForType( 'iridescenceMap', value, lprop );
 						use_phong = false;
 						break;
-	
+
 					case 'map_psc':
 						// PBR sheen layer color map
 						setMapForType( 'sheenColorMap', value, lprop );
@@ -655,26 +656,26 @@
 						use_phong = false;
 						break;
 
-					case 'pbr_psc_map':
+					case 'map_psp':
 						// PBR specular color map
 						setMapForType( 'specularColorMap', value, lprop );
 						use_phong = false;
 						break;
-	
-					case 'pbr_psi_map':
+
+					case 'map_psi':
 						// PBR specular intensity map
 						setMapForType( 'specularIntensityMap', value, lprop );
 						use_phong = false;
 						break;
-
+	
 					case 'map_pth':
-						// Thickness map
+						// PBR thickness map
 						setMapForType( 'thicknessMap', value, lprop );
 						use_phong = false;
 						break;
 
 					case 'map_ptr':
-						// Transmission map
+						// PBR transmission map
 						setMapForType( 'transmissionMap', value, lprop );
 						use_phong = false;
 						break;
@@ -725,23 +726,29 @@
 
 				if ( params.iridescence ) params.iridescenceThicknessRange = iridescenceThicknessRange;
 
+				// Check params to allow correct transmission effect
+
 				if ( params.transmission && params.transmission > 0 ) {
 
-					if ( params.metalnessMap && params.metalness === undefined ) {
+					if ( params.metalnessMap !== undefined && params.metalness === undefined ) {
 
 						params.metalness = 0.01;
 
 					}
 
-					if ( params.roughnessMap && params.roughness === undefined ) {
+					if ( params.roughnessMap !== undefined && params.roughness === undefined ) {
 
 						params.roughness = 0.01;
 
 					}
 
-					if ( ! params.metalnessMap && ! params.roughnessMap && params.metalness === undefined && params.roughness === undefined ) {
+					if ( params.metalnessMap === undefined && params.roughnessMap === undefined ) {
 
-						params.roughness = 0.01;
+						if ( params.metalness === undefined && ( params.roughness === undefined || params.roughness === 1.0 ) ) {
+
+							params.roughness = 0.01;
+
+						}
 
 					}
 
