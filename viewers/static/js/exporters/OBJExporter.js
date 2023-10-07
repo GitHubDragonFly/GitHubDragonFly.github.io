@@ -617,7 +617,7 @@
 
 								if ( map_uuids.includes( mat.specularMap.uuid ) === false ) {
 
-									name = 'specularMap' + count;
+									name = 'specMap' + count;
 
 									map_uuids.push( mat.specularMap.uuid );
 									map_names[ mat.specularMap.uuid ] = name;
@@ -659,7 +659,7 @@
 
 								if ( map_uuids.includes( mat.emissiveMap.uuid ) === false ) {
 
-									name = 'emissiveMap' + count;
+									name = 'emMap' + count;
 
 									map_uuids.push( mat.emissiveMap.uuid );
 									map_names[ mat.emissiveMap.uuid ] = name;
@@ -701,7 +701,7 @@
 
 								if ( map_uuids.includes( mat.bumpMap.uuid ) === false ) {
 
-									name = 'bumpMap' + count;
+									name = 'bmMap' + count;
 
 									map_uuids.push( mat.bumpMap.uuid );
 									map_names[ mat.bumpMap.uuid ] = name;
@@ -759,7 +759,7 @@
 
 								if ( map_uuids.includes( mat.lightMap.uuid ) === false ) {
 
-									name = 'lightMap' + count;
+									name = 'ltMap' + count;
 
 									map_uuids.push( mat.lightMap.uuid );
 									map_names[ mat.lightMap.uuid ] = name;
@@ -803,7 +803,7 @@
 
 									if ( map_uuids.includes( mat.metalnessMap.uuid ) === false ) {
 
-										name = 'metalnessMap' + count;
+										name = 'metalMap' + count;
 
 										map_uuids.push( mat.metalnessMap.uuid );
 										map_names[ mat.metalnessMap.uuid ] = name;
@@ -867,7 +867,7 @@
 
 									if ( map_uuids.includes( mat.roughnessMap.uuid ) === false ) {
 
-										name = 'roughnessMap' + count;
+										name = 'roughMap' + count;
 
 										map_uuids.push( mat.roughnessMap.uuid );
 										map_names[ mat.roughnessMap.uuid ] = name;
@@ -929,7 +929,7 @@
 
 								if ( map_uuids.includes( mat.displacementMap.uuid ) === false ) {
 
-									name = 'displacementMap' + count;
+									name = 'displaceMap' + count;
 
 									map_uuids.push( mat.displacementMap.uuid );
 									map_names[ mat.displacementMap.uuid ] = name;
@@ -971,7 +971,7 @@
 
 								if ( map_uuids.includes( mat.normalMap.uuid ) === false ) {
 
-									name = 'normalMap' + count;
+									name = 'norMap' + count;
 
 									map_uuids.push( mat.normalMap.uuid );
 									map_names[ mat.normalMap.uuid ] = name;
@@ -1013,7 +1013,7 @@
 
 								if ( map_uuids.includes( mat.alphaMap.uuid ) === false ) {
 
-									name = 'alphaMap' + count;
+									name = 'alpMap' + count;
 
 									map_uuids.push( mat.alphaMap.uuid );
 									map_names[ mat.alphaMap.uuid ] = name;
@@ -1055,7 +1055,7 @@
 
 								if ( map_uuids.includes( mat.aoMap.uuid ) === false ) {
 
-									name = 'ambientMap' + count;
+									name = 'ambMap' + count;
 
 									map_uuids.push( mat.aoMap.uuid );
 									map_names[ mat.aoMap.uuid ] = name;
@@ -1097,7 +1097,7 @@
 
 								if ( map_uuids.includes( mat.anisotropyMap.uuid ) === false ) {
 
-									name = 'anisotropyMap' + count;
+									name = 'anisMap' + count;
 
 									map_uuids.push( mat.anisotropyMap.uuid );
 									map_names[ mat.anisotropyMap.uuid ] = name;
@@ -1139,7 +1139,7 @@
 
 								if ( map_uuids.includes( mat.clearcoatMap.uuid ) === false ) {
 
-									name = 'clearcoatMap' + count;
+									name = 'ccMap' + count;
 
 									map_uuids.push( mat.clearcoatMap.uuid );
 									map_names[ mat.clearcoatMap.uuid ] = name;
@@ -1181,7 +1181,7 @@
 
 								if ( map_uuids.includes( mat.clearcoatNormalMap.uuid ) === false ) {
 
-									name = 'clearcoatNormalMap' + count;
+									name = 'ccnMap' + count;
 
 									map_uuids.push( mat.clearcoatNormalMap.uuid );
 									map_names[ mat.clearcoatNormalMap.uuid ] = name;
@@ -1223,7 +1223,7 @@
 
 								if ( map_uuids.includes( mat.clearcoatRoughnessMap.uuid ) === false ) {
 
-									name = 'clearcoatRoughnessMap' + count;
+									name = 'ccrMap' + count;
 
 									map_uuids.push( mat.clearcoatRoughnessMap.uuid );
 									map_names[ mat.clearcoatRoughnessMap.uuid ] = name;
@@ -1265,7 +1265,7 @@
 
 								if ( map_uuids.includes( mat.iridescenceMap.uuid ) === false ) {
 
-									name = 'iridescenceMap' + count;
+									name = 'irMap' + count;
 
 									map_uuids.push( mat.iridescenceMap.uuid );
 									map_names[ mat.iridescenceMap.uuid ] = name;
@@ -1307,7 +1307,7 @@
 
 								if ( map_uuids.includes( mat.iridescenceThicknessMap.uuid ) === false ) {
 
-									name = 'iridescenceThicknessMap' + count;
+									name = 'irthMap' + count;
 
 									map_uuids.push( mat.iridescenceThicknessMap.uuid );
 									map_names[ mat.iridescenceThicknessMap.uuid ] = name;
@@ -1349,7 +1349,7 @@
 
 								if ( map_uuids.includes( mat.sheenColorMap.uuid ) === false ) {
 
-									name = 'sheenColorMap' + count;
+									name = 'shcMap' + count;
 
 									map_uuids.push( mat.sheenColorMap.uuid );
 									map_names[ mat.sheenColorMap.uuid ] = name;
@@ -1391,7 +1391,7 @@
 
 								if ( map_uuids.includes( mat.sheenRoughnessMap.uuid ) === false ) {
 
-									name = 'sheenRoughnessMap' + count;
+									name = 'shrMap' + count;
 
 									map_uuids.push( mat.sheenRoughnessMap.uuid );
 									map_names[ mat.sheenRoughnessMap.uuid ] = name;
@@ -1433,7 +1433,7 @@
 
 								if ( map_uuids.includes( mat.specularIntensityMap.uuid ) === false ) {
 
-									name = 'specularIntensityMap' + count;
+									name = 'spiMap' + count;
 
 									map_uuids.push( mat.specularIntensityMap.uuid );
 									map_names[ mat.specularIntensityMap.uuid ] = name;
@@ -1475,7 +1475,7 @@
 
 								if ( map_uuids.includes( mat.specularColorMap.uuid ) === false ) {
 
-									name = 'specularColorMap' + count;
+									name = 'spcMap' + count;
 
 									map_uuids.push( mat.specularColorMap.uuid );
 									map_names[ mat.specularColorMap.uuid ] = name;
@@ -1517,7 +1517,7 @@
 
 								if ( map_uuids.includes( mat.thicknessMap.uuid ) === false ) {
 
-									name = 'thicknessMap' + count;
+									name = 'thMap' + count;
 
 									map_uuids.push( mat.thicknessMap.uuid );
 									map_names[ mat.thicknessMap.uuid ] = name;
@@ -1559,7 +1559,7 @@
 
 								if ( map_uuids.includes( mat.transmissionMap.uuid ) === false ) {
 
-									name = 'transmissionMap' + count;
+									name = 'trMap' + count;
 
 									map_uuids.push( mat.transmissionMap.uuid );
 									map_names[ mat.transmissionMap.uuid ] = name;
