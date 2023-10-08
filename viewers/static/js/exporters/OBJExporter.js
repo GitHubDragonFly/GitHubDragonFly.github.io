@@ -529,6 +529,7 @@
 							}
 						}
 						if ( mat.lightMapIntensity && mat.lightMapIntensity !== 1 ) mtlOutput += 'Pli ' + mat.lightMapIntensity + '\n';
+						if ( mat.emissiveIntensity && mat.emissiveIntensity !== 1 ) mtlOutput += 'Pe ' + mat.emissiveIntensity + '\n';
 						if ( mat.anisotropy ) {
 							mtlOutput += 'Pa ' + mat.anisotropy + '\n';
 							mtlOutput += 'Pas ' + mat.anisotropyStrength + '\n';
