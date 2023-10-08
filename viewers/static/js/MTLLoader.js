@@ -474,7 +474,6 @@
 					case 'pns':
 						// Normal Scale - how much the normal map affects the material
 						params.normalScale = new THREE.Vector2().fromArray( value.split( ' ' ).map( Number ) );
-						use_phong = false;
 						break;
 
 					case 'disp_b':
