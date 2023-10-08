@@ -161,6 +161,7 @@
 
 			this.baseUrl = baseUrl;
 			this.options = options;
+			this.orginalMaterialsInfo = {};
 			this.materialsInfo = {};
 			this.materials = {};
 			this.materialsArray = [];
@@ -186,6 +187,7 @@
 
 		setMaterials( materialsInfo ) {
 
+			this.originalMaterialsInfo = materialsInfo;
 			this.materialsInfo = this.convert( materialsInfo );
 			this.materials = {};
 			this.materialsArray = [];
@@ -307,7 +309,7 @@
 			// Create material
 			const scope = this;
 			const mat = this.materialsInfo[ materialName ];
-			const original_mat = this.materialsInfo[ materialName ];
+			const original_mat = this.originalMaterialsInfo[ materialName ];
 
 			const params = {
 				name: materialName,
@@ -451,6 +453,12 @@
 						use_phong = false;
 						break;
 
+					case 'pe':
+						// Emissive Intensity (strength)
+						params.emissiveIntensity = parseFloat( value );
+						use_phong = false;
+						break;
+	
 					case 'pm':
 						// Metalness
 						params.metalness = parseFloat( value );
