@@ -513,18 +513,22 @@
 						if ( mat.shininess ) mtlOutput += 'Ns ' + mat.shininess + '\n';
 						if ( mat.metalness ) mtlOutput += 'Pm ' + mat.metalness + '\n';
 						if ( mat.roughness ) mtlOutput += 'Pr ' + mat.roughness + '\n';
-						if ( mat.ior && mat.ior > 0 ) mtlOutput += 'Ni ' + Math.max( 1.0, Math.min( 2.333, mat.ior ) ) + '\n';
-						if ( mat.normalScale && ! mat.sheen ) mtlOutput += 'Pns ' + mat.normalScale.x + ' ' + mat.normalScale.y + '\n';
+						if ( mat.ior && mat.ior >= 1 ) mtlOutput += 'Ni ' + Math.min( 2.333, mat.ior ) + '\n';
+						if ( mat.normalScale && ! ( mat.normalScale.x === 1 && mat.normalScale.y === 1 ) && ! mat.sheen ) {
+							mtlOutput += 'Pns ' + mat.normalScale.x + ' ' + mat.normalScale.y + '\n';
+						}
 						if ( mat.displacementMap ) {
-							if ( mat.displacementBias ) mtlOutput += 'disp_b ' + mat.displacementBias + '\n';
-							if ( mat.displacementScale ) mtlOutput += 'disp_s ' + mat.displacementScale + '\n';
+							if ( mat.displacementBias && mat.displacementBias > 0 ) mtlOutput += 'disp_b ' + mat.displacementBias + '\n';
+							if ( mat.displacementScale && mat.displacementScale < 1 ) mtlOutput += 'disp_s ' + mat.displacementScale + '\n';
 						}
 						if ( mat.clearcoat && mat.clearcoat > 0 ) {
 							mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
 							if ( mat.clearcoatRoughness ) mtlOutput += 'Pcr ' + mat.clearcoatRoughness + '\n';
-							if ( mat.clearcoatNormalScale ) mtlOutput += 'Pbr_pcns ' + mat.clearcoatNormalScale.x + ' ' + mat.clearcoatNormalScale.y + '\n';
+							if ( mat.clearcoatNormalScale && ! ( mat.clearcoatNormalScale.x === 1 && mat.clearcoatNormalScale.y === 1 ) ) {
+								mtlOutput += 'Pbr_pcns ' + mat.clearcoatNormalScale.x + ' ' + mat.clearcoatNormalScale.y + '\n';
+							}
 						}
-						if ( mat.lightMapIntensity ) mtlOutput += 'Pli ' + mat.lightMapIntensity + '\n';
+						if ( mat.lightMapIntensity && mat.lightMapIntensity !== 1 ) mtlOutput += 'Pli ' + mat.lightMapIntensity + '\n';
 						if ( mat.anisotropy ) {
 							mtlOutput += 'Pa ' + mat.anisotropy + '\n';
 							mtlOutput += 'Pas ' + mat.anisotropyStrength + '\n';
@@ -536,7 +540,7 @@
 						}
 						if ( mat.iridescence && mat.iridescence > 0 ) {
 							mtlOutput += 'Pi ' + mat.iridescence + '\n';
-							if ( mat.iridescenceIOR ) mtlOutput += 'Pii ' + Math.max( 1.0, Math.min( 2.333, mat.iridescenceIOR ) ) + '\n';
+							if ( mat.iridescenceIOR && mat.iridescenceIOR >= 1 ) mtlOutput += 'Pii ' + Math.min( 2.333, mat.iridescenceIOR ) + '\n';
 							if ( mat.iridescenceThicknessRange ) {
 								mtlOutput += 'Pitx ' + mat.iridescenceThicknessRange[ 0 ] + '\n';
 								mtlOutput += 'Pity ' + mat.iridescenceThicknessRange[ 1 ] + '\n';
