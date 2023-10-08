@@ -513,7 +513,7 @@
 						if ( mat.shininess ) mtlOutput += 'Ns ' + mat.shininess + '\n';
 						if ( mat.metalness ) mtlOutput += 'Pm ' + mat.metalness + '\n';
 						if ( mat.roughness ) mtlOutput += 'Pr ' + mat.roughness + '\n';
-						if ( mat.ior && mat.ior > 0 ) mtlOutput += 'Ni ' + mat.ior + '\n';
+						if ( mat.ior && mat.ior > 0 ) mtlOutput += 'Ni ' + Math.max( 1.0, Math.min( 2.333, mat.ior ) ) + '\n';
 						if ( mat.normalScale && ! mat.sheen ) mtlOutput += 'Pns ' + mat.normalScale.x + ' ' + mat.normalScale.y + '\n';
 						if ( mat.displacementMap ) {
 							if ( mat.displacementBias ) mtlOutput += 'disp_b ' + mat.displacementBias + '\n';
@@ -536,7 +536,7 @@
 						}
 						if ( mat.iridescence && mat.iridescence > 0 ) {
 							mtlOutput += 'Pi ' + mat.iridescence + '\n';
-							if ( mat.iridescenceIOR ) mtlOutput += 'Pii ' + mat.iridescenceIOR + '\n';
+							if ( mat.iridescenceIOR ) mtlOutput += 'Pii ' + Math.max( 1.0, Math.min( 2.333, mat.iridescenceIOR ) ) + '\n';
 							if ( mat.iridescenceThicknessRange ) {
 								mtlOutput += 'Pitx ' + mat.iridescenceThicknessRange[ 0 ] + '\n';
 								mtlOutput += 'Pity ' + mat.iridescenceThicknessRange[ 1 ] + '\n';
