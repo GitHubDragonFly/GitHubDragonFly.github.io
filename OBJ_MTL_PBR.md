@@ -17,28 +17,30 @@ This document would represent a summary of PBR entries that can be found in the 
 
 ## PBR Entries with associated textures (maps):
 
+ - `a` - alphaTest (alphaCutoff)
+ - `Pside` - material side
+ - `Pac` / `Pad` - attenuationColor / attenuationDistance
+
  - `Pm` - metalness
    - `map_Pm` - metalnessMap
  - `Pr` - roughness
    - `map_Pr` - roughnessMap
  - `map_Px` - replaces both `map_Pm` and `map_Pr` when they are identical
 
- - `Pa / Pas / Par` - anisotropy / anisotropyStrength / anisotropyRotation
+ - `Pa` / `Pas` / `Par` - anisotropy / anisotropyStrength / anisotropyRotation
    - `map_Pa` - anisotropyMap
 
- - `Pac / Pad` - attenuationColor / attenuationDistance
-
- - `Pi / Pii` - iridescence / iridescenceIOR
+ - `Pi` / `Pii` - iridescence / iridescenceIOR
    - `map_Pi` - iridescenceMap
- - `Pitx / Pity` - iridescenceThicknessMinimum / iridescenceThicknessMaximum aka iridescenceThicknessRange[x, y] in three.js
+ - `Pitx` / `Pity` - iridescenceThicknessMinimum / iridescenceThicknessMaximum (aka iridescenceThicknessRange[x, y] in three.js)
    - `map_Pit` - iridescenceThicknessMap
 
- - `Pcc / Pcr` - clearcoat / clearcoatRoughness
+ - `Pcc` / `Pcr` - clearcoat / clearcoatRoughness
    - `map_Pcc` - clearcoatMap
    - `map_Pcn` - clearcoatNormalMap
    - `map_Pcr` - clearcoatRoughnessMap
 
- - `Ps / Psr` - sheenColor / sheenRoughness
+ - `Ps` / `Psr` - sheenColor / sheenRoughness
    - `map_Psc` - sheenColorMap
    - `map_Psr` - sheenRoughnessMap`
 
@@ -48,21 +50,23 @@ This document would represent a summary of PBR entries that can be found in the 
  - `Ptr` - transmission
    - `map_Ptr` - transmissionMap
 
-Entries currently not compatible with the `assimp` library:
+ - `Psp` - specularColor
+   - `map_Psp` - specularColorMap
 
+ - `Psi` - specularIntensity
+   - `map_Psi` - specularIntensityMap
+
+Entries currently not compatible with the `assimp` library but working fine in the OBJ + MTL Viewer:
+
+ - `Pe` - emissive intensity
  - `Pns` - normalScale
  - `Pli` - lightMapIntensity
  - `disp_b` - displacementBias
  - `disp_s` - displacementScale
  - `Pbr_ps` - sheen (layer intensity)
  - `Pbr_pcns` - clearcoatNormalScale
- - `Pbr_psc` - specularColor
- - `Pbr_psi` - specularIntensity
  - `Pbr_refl` - reflectivity
- - `Pbr_alpha` - alphaTest
  - `Pbr_pl_map` - lightMap
- - `Pbr_psc_map` - specularColorMap
- - `Pbr_psi_map` - specularIntensityMap
 
 Remember that other OBJ + MTL viewers will probably NOT be able to interpret most of these PBR entries.
 
