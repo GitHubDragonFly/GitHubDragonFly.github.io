@@ -16,6 +16,7 @@
 			let materials = {};
 			let material_names = [];
 			let material_colors = {};
+			let vertexTangents = false;
 			const vertex = new THREE.Vector3();
 			const color = new THREE.Color();
 			const normal = new THREE.Vector3();
@@ -38,12 +39,13 @@
 				}
 
 				// shortcuts
-				const groups = geometry.groups;
+				vertexTangents = geometry.attributes.tangent !== undefined;
 				const vertex_colors = geometry.getAttribute( 'color' );
 				const vertices = geometry.getAttribute( 'position' );
 				const normals = geometry.getAttribute( 'normal' );
 				const uvs = geometry.getAttribute( 'uv' );
 				const indices = geometry.getIndex();
+				const groups = geometry.groups;
 
 				// name of the mesh object
 				if (mesh.name === '') {
@@ -514,8 +516,8 @@
 						if ( mat.metalness ) mtlOutput += 'Pm ' + mat.metalness + '\n';
 						if ( mat.roughness ) mtlOutput += 'Pr ' + mat.roughness + '\n';
 						if ( mat.ior && mat.ior >= 1 ) mtlOutput += 'Ni ' + Math.min( 2.333, mat.ior ) + '\n';
-						if ( mat.normalScale && ! ( mat.normalScale.x === 1 && mat.normalScale.y === 1 ) && ! mat.sheen ) {
-							mtlOutput += 'Pns ' + mat.normalScale.x + ' ' + mat.normalScale.y + '\n';
+						if ( ( mat.normalScale && ! ( mat.normalScale.x === 1 && mat.normalScale.y === 1 ) && ! mat.sheen ) || vertexTangents === true ) {
+							mtlOutput += 'Pns ' + mat.normalScale.x + ' ' + ( vertexTangents === true ? mat.normalScale.y *= -1 : mat.normalScale.y ) + '\n';
 						}
 						if ( mat.displacementMap ) {
 							if ( mat.displacementBias && mat.displacementBias > 0 ) mtlOutput += 'disp_b ' + mat.displacementBias + '\n';
@@ -524,8 +526,8 @@
 						if ( mat.clearcoat && mat.clearcoat > 0 ) {
 							mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
 							if ( mat.clearcoatRoughness ) mtlOutput += 'Pcr ' + mat.clearcoatRoughness + '\n';
-							if ( mat.clearcoatNormalScale && ! ( mat.clearcoatNormalScale.x === 1 && mat.clearcoatNormalScale.y === 1 ) ) {
-								mtlOutput += 'Pbr_pcns ' + mat.clearcoatNormalScale.x + ' ' + mat.clearcoatNormalScale.y + '\n';
+							if ( ( mat.clearcoatNormalScale && ! ( mat.clearcoatNormalScale.x === 1 && mat.clearcoatNormalScale.y === 1 ) ) || vertexTangents === true ) {
+								mtlOutput += 'Pbr_pcns ' + mat.clearcoatNormalScale.x + ' ' + ( vertexTangents === true ? mat.clearcoatNormalScale.y *= -1 : mat.clearcoatNormalScale.y ) + '\n';
 							}
 						}
 						if ( mat.lightMapIntensity && mat.lightMapIntensity !== 1 ) mtlOutput += 'Pli ' + mat.lightMapIntensity + '\n';
