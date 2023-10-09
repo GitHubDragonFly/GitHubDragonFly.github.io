@@ -513,8 +513,8 @@
 						if ( mat.emissive ) mtlOutput += 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + '\n';
 						if ( mat.specular ) mtlOutput += 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + '\n';
 						if ( mat.shininess ) mtlOutput += 'Ns ' + mat.shininess + '\n';
-						if ( mat.metalness ) mtlOutput += 'Pm ' + mat.metalness + '\n';
-						if ( mat.roughness ) mtlOutput += 'Pr ' + mat.roughness + '\n';
+						if ( mat.metalness !== undefined && mat.metalness >= 0 ) mtlOutput += 'Pm ' + mat.metalness + '\n';
+						if ( mat.roughness !== undefined && mat.roughness >= 0 ) mtlOutput += 'Pr ' + mat.roughness + '\n';
 						if ( mat.ior && mat.ior >= 1 ) mtlOutput += 'Ni ' + Math.min( 2.333, mat.ior ) + '\n';
 						if ( ( mat.normalScale && ! ( mat.normalScale.x === 1 && mat.normalScale.y === 1 ) && ! mat.sheen ) || vertexTangents === true ) {
 							mtlOutput += 'Pns ' + mat.normalScale.x + ' ' + ( vertexTangents === true ? mat.normalScale.y *= -1 : mat.normalScale.y ) + '\n';
