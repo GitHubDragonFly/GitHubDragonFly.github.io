@@ -474,6 +474,7 @@
 					case 'pns':
 						// Normal Scale - how much the normal map affects the material
 						params.normalScale = new THREE.Vector2().fromArray( value.split( ' ' ).map( Number ) );
+						use_phong = false;
 						break;
 
 					case 'disp_b':
@@ -498,7 +499,7 @@
 						use_phong = false;
 						break;
 
-					case 'pbr_pcns':
+					case 'pcn':
 						// Clearcoat normal scale
 						params.clearcoatNormalScale = new THREE.Vector2().fromArray( value.split( ' ' ).map( Number ) );
 						use_phong = false;
@@ -576,7 +577,7 @@
 						use_phong = false;
 						break;
 	
-					case 'pside':
+					case 's':
 						// Material side
 						params.side = parseInt( value );
 						break;
