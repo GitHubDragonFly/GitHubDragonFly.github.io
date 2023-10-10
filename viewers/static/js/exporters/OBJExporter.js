@@ -512,10 +512,10 @@
 						if ( mat.color ) mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + '\n';
 						if ( mat.emissive ) mtlOutput += 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + '\n';
 						if ( mat.specular ) mtlOutput += 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + '\n';
-						if ( mat.shininess ) mtlOutput += 'Ns ' + mat.shininess + '\n';
+						if ( mat.shininess !== undefined && mat.shininess > 0 ) mtlOutput += 'Ns ' + mat.shininess + '\n';
 						if ( mat.metalness !== undefined && mat.metalness >= 0 ) mtlOutput += 'Pm ' + mat.metalness + '\n';
 						if ( mat.roughness !== undefined && mat.roughness >= 0 ) mtlOutput += 'Pr ' + mat.roughness + '\n';
-						if ( mat.ior && mat.ior >= 1 ) mtlOutput += 'Ni ' + Math.min( 2.333, mat.ior ) + '\n';
+						if ( mat.ior !== undefined && mat.ior >= 1 ) mtlOutput += 'Ni ' + Math.min( 2.333, mat.ior ) + '\n';
 						if ( ( mat.normalScale && ! ( mat.normalScale.x === 1 && mat.normalScale.y === 1 ) && ! mat.sheen ) || vertexTangents === true ) {
 							mtlOutput += 'Pns ' + mat.normalScale.x + ' ' + ( vertexTangents === true ? mat.normalScale.y *= -1 : mat.normalScale.y ) + '\n';
 						}
@@ -527,7 +527,7 @@
 							mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
 							if ( mat.clearcoatRoughness ) mtlOutput += 'Pcr ' + mat.clearcoatRoughness + '\n';
 							if ( ( mat.clearcoatNormalScale && ! ( mat.clearcoatNormalScale.x === 1 && mat.clearcoatNormalScale.y === 1 ) ) || vertexTangents === true ) {
-								mtlOutput += 'Pbr_pcns ' + mat.clearcoatNormalScale.x + ' ' + ( vertexTangents === true ? mat.clearcoatNormalScale.y *= -1 : mat.clearcoatNormalScale.y ) + '\n';
+								mtlOutput += 'Pcn ' + mat.clearcoatNormalScale.x + ' ' + ( vertexTangents === true ? mat.clearcoatNormalScale.y *= -1 : mat.clearcoatNormalScale.y ) + '\n';
 							}
 						}
 						if ( mat.lightMapIntensity && mat.lightMapIntensity !== 1 ) mtlOutput += 'Pli ' + mat.lightMapIntensity + '\n';
@@ -561,9 +561,9 @@
 						if ( mat.thickness && mat.thickness > 0 ) mtlOutput += 'Pth ' + mat.thickness + '\n';
 						if ( mat.transmission && mat.transmission > 0 ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
 
-						if ( mat.reflectivity ) mtlOutput += 'Pbr_refl ' + mat.reflectivity + '\n';
+						if ( mat.reflectivity !== undefined && mat.reflectivity > 0 ) mtlOutput += 'Pbr_refl ' + mat.reflectivity + '\n';
 						if ( mat.alphaTest > 0 ) mtlOutput += 'a ' + mat.alphaTest + '\n';
-						mtlOutput += 'Pside ' + mat.side + '\n';
+						mtlOutput += 's ' + mat.side + '\n';
 
 						if ( mat.map && mat.map.type === 1009 && mat.map.image ) {
 
