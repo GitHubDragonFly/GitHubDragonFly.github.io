@@ -18,7 +18,8 @@ This document would represent a summary of PBR entries that can be found in the 
 ## PBR Entries with associated textures (maps):
 
  - `a` - alphaTest (alphaCutoff)
- - `Pside` - material side
+ - `s` - material side
+ - `Pe` - emissive intensity
  - `Pac` / `Pad` - attenuationColor / attenuationDistance
 
  - `Pm` - metalness
@@ -58,13 +59,12 @@ This document would represent a summary of PBR entries that can be found in the 
 
 Entries currently not compatible with the `assimp` library but working fine in the OBJ + MTL Viewer:
 
- - `Pe` - emissive intensity
  - `Pns` - normalScale
+ - `Pcn` - clearcoatNormalScale
  - `Pli` - lightMapIntensity
  - `disp_b` - displacementBias
  - `disp_s` - displacementScale
  - `Pbr_ps` - sheen (layer intensity)
- - `Pbr_pcns` - clearcoatNormalScale
  - `Pbr_refl` - reflectivity
  - `Pbr_pl_map` - lightMap
 
