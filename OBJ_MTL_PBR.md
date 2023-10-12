@@ -20,6 +20,7 @@ This document would represent a summary of PBR entries that can be found in the 
  - `a` - alphaTest (alphaCutoff)
  - `s` - material side
  - `Pe` - emissive intensity
+ - `Prf` - reflectivity
  - `Pac` / `Pad` - attenuationColor / attenuationDistance
 
  - `Pm` - metalness
@@ -65,7 +66,6 @@ Entries currently not compatible with the `assimp` library but working fine in t
  - `disp_b` - displacementBias
  - `disp_s` - displacementScale
  - `Pbr_ps` - sheen (layer intensity)
- - `Pbr_refl` - reflectivity
  - `Pbr_pl_map` - lightMap
 
 Remember that other OBJ + MTL viewers will probably NOT be able to interpret most of these PBR entries.
