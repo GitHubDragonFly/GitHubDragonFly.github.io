@@ -561,7 +561,7 @@
 						if ( mat.thickness && mat.thickness > 0 ) mtlOutput += 'Pth ' + mat.thickness + '\n';
 						if ( mat.transmission && mat.transmission > 0 ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
 
-						if ( mat.reflectivity !== undefined && mat.reflectivity > 0 ) mtlOutput += 'Pbr_refl ' + mat.reflectivity + '\n';
+						if ( mat.reflectivity !== undefined && mat.reflectivity > 0 ) mtlOutput += 'Prf ' + mat.reflectivity + '\n';
 						if ( mat.alphaTest > 0 ) mtlOutput += 'a ' + mat.alphaTest + '\n';
 						mtlOutput += 's ' + mat.side + '\n';
 
