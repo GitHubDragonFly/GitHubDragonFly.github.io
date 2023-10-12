@@ -577,20 +577,20 @@
 						params.transmission = parseFloat( value );
 						use_phong = false;
 						break;
-	
+
 					case 's':
 						// Material side
 						params.side = parseInt( value );
 						break;
 
-					case 'pbr_refl':
-						// Reflectivity
-						params.reflectivity = parseFloat( value );
-						break;
-		
 					case 'a':
 						// Material alphaTest
 						params.alphaTest = parseFloat( value );
+						break;
+
+					case 'prf':
+						// Reflectivity
+						params.reflectivity = parseFloat( value );
 						break;
 
 					case 'pbr_pl_map':
