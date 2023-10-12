@@ -340,6 +340,8 @@
 			}
 
 			let use_phong = true;
+			let refraction_present = false;
+			let refraction_value;
 			let iridescenceThicknessRange = [ 100, 400 ];
 
 			for ( const prop in mat ) {
@@ -418,6 +420,16 @@
 						setMapForType( 'displacementMap', value, lprop );
 						break;
 
+					case 'disp_b':
+						// Displacement bias
+						params.displacementBias = parseFloat( value );
+						break;
+
+					case 'disp_s':
+						// Displacement scale
+						params.displacementScale = parseFloat( value );
+						break;
+
 					case 'pli':
 						// Lightmap intensity
 						params.lightMapIntensity = parseFloat( value );
@@ -458,7 +470,7 @@
 						params.emissiveIntensity = parseFloat( value );
 						use_phong = false;
 						break;
-	
+
 					case 'pm':
 						// Metalness
 						params.metalness = parseFloat( value );
@@ -474,17 +486,6 @@
 					case 'pns':
 						// Normal Scale - how much the normal map affects the material
 						params.normalScale = new THREE.Vector2().fromArray( value.split( ' ' ).map( Number ) );
-						use_phong = false;
-						break;
-
-					case 'disp_b':
-						// Displacement bias
-						params.displacementBias = parseFloat( value );
-						break;
-
-					case 'disp_s':
-						// Displacement scale
-						params.displacementScale = parseFloat( value );
 						break;
 
 					case 'pcc':
@@ -507,8 +508,8 @@
 
 					case 'ni':
 						// Index-of-refraction for non-metallic materials
-						params.ior = parseFloat( value );
-						use_phong = false;
+						refraction_present = true;
+						refraction_value = parseFloat( value );
 						break;
 
 					case 'pi':
@@ -728,10 +729,12 @@
 
 			if ( use_phong === true ) {
 
+				if ( refraction_present === true ) params.refractionRatio = refraction_value;
 				this.materials[ materialName ] = new THREE.MeshPhongMaterial( params );
 
 			} else {
 
+				if ( refraction_present === true ) params.ior = refraction_value;
 				if ( params.iridescence ) params.iridescenceThicknessRange = iridescenceThicknessRange;
 
 				// Check params to allow correct transmission effect
