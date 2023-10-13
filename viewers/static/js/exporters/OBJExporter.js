@@ -515,7 +515,11 @@
 						if ( mat.shininess !== undefined && mat.shininess > 0 ) mtlOutput += 'Ns ' + mat.shininess + '\n';
 						if ( mat.metalness !== undefined && mat.metalness >= 0 ) mtlOutput += 'Pm ' + mat.metalness + '\n';
 						if ( mat.roughness !== undefined && mat.roughness >= 0 ) mtlOutput += 'Pr ' + mat.roughness + '\n';
-						if ( mat.ior !== undefined && mat.ior >= 1 ) mtlOutput += 'Ni ' + Math.min( 2.333, mat.ior ) + '\n';
+						if ( mat.ior !== undefined && mat.ior >= 1 && mat.ior !== 1.5 ) {
+							mtlOutput += 'Ni ' + mat.ior + '\n';
+						} else if ( mat.refractionRatio !== undefined && mat.refractionRatio <= 1 && mat.ior !== 0.98) {
+							mtlOutput += 'Ni ' + mat.refractionRatio + '\n';
+						}
 						if ( ( mat.normalScale && ! ( mat.normalScale.x === 1 && mat.normalScale.y === 1 ) && ! mat.sheen ) || vertexTangents === true ) {
 							mtlOutput += 'Pns ' + mat.normalScale.x + ' ' + ( vertexTangents === true ? mat.normalScale.y *= -1 : mat.normalScale.y ) + '\n';
 						}
