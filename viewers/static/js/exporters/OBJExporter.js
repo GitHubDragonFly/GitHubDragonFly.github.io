@@ -541,7 +541,7 @@
 							mtlOutput += 'Pas ' + mat.anisotropyStrength + '\n';
 							mtlOutput += 'Par ' + mat.anisotropyRotation + '\n';
 						}
-						if ( mat.attenuationColor && mat.attenuationDistance && mat.attenuationDistance !== Infinity ) {
+						if ( mat.attenuationColor || ( mat.attenuationDistance && mat.attenuationDistance !== Infinity ) ) {
 							mtlOutput += 'Pac ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
 							mtlOutput += 'Pad ' + mat.attenuationDistance + '\n';
 						}
@@ -558,7 +558,7 @@
 							if ( mat.sheenColor ) mtlOutput += 'Ps ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
 							if ( mat.sheenRoughness ) mtlOutput += 'Psr ' + mat.sheenRoughness + '\n';
 						}
-						if ( mat.specularColorMap || mat.specularIntensityMap || ( ! ( mat.specularColor && mat.specularColor.getHex() === 16777215 && mat.specularIntensity && mat.specularIntensity === 1.0 ) ) ) {
+						if ( mat.specularColor || mat.specularIntensity || mat.specularColorMap || mat.specularIntensityMap ) {
 							if ( mat.specularColor ) mtlOutput += 'Psp ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
 							if ( mat.specularIntensity ) mtlOutput += 'Psi ' + mat.specularIntensity + '\n';
 						}
