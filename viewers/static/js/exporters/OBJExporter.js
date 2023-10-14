@@ -541,10 +541,8 @@
 							mtlOutput += 'Pas ' + mat.anisotropyStrength + '\n';
 							mtlOutput += 'Par ' + mat.anisotropyRotation + '\n';
 						}
-						if ( mat.attenuationColor || ( mat.attenuationDistance && mat.attenuationDistance !== Infinity ) ) {
-							mtlOutput += 'Pac ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
-							mtlOutput += 'Pad ' + mat.attenuationDistance + '\n';
-						}
+						if ( mat.attenuationColor ) mtlOutput += 'Pac ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
+						if ( mat.attenuationDistance && mat.attenuationDistance !== Infinity ) mtlOutput += 'Pad ' + mat.attenuationDistance + '\n';
 						if ( mat.iridescence && mat.iridescence > 0 ) {
 							mtlOutput += 'Pi ' + mat.iridescence + '\n';
 							if ( mat.iridescenceIOR && mat.iridescenceIOR >= 1 ) mtlOutput += 'Pii ' + Math.min( 2.333, mat.iridescenceIOR ) + '\n';
