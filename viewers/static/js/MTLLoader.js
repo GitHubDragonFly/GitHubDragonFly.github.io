@@ -114,7 +114,7 @@
 
 				} else {
 
-					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' || key === 'ps' || key === 'pac' || key === 'psp' ) {
+					if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' ) {
 
 						const ss = value.split( delimiter_pattern, 3 );
 						info[ key ] = [ parseFloat( ss[ 0 ] ), parseFloat( ss[ 1 ] ), parseFloat( ss[ 2 ] ) ];
@@ -218,9 +218,6 @@
 						case 'ka':
 						case 'ke':
 						case 'ks':
-						case 'ps':
-						case 'pac':
-						case 'psp':
 							// Diffuse color (color under white light) using RGB values
 							if ( this.options && this.options.normalizeRGB ) {
 
@@ -461,7 +458,7 @@
 
 					case 'pac':
 						// Attenuation color
-						params.attenuationColor = new THREE.Color().fromArray( value );
+						params.attenuationColor = new THREE.Color().fromArray( value.split( ' ' ).map( Number ) );
 						use_phong = false;
 						break;
 
@@ -544,7 +541,7 @@
 
 					case 'ps':
 						// The sheen tint (color)
-						params.sheenColor = new THREE.Color().fromArray( value );
+						params.sheenColor = new THREE.Color().fromArray( value.split( ' ' ).map( Number ) );
 						use_phong = false;
 						break;
 
@@ -556,7 +553,7 @@
 
 					case 'psp':
 						// PBR material specular color
-						params.specularColor = new THREE.Color().fromArray( value );
+						params.specularColor = new THREE.Color().fromArray( value.split( ' ' ).map( Number ) );
 						use_phong = false;
 						break;
 
