@@ -1614,7 +1614,7 @@
 
 					// Just in case
 
-					Object3D.prototype.copy.call( instancedMesh, mesh );
+					THREE.Object3D.prototype.copy.call( instancedMesh, mesh );
 
 					this.parser.assignFinalMaterial( instancedMesh );
 
