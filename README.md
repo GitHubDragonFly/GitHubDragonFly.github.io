@@ -46,17 +46,18 @@ Number Type Converter
   - Might have bugs and interface / library related limitations and slow to load some models
   - It tries to take advantage of the THREE.MeshPhysicalMaterial to bring a GLTF alike functionality for OBJ + MTL models
   - Has multiple export options available, with special notes about JSON formats:
-    - Use JSON Viewer to see all models exported as `JSON`
-    - Use JSON Legacy viewer to see all models exported as `ASSJSON`
+    - Use [JSON Viewer](https://githubdragonfly.github.io/viewers/templates/JSON%20Viewer.html) to see all models exported as `JSON`
+    - Use [JSON Legacy](https://githubdragonfly.github.io/viewers/templates/JSON%20Legacy.html) viewer to see all models exported as `ASSJSON`
     - Both `JSON` and `ASSJSON` exported files use the same `.json` extension
   - GLTF / GLB v2.0 and DRC models will be handled by three.js, as originally intended
-  - All other formats, including GLTF / GLB v1.0, will be initially handled by ASSIMP(JS), converted to `GLB2` and passed on to three.js
+  - All other formats, including GLTF / GLB v1.0, will be initially handled by ASSIMP(JS), converted to `GLB2` and passed on to three.js `GLTF Loader`
   - Supported formats: 3D, 3DS, 3MF, A3D, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IFC, IQM, IRR, IRRMESH, KMZ, LWO, LWS, LXO, M3D, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NDO, NFF, OBJ + MTL, OFF, OGEX, PLY, PMX, Q3O, Q3S, RAW, SIB, SMD, STL, TER, X, X3D, XGL, XML, ZAE, ZGL
   - Unsupported formats: BSP, JT, M3, PK3, WRL
     - the viewer will allow you to select these files but they didn't work for me
-  - When using the viewer's URL option remember the following:
-    - BIN and / or MTL file URLs need to be added alongside the model URL and comma separated, this would normally apply to GLTF and OBJ files, for example:
+  - When using the viewer's `URL` option remember the following:
+    - BIN and / or MTL file URLs might need to be added alongside the model URL and comma separated, this would normally apply to GLTF and OBJ files, for example:
       - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/OBJ/spider.obj, https://raw.githubusercontent.com/assimp/assimp/master/test/models/OBJ/spider.mtl`
+      - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/glTF/CesiumMilkTruck/CesiumMilkTruck.gltf, https://raw.githubusercontent.com/assimp/assimp/master/test/models/glTF/CesiumMilkTruck/CesiumMilkTruck.bin`
     - For MD2 models you will have to add their texture URL, for example:
       - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/MD2/faerie.md2, https://raw.githubusercontent.com/assimp/assimp/master/test/models/MD2/faerie2.bmp`
     - If textures are not automatically fetched with the model URL only then add the texture location URL, for example:
