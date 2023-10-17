@@ -69,11 +69,13 @@ function dotbim_Elemment2Mesh(element, geometrys) {
 
     geometry.computeVertexNormals();
 
-    let material = new THREE.MeshPhongMaterial({
+    let material = new THREE.MeshStandardMaterial({
         side: THREE.DoubleSide,
         flatShading: false,
         transparent: true,
-        color: 0xCCCCCC
+        metalnes: 0.8,
+        roughness: 0.3,
+        color: 0xFFFFFF
     });
 
     if (color) {
