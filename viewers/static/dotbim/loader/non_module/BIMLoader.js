@@ -120,6 +120,7 @@
 				return bim_meshes;
 
 			}
+
 			function dotbim_Elemments2Meshes( elements, geometries ) {
 
 				return elements.map( element => dotbim_Elemment2Mesh( element, geometries ) );
@@ -134,12 +135,14 @@
 
 				geometry.computeVertexNormals();
 
-				let material = new THREE.MeshPhongMaterial( {
+				let material = new THREE.MeshStandardMaterial( {
 
 					side: THREE.DoubleSide,
 					flatShading: false,
 					transparent: true,
-					color: 0xCCCCCC
+					metalness: 0.8,
+					roughness: 0.3,
+					color: 0xFFFFFF
 
 				} );
 
@@ -176,7 +179,7 @@
 
 				if ( geometry.getAttribute( 'color' ) ) {
 
-					material.color = undefined;
+					material.color.setRGB( 1, 1, 1 );
 					material.opacity = 1.0;
 					material.transparent = true;
 					material.vertexColors = true;
@@ -216,7 +219,7 @@
 					let el_color = [ color.r, color.g, color.b, color.a ];
 					let mesh_id_key = mesh_id_keys[ mesh_id ][ 'color_group' ][ el_color ];
 
-					if (mesh_id_key[ 'mesh' ] === null) {
+					if ( mesh_id_key[ 'mesh' ] === null ) {
 
 						mesh_id_key[ 'mesh' ] = new THREE.InstancedMesh( geometry, material, mesh_id_key.instance_count );
 
