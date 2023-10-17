@@ -149,12 +149,14 @@ class BIMLoader extends Loader {
 
 			geometry.computeVertexNormals();
 
-			let material = new MeshPhongMaterial( {
+			let material = new MeshStandardMaterial( {
 
 				side: DoubleSide,
 				flatShading: false,
 				transparent: true,
-				color: 0xCCCCCC
+				metalness: 0.8,
+				roughness: 0.3,
+				color: 0xFFFFFF
 
 			} );
 
@@ -190,7 +192,7 @@ class BIMLoader extends Loader {
 
 			if ( geometry.getAttribute( 'color' ) ) {
 
-				material.color = undefined;
+				material.color.setRGB( 1, 1, 1 );
 				material.opacity = 1.0;
 				material.transparent = true;
 				material.vertexColors = true;
