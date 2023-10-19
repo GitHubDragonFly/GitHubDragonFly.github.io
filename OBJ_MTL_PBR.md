@@ -70,6 +70,20 @@ Entries currently not compatible with the `assimp` library but working fine in t
 
 Remember that other OBJ + MTL viewers will probably NOT be able to interpret most of these PBR entries.
 
+# Testing
+
+This can be tested by using the [Khronos Group glTF v2.0 examples](https://github.-com/KhronosGroup/glTF-Sample-Models/tree/master/2.0) and following these instructions:
+
+ - Use my [GLTF Viewer](https://githubdragonfly.github.io/viewers/templates/GLTF%20Viewer.html) to load one of those example GLTF files via the viewer's `URL` option, here is an example url:
+   - `https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/2.0/IridescenceMetallicSpheres/glTF/IridescenceMetallicSpheres.gltf`
+ - Use the viewer's `OBJ` export option to get `OBJ + MTL + textures` in a zip file
+ - Extract all the files to a folder on your device (this needs to be done since my viewers currently don't support loading of zip files)
+ - Examine the MTL file to see what the entries look like and then do the following:
+   - Use my [OBJ Viewer](https://githubdragonfly.github.io/viewers/templates/ASSIMP%20Viewer.html) or [ASSIMP Viewer](https://githubdragonfly.github.io/viewers/templates/ASSIMP%20Viewer.html) and select its `Browse` option to load these extracted files all at once - your device will have to allow loading local files
+ - After the model is loaded then make sure to check the `Eq` box in the viewer to get the environment texture / lights
+
+Not all the examples will work properly but lots of them do.
+
 # Credits
 
  - Ref: https://stackoverflow.com/questions/35070048/export-a-three-js-textured-model-to-a-obj-with-mtl-file
