@@ -517,7 +517,7 @@
 						if ( mat.roughness !== undefined && mat.roughness >= 0 ) mtlOutput += 'Pr ' + mat.roughness + '\n';
 						if ( mat.ior !== undefined && mat.ior >= 1 && mat.ior !== 1.5 ) {
 							mtlOutput += 'Ni ' + mat.ior + '\n';
-						} else if ( mat.refractionRatio !== undefined && mat.refractionRatio <= 1 && mat.ior !== 0.98) {
+						} else if ( mat.refractionRatio !== undefined && mat.refractionRatio <= 1 && mat.refractionRatio !== 0.98) {
 							mtlOutput += 'Ni ' + mat.refractionRatio + '\n';
 						}
 						if ( ( mat.normalScale && ! ( mat.normalScale.x === 1 && mat.normalScale.y === 1 ) && ! mat.sheen ) || vertexTangents === true ) {
@@ -541,8 +541,10 @@
 							mtlOutput += 'Pas ' + mat.anisotropyStrength + '\n';
 							mtlOutput += 'Par ' + mat.anisotropyRotation + '\n';
 						}
-						if ( mat.attenuationColor ) mtlOutput += 'Pac ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
-						if ( mat.attenuationDistance && mat.attenuationDistance !== Infinity ) mtlOutput += 'Pad ' + mat.attenuationDistance + '\n';
+						if ( mat.attenuationDistance && mat.attenuationDistance !== Infinity ) {
+							mtlOutput += 'Pac ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
+							mtlOutput += 'Pad ' + mat.attenuationDistance + '\n';
+						}
 						if ( mat.iridescence && mat.iridescence > 0 ) {
 							mtlOutput += 'Pi ' + mat.iridescence + '\n';
 							if ( mat.iridescenceIOR && mat.iridescenceIOR >= 1 ) mtlOutput += 'Pii ' + Math.min( 2.333, mat.iridescenceIOR ) + '\n';
