@@ -622,7 +622,7 @@
 					case 'DiffuseColor':
 					case 'Maya|TEX_color_map':
 						parameters.map = scope.getTexture( textureMap, child.ID );
-						parameters.map.encoding = THREE.sRGBEncoding;
+						parameters.map.colorSpace = THREE.SRGBColorSpace;
 						break;
 
 					case 'DisplacementColor':
@@ -631,7 +631,7 @@
 
 					case 'EmissiveColor':
 						parameters.emissiveMap = scope.getTexture( textureMap, child.ID );
-						parameters.emissiveMap.encoding = THREE.sRGBEncoding;
+						parameters.emissiveMap.colorSpace = THREE.SRGBColorSpace;
 						break;
 
 					case 'NormalMap':
@@ -642,12 +642,12 @@
 					case 'ReflectionColor':
 						parameters.envMap = scope.getTexture( textureMap, child.ID );
 						parameters.envMap.mapping = THREE.EquirectangularReflectionMapping;
-						parameters.envMap.encoding = THREE.sRGBEncoding;
+						parameters.envMap.colorSpace = THREE.SRGBColorSpace;
 						break;
 
 					case 'SpecularColor':
 						parameters.specularMap = scope.getTexture( textureMap, child.ID );
-						parameters.specularMap.encoding = THREE.sRGBEncoding;
+						parameters.specularMap.colorSpace = THREE.SRGBColorSpace;
 						break;
 
 					case 'TransparentColor':
