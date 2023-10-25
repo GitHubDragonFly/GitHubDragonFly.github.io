@@ -627,12 +627,13 @@
       var flat_shading_enabled, bgnd_linear_gradient;
       var selected_url_file = '', selected_obj_url_file;
       var selected_mtl_file, selected_mtl_url_file, selected_obj_file;
-      var vertex_colors_enabled, random_vertex_colors_enabled, current_colors;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
       var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif;
       var texture_files_svg, texture_files_dds, texture_files_tga, texture_files_webp;
       var url_tga_loaded, current_texture, animated_gif_texture, textures;
       var lines_visible, lines_present, filename, outline_material, slider_height = 0;
+      var vertex_colors_enabled, original_vertex_colors, original_vertex_color_array;
+      var random_vertex_colors_enabled, random_vertex_color_array, current_colors;
 
       const link = document.createElement( 'a' );
       link.style.display = 'none';
@@ -1604,6 +1605,7 @@
             if (child.isMesh && child.material) {
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
+                  mtl.envMap.colorSpace = THREE.SRGBColorSpace;
                   mtl.envMap = set_env_map ? scene.environment : null;
                 });
               } else {
@@ -1872,22 +1874,15 @@
 
         if (manager === undefined) manager = new THREE.LoadingManager();
 
-        manager.onProgress = function ( item, loaded, total ) {
-          if ( loaded === total ) {
-            console.timeEnd( 'Loading Time' );
-            document.getElementById('div_loading').style.display = 'none';
-            enable_disable( false );
-            render_requested = true;
-            mouse_wheel = true;
-            render();
-          }
-        }
+        manager.onLoad = function() { mouse_wheel = true; }
 
         if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
 
         if (obj_loader === undefined) obj_loader = new THREE.OBJLoader( manager );
 
         if (mtl_loader === undefined) mtl_loader = new THREE.MTLLoader( manager );
+
+        if (gif_loader === undefined) gif_loader = new THREE.GifLoader( manager );
 
         if (tga_loader === undefined) {
           tga_loader = new THREE.TGALoader( manager );
@@ -1900,8 +1895,6 @@
         }
 
         if (zip === undefined) zip = new JSZip();
-
-        if (gif_loader === undefined) gif_loader = new THREE.GifLoader( manager );
 
         obj_loader.setMaterials( null );
 
@@ -1962,7 +1955,10 @@
         flat_shading_enabled = false;
         bgnd_linear_gradient = false;
         vertex_colors_enabled = false;
+        original_vertex_color_array = {};
+        original_vertex_colors = {};
         random_vertex_colors_enabled = false;
+        random_vertex_color_array = {};
         current_colors = {};
         grid_visible = false;
         polar_grid_visible = false;
@@ -2072,8 +2068,8 @@
           controls.rotateSpeed = 0.8;
           controls.keyPanSpeed = 0.8; 
           controls.panSpeed = 0.8;
-          controls.enableDamping = true;
-          controls.dampingFactor = 0.05;
+          //controls.enableDamping = true;
+          //controls.dampingFactor = 0.05;
           //controls.enableKeys = false;
           //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
@@ -2201,7 +2197,7 @@
 
                   if (child.name === '') child.name = 'child_' + child_count;
 
-                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                  if (child.geometry.hasAttribute( 'color' )) {
                     vertex_colors_enabled = true;
                     document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                     document.getElementById('btn_random_vertex_colors').disabled = false;
@@ -2216,12 +2212,6 @@
                     if (child.isSkinnedMesh) child.frustumCulled = false;
                   } else {
                     object_is_points = true;
-                    document.getElementById('wireframe').disabled = true;
-                    document.getElementById('edge_color').disabled = true;
-                    document.getElementById('btn_edges').disabled = true;
-                    document.getElementById('btn_flat').disabled = true;
-                    document.getElementById('btn_mtl_side').disabled = true;
-                    document.getElementById('btn_xtra_smooth').disabled = true;
                   }
 
                   if (Array.isArray( child.material )) {
@@ -2231,6 +2221,7 @@
                     initial_transparency_array[ child.name ] = {};
                     original_color_array[ child.name ] = {};
                     original_side_array[ child.name ] = {};
+                    original_vertex_color_array[ child.name ] = {};
 
                     child.material.forEach( mtrl => {
                       if ( mtrl.aoMap && child.geometry.attributes.uv1 === undefined && child.geometry.attributes.uv !== undefined ) {
@@ -2239,12 +2230,13 @@
                       }
 
                       set_texture_colorSpace( mtrl );
-                      mtrl.vertexColors = vertex_colors_enabled;
+                      mtrl.vertexColors = child.geometry.hasAttribute( 'color' );
 
                       initial_opacity_array[ child.name ][ child_count_array ] = mtrl.opacity;
                       initial_transparency_array[ child.name ][ child_count_array ] = mtrl.transparent;
                       original_color_array[ child.name ][ child_count_array ] = new THREE.Color( mtrl.color );
                       original_side_array[ child.name ][ child_count_array ] = mtrl.side;
+                      original_vertex_color_array[ child.name ][ child_count_array ] = mtrl.vertexColors;
 
                       mtrl.needsUpdate = true;
 
@@ -2257,12 +2249,13 @@
                     }
 
                     set_texture_colorSpace( child.material );
-                    child.material.vertexColors = vertex_colors_enabled;
+                    child.material.vertexColors = child.geometry.hasAttribute( 'color' );
 
                     initial_opacity[ child.name ] = child.material.opacity;
                     initial_transparency[ child.name ] = child.material.transparent;
                     original_color[ child.name ] = new THREE.Color( child.material.color );
                     original_side[ child.name ] = child.material.side;
+                    original_vertex_colors[ child.name ] = child.material.vertexColors;
 
                     if (child.isPoints) {
                       child.material.size = 0.3;
@@ -2284,19 +2277,7 @@
               Obj.position.set( 0, 0, 0 );
               camera.lookAt( Obj.position );
 
-              set_initial_scale();
-              resize();
-
-              Obj.traverse( function( child ) {
-                if (child.isMesh) edges.add( new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material ) );
-              });
-
-              if (vertex_colors_enabled) {
-                document.getElementById('btn_xtra_smooth').disabled = true;
-                random_vertex_changed();
-              }
-
-              mouse_wheel = true;
+              finish_loading();
             }, function ( xhr ) { // onProgress
             }, function ( error ) { // onError
               handle_error( error );
@@ -2349,7 +2330,7 @@
 
                 if (child.name === '') child.name = 'child_' + child_count;
 
-                if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                if (child.geometry.hasAttribute( 'color' )) {
                   vertex_colors_enabled = true;
                   document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                   document.getElementById('btn_random_vertex_colors').disabled = false;
@@ -2364,12 +2345,6 @@
                   if (child.isSkinnedMesh) child.frustumCulled = false;
                 } else {
                   object_is_points = true;
-                  document.getElementById('wireframe').disabled = true;
-                  document.getElementById('edge_color').disabled = true;
-                  document.getElementById('btn_edges').disabled = true;
-                  document.getElementById('btn_flat').disabled = true;
-                  document.getElementById('btn_mtl_side').disabled = true;
-                  document.getElementById('btn_xtra_smooth').disabled = true;
                 }
 
                 if (Array.isArray( child.material )) {
@@ -2379,6 +2354,7 @@
                   initial_transparency_array[ child.name ] = {};
                   original_color_array[ child.name ] = {};
                   original_side_array[ child.name ] = {};
+                  original_vertex_color_array[ child.name ] = {};
 
                   child.material.forEach( mtrl => {
                     if ( mtrl.aoMap && child.geometry.attributes.uv1 === undefined && child.geometry.attributes.uv !== undefined ) {
@@ -2387,12 +2363,13 @@
                     }
 
                     set_texture_colorSpace( mtrl );
-                    mtrl.vertexColors = vertex_colors_enabled;
+                    mtrl.vertexColors = child.geometry.hasAttribute( 'color' );
 
                     initial_opacity_array[ child.name ][ child_count_array ] = mtrl.opacity;
                     initial_transparency_array[ child.name ][ child_count_array ] = mtrl.transparent;
                     original_color_array[ child.name ][ child_count_array ] = new THREE.Color( mtrl.color );
                     original_side_array[ child.name ][ child_count_array ] = mtrl.side;
+                    original_vertex_color_array[ child.name ][ child_count_array ] = mtrl.vertexColors;
 
                     mtrl.needsUpdate = true;
 
@@ -2405,12 +2382,13 @@
                   }
 
                   set_texture_colorSpace( child.material );
-                  child.material.vertexColors = vertex_colors_enabled;
+                  child.material.vertexColors = child.geometry.hasAttribute( 'color' );
 
                   initial_opacity[ child.name ] = child.material.opacity;
                   initial_transparency[ child.name ] = child.material.transparent;
                   original_color[ child.name ] = new THREE.Color( child.material.color );
                   original_side[ child.name ] = child.material.side;
+                  original_vertex_colors[ child.name ] = child.material.vertexColors;
 
                   if (child.isPoints) {
                     child.material.size = 0.3;
@@ -2432,19 +2410,7 @@
             Obj.position.set( 0, 0, 0 );
             camera.lookAt( Obj.position );
 
-            set_initial_scale();
-            resize();
-
-            Obj.traverse( function( child ) {
-              if (child.isMesh) edges.add( new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material ) );
-            });
-
-            if (vertex_colors_enabled) {
-              document.getElementById('btn_xtra_smooth').disabled = true;
-              random_vertex_changed();
-            }
-
-            mouse_wheel = true;
+            finish_loading();
           }, function ( xhr ) { // onProgress
           }, function ( error ) { // onError
             handle_error( error );
@@ -2540,7 +2506,7 @@
 
                         if (child.name === '') child.name = 'child_' + child_count;
 
-                        if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                        if (child.geometry.hasAttribute( 'color' )) {
                           vertex_colors_enabled = true;
                           document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                           document.getElementById('btn_random_vertex_colors').disabled = false;
@@ -2555,11 +2521,6 @@
                           if (child.isSkinnedMesh) child.frustumCulled = false;
                         } else {
                           object_is_points = true;
-                          document.getElementById('wireframe').disabled = true;
-                          document.getElementById('btn_flat').disabled = true;
-                          document.getElementById('btn_edges').disabled = true;
-                          document.getElementById('btn_mtl_side').disabled = true;
-                          document.getElementById('btn_xtra_smooth').disabled = true;
                         }
 
                         if (Array.isArray( child.material )) {
@@ -2569,6 +2530,7 @@
                           initial_transparency_array[ child.name ] = {};
                           original_color_array[ child.name ] = {};
                           original_side_array[ child.name ] = {};
+                          original_vertex_color_array[ child.name ] = {};
 
                           child.material.forEach( mtrl => {
                             if ( mtrl.aoMap && child.geometry.attributes.uv1 === undefined && child.geometry.attributes.uv !== undefined ) {
@@ -2586,12 +2548,13 @@
                               }
                             }
 
-                            mtrl.vertexColors = vertex_colors_enabled;
+                            mtrl.vertexColors = child.geometry.hasAttribute( 'color' );
 
                             initial_opacity_array[ child.name ][ child_count_array ] = mtrl.opacity;
                             initial_transparency_array[ child.name ][ child_count_array ] = mtrl.transparent;
                             original_color_array[ child.name ][ child_count_array ] = new THREE.Color( mtrl.color );
                             original_side_array[ child.name ][ child_count_array ] = mtrl.side;
+                            original_vertex_color_array[ child.name ][ child_count_array ] = mtrl.vertexColors;
 
                             mtrl.needsUpdate = true;
 
@@ -2613,12 +2576,13 @@
                             }
                           }
 
-                          child.material.vertexColors = vertex_colors_enabled;
+                          child.material.vertexColors = child.geometry.hasAttribute( 'color' );
 
                           initial_opacity[ child.name ] = child.material.opacity;
                           initial_transparency[ child.name ] = child.material.transparent;
                           original_color[ child.name ] = new THREE.Color( child.material.color );
                           original_side[ child.name ] = child.material.side;
+                          original_vertex_colors[ child.name ] = child.material.vertexColors;
 
                           if (child.isPoints) {
                             child.material.size = 0.3;
@@ -2640,19 +2604,7 @@
                     Obj.position.set( 0, 0, 0 );
                     camera.lookAt( Obj.position );
 
-                    set_initial_scale();
-                    resize();
-
-                    Obj.traverse( function( child ) {
-                      if (child.isMesh) edges.add( new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material ) );
-                    });
-
-                    if (vertex_colors_enabled) {
-                      document.getElementById('btn_xtra_smooth').disabled = true;
-                      random_vertex_changed();
-                    }
-
-                    mouse_wheel = true;
+                    finish_loading();
                   }, function ( xhr ) { // onProgress
                   }, function ( error ) { handle_error( error ); }); // onError
                 }, function ( xhr ) { // onProgress
@@ -2680,7 +2632,7 @@
 
                       if (child.name === '') child.name = 'child_' + child_count;
 
-                      if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                      if (child.geometry.hasAttribute( 'color' )) {
                         vertex_colors_enabled = true;
                         document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                         document.getElementById('btn_random_vertex_colors').disabled = false;
@@ -2695,11 +2647,6 @@
                         if (child.isSkinnedMesh) child.frustumCulled = false;
                       } else {
                         object_is_points = true;
-                        document.getElementById('wireframe').disabled = true;
-                        document.getElementById('btn_flat').disabled = true;
-                        document.getElementById('btn_edges').disabled = true;
-                        document.getElementById('btn_mtl_side').disabled = true;
-                        document.getElementById('btn_xtra_smooth').disabled = true;
                       }
 
                       if (Array.isArray( child.material )) {
@@ -2709,6 +2656,7 @@
                         initial_transparency_array[ child.name ] = {};
                         original_color_array[ child.name ] = {};
                         original_side_array[ child.name ] = {};
+                        original_vertex_color_array[ child.name ] = {};
 
                         child.material.forEach( mtrl => {
                           if ( mtrl.aoMap && child.geometry.attributes.uv1 === undefined && child.geometry.attributes.uv !== undefined ) {
@@ -2726,12 +2674,13 @@
                             }
                           }
 
-                          mtrl.vertexColors = vertex_colors_enabled;
+                          mtrl.vertexColors = child.geometry.hasAttribute( 'color' );
 
                           initial_opacity_array[ child.name ][ child_count_array ] = mtrl.opacity;
                           initial_transparency_array[ child.name ][ child_count_array ] = mtrl.transparent;
                           original_color_array[ child.name ][ child_count_array ] = new THREE.Color( mtrl.color );
                           original_side_array[ child.name ][ child_count_array ] = mtrl.side;
+                          original_vertex_color_array[ child.name ][ child_count_array ] = mtrl.vertexColors;
 
                           mtrl.needsUpdate = true;
 
@@ -2753,12 +2702,13 @@
                           }
                         }
 
-                        child.material.vertexColors = vertex_colors_enabled;
+                        child.material.vertexColors = child.geometry.hasAttribute( 'color' );
 
                         initial_opacity[ child.name ] = child.material.opacity;
                         initial_transparency[ child.name ] = child.material.transparent;
                         original_color[ child.name ] = new THREE.Color( child.material.color );
                         original_side[ child.name ] = child.material.side;
+                        original_vertex_colors[ child.name ] = child.material.vertexColors;
 
                         if (child.isPoints) {
                           child.material.size = 0.3;
@@ -2780,19 +2730,7 @@
                   Obj.position.set( 0, 0, 0 );
                   camera.lookAt( Obj.position );
 
-                  set_initial_scale();
-                  resize();
-
-                  Obj.traverse( function( child ) {
-                    if (child.isMesh) edges.add( new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material ) );
-                  });
-
-                  if (vertex_colors_enabled) {
-                    document.getElementById('btn_xtra_smooth').disabled = true;
-                    random_vertex_changed();
-                  }
-
-                  mouse_wheel = true;
+                  finish_loading();
                 }, function ( xhr ) { // onProgress
                 }, function ( error ) { handle_error( error ); }); // onError
               }
@@ -2825,7 +2763,7 @@
 
                     if (child.name === '') child.name = 'child_' + child_count;
 
-                    if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                    if (child.geometry.hasAttribute( 'color' )) {
                       vertex_colors_enabled = true;
                       document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                       document.getElementById('btn_random_vertex_colors').disabled = false;
@@ -2840,11 +2778,6 @@
                       if (child.isSkinnedMesh) child.frustumCulled = false;
                     } else {
                       object_is_points = true;
-                      document.getElementById('wireframe').disabled = true;
-                      document.getElementById('btn_flat').disabled = true;
-                      document.getElementById('btn_edges').disabled = true;
-                      document.getElementById('btn_mtl_side').disabled = true;
-                      document.getElementById('btn_xtra_smooth').disabled = true;
                     }
 
                     if (Array.isArray( child.material )) {
@@ -2854,6 +2787,7 @@
                       initial_transparency_array[ child.name ] = {};
                       original_color_array[ child.name ] = {};
                       original_side_array[ child.name ] = {};
+                      original_vertex_color_array[ child.name ] = {};
 
                       child.material.forEach( mtrl => {
                         if ( mtrl.aoMap && child.geometry.attributes.uv1 === undefined && child.geometry.attributes.uv !== undefined ) {
@@ -2862,12 +2796,13 @@
                         }
 
                         set_texture_colorSpace( mtrl );
-                        mtrl.vertexColors = vertex_colors_enabled;
+                        mtrl.vertexColors = child.geometry.hasAttribute( 'color' );
 
                         initial_opacity_array[ child.name ][ child_count_array ] = mtrl.opacity;
                         initial_transparency_array[ child.name ][ child_count_array ] = mtrl.transparent;
                         original_color_array[ child.name ][ child_count_array ] = new THREE.Color( mtrl.color );
                         original_side_array[ child.name ][ child_count_array ] = mtrl.side;
+                        original_vertex_color_array[ child.name ][ child_count_array ] = mtrl.vertexColors;
 
                         mtrl.needsUpdate = true;
 
@@ -2880,12 +2815,13 @@
                       }
 
                       set_texture_colorSpace( child.material );
-                      child.material.vertexColors = vertex_colors_enabled;
+                      child.material.vertexColors = child.geometry.hasAttribute( 'color' );
 
                       initial_opacity[ child.name ] = child.material.opacity;
                       initial_transparency[ child.name ] = child.material.transparent;
                       original_color[ child.name ] = new THREE.Color( child.material.color );
                       original_side[ child.name ] = child.material.side;
+                      original_vertex_colors[ child.name ] = child.material.vertexColors;
 
                       if (child.isPoints) {
                         child.material.size = 0.3;
@@ -2907,19 +2843,7 @@
                 Obj.position.set( 0, 0, 0 );
                 camera.lookAt( Obj.position );
 
-                set_initial_scale();
-                resize();
-
-                Obj.traverse( function( child ) {
-                  if (child.isMesh) edges.add( new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material ) );
-                });
-
-                if (vertex_colors_enabled) {
-                  document.getElementById('btn_xtra_smooth').disabled = true;
-                  random_vertex_changed();
-                }
-
-                mouse_wheel = true;
+                finish_loading();
               }, function ( xhr ) { // onProgress
               }, function ( error ) { handle_error( error ); }); // onError
             } else {
@@ -2950,6 +2874,43 @@
         if (material.specularIntensityMap) material.specularIntensityMap.colorSpace = THREE.LinearSRGBColorSpace;
         if (material.thicknessMap) material.thicknessMap.colorSpace = THREE.LinearSRGBColorSpace;
         if (material.transmissionMap) material.transmissionMap.colorSpace = THREE.LinearSRGBColorSpace;
+      }
+
+      function finish_loading() {
+        enable_disable( false );
+
+        if (object_is_points === true) {
+          document.getElementById('wireframe').disabled = true;
+          document.getElementById('edge_color').disabled = true;
+          document.getElementById('btn_edges').disabled = true;
+          document.getElementById('btn_flat').disabled = true;
+          document.getElementById('btn_mtl_side').disabled = true;
+          document.getElementById('btn_xtra_smooth').disabled = true;
+        }
+
+        set_initial_scale();
+        resize();
+
+        Obj.traverse( function( child ) {
+          if (child.isMesh || child.isPoints) {
+            if (child.isMesh) edges.add( new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material ) );
+            random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+          }
+        });
+
+        if (vertex_colors_enabled === true) {
+          document.getElementById('btn_xtra_smooth').disabled = true;
+          random_vertex_changed();
+        }
+
+        disabled_changed();
+
+        console.timeEnd( 'Loading Time' );
+        document.getElementById('div_loading').style.display = 'none';
+
+        render_requested = true;
+        mouse_wheel = true;
+        render();
       }
 
       function handle_error( error ) {
@@ -3412,12 +3373,15 @@
             if (child.isPoints) document.getElementById('btn_xtra_smooth').disabled = true;
 
             if (Array.isArray( child.material )) {
+              let child_count_array = 1;
+
               child.material.forEach( mtl => {
-                mtl.vertexColors = vertex_colors_enabled;
+                mtl.vertexColors = vertex_colors_enabled ? original_vertex_color_array[ child.name ][ child_count_array ] : false;
+                child_count_array += 1;
                 mtl.needsUpdate = true;
               });
             } else {
-              child.material.vertexColors = vertex_colors_enabled;
+              child.material.vertexColors = vertex_colors_enabled ? original_vertex_colors[ child.name ] : false;
               child.material.needsUpdate = true;
             }
     		  }
@@ -3439,10 +3403,12 @@
     	    if (child.isMesh || child.isPoints) {
             if (random_vertex_colors_enabled === true) {
               current_colors[ child.name ] = child.geometry.getAttribute( 'color' );
-              child.geometry.setAttribute( 'color', new THREE.BufferAttribute( new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) ), 3, false ) );
+              child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3, false ) );
             } else {
               if (current_colors[ child.name ] === undefined) {
                 child.geometry.deleteAttribute( 'color' );
+                vertex_colors_enabled = false;
+                set_vertex_colors();
               } else {
                 child.geometry.setAttribute( 'color', current_colors[ child.name ] );
               }
@@ -3450,9 +3416,11 @@
 
             if (Array.isArray( child.material )) {
               child.material.forEach( mtl => {
+                if (random_vertex_colors_enabled === true) mtl.vertexColors = true;
                 mtl.needsUpdate = true;
               });
             } else {
+              if (random_vertex_colors_enabled === true) child.material.vertexColors = true;
               child.material.needsUpdate = true;
             }
     		  }
