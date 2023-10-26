@@ -2640,29 +2640,16 @@
 
 		generateRotationTrack( modelName, curves, initialValue, preRotation, postRotation, eulerOrder ) {
 
-			if ( curves.x !== undefined ) {
+			let times, values;
 
-				this.interpolateRotations( curves.x );
-				curves.x.values = curves.x.values.map( THREE.MathUtils.degToRad );
+			if ( curves.x !== undefined && curves.y !== undefined && curves.z !== undefined ) {
 
-			}
+				const result = this.interpolateRotations( curves.x, curves.y, curves.z, eulerOrder );
 
-			if ( curves.y !== undefined ) {
-
-				this.interpolateRotations( curves.y );
-				curves.y.values = curves.y.values.map( THREE.MathUtils.degToRad );
+				times = result[ 0 ];
+				values = result[ 1 ];
 
 			}
-
-			if ( curves.z !== undefined ) {
-
-				this.interpolateRotations( curves.z );
-				curves.z.values = curves.z.values.map( THREE.MathUtils.degToRad );
-
-			}
-
-			const times = this.getTimesForAllAxes( curves );
-			const values = this.getKeyframeTrackValues( times, curves, initialValue );
 
 			if ( preRotation !== undefined ) {
 
@@ -2686,12 +2673,35 @@
 			const euler = new THREE.Euler();
 			const quaternionValues = [];
 
+			if ( ! values || ! times ) return new THREE.QuaternionKeyframeTrack( modelName + '.quaternion', [], [] );
+
 			for ( let i = 0; i < values.length; i += 3 ) {
 
 				euler.set( values[ i ], values[ i + 1 ], values[ i + 2 ], eulerOrder );
 				quaternion.setFromEuler( euler );
+
 				if ( preRotation !== undefined ) quaternion.premultiply( preRotation );
 				if ( postRotation !== undefined ) quaternion.multiply( postRotation );
+
+				// Check unroll
+
+				if ( i > 2 ) {
+
+					const prevQuat = new THREE.Quaternion().fromArray( quaternionValues, ( ( i - 3 ) / 3 ) * 4 );
+
+					if ( prevQuat.dot( quaternion ) < 0 ) {
+
+						quaternion.set(
+							- quaternion.x,
+							- quaternion.y,
+							- quaternion.z,
+							- quaternion.w
+						);
+
+					}
+
+				}
+
 				quaternion.toArray( quaternionValues, i / 3 * 4 );
 
 			}
@@ -2824,41 +2834,97 @@
 		// These will be converted to quaternions which don't support values greater than
 		// PI, so we'll interpolate large rotations
 
-		interpolateRotations( curve ) {
+		interpolateRotations( curvex, curvey, curvez, eulerOrder ) {
 
-			for ( let i = 1; i < curve.values.length; i ++ ) {
+			const times = [];
+			const values = [];
 
-				const initialValue = curve.values[ i - 1 ];
-				const valuesSpan = curve.values[ i ] - initialValue;
-				const absoluteSpan = Math.abs( valuesSpan );
+			for ( let i = 1; i < curvex.values.length; i ++ ) {
 
-				if ( absoluteSpan >= 180 ) {
+				const initialValue = [
+					curvex.values[ i - 1 ],
+					curvey.values[ i - 1 ],
+					curvez.values[ i - 1 ],
+				];
 
-					const numSubIntervals = absoluteSpan / 180;
-					const step = valuesSpan / numSubIntervals;
-					let nextValue = initialValue + step;
-					const initialTime = curve.times[ i - 1 ];
-					const timeSpan = curve.times[ i ] - initialTime;
-					const interval = timeSpan / numSubIntervals;
-					let nextTime = initialTime + interval;
-					const interpolatedTimes = [];
-					const interpolatedValues = [];
+				if ( isNaN( initialValue[ 0 ] ) || isNaN( initialValue[ 1 ] ) || isNaN( initialValue[ 2 ] ) ) continue;
 
-					while ( nextTime < curve.times[ i ] ) {
+				const initialValueRad = initialValue.map( THREE.MathUtils.degToRad );
 
-						interpolatedTimes.push( nextTime );
-						nextTime += interval;
-						interpolatedValues.push( nextValue );
-						nextValue += step;
+				const currentValue = [
+					curvex.values[ i ],
+					curvey.values[ i ],
+					curvez.values[ i ],
+				];
+
+				if ( isNaN( currentValue[ 0 ] ) || isNaN( currentValue[ 1 ] ) || isNaN( currentValue[ 2 ] ) ) continue;
+
+				const currentValueRad = currentValue.map( THREE.MathUtils.degToRad );
+
+				const valuesSpan = [
+					currentValue[ 0 ] - initialValue[ 0 ],
+					currentValue[ 1 ] - initialValue[ 1 ],
+					currentValue[ 2 ] - initialValue[ 2 ],
+				];
+
+				const absoluteSpan = [
+					Math.abs( valuesSpan[ 0 ] ),
+					Math.abs( valuesSpan[ 1 ] ),
+					Math.abs( valuesSpan[ 2 ] ),
+				];
+
+				if ( absoluteSpan[ 0 ] >= 180 || absoluteSpan[ 1 ] >= 180 || absoluteSpan[ 2 ] >= 180 ) {
+
+					const maxAbsSpan = Math.max( ...absoluteSpan );
+					const numSubIntervals = maxAbsSpan / 180;
+
+					const E1 = new THREE.Euler( ...initialValueRad, eulerOrder );
+					const E2 = new THREE.Euler( ...currentValueRad, eulerOrder );
+
+					const Q1 = new THREE.Quaternion().setFromEuler( E1 );
+					const Q2 = new THREE.Quaternion().setFromEuler( E2 );
+
+					// Check unroll
+
+					if ( Q1.dot( Q2 ) ) {
+
+						Q2.set( - Q2.x, - Q2.y, - Q2.z, - Q2.w );
 
 					}
 
-					curve.times = inject( curve.times, i, interpolatedTimes );
-					curve.values = inject( curve.values, i, interpolatedValues );
+					// Interpolate
+
+					const initialTime = curvex.times[ i - 1 ];
+					const timeSpan = curvex.times[ i ] - initialTime;
+
+					const Q = new THREE.Quaternion();
+					const E = new THREE.Euler();
+
+					for ( let t = 0; t < 1; t += 1 / numSubIntervals ) {
+
+						Q.copy( Q1.clone().slerp( Q2.clone(), t ) );
+
+						times.push( initialTime + t * timeSpan );
+						E.setFromQuaternion( Q, eulerOrder );
+
+						values.push( E.x );
+						values.push( E.y );
+						values.push( E.z );
+
+					}
+
+				} else {
+
+					times.push( curvex.times[ i ] );
+					values.push( THREE.MathUtils.degToRad( curvex.values[ i ] ) );
+					values.push( THREE.MathUtils.degToRad( curvey.values[ i ] ) );
+					values.push( THREE.MathUtils.degToRad( curvez.values[ i ] ) );
 
 				}
 
 			}
+
+			return [ times, values ];
 
 		}
 
