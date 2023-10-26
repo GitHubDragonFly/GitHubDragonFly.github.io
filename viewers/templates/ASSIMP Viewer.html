@@ -622,11 +622,12 @@
       var initial_transparency, initial_transparency_array;
       var original_side, original_side_array, bgnd_linear_gradient;
       var lines_present, lines_visible, bounding_box, zip, files, file_model_urls;
+      var random_vertex_colors_enabled, random_vertex_color_array, current_colors;
+      var vertex_colors_enabled, original_vertex_colors, original_vertex_color_array;
+      var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
       var texture_files_svg, texture_files_webp, texture_files_ktx2, texture_files_gif, texture_files_exr;
       var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_tga, texture_files_dds, tex;
-      var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
       var selected_gltf_file, bin_buffer_files, selected_draco_file, selected_url_file = '', selected_gltf_url_file;
-      var vertex_colors_enabled, random_vertex_colors_enabled, original_vertex_color_array, random_vertex_color_array;
 
       const link = document.createElement( 'a' );
       link.style.display = 'none';
@@ -1932,7 +1933,7 @@
           }
 
           gltf_obj.traverse( ( child ) => {
-            if (child.isMesh || child.isPoints) {
+            if (child.isMesh || child.isPoints || child.isLineSegments) {
               if (child.material) {
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
@@ -2049,9 +2050,11 @@
         flat_shading_enabled = false;
         bgnd_linear_gradient = false;
         vertex_colors_enabled = false;
-        random_vertex_colors_enabled = false;
         original_vertex_color_array = {};
+        original_vertex_colors = {};
+        random_vertex_colors_enabled = false;
         random_vertex_color_array = {};
+        current_colors = {};
         grid_visible = false;
         polar_grid_visible = false;
         render_requested = false;
@@ -2483,16 +2486,13 @@
           let child_count = 1;
 
           gltf.scene.traverse( function( child ) {
-            if ( child.isLineSegments || child.isConditionalLine ) {
+            if (child.isLineSegments) {
               if (child.name === '') child.name = 'childLines_' + child_count;
 
               child.geometry.computeBoundingBox();
               child.geometry.computeBoundingSphere();
               child.geometry.computeVertexNormals();
               child.geometry.normalizeNormals();
-
-              random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-              original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
 
               lines_present = lines_visible = true;
               document.getElementById('btn_lines').disabled = false;
@@ -2501,9 +2501,6 @@
 
             if (child.isMesh || child.isPoints) {
               if (child.name === '') child.name = 'child_' + child_count;
-
-              random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-              original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
 
               child.geometry.computeBoundingBox();
               child.geometry.computeBoundingSphere();
@@ -2518,7 +2515,7 @@
 
               child.geometry.normalizeNormals();
 
-              if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+              if (child.geometry.hasAttribute( 'color' )) {
                 vertex_colors_enabled = true;
                 document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                 document.getElementById('btn_random_vertex_colors').disabled = false;
@@ -2527,10 +2524,6 @@
 
               if (child.isMesh) {
                 if (child.isSkinnedMesh) child.frustumCulled = false;
-
-                if (child.geometry.attributes.position) {
-                  edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
-                }
               } else {
                 object_is_points = true;
               }
@@ -2548,6 +2541,7 @@
                 initial_transparency_array[ child.name ] = {};
                 initial_opacity_array[ child.name ] = {};
                 original_side_array[ child.name ] = {};
+                original_vertex_color_array[ child.name ] = {};
 
                 child.material.forEach( mtl => {
                   if (mtl.name === '') mtl.name = 'material_' + child_count_array;
@@ -2559,11 +2553,12 @@
                     if ( mtl.metalnessMap && ! mtl.metalness ) mtl.metalness = 0.01;
                   }
 
+                  mtl.vertexColors = child.geometry.hasAttribute( 'color' );
+
                   initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
                   initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
                   original_side_array[ child.name ][ child_count_array ] = mtl.side;
-
-                  mtl.vertexColors = vertex_colors_enabled;
+                  original_vertex_color_array[ child.name ][ child_count_array ] = mtl.vertexColors;
 
                   if (assimp_load === true && child.isMesh) {
                     // default to double side since some models might not be visible initially
@@ -2591,19 +2586,20 @@
                   if ( child.material.metalnessMap && ! child.material.metalness ) child.material.metalness = 0.01;
                 }
 
+                child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+
                 initial_transparency[ child.name ] = child.material.transparent;
                 initial_opacity[ child.name ] = child.material.opacity;
                 original_side[ child.name ] = child.material.side;
-
-                child.material.vertexColors = vertex_colors_enabled;
+                original_vertex_colors[ child.name ] = child.material.vertexColors;
 
                 if (assimp_load === true && child.isMesh) {
                   // default to double side since some models might not be visible initially
                   child.material.side = THREE.DoubleSide;
                   document.getElementById('btn_mtl_side').innerHTML = 'DS';
 
-                  child.material.flatShading = true;
                   flat_shading_enabled = true;
+                  child.material.flatShading = true;
                   document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
                 } else {
                   child.material.flatShading = false;
@@ -2618,7 +2614,7 @@
                     tga_loader.load( URL.createObjectURL( file ) , function( texture ) {
                       URL.revokeObjectURL( file );
 
-                      texture.encoding = THREE.sRGBEncoding;
+                      texture.colorSpace = THREE.SRGBColorSpace;
                       texture.wrapS = THREE.RepeatWrapping;
                       texture.wrapT = THREE.RepeatWrapping;
                       texture.flipY = true;
@@ -2633,7 +2629,7 @@
                     dds_loader.load( URL.createObjectURL( file ) , function( texture ) {
                       URL.revokeObjectURL( file );
 
-                      texture.encoding = THREE.sRGBEncoding;
+                      texture.colorSpace = THREE.SRGBColorSpace;
                       texture.wrapS = THREE.RepeatWrapping;
                       texture.wrapT = THREE.RepeatWrapping;
 
@@ -2647,7 +2643,7 @@
                     exr_loader.load( URL.createObjectURL( file ) , function( texture ) {
                       URL.revokeObjectURL( file );
 
-                      texture.encoding = THREE.sRGBEncoding;
+                      texture.colorSpace = THREE.SRGBColorSpace;
                       texture.wrapS = THREE.RepeatWrapping;
                       texture.wrapT = THREE.RepeatWrapping;
 
@@ -2661,7 +2657,7 @@
                     ktx2_loader.load( URL.createObjectURL( file ) , function( texture ) {
                       URL.revokeObjectURL( file );
 
-                      texture.encoding = THREE.sRGBEncoding;
+                      texture.colorSpace = THREE.SRGBColorSpace;
                       texture.wrapS = THREE.RepeatWrapping;
                       texture.wrapT = THREE.RepeatWrapping;
 
@@ -2677,7 +2673,7 @@
                     texture_loader.load( URL.createObjectURL( file ) , function( texture ) {
                       URL.revokeObjectURL( file );
 
-                      texture.encoding = THREE.sRGBEncoding;
+                      texture.colorSpace = THREE.SRGBColorSpace;
                       texture.wrapS = THREE.RepeatWrapping;
                       texture.wrapT = THREE.RepeatWrapping;
 
@@ -2730,18 +2726,11 @@
 
           if (!geometry.attributes.normal) geometry.computeVertexNormals();
 
-          if (geometry.attributes.color && geometry.attributes.color.array.length > 0) {
+          if (geometry.hasAttribute( 'color' )) {
             vertex_colors_enabled = true;
             document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
             document.getElementById('btn_random_vertex_colors').disabled = false;
             random_vertex_changed();
-          }
-
-          random_vertex_color_array[ 'child_0' ] = new Float32Array( Array.from( { length: geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-          original_vertex_color_array[ 'child_0' ] = geometry.getAttribute( 'color' );
-
-          if (geometry.attributes.position) {
-            edges[ 'child_0' ] = new THREE.LineSegments( new THREE.EdgesGeometry( geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
           }
 
           if (texture_files_tga.length > 0) {
@@ -2749,7 +2738,7 @@
               tga_loader.load( URL.createObjectURL( file ), function( texture ) {
                 URL.revokeObjectURL( file );
 
-                texture.encoding = THREE.sRGBEncoding;
+                texture.colorSpace = THREE.SRGBColorSpace;
                 texture.wrapS = THREE.RepeatWrapping;
                 texture.wrapT = THREE.RepeatWrapping;
                 texture.flipY = true;
@@ -2761,7 +2750,6 @@
 
                 gltf_obj.name = 'child_0';
                 initial_opacity[ gltf_obj.name ] = 1;
-
                 initial_rotation = gltf_obj.rotation;
 
                 // Add DRACO model to scene
@@ -2777,7 +2765,7 @@
               dds_loader.load( URL.createObjectURL( file ), function( texture ) {
                 URL.revokeObjectURL( file );
 
-                texture.encoding = THREE.sRGBEncoding;
+                texture.colorSpace = THREE.SRGBColorSpace;
                 texture.wrapS = THREE.RepeatWrapping;
                 texture.wrapT = THREE.RepeatWrapping;
 
@@ -2788,7 +2776,6 @@
 
                 gltf_obj.name = 'child_0';
                 initial_opacity[ gltf_obj.name ] = 1;
-
                 initial_rotation = gltf_obj.rotation;
 
                 // Add DRACO model to scene
@@ -2804,7 +2791,7 @@
               exr_loader.load( URL.createObjectURL( file ), function( texture ) {
                 URL.revokeObjectURL( file );
 
-                texture.encoding = THREE.sRGBEncoding;
+                texture.colorSpace = THREE.SRGBColorSpace;
                 texture.wrapS = THREE.RepeatWrapping;
                 texture.wrapT = THREE.RepeatWrapping;
 
@@ -2815,7 +2802,6 @@
 
                 gltf_obj.name = 'child_0';
                 initial_opacity[ gltf_obj.name ] = 1;
-
                 initial_rotation = gltf_obj.rotation;
 
                 // Add DRACO model to scene
@@ -2831,7 +2817,7 @@
               ktx2_loader.load( URL.createObjectURL( file ), function( texture ) {
                 URL.revokeObjectURL( file );
 
-                texture.encoding = THREE.sRGBEncoding;
+                texture.colorSpace = THREE.SRGBColorSpace;
                 texture.wrapS = THREE.RepeatWrapping;
                 texture.wrapT = THREE.RepeatWrapping;
                 texture.flipY = false;
@@ -2843,7 +2829,6 @@
 
                 gltf_obj.name = 'child_0';
                 initial_opacity[ gltf_obj.name ] = 1;
-
                 initial_rotation = gltf_obj.rotation;
 
                 // Add DRACO model to scene
@@ -2861,7 +2846,7 @@
               texture_loader.load( URL.createObjectURL( file ), function( texture ) {
                 URL.revokeObjectURL( file );
 
-                texture.encoding = THREE.sRGBEncoding;
+                texture.colorSpace = THREE.SRGBColorSpace;
                 texture.wrapS = THREE.RepeatWrapping;
                 texture.wrapT = THREE.RepeatWrapping;
                 texture.flipY = false;
@@ -2873,7 +2858,6 @@
 
                 gltf_obj.name = 'child_0';
                 initial_opacity[ gltf_obj.name ] = 1;
-
                 initial_rotation = gltf_obj.rotation;
 
                 // Add DRACO model to scene
@@ -2892,7 +2876,6 @@
 
             gltf_obj.name = 'child_0';
             initial_opacity[ gltf_obj.name ] = 1;
-
             initial_rotation = gltf_obj.rotation;
 
             // Add DRACO model to scene
@@ -2987,15 +2970,12 @@
             draco_loader.load( selected_gltf_url_file, function( geometry ) {
               if (!geometry.attributes.normal) geometry.computeVertexNormals();
 
-              if (geometry.attributes.color && geometry.attributes.color.array.length > 0) {
+              if (geometry.hasAttribute( 'color' )) {
                 vertex_colors_enabled = true;
                 document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                 document.getElementById('btn_random_vertex_colors').disabled = false;
                 random_vertex_changed();
               }
-
-              random_vertex_color_array[ 'child_0' ] = new Float32Array( Array.from( { length: geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-              original_vertex_color_array[ 'child_0' ] = geometry.getAttribute( 'color' );
 
               let draco_texture = texture_loader.load( 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAzSURBVBhXFYrJDQAxDAIHl5tG9pWOI8/aICGunO9qP0JRNZqwltgspltKdtmfihNMoc0PFNkQjHSfyTIAAAAASUVORK5CYII=' );
               draco_material = new THREE.MeshPhongMaterial( { side: THREE.DoubleSide, map: draco_texture, opacity: 1, transparent: true, vertexColors: vertex_colors_enabled } );
@@ -3004,11 +2984,6 @@
 
               gltf_obj.name = 'child_0';
               initial_opacity[ gltf_obj.name ] = 1;
-
-              if (geometry.attributes.position) {
-                edges[ gltf_obj.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
-              }
-
               initial_rotation = gltf_obj.rotation;
 
               // Add DRACO model to scene
@@ -3058,16 +3033,13 @@
               let child_count = 1;
 
               gltf.scene.traverse( function( child ) {
-                if ( child.isLineSegments || child.isConditionalLine ) {
+                if (child.isLineSegments) {
                   if (child.name === '') child.name = 'childLines_' + child_count;
 
                   child.geometry.computeBoundingBox();
                   child.geometry.computeBoundingSphere();
                   child.geometry.computeVertexNormals();
                   child.geometry.normalizeNormals();
-
-                  random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-                  original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
 
                   lines_present = lines_visible = true;
                   document.getElementById('btn_lines').disabled = false;
@@ -3076,9 +3048,6 @@
 
                 if (child.isMesh || child.isPoints) {
                   if (child.name === '') child.name = 'child_' + child_count;
-
-                  random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-                  original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
 
                   child.geometry.computeBoundingBox();
                   child.geometry.computeBoundingSphere();
@@ -3093,7 +3062,7 @@
 
                   child.geometry.normalizeNormals();
 
-                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                  if (child.geometry.hasAttribute( 'color' )) {
                     vertex_colors_enabled = true;
                     document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                     document.getElementById('btn_random_vertex_colors').disabled = false;
@@ -3102,10 +3071,6 @@
 
                   if (child.isMesh) {
                     if (child.isSkinnedMesh) child.frustumCulled = false;
-
-                    if (child.geometry.attributes.position) {
-                      edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
-                    }
                   } else {
                     object_is_points = true;
                   }
@@ -3123,6 +3088,7 @@
                     initial_transparency_array[ child.name ] = {};
                     initial_opacity_array[ child.name ] = {};
                     original_side_array[ child.name ] = {};
+                    original_vertex_color_array[ child.name ] = {};
 
                     child.material.forEach( mtl => {
                       if (mtl.name === '') mtl.name = 'material_' + child_count_array;
@@ -3134,11 +3100,12 @@
                         if ( mtl.metalnessMap && ! mtl.metalness ) mtl.metalness = 0.01;
                       }
 
+                      mtl.vertexColors = child.geometry.hasAttribute( 'color' );
+
                       initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
                       initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
                       original_side_array[ child.name ][ child_count_array ] = mtl.side;
-
-                      mtl.vertexColors = vertex_colors_enabled;
+                      original_vertex_color_array[ child.name ][ child_count_array ] = mtl.vertexColors;
 
                       if (assimp_load === true && child.isMesh) {
                         // default to double side since some models might not be visible initially
@@ -3166,11 +3133,12 @@
                       if ( child.material.metalnessMap && ! child.material.metalness ) child.material.metalness = 0.01;
                     }
 
+                    child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+
                     initial_transparency[ child.name ] = child.material.transparent;
                     initial_opacity[ child.name ] = child.material.opacity;
                     original_side[ child.name ] = child.material.side;
-
-                    child.material.vertexColors = vertex_colors_enabled;
+                    original_vertex_colors[ child.name ] = child.material.vertexColors;
 
                     if (assimp_load === true && child.isMesh) {
                       // default to double side since some models might not be visible initially
@@ -3242,6 +3210,19 @@
           set_directional_light_intensity();
         }
 
+        gltf_obj.traverse( function( child ) {
+          if (child.isMesh || child.isPoints || child.isLineSegments) {
+            if (child.isMesh) {
+              edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material );
+              edges[ child.name ].name = child.name + '_edges';
+              random_vertex_color_array[ edges[ child.name ].name ] = new Float32Array( Array.from( { length: edges[ child.name ].geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+              original_vertex_colors[ edges[ child.name ].name ] = edges[ child.name ].geometry.getAttribute( 'color' );
+            }
+
+            random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+          }
+        });
+
         disabled_changed();
 
         console.timeEnd( 'Loading Time' );
@@ -3279,7 +3260,7 @@
         }
 
         gltf_obj.traverse( child => {
-          if (( child.isLineSegments && child.geometry.type !== 'EdgesGeometry' ) || child.isConditionalLine) {
+          if (child.isLineSegments && child.geometry.type !== 'EdgesGeometry') {
             child.visible = lines_visible;
           }
 
@@ -3523,17 +3504,18 @@
         random_vertex_changed();
 
         gltf_obj.traverse( function( child ) {
-          if (child.isMesh || child.isPoints || (child.isLineSegments && child.geometry.type !== 'EdgesGeometry')) {
-            if (child.material) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.vertexColors = vertex_colors_enabled;
-                  mtl.needsUpdate = true;
-                });
-              } else {
-                child.material.vertexColors = vertex_colors_enabled;
-                child.material.needsUpdate = true;
-              }
+          if (child.isMesh || child.isPoints || child.isLineSegments) {
+            if (Array.isArray( child.material )) {
+              let child_count_array = 1;
+
+              child.material.forEach( mtl => {
+                mtl.vertexColors = vertex_colors_enabled ? original_vertex_color_array[ child.name ][ child_count_array ] : false;
+                child_count_array += 1;
+                mtl.needsUpdate = true;
+              });
+            } else {
+              child.material.vertexColors = vertex_colors_enabled ? original_vertex_colors[ child.name ] : false;
+              child.material.needsUpdate = true;
             }
           }
 
@@ -3551,22 +3533,39 @@
         }
 
         gltf_obj.traverse( function( child ) {
-    	    if (child.isMesh || child.isPoints || (child.isLineSegments && child.geometry.type !== 'EdgesGeometry')) {
+    	    if (child.isMesh || child.isPoints || child.isLineSegments) {
             if (random_vertex_colors_enabled === true) {
-              if (assimp_load === true) original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+              current_colors[ child.name ] = child.geometry.getAttribute( 'color' );
               child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3, false ) );
             } else {
-              original_vertex_color_array[ child.name ] ? child.geometry.setAttribute( 'color', original_vertex_color_array[ child.name ] ) : child.geometry.deleteAttribute( 'color' );
+              if (current_colors[ child.name ]) {
+                child.geometry.setAttribute( 'color', current_colors[ child.name ] );
+              } else {
+                child.geometry.deleteAttribute('color');
+              }
             }
 
-            if (child.material) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.needsUpdate = true;
-                });
+            if (Array.isArray( child.material )) {
+              let child_count_array = 1;
+
+              child.material.forEach( mtl => {
+                if (random_vertex_colors_enabled === true) {
+                  mtl.vertexColors = true;
+                } else {
+                  mtl.vertexColors = current_colors[ child.name ] ? original_vertex_color_array[ child.name ][ child_count_array ] : false;
+                }
+
+                child_count_array += 1;
+                mtl.needsUpdate = true;
+              });
+            } else {
+              if (random_vertex_colors_enabled === true) {
+                child.material.vertexColors = true;
               } else {
-                child.material.needsUpdate = true;
+                child.material.vertexColors = current_colors[ child.name ] ? original_vertex_colors[ child.name ] : false;
               }
+
+              child.material.needsUpdate = true;
             }
     		  }
 
@@ -3788,7 +3787,7 @@
               }
 
               gltf_obj.traverse( ( child ) => {
-                if (child.isMesh || child.isPoints) {
+                if (child.isMesh || child.isPoints || child.isLineSegments) {
                   if (child.material) {
                     if (Array.isArray( child.material )) {
                       child.material.forEach( mtl => {
@@ -3984,7 +3983,7 @@
 
     <script type="module">
       import { KTX2Loader } from '../static/jsm/KTX2Loader.js';
-      import { GUI } from 'https://cdn.jsdelivr.net/npm/three@0.147.0/examples/jsm/libs/lil-gui.module.min.js';
+      import { GUI } from 'https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/libs/lil-gui.module.min.js';
       import GLTFVideoTextureExtension from '../static/jsm/extensions/loaders/EXT_texture_video/EXT_texture_video.js';
       import GLTFMaterialsVariantsExtension from '../static/jsm/extensions/loaders/KHR_materials_variants/KHR_materials_variants.js';
 
