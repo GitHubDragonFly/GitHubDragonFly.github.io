@@ -32,13 +32,13 @@
 			this.register( function ( parser ) {
 
 				return new GLTFTextureAVIFExtension( parser );
-	
+
 			} );
-	
+
 			this.register( function ( parser ) {
-	
+
 				return new GLTFMaterialsSheenExtension( parser );
-	
+
 			} );
 
 			this.register( function ( parser ) {
@@ -50,33 +50,39 @@
 			this.register( function ( parser ) {
 
 				return new GLTFMaterialsVolumeExtension( parser );
-	
+
 			} );
-	
+
 			this.register( function ( parser ) {
-	
+
 				return new GLTFMaterialsIorExtension( parser );
-	
+
 			} );
-	
+
 			this.register( function ( parser ) {
-	
+
 				return new GLTFMaterialsEmissiveStrengthExtension( parser );
-	
+
 			} );
-	
+
 			this.register( function ( parser ) {
-	
+
 				return new GLTFMaterialsSpecularExtension( parser );
-	
+
 			} );
-	
+
 			this.register( function ( parser ) {
-	
+
 				return new GLTFMaterialsIridescenceExtension( parser );
-	
+
 			} );
-	
+
+			this.register( function ( parser ) {
+
+				return new GLTFMaterialsAnisotropyExtension( parser );
+
+			} );
+
 			this.register( function ( parser ) {
 
 				return new GLTFLightsExtension( parser );
@@ -92,9 +98,9 @@
 			this.register( function ( parser ) {
 
 				return new GLTFMeshGpuInstancing( parser );
-	
+
 			} );
-	
+
 		}
 
 		load( url, onLoad, onProgress, onError ) {
