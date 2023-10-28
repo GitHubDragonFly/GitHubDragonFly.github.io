@@ -609,8 +609,8 @@
 						if ( mat.emissiveIntensity && mat.emissiveIntensity !== 1 ) mtlOutput += 'Pe ' + mat.emissiveIntensity + '\n';
 						if ( mat.anisotropy ) {
 							mtlOutput += 'Pa ' + mat.anisotropy + '\n';
-							mtlOutput += 'Pas ' + mat.anisotropyStrength + '\n';
-							mtlOutput += 'Par ' + mat.anisotropyRotation + '\n';
+							if ( mat.anisotropyStrength ) mtlOutput += 'Pas ' + mat.anisotropyStrength + '\n';
+							if ( mat.anisotropyRotation ) mtlOutput += 'Par ' + mat.anisotropyRotation + '\n';
 						}
 						if ( mat.attenuationDistance && mat.attenuationDistance !== Infinity ) {
 							mtlOutput += 'Pac ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
