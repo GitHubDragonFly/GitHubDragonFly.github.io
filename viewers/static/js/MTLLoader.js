@@ -438,12 +438,6 @@
 						use_phong = false;
 						break;
 
-					case 'pas':
-						// Anisotropy Strength
-						params.anisotropyStrength = parseFloat( value );
-						use_phong = false;
-						break;
-
 					case 'par':
 						// Anisotropy Rotation
 						params.anisotropyRotation = parseFloat( value );
