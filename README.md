@@ -42,6 +42,11 @@ Number Type Converter
   - Move = right-click + hold + drag
   - Zoom In / Out = mouse scroll wheel
 
+- Notes about GLTF viewers:
+  - `GLTF Viewer` is for v2.0 glTF files and is currently using r158 of three.js
+  - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js, which appears to be the last revision supporting its included `pbrSpecularGlossiness` extension
+  - `GLTF Legacy` viewer is purely experimental and is rather limited (see notes further below)
+
 - Special notes about `ASSIMP Viewer` which is using [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and [ASSIMP](https://github.com/assimp/assimp) library:
   - This is a revamped version of my GLTF v2.0 Viewer and is a sort of ASSIMP(JS) / three.js hybrid
   - It can be used instead of GLTF v2.0 and GLTF v1.0 Legacy viewers and also provides more export options
