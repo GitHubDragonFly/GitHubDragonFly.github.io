@@ -48,7 +48,7 @@
 				const groups = geometry.groups;
 
 				// name of the mesh object
-				if (mesh.name === '') {
+				if ( mesh.name === '' ) {
 
 					mesh[ 'name' ] = 'mesh_' + mesh_count;
 
@@ -204,7 +204,7 @@
 						normal.applyMatrix3( normalMatrixWorld ).normalize();
 
 						// transform the normal to export format
-						output += 'vn ' + normal.x + ' ' + normal.y + ' ' + normal.z + '\n';
+						output += 'vn ' + normal.x * mesh.scale.x + ' ' + normal.y * mesh.scale.y + ' ' + normal.z * mesh.scale.z + '\n';
 
 					}
 
@@ -276,6 +276,18 @@
 
 			function parseLine( line ) {
 
+				// name of the line object
+				if ( line.name === '' ) {
+
+					line[ 'name' ] = 'line_' + line_count;
+
+				} else {
+
+					line.name = line.name.replaceAll( '#', '' );
+					line.name = line.name.replaceAll( ' ', '_' );
+
+				}
+
 				let nbVertex = 0;
 				const geometry = line.geometry;
 				const type = line.type;
@@ -288,27 +300,65 @@
 
 				// shortcuts
 				const vertices = geometry.getAttribute( 'position' );
-				
-				// name of the line object
+
 				output += 'o ' + line.name + '\n';
 
 				if ( line.material ) {
 
-					if ( line.material.name ) {
+					if ( Array.isArray( line.material ) ) {
 
-						if ( line.material.name === '' ) line.material.name = 'line_material_' + line_count;
+						line.material.forEach( mtl => {
+
+							if ( mtl.name ) {
+
+								if ( mtl.name === '' ) {
+
+									mtl.name = 'line_material_' + line_count;
+
+								} else {
+
+									mtl.name = mtl.name.replaceAll( '#', '' );
+									mtl.name = mtl.name.replaceAll( ' ', '_' );
+
+								}
+
+							} else {
+
+								mtl[ 'name' ] = 'line_material_' + line_count;
+
+							}
+
+							output += 'usemtl ' + mtl.name + '\n';
+
+						});
 
 					} else {
 
-						line.material[ 'name' ] = 'line_material_' + line_count;
+						if ( line.material.name ) {
+
+							if ( line.material.name === '' ) {
+
+								line.material.name = 'line_material_' + line_count;
+
+							} else {
+
+								line.material.name = line.material.name.replaceAll( '#', '' );
+								line.material.name = line.material.name.replaceAll( ' ', '_' );
+
+							}
+
+						} else {
+
+							line.material[ 'name' ] = 'line_material_' + line_count;
+
+						}
+
+						output += 'usemtl ' + line.material.name + '\n';
 
 					}
 
-					materials[ line.material.name ] = line.material;
-
-					output += 'usemtl ' + line.material.name + '\n';
-
 					line_count += 1;
+
 				}
 
 				if ( vertices !== undefined ) {
@@ -359,6 +409,18 @@
 			}
 
 			function parsePoints( points ) {
+
+				// name of the points object
+				if ( points.name === '' ) {
+
+					points[ 'name' ] = 'points_' + points_count;
+
+				} else {
+
+					points.name = points.name.replaceAll( '#', '' );
+					points.name = points.name.replaceAll( ' ', '_' );
+
+				}
 
 				let nbVertex = 0;
 				const geometry = points.geometry;
@@ -411,7 +473,16 @@
 
 					if ( points.material.name ) {
 
-						if ( points.material.name === '' ) points.material.name = 'points_material_' + points_count;
+						if ( points.material.name === '' ) {
+
+							points.material.name = 'points_material_' + points_count;
+
+						} else {
+
+							points.material.name = points.material.name.replaceAll( '#', '' );
+							points.material.name = points.material.name.replaceAll( ' ', '_' );
+
+						}
 
 					} else {
 
@@ -436,7 +507,7 @@
 
 				}
 
-				if ( child.isLine === true ) {
+				if ( child.isLine === true || child.isLineSegments === true ) {
 
 					parseLine( child );
 

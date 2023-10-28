@@ -15,7 +15,7 @@
 
 	class PLYExporter {
 
-		parse( object, onDone, options ) {
+		parse( object, onDone, options, ldraw = false ) {
 
 			if ( onDone && typeof onDone === 'object' ) {
 
@@ -111,13 +111,21 @@
 
 					// allow converting material color to vertex color if material texture is not used
 					if ( colors !== undefined ) {
+
 						includeColors = true;
+
 					} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length <= mesh.material.length ) ) {
+
 						includeColors = true;
+
 					} else if ( geometry.groups && geometry.groups.length === 1 && mesh.material && mesh.material.map === null ) {
+
 						includeColors = true;
+
 					} else if ( mesh.material && mesh.material.color && mesh.material.map === null ) {
+
 						includeColors = true;
+
 					}
 
 				}
@@ -236,7 +244,9 @@
 								vertex.x = normals.getX( i );
 								vertex.y = normals.getY( i );
 								vertex.z = normals.getZ( i );
+
 								vertex.applyMatrix3( normalMatrixWorld ).normalize();
+
 								output.setFloat32( vOffset, vertex.x, options.littleEndian );
 								vOffset += 4;
 								output.setFloat32( vOffset, vertex.y, options.littleEndian );
@@ -288,6 +298,7 @@
 								tempColor.r = colors.getX( i );
 								tempColor.g = colors.getY( i );
 								tempColor.b = colors.getZ( i );
+
 								tempColor.convertLinearToSRGB();
 
 								output.setUint8( vOffset, Math.floor( tempColor.r * 255 ) );
@@ -314,12 +325,28 @@
 
 							} else if ( ( mesh.material && geometry.groups && geometry.groups.length === 1 ) || ( mesh.material && mesh.material.color ) ) {
 
-								output.setUint8( vOffset, Math.floor( mesh.material.color.r * 255 ) );
-								vOffset += 1;
-								output.setUint8( vOffset, Math.floor( mesh.material.color.g * 255 ) );
-								vOffset += 1;
-								output.setUint8( vOffset, Math.floor( mesh.material.color.b * 255 ) );
-								vOffset += 1;
+								if ( ldraw === true ) {
+
+									let new_material_color = new THREE.Color( mesh.material.color.r, mesh.material.color.g, mesh.material.color.b );
+									new_material_color.convertLinearToSRGB();
+
+									output.setUint8( vOffset, Math.floor( new_material_color.r * 255 ) );
+									vOffset += 1;
+									output.setUint8( vOffset, Math.floor( new_material_color.g * 255 ) );
+									vOffset += 1;
+									output.setUint8( vOffset, Math.floor( new_material_color.b * 255 ) );
+									vOffset += 1;
+	
+								} else {
+
+									output.setUint8( vOffset, Math.floor( mesh.material.color.r * 255 ) );
+									vOffset += 1;
+									output.setUint8( vOffset, Math.floor( mesh.material.color.g * 255 ) );
+									vOffset += 1;
+									output.setUint8( vOffset, Math.floor( mesh.material.color.b * 255 ) );
+									vOffset += 1;
+
+								}
 
 							} else {
 
@@ -476,7 +503,18 @@
 
 							} else if ( ( geometry.groups && mesh.material && geometry.groups.length === 1 ) || ( mesh.material && mesh.material.color ) ) {
 
-								line += ' ' + Math.floor( mesh.material.color.r * 255 ) + ' ' + Math.floor( mesh.material.color.g * 255 ) + ' ' + Math.floor( mesh.material.color.b * 255 );
+								if ( ldraw === true ) {
+
+									let new_material_color = new THREE.Color( mesh.material.color.r, mesh.material.color.g, mesh.material.color.b );
+									new_material_color.convertLinearToSRGB();
+
+									line += ' ' + Math.floor( new_material_color.r * 255 ) + ' ' + Math.floor( new_material_color.g * 255 ) + ' ' + Math.floor( new_material_color.b * 255 );
+
+								} else {
+
+									line += ' ' + Math.floor( mesh.material.color.r * 255 ) + ' ' + Math.floor( mesh.material.color.g * 255 ) + ' ' + Math.floor( mesh.material.color.b * 255 );
+
+								}
 
 							} else {
 
@@ -526,7 +564,7 @@
 
 			}
 
-			if ( typeof onDone === 'function' ) requestAnimationFrame( () => onDone( result ) );
+			if ( typeof onDone === 'function' ) return onDone( result );
 
 			return result;
 
