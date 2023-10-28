@@ -29,7 +29,7 @@ This document would represent a summary of PBR entries that can be found in the 
    - `map_Pr` - roughnessMap
  - `map_Px` - replaces both `map_Pm` and `map_Pr` when they are identical
 
- - `Pa` / `Pas` / `Par` - anisotropy / anisotropyStrength / anisotropyRotation
+ - `Pa`/ `Par` - anisotropy (strength) / anisotropyRotation
    - `map_Pa` - anisotropyMap
 
  - `Pi` / `Pii` - iridescence / iridescenceIOR
