@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="description" content="GLTF / GLB Viewer using Google's model-viewer web component">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
+
+    <script async src="https://ga.jspm.io/npm:es-module-shims@1.6.3/dist/es-module-shims.js"></script>
+    <script type="importmap-shim">{ "imports": { "three": "https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js" } }</script>
+    <script type="module-shim" src="https://ajax.googleapis.com/ajax/libs/model-viewer/3.3.0/model-viewer.min.js"></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
+
+    <script>
+      self.ModelViewerElement = self.ModelViewerElement || {};
+      self.ModelViewerElement.meshoptDecoderLocation = 'https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_decoder.js';
+      self.ModelViewerElement.lottieLoaderLocation = 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/LottieLoader.js';
+    </script>
+
+    <style>
+      body, html {
+        position: relative;
+        display: block;
+        background-color: #10104b;
+        width: 100%;
+        min-height: 100vh;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button {
+        border: 1px solid blue;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+        min-width: 28px;
+        height: 22px;
+        padding: 1px;
+      }
+
+      label {
+        vertical-align: middle;
+        height: 22px;
+        margin: 2px 0 2px 0;
+      }
+
+      input[type=file] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        max-width: 170px;
+      }
+
+      input[type=text] { vertical-align: middle; margin: 2px 5px 2px 0; }
+
+      .fm { color: navy; width: 99%; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+
+      .fixed-menu {
+        position: fixed;
+        z-index: 1;
+        display: inline-block;
+        background-color: whitesmoke;
+        margin: 0px;
+        padding: 1px;
+        width: 100%;
+      }
+
+      .model_viewer {
+        background-color: transparent;
+        min-height: 100vh;
+        width: 99.7%;
+        margin: 1px 1px 1px 1px;
+        padding: 0;
+      }
+    </style>
+
+    <!-- Using Google Model Viewer element: https://github.com/google/model-viewer -->
+
+    <title>GLTF/GLB Model Viewer</title>
+  </head>
+  <body onload="reset_all();">
+    <div class="fixed-menu">
+      <div class="fm">
+        <button title="Get file via URL" id="btn_url" onclick="show_url()" style="min-width: 38px;">URL</button>
+        <label for="file_input" title="File Input"></label>
+        <input type="file" id="file_input" name="file" onchange="init()" accept=".glb, .gltf" multiple />
+        <button title="Current Model" id="current_model" onclick="current_model_changed()" disabled>M</button>
+        <button title="Animations" id="btn_animate" onclick="animate_gltf()" disabled>A</button>
+        <button title="Variants" id="btn_variants" onclick="switch_variant()" disabled>V</button>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry">URL:</label>
+        <input type="text" id="url_entry" value="" style="min-width: 70%; margin-right: 3px;" />
+        <button onclick="load_url_file();" style="min-width: 38px; margin-right: 3px;">Load</button>
+        <button onclick="clear_url();" style="min-width: 38px; margin-right: 1px;">Clear</button>
+      </div>
+    </div><br />
+
+    <model-viewer class="model_viewer" id="mv" loading="eager" min-field-of-view="0deg" max-field-of-view="110deg" camera-controls touch-action="pan-y" interpolation-decay="200" autoplay ar></model-viewer>
+
+    <script>
+      function show_url() {
+        if (url_displayed === true) {
+          document.getElementById('url').style.display = 'none';
+          url_displayed = false;
+        } else {
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+    </script>
+
+    <script>
+      var filename, filenames, models, current_model = 0;
+      var selected_file, selected_url_file = '';
+      var url_displayed = false, url_loading = false;
+      var ww = window.innerWidth,	wh = window.innerHeight;
+      var variants, current_variant = 0, variants_available = false;
+      var animations, current_animation = 0, animation_running = false;
+
+      async function init() {
+        if (models && models.length > 0) reset_all( false );
+
+        selected_file = null;
+        animations = {};
+        variants = {};
+        filename = null;
+        filenames = [];
+        models = [];
+
+        enable_disable( true );
+
+        if (url_loading === false) {
+          // Loaded file
+          var fi = document.getElementById('file_input');
+
+          for (let i = 0; i < fi.files.length; i++) {
+            let fn_uc = fi.files[ i ].name.toUpperCase();
+
+            if (fn_uc.endsWith('.GLB') || fn_uc.endsWith('.GLTF')) {
+              let url = URL.createObjectURL( fi.files[ i ] );
+
+              animations[ i ] = [];
+              variants[ i ] = [];
+
+              models.push( url );
+              filenames.push( fi.files[ i ].name.substring( 0, fi.files[ i ].name.lastIndexOf('.') ) );
+              if (filename === null) filename = filenames[ 0 ];
+              if (selected_file === null) selected_file = url;
+
+              URL.revokeObjectURL( fi.files[ i ] );
+            }
+          };
+
+          if (models.length > 0) {
+            document.getElementById('current_model').innerHTML = 'M0';
+
+            if (models.length > 1) {
+              document.getElementById('current_model').disabled = false;
+              document.getElementById('current_model').style.backgroundColor = 'lightgreen';
+            } else {
+              document.getElementById('current_model').disabled = true;
+              document.getElementById('current_model').style.backgroundColor = 'transparent';
+            }
+          } else {
+            console.log( 'No valid GLTF / GLB file selected!' );
+            return;
+          }
+
+          selected_url_file = '';
+        } else {
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          url_loading = false;
+        }
+
+        selected_file !== null ? loadFile() : loadURLFile();
+      }
+
+      async function loadFile() {
+        let m_viewer = document.getElementById('mv');
+        m_viewer.setAttribute( 'src', selected_file );
+
+        await new Promise( resolve => setTimeout( resolve, 500 ) ); // adjust timing if necessary
+
+        if (document.getElementById('mv').availableAnimations.length > 0) {
+          animation_running = true;
+          document.getElementById('btn_animate').innerHTML = 'A0';
+          document.getElementById('btn_animate').disabled = false;
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          animations[ 0 ] = document.getElementById('mv').availableAnimations;
+        }
+
+        if (document.getElementById('mv').availableVariants.length > 0) {
+          variants_available = true;
+          document.getElementById('btn_variants').innerHTML = 'V0';
+          document.getElementById('btn_variants').disabled = false;
+          document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
+          variants[ 0 ] = document.getElementById('mv').availableVariants;
+          current_variant = variants[ 0 ].length - 1;
+          switch_variant();
+        }
+      }
+
+      async function loadURLFile() {
+        if (selected_url_file !== '') {
+          if (selected_url_file.indexOf( ',' ) > -1) {
+            let urls = selected_url_file.split( ',' );
+
+            for (let i = 0; i < urls.length; i++) {
+              let url = urls[ i ].trim();
+
+              if (url.startsWith('https://github.com') === true) {
+                url = ( url.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+              }
+
+              if (url.toUpperCase().endsWith('.GLB') || url.toUpperCase().endsWith('.GLTF')) {
+                animations[ i ] = [];
+                variants[ i ] = [];
+
+                models.push( url );
+                filenames.push( url.substring( url.lastIndexOf('/') + 1, url.lastIndexOf('.') ) );
+                if (filename === null) filename = filenames[ 0 ];
+                if (selected_file === null) selected_file = url;
+              }
+            }
+
+            if (models.length > 0) {
+              document.getElementById('current_model').innerHTML = 'M0';
+
+              if (models.length > 1) {
+                document.getElementById('current_model').disabled = false;
+                document.getElementById('current_model').style.backgroundColor = 'lightgreen';
+              } else {
+                document.getElementById('current_model').disabled = true;
+                document.getElementById('current_model').style.backgroundColor = 'transparent';
+              }
+            } else {
+              console.log( 'Unsupported URL file!' );
+              return;
+            }
+
+            document.getElementById('mv').setAttribute( 'src', selected_file );
+          } else {
+            if (selected_url_file.startsWith('https://github.com') === true) {
+              selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+            }
+
+            let url_uc = selected_url_file.toUpperCase();
+
+            if (url_uc.endsWith('.GLB') || url_uc.endsWith('.GLTF')) {
+              animations[ 0 ] = [];
+              variants[ 0 ] = [];
+
+              models.push( selected_url_file );
+              filenames.push( selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') ) );
+              if (filename === null) filename = filenames[ 0 ];
+
+              document.getElementById('current_model').innerHTML = 'M0';
+              document.getElementById('current_model').disabled = true;
+              document.getElementById('current_model').style.backgroundColor = 'transparent';
+              document.getElementById('mv').setAttribute( 'src', selected_url_file );
+            } else {
+              console.log( 'Unsupported URL file!' );
+              enable_disable( true );
+              return;
+            }
+          }
+
+          await new Promise( resolve => setTimeout( resolve, 1000 ) ); // adjust timing if necessary
+
+          if (document.getElementById('mv').availableAnimations.length > 0) {
+            animation_running = true;
+            document.getElementById('btn_animate').innerHTML = 'A0';
+            document.getElementById('btn_animate').disabled = false;
+            document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+            animations[ 0 ] = document.getElementById('mv').availableAnimations;
+          }
+
+          if (document.getElementById('mv').availableVariants.length > 0) {
+            variants_available = true;
+            document.getElementById('btn_variants').innerHTML = 'V0';
+            document.getElementById('btn_variants').disabled = false;
+            document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
+            variants[ 0 ] = document.getElementById('mv').availableVariants;
+            current_variant = variants[ 0 ].length - 1;
+            switch_variant();
+          }
+        }
+      }
+
+      async function current_model_changed() {
+        current_model += 1;
+
+        if (current_model === models.length) current_model = 0;
+
+        document.getElementById('current_model').innerHTML = 'M' + current_model;
+
+        let mdl_viewer = document.getElementById('mv');
+
+        if (animation_running === true) {
+          mdl_viewer.pause();
+          mdl_viewer.currentTime = 0;
+        }
+
+        document.getElementById('btn_animate').innerHTML = 'A';
+        document.getElementById('btn_animate').disabled = true;
+        document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+
+        document.getElementById('btn_variants').innerHTML = 'V';
+        document.getElementById('btn_variants').disabled = true;
+        document.getElementById('btn_variants').style.backgroundColor = 'transparent';
+
+        mdl_viewer.setAttribute( 'src', models[ current_model ] );
+        filename = filenames[ current_model ];
+
+        await new Promise( resolve => setTimeout( resolve, 1000 ) ); // adjust timing if necessary
+
+        if (mdl_viewer.availableAnimations.length > 0) {
+          if (animations[ current_model ].length === 0) animations[ current_model ] = mdl_viewer.availableAnimations;
+          current_animation = animations[ current_model ].length - 1;
+          mdl_viewer.currentTime = 0;
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_animate').innerHTML = 'A0';
+          document.getElementById('btn_animate').disabled = false;
+          animation_running = false;
+          current_animation = 0;
+          animate_gltf();
+        } else {
+          document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+          document.getElementById('btn_animate').innerHTML = 'A';
+          document.getElementById('btn_animate').disabled = true;
+          animation_running = false;
+        }
+
+        if (mdl_viewer.availableVariants.length > 0) {
+          if (variants[ current_model ].length === 0) variants[ current_model ] = mdl_viewer.availableVariants;
+          current_variant = variants[ current_model ].length - 1;
+          document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_variants').innerHTML = 'V0';
+          document.getElementById('btn_variants').disabled = false;
+          variants_available = false;
+          current_variant = 0;
+          switch_variant();
+        } else {
+          document.getElementById('btn_variants').style.backgroundColor = 'transparent';
+          document.getElementById('btn_variants').innerHTML = 'V';
+          document.getElementById('btn_variants').disabled = true;
+          variants_available = false;
+        }
+      }
+
+      function animate_gltf() {
+        let ani = document.getElementById('btn_animate');
+        let mdl_viewer = document.getElementById('mv');
+
+        if (animation_running === true) {
+          mdl_viewer.pause();
+          mdl_viewer.currentTime = 0;
+
+          if (current_animation === animations[ current_model ].length - 1) {
+            mdl_viewer.animationName = '';
+            ani.innerHTML = 'A';
+            current_animation = 0;
+            animation_running = false;
+          } else {
+            current_animation += 1;
+            ani.innerHTML = 'A' + current_animation;
+            mdl_viewer.animationName = animations[ current_model ][ current_animation ];
+            mdl_viewer.play();
+          }
+        } else {
+          ani.innerHTML = 'A0';
+          mdl_viewer.animationName = animations[ current_model ][ 0 ];
+          mdl_viewer.play();
+          animation_running = true;
+        }
+      }
+
+      function switch_variant() {
+        if (variants_available === true) {
+          if (current_variant === variants[ current_model ].length - 1) {
+            document.getElementById('mv').variantName = variants[ current_model ][ 0 ];
+            document.getElementById('btn_variants').innerHTML = 'V0';
+            current_variant = 0;
+          } else {
+            current_variant += 1;
+            document.getElementById('btn_variants').innerHTML = 'V' + current_variant;
+            document.getElementById('mv').variantName = variants[ current_model ][ current_variant ];
+          }
+        } else {
+          document.getElementById('mv').variantName = variants[ current_model ][ 0 ];
+          document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_variants').innerHTML = 'V0';
+          variants_available = true;
+        }
+      }
+
+      function reset_all( page_loading = true ) {
+        current_model = 0;
+
+        document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+        document.getElementById('btn_animate').disabled = true;
+        document.getElementById('btn_animate').innerHTML = 'A';
+        document.getElementById('btn_variants').style.backgroundColor = 'transparent';
+        document.getElementById('btn_variants').disabled = true;
+        document.getElementById('btn_variants').innerHTML = 'V';
+        enable_disable( true );
+
+        if (page_loading) {
+          // Page (re)loading so reset the equi, file input, URL entry and disable controls
+          document.getElementById('file_input').value = '';
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+        }
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('current_model').disabled = disable;
+      }
+    </script>
+  </body>
+</html>
