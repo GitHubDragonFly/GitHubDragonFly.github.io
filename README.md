@@ -43,7 +43,9 @@ Number Type Converter
   - Zoom In / Out = mouse scroll wheel
 
 - Notes about GLTF viewers:
-  - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component
+  - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component:
+    - Local loading only supports self-contained models, either embedded GLTF or binary GLB
+    - There is no error handling so check the console output if the model is not showing 
   - `GLTF Viewer` is for v2.0 glTF files and is currently using r158 of three.js
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js, which appears to be the last revision supporting its included `pbrSpecularGlossiness` extension
   - `GLTF Legacy` viewer is for v1.0 glTF files and is purely experimental and rather limited (see notes further below)
