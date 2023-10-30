@@ -5,15 +5,15 @@ Designed to serve as a hub with links to repositories, Number Type Converter and
 
 Fit for a desktop but should be functional on mobile devices in spite of its tiny or bulky appearance.
 
-The `M` button that will allow you to switch to a stripped down and simplified version of mobile friendly viewers (almost all viewers are currently available). Once you are on the mobile main page then consider bookmarking it if you would need continuous access to the viewers.
+The `M` button will allow you to switch to a stripped down and simplified version of mobile friendly 3D viewers (almost all viewers are currently available). Once on the mobile main page then consider bookmarking it for continuous access to the viewers.
 
-GitHub servers are providing correct access to files, so cloning or downloading this repository will not have the same functionality if run locally without some server. These servers are setting `CacheControl` to last only for 10 minutes so you might need to refresh the current page as needed.
+GitHub servers are providing correct access to all files, so cloning or downloading this repository and using it offline will have a reduced functionality if run locally without some server. These GitHub servers are setting `CacheControl` to last only for 10 minutes so you might need to refresh the current page as needed.
 
 Repositories do contain projects in several different programming languages or a mix of: `Java` `VB.Net` `C#` `python` `JavaScript` `jQuery` `HTML/CSS` `shell`.
 
 There is a lot of information and descriptions, some intended for Industrial Automation and some for general or personal use. All is good as an educational resource as well.
 
-Intro video shows how to start using 3D viewers and also how to load model files from a hard drive. It was captured by using the free and open source [OBS Studio](https://github.com/obsproject/obs-studio) software.
+Intro video shows how to start using 3D viewers by loading model files from a hard drive. It was captured by using the free and open source [OBS Studio](https://github.com/obsproject/obs-studio) software.
 
 # Mozilla Firefox screenshot
 
