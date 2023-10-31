@@ -734,7 +734,7 @@
 						URL.revokeObjectURL( sourceURI );
 
 					} );
-					texture.encoding = THREE.sRGBEncoding; // texture parameters
+					texture.colorSpace = THREE.SRGBColorSpace; // texture parameters
 
 					switch ( texture2d.tilestyleu ) {
 
