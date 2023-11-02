@@ -16,14 +16,18 @@ Else, copy any of the following links and then paste it within the `URL` option 
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3mf/truck.3mf`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/amf/rook.amf`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vtk/liver.vtk`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/json/lightmap/lightmap.json`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ldraw/officialLibrary/models/car.ldr_Packed.mpd`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pcd/binary_compressed/pcl_logo.pcd`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ifc/rac_advanced_sample_project.ifc`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.mtl, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.obj`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_v2.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_camera.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/audios/wavefile_short.mp3`
 - some of the links above might become invalid as three.js revisions progress so try using still available older version:
-  - `https://raw.githubusercontent.com/KodyJKing/three.js/master/examples/models/json/lightmap/lightmap.json`
   - `https://raw.githubusercontent.com/KodyJKing/three.js/master/examples/models/prwm/smooth-suzanne.le.prwm`
+- access to some MMD (Miku Miku Dance) example files:
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_v2.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_camera.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/audios/wavefile_short.mp3`
+  - `https://raw.githubusercontent.com/oecax2208/PyMikuMikuDance/master/example/vdproject_peach_v1/小桃初代女仆v1.pmx`
+  - `https://raw.githubusercontent.com/takahirox/mmd-viewer-js/master/model/default/meiko_sakine.pmd`
+  - `https://raw.githubusercontent.com/takahirox/mmd-viewer-js/master/model/default/miku_m.pmd`
 - access to [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF v1.0 examples for GLTF Legacy viewer, mind the correct path after `1.0`:
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/1.0/VC/glTF-Embedded/VC.gltf`
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/1.0/Avocado/glTF-Embedded/Avocado.gltf`
@@ -62,8 +66,6 @@ Else, copy any of the following links and then paste it within the `URL` option 
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.obj`
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/male02_dds.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/male02.obj`
   - `https://raw.githubusercontent.com/robertlong/GLTFExporterTextureSizes/master/BlendToFBX/Atrium.fbx`
-  - `https://raw.githubusercontent.com/takahirox/mmd-viewer-js/master/model/default/meiko_sakine.pmd`
-  - `https://raw.githubusercontent.com/takahirox/mmd-viewer-js/master/model/default/miku_m.pmd`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/three/scene.json`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/vrml/cow.wrl`
 - FBX / OBJ / 3DS viewers also allow setting texture path with URL just like in the following example:
