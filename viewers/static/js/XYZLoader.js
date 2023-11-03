@@ -69,9 +69,9 @@
 
 					// XYZ
 
-					vertices.push( parseFloat( lineValues[ 0 ] ) );
-					vertices.push( parseFloat( lineValues[ 1 ] ) );
-					vertices.push( parseFloat( lineValues[ 2 ] ) );
+					vertices.push( parseFloat( lineValues[ 0 ] ) || 0 );
+					vertices.push( parseFloat( lineValues[ 1 ] ) || 0 );
+					vertices.push( parseFloat( lineValues[ 2 ] ) || 0 );
 
 				} else {
 
@@ -81,15 +81,15 @@
 
 						// XYZ
 
-						vertices.push( parseFloat( lineValues[ 0 ] ) );
-						vertices.push( parseFloat( lineValues[ 1 ] ) );
-						vertices.push( parseFloat( lineValues[ 2 ] ) );
+						vertices.push( parseFloat( lineValues[ 0 ] ) || 0 );
+						vertices.push( parseFloat( lineValues[ 1 ] ) || 0 );
+						vertices.push( parseFloat( lineValues[ 2 ] ) || 0 );
 
 					}
 
 					if ( lineValues.length === 4 ) {
 
-						// possible RGB or RGBA Int32 value so parse it and convert to hex
+						// possible RGB or RGBA UInt32 value so parse it and convert to hex
 						let hex_value = ( parseInt( lineValues[ 3 ] ) ).toString( 16 ).padEnd( 6, '0' );
 
 						// RGB
