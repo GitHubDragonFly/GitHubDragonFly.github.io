@@ -6,8 +6,9 @@
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js" defer></script>
     <script src="../static/js/GCodeLoader.js" defer></script>
+    <script src="../static/js/RGBELoader.js" defer></script>
     <script src="../static/js/upng/UPNG.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
     <script src="../static/js/omggif/omggif.js" defer></script>
@@ -201,6 +202,7 @@
 
       .fm { color: navy; width: calc(100% - 86px); border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
       .fm_gizmo { width: 63px; height: 63px; padding: 4px; margin: 2px; }
+      #gui_position { position: absolute; display: none; min-width: 200px; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; min-height: 22px; margin-left: 2px; }
 
       .fixed-menu {
         background-color: whitesmoke;
@@ -223,6 +225,8 @@
     <!--   https://github.com/photopea/UPNG.js -->
     <!--   https://github.com/nodeca/pako -->
 
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
     <title>GCODE Viewer</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
@@ -234,9 +238,9 @@
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".gcode, .ncc, .ngc" />
         <label for="file_image_input" title="Background Image" style="color: #553801;">BGND</label>
         <input type="file" title="Background Image" id="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
+        <button title="Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
         <label for="back_color" title="Background Color">BG</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
-        <label title="Equirectangular Background">Eq<input type="checkbox" id="equi" onchange="set_equi();" disabled /></label>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL">URL:</label>
@@ -264,7 +268,11 @@
             <span id="z_val">0</span>
           </div>
         </button>
-        <select title="Scale" id="model_scale" style="min-width: 50px;" disabled>
+        <label title="Equirectangular Background">Eq<input type="checkbox" id="equi" onchange="set_equi();" disabled /></label>
+        <button title="Path" id="btn_path" onclick="show_path()" style="min-width: 40px;" disabled>path</button>
+        <button title="Grid" id="btn_grid" onclick="show_grid();" style="margin-left: 2px;" disabled>#</button>
+        <button title="Polar Grid" id="btn_polar_grid" onclick="show_polar_grid();" style="min-width: 24px;" disabled><p class="polar"></p></button>
+        <select title="Scale" id="model_scale" disabled>
           <option value="" selected disabled>Scale</option>
           <option title="Scale 0.01x" value="0.01x" onclick="set_model_scale( '0.01x' );">0.01x</option>
           <option title="Scale 0.02x" value="0.02x" onclick="set_model_scale( '0.02x' );">0.02x</option>
@@ -273,10 +281,6 @@
           <option title="Scale 50x" value="50x" onclick="set_model_scale( '50x' );">50x</option>
           <option title="Scale 100x" value="100x" onclick="set_model_scale( '100x' );">100x</option>
         </select>
-        <button title="Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
-        <button title="Grid" id="btn_grid" onclick="show_grid();" style="margin-left: 2px;" disabled>#</button>
-        <button title="Polar Grid" id="btn_polar_grid" onclick="show_polar_grid();" style="min-width: 24px;" disabled><p class="polar"></p></button>
-        <button title="Path" id="btn_path" onclick="show_path()" style="min-width: 40px;" disabled>path</button>
         <select title="Export" id="export_names" disabled>
           <option value="" selected disabled>Export</option>
           <option title="GIF - Animated GIF" value="gif" onclick="export_animated_gif();">GIF</option>
@@ -291,7 +295,8 @@
         <button title="Menu Location" id="btn_menu_location" onclick="change_menu_location();" style="background-color: transparent; min-width: 16px;">&#x2193</button>
       </div>
     </div>
-    <div id="gif_progress" style="display: none; background-color: whitesmoke; border: none;">
+    <div id="gui_position"></div>
+    <div id="animation_progress" style="display: none; background-color: whitesmoke; border: none;">
       <progress id="progress" value="0" max="1" style="width: 99.5%; margin-left: 3px; margin-right: 3px;"></progress>
     </div>
 
@@ -301,7 +306,7 @@
     <div id="div_gif_rectangle" class="gif_rectangle"></div>
 
     <script>
-      function hide_dropdown_x() { $('#dc_x').fadeOut(); }
+      function hide_dropdown_x() { $('#dc_x').fadeOut(); mouse_wheel = true; }
 
       function show_hide_dropdown_x() {
         if ($('#dc_x')[ 0 ].style.display === 'none') {
@@ -318,9 +323,11 @@
         } else {
           $('#dc_x').fadeOut();
         }
+
+        mouse_wheel = true;
       }
 
-      function hide_dropdown_y() { $('#dc_y').fadeOut(); }
+      function hide_dropdown_y() { $('#dc_y').fadeOut(); mouse_wheel = true; }
 
       function show_hide_dropdown_y() {
         if ($('#dc_y')[ 0 ].style.display === 'none') {
@@ -337,9 +344,11 @@
         } else {
           $('#dc_y').fadeOut();
         }
+
+        mouse_wheel = true;
       }
 
-      function hide_dropdown_z() { $('#dc_z').fadeOut(); }
+      function hide_dropdown_z() { $('#dc_z').fadeOut(); mouse_wheel = true; }
 
       function show_hide_dropdown_z() {
         if ($('#dc_z')[ 0 ].style.display === 'none') {
@@ -356,6 +365,8 @@
         } else {
           $('#dc_z').fadeOut();
         }
+
+        mouse_wheel = true;
       }
 
       function return_false() { return false; }
@@ -368,6 +379,13 @@
           document.getElementById('url').style.display = 'block';
           url_displayed = true;
         }
+
+        if (gui && menu_location_bottom === false) {
+          let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+          document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
+        }
+
+        mouse_wheel = true;
       }
 
       function load_url_file() {
@@ -391,6 +409,8 @@
         }
 
         if (scene) {
+          mouse_wheel = true;
+
           renderer.setSize( window.innerWidth, window.innerHeight );
 
           camera.aspect = window.innerWidth / window.innerHeight;
@@ -398,6 +418,17 @@
 
           ww = window.innerWidth;
           wh = window.innerHeight;
+
+          if (gui) {
+            if (menu_location_bottom === false) {
+              let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+              document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
+            } else {
+              document.getElementById('gui_position').style.marginTop = '2px';
+            }
+          }
+
+          mouse_wheel = true;
         }
       }
 
@@ -422,26 +453,36 @@
           document.getElementById('fixed_menu').style.bottom = '';
           document.getElementById('btn_menu_location').innerHTML = '&#x2193';
           document.getElementById('btn_menu_location').style.backgroundColor = 'transparent';
+
+          if (gui) {
+            let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+            document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
+          }
         } else {
           menu_location_bottom = true;
           document.getElementById('fixed_menu').style.top = '';
           document.getElementById('fixed_menu').style.bottom = 0;
           document.getElementById('btn_menu_location').innerHTML = '&#x2191';
           document.getElementById('btn_menu_location').style.backgroundColor = '#FFFF00';
+
+          if (gui) document.getElementById('gui_position').style.marginTop = '2px';
         }
+
+        mouse_wheel = true;
       }
     </script>
 
     <script>
-      var manager, texture_loader, equi_loader, gcode_loader;
+      var manager, texture_loader, rgbe_loader, gcode_loader, count = 0, tex;
       var renderer, scene, camera, gcode_obj, path, path_visible, render_requested;
       var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
+      var gui, gui_set = false, guiExposure, params, toneMappingOptions;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var ww = window.innerWidth, wh = window.innerHeight;
-      var rot_x = 0, rot_y = 0, rot_z = 0;
+      var rot_x = 0, rot_y = 0, rot_z = 0, slider_height = 0;
       var bounding_box, filename, gif_export, bgnd_linear_gradient, zip;
       var selected_gcode_file, selected_gcode_url_file, selected_url_file = '';
-      var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
+      var url_displayed = false, url_loading = false, menu_location_bottom = false;
 
       const link = document.createElement( 'a' );
       link.style.display = 'none';
@@ -453,6 +494,7 @@
         document.getElementById('fixed_menu').style.display = 'none';
         document.getElementById('div_loading').innerHTML = 'Please wait ...';
         document.getElementById('div_loading').style.display = 'block';
+        if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
 
         set_filename();
       }
@@ -475,7 +517,9 @@
           document.getElementById('div_loading').innerHTML = '';
           document.getElementById('div_loading').style.display = 'none';
           document.getElementById('fixed_menu').style.display = 'block';
+          if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
           render_requested = true;
+          mouse_wheel = true;
           render();
 
           zip = new JSZip();
@@ -607,28 +651,24 @@
 
               context.drawImage( renderer.domElement, frame_x, frame_y, 500, 500, 0, 0, 500, 500 );
               gif_frames.push( context.getImageData( 0, 0, 500, 500 ).data );
+
+              progress.value = current / frames;
+
+              if (current === before_last) {
+                document.getElementById('div_loading').innerHTML = 'Please wait ...';
+                document.getElementById('div_loading').style.display = 'block';
+              }
+
+              setTimeout( addFrame, 0 );
             } else {
               document.getElementById('fixed_menu').style.display = 'none';
-              document.getElementById('gif_progress').style.display = 'block';
+              document.getElementById('animation_progress').style.display = 'block';
               document.getElementById('div_gif_rectangle').style.display = 'block';
+              if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
 
-              await new Promise( resolve => setTimeout( resolve, 100 ) );
+              setTimeout( addFrame, 100 );
             }
-
-            progress.value = current / frames;
-
-            if (current === before_last) {
-              document.getElementById('div_loading').innerHTML = 'Please wait ...';
-              document.getElementById('div_loading').style.display = 'block';
-            }
-
-            setTimeout( addFrame, 0 );
           } else {
-            progress.value = 0;
-            document.getElementById('fixed_menu').style.display = 'block';
-            document.getElementById('gif_progress').style.display = 'none';
-            document.getElementById('div_gif_rectangle').style.display = 'none';
-
             // Download
 
             let blob = await gif_encode( gif_frames );
@@ -636,9 +676,18 @@
             document.getElementById('div_loading').innerHTML = '';
             document.getElementById('div_loading').style.display = 'none';
 
+            context = null;
+            canvas = null;
+
             link.href = URL.createObjectURL( blob );
             link.download = filename + '.gif';
             link.click();
+
+            progress.value = 0;
+            document.getElementById('fixed_menu').style.display = 'block';
+            document.getElementById('animation_progress').style.display = 'none';
+            document.getElementById('div_gif_rectangle').style.display = 'none';
+            if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
 
             gif_export = false;
 
@@ -658,7 +707,7 @@
         let pixels = new Uint8ClampedArray( 250000 ); // 500 * 500
         let writer = new GifWriter( buffer, 500, 500, { loop: 0 } );
 
-        // Skip first frame since it might be all zeros due to rendering
+        // Skip the first frame since it might be all zeros due to rendering
         // Any subsequent frame that might be all zeros will throw an error
         for ( let i = 1; i < gif_frames.length; i++ ) {
           let data = gif_frames[ i ];
@@ -704,7 +753,7 @@
         let fx = Math.ceil( ( renderer.domElement.width - 500 ) / 2.0 );
         let fy = Math.ceil( ( renderer.domElement.height - 500 ) / 2.0 );
 
-        let frames_count = 125;
+        let frames_count = 126;
         let delay = 75;
         let png_frames = [];
 
@@ -730,7 +779,14 @@
 
         async function addFrame() {
           if (current <= frames) {
-            if (current > 0) {
+            if (current === 1) {
+              // Skip the first frame since it might be all zeros due to rendering
+              // Set the progress value and trigger rendering
+              progress.value = current / frames;
+              renderFunction();
+
+              setTimeout( addFrame, 10 );
+            } else if (current > 0) {
               context.clearRect( 0, 0, 500, 500 );
 
               renderFunction();
@@ -738,26 +794,24 @@
               context.drawImage( renderer.domElement, frame_x, frame_y, 500, 500, 0, 0, 500, 500 );
               png_frames.push( context.getImageData( 0, 0, 500, 500 ).data );
               frame_delay.push( delay );
+
+              progress.value = current / frames;
+
+              if (current === before_last) {
+                document.getElementById('div_loading').innerHTML = 'Please wait ...';
+                document.getElementById('div_loading').style.display = 'block';
+              }
+
+              setTimeout( addFrame, 0 );
             } else {
               document.getElementById('fixed_menu').style.display = 'none';
-              document.getElementById('gif_progress').style.display = 'block';
+              document.getElementById('animation_progress').style.display = 'block';
               document.getElementById('div_gif_rectangle').style.display = 'block';
+              if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
+
+              setTimeout( addFrame, 100 );
             }
-
-            progress.value = current / frames;
-
-            if (current === before_last) {
-              document.getElementById('div_loading').innerHTML = 'Please wait ...';
-              document.getElementById('div_loading').style.display = 'block';
-            }
-
-            setTimeout( addFrame, 0 );
           } else {
-            progress.value = 0;
-            document.getElementById('fixed_menu').style.display = 'block';
-            document.getElementById('gif_progress').style.display = 'none';
-            document.getElementById('div_gif_rectangle').style.display = 'none';
-
             // Download
 
             // For Lossy PNG consider replacing 0 with 256
@@ -766,10 +820,19 @@
             document.getElementById('div_loading').innerHTML = '';
             document.getElementById('div_loading').style.display = 'none';
 
+            context = null;
+            canvas = null;
+
             let blob = new Blob( [ new Uint8Array( apng ) ], { type: 'image/png' } );
             link.href = URL.createObjectURL( blob );
             link.download = filename + '.png';
             link.click();
+
+            progress.value = 0;
+            document.getElementById('fixed_menu').style.display = 'block';
+            document.getElementById('animation_progress').style.display = 'none';
+            document.getElementById('div_gif_rectangle').style.display = 'none';
+            if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
 
             if (render_requested === true) render();
 
@@ -789,6 +852,7 @@
         document.getElementById('file_image_input').value = '';
         document.body.style.backgroundColor = document.getElementById('back_color').value;
         document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+        mouse_wheel = true;
       }
 
       function set_bgnd_linear_gradient() {
@@ -819,40 +883,89 @@
           document.body.style.backgroundColor = document.getElementById('back_color').value;
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'lightgreen';
         }
+
+        mouse_wheel = true;
       }
 
-      function set_equi() {
+      function updateGUI() {
+        if ( guiExposure !== null ) {
+          guiExposure.destroy();
+          guiExposure = null;
+        }
+
+        if ( params.toneMapping !== 'None' ) {
+          guiExposure = gui.add( params, 'exposure', 0, 2 )
+          .onChange( function () {
+            renderer.toneMappingExposure = params.exposure;
+            mouse_wheel = true;
+          });
+        }
+      }
+
+      async function set_equi() {
         if (document.getElementById('equi').checked) {
+          if (gui_set === false) {
+            gui.add( params, 'toneMapping', Object.keys( toneMappingOptions ) )
+            .onChange( function () {
+              updateGUI();
+              renderer.toneMapping = toneMappingOptions[ params.toneMapping ];
+              mouse_wheel = true;
+            });
 
-          //Textures: http://reije081.home.xs4all.nl/skyboxes/
+            gui.add( params, 'blurriness', 0, 1 )
+            .onChange( function ( value ) {
+              scene.backgroundBlurriness = value;
+              mouse_wheel = true;
+            });
 
-          let tex = equi_loader.load([
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/skyboxsun25deg/px.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/skyboxsun25deg/nx.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/skyboxsun25deg/py.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/skyboxsun25deg/ny.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/skyboxsun25deg/pz.jpg',
-            'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/cube/skyboxsun25deg/nz.jpg',
-          ], () => {
-            document.getElementById('file_image_input').value = '';
-            document.getElementById('file_image_input').disabled = true;
-            document.getElementById('back_color').disabled = true;
-            document.getElementById('back_color').value = '#000000';
-            document.body.style.backgroundColor = document.getElementById('back_color').value;
-            bgnd_linear_gradient = false;
-            document.getElementById('btn_bgnd_linear_gradient').disabled = true;
-            document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
-            scene.background = tex;
-            tex.dispose();
-          }, () => { console.log( 'Textures loaded' ) }, () => { console.log( 'Error loading textures' ) });
+            updateGUI();
+            gui.open();
+
+            scene.backgroundBlurriness = params.blurriness;
+            gui_set = true;
+          }
+
+          document.getElementById('gui_position').style.display = 'block';
+
+          document.getElementById('file_image_input').value = '';
+          document.getElementById('file_image_input').disabled = true;
+          document.getElementById('back_color').disabled = true;
+          document.getElementById('back_color').value = '#000000';
+          document.body.style.backgroundColor = document.getElementById('back_color').value;
+          bgnd_linear_gradient = false;
+          document.getElementById('btn_bgnd_linear_gradient').disabled = true;
+          document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+
+          scene.background = tex;
+          scene.environment = tex;
         } else {
+          if (gui) gui_reset();
+
           scene.background = null;
+          scene.environment = null;
+
           document.getElementById('file_image_input').disabled = false;
           document.getElementById('back_color').disabled = false;
           document.getElementById('btn_bgnd_linear_gradient').disabled = false;
         }
 
         equi_checked_changed();
+
+        mouse_wheel = true;
+      }
+
+      function gui_reset() {
+        params.toneMapping = 'ACESFilmic';
+        renderer.toneMappingExposure = params.exposure = 0.7;
+        params.blurriness = 0.3;
+
+        mouse_wheel = true;
+
+        gui.reset();
+
+        document.getElementById('gui_position').style.display = 'none';
+
+        mouse_wheel = true;
       }
 
       function set_scene_image() {
@@ -893,6 +1006,8 @@
         } else {
           scene.background = null;
         }
+
+        mouse_wheel = true;
       }
 
       function set_initial_scale() {
@@ -912,6 +1027,8 @@
         bounding_box.setFromObject( gcode_obj );
         let center = bounding_box.getCenter(new THREE.Vector3());
         controls.target.set( center.x, center.y, center.z );
+
+        mouse_wheel = true;
       }
 
       function set_model_scale( scale ) {
@@ -921,6 +1038,8 @@
 
         set_polar_grid_y();
         set_grid_y();
+
+        mouse_wheel = true;
       }
 
       function rot_x_changed() {
@@ -928,6 +1047,8 @@
         document.getElementById('x_val').innerText = x;
 
         rot_x = x / 1000.0;
+
+        mouse_wheel = true;
       }
 
       function rot_y_changed() {
@@ -935,6 +1056,8 @@
         document.getElementById('y_val').innerText = y;
 
         rot_y = y / 1000.0;
+
+        mouse_wheel = true;
       }
 
       function rot_z_changed() {
@@ -942,6 +1065,8 @@
         document.getElementById('z_val').innerText = z;
 
         rot_z = z / 1000.0;
+
+        mouse_wheel = true;
       }
 
       function init() {
@@ -966,20 +1091,47 @@
 
         if (manager === undefined) manager = new THREE.LoadingManager();
 
-        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
+        manager.onProgress = function ( item, loaded, total ) {
+          if ( loaded === total ) {
+            console.timeEnd( 'Loading Time' );
+            document.getElementById('div_loading').style.display = 'none';
+            enable_disable( false );
+            render_requested = true;
+            mouse_wheel = true;
+            render();
 
-        if (equi_loader === undefined) equi_loader = new THREE.CubeTextureLoader();
+            gcode_obj.rotation.x -= Math.PI / 2;
+          }
+        }
+
+        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
 
         if (gcode_loader === undefined) gcode_loader = new THREE.GCodeLoader( manager );
 
         if (zip === undefined) zip = new JSZip();
 
+        if (rgbe_loader === undefined) {
+          rgbe_loader = new THREE.RGBELoader();
+          rgbe_loader.setDataType( THREE.HalfFloatType );
+        }
+
+        if (params === undefined) params = { exposure: 0.7, toneMapping: 'ACESFilmic', blurriness: 0.3 };
+
+        if (toneMappingOptions === undefined) toneMappingOptions = {
+          None: THREE.NoToneMapping,
+          Linear: THREE.LinearToneMapping,
+          Reinhard: THREE.ReinhardToneMapping,
+          Cineon: THREE.CineonToneMapping,
+          ACESFilmic: THREE.ACESFilmicToneMapping
+        };
+
         path = null;
         path_visible = false;
         selected_gcode_file = null;
         selected_gcode_url_file = null;
+        guiExposure = null;
         mouse_down = false;
-        mouse_wheel = false;
+        mouse_wheel = true;
         bgnd_linear_gradient = false;
         grid_visible = false;
         polar_grid_visible = false;
@@ -1015,7 +1167,8 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
-          renderer.encoding = THREE.sRGBEncoding;
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = 0.7;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -1047,8 +1200,8 @@
           controls.rotateSpeed = 0.8;
           controls.keyPanSpeed = 0.8; 
           controls.panSpeed = 0.8;
-          controls.enableDamping = true;
-          controls.dampingFactor = 0.3;
+          //controls.enableDamping = true;
+          //controls.dampingFactor = 0.3;
           //controls.enableKeys = false;
           //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
@@ -1070,16 +1223,20 @@
             fontWeight: 'bold'
           });
 
+          document.getElementById('gizmo').addEventListener( 'click', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
           document.getElementById('gizmo').appendChild( gizmo.domElement );
         }
 
-        enable_disable( false );
+        if (tex === undefined) {
+          rgbe_loader.load( 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/venice_sunset_1k.hdr', function( texture ) {
+            texture.mapping = THREE.EquirectangularReflectionMapping;
+            tex = texture;
+            texture.dispose();
+          });
+        }
 
         // Load GCODE file
         selected_gcode_file !== null ? loadFile() : loadURLFile();
-
-        render_requested = true;
-        render();
       }
 
       function loadFile(){
@@ -1091,9 +1248,6 @@
 
           path = object.children[ 1 ];
           gcode_obj = object.children[ 0 ];
-          gcode_obj.rotation.x -= Math.PI / 2;
-
-          console.timeEnd( 'Loading Time' );
 
           // Add gcode_obj to the scene
           scene.add( gcode_obj );
@@ -1101,10 +1255,6 @@
 
           set_initial_scale();
           resize();
-
-          document.getElementById('div_loading').style.display = 'none';
-
-          disabled_changed();
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
           handle_error( error );
@@ -1114,43 +1264,18 @@
 
       function loadURLFile() {
         if (selected_url_file !== '') {
-          if (selected_url_file.indexOf( ',' ) > -1) {
-            let urls = selected_url_file.split( ',' );
-
-            for (let i = 0; i < urls.length; i++) {
-              let url = urls[ i ].trim();
-              let url_uc = url.toUpperCase();
-
-              if (url_uc.endsWith('.GCODE') || url_uc.endsWith('.NCC') || url_uc.endsWith('.NGC')) selected_gcode_url_file = url;
-            }
-          } else {
-            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-              selected_gcode_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
-            } else {
-              if (selected_url_file.startsWith('https://github.com') === true) {
-                selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
-              }
-
-              let url_uc = selected_url_file.toUpperCase();
-
-              if (url_uc.endsWith('.GCODE') || url_uc.endsWith('.NCC') || url_uc.endsWith('.NGC')) selected_gcode_url_file = selected_url_file;
-            }
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          if (selected_gcode_url_file === null) {
-            handle_error( 'Unsupported URL file!' );
-            return;
-          }
-
-          gcode_loader.load( selected_gcode_url_file, function( object ) {
+          gcode_loader.load( selected_url_file, function( object ) {
             object.children[ 0 ].name += '_extruded';
             object.children[ 1 ].name += '_path';
 
             path = object.children[ 1 ];
             gcode_obj = object.children[ 0 ];
-            gcode_obj.rotation.x -= Math.PI / 2;
-
-            console.timeEnd( 'Loading Time' );
 
             // Add gcode_obj to the scene
             scene.add( gcode_obj );
@@ -1158,10 +1283,6 @@
 
             set_initial_scale();
             resize();
-
-            document.getElementById('div_loading').style.display = 'none';
-
-            disabled_changed();
           }, function ( xhr ) { // onProgress
           }, function ( error ) { // onError
             handle_error( error );
@@ -1173,6 +1294,7 @@
         console.timeEnd( 'Loading Time' );
         console.log( 'Error loading model!' );
         console.log( error );
+        mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
 
@@ -1195,6 +1317,8 @@
           gcode_obj.add( path );
           document.getElementById('btn_path').style.backgroundColor = 'lightgreen';
         }
+
+        mouse_wheel = true;
       }
 
       function show_polar_grid() {
@@ -1212,6 +1336,8 @@
         }
 
         grid_changed();
+
+        mouse_wheel = true;
       }
 
       function show_grid() {
@@ -1229,66 +1355,67 @@
         }
 
         grid_changed();
+
+        mouse_wheel = true;
       }
 
       function set_polar_grid_y() {
         bounding_box.setFromObject( gcode_obj );
         polar_grid.position.y = bounding_box.min.y;
+        mouse_wheel = true;
       }
 
       function set_grid_y() {
         bounding_box.setFromObject( gcode_obj );
         grid.position.y = bounding_box.min.y;
+        mouse_wheel = true;
       }
 
       async function render() {
-        if (document.getElementById('gif_progress').style.display === 'none') {
+        if (document.getElementById('animation_progress').style.display === 'none') {
           if (render_requested === true) requestAnimationFrame( render );
         }
 
-        if (gcode_obj) {
-          // Reset gcode_obj rotational values
-          if (reset_rotation === true) {
-            gcode_obj.rotation.set( 0, 0, 0 );
-            reset_rotation = false;
-          }
-
-          // Rotate the gcode_obj
-          if (mouse_down === false) {
-            if (rot_x === 0 && rot_y === 0 && rot_z === 0) {
-              // Animated GIF / APNG generation
-              if (progress.value > 0.0) {
-                gif_export ? gcode_obj.rotation.z += 0.03 : gcode_obj.rotation.z += 0.05;
-              } else {
-                // Let GPU cool down a bit
-                let count = 0;
-
-                while (count < 15) {
-                  await new Promise( resolve => setTimeout( resolve, 20 ) ).then( () => {
-                    if (mouse_down === true || mouse_wheel === true) {
-                      if (mouse_wheel === true) mouse_wheel = false;
-                      count = 15;
-                    } else {
-                      count ++;
-                    }
-                  });
-                }
-              }
-            } else {
-              if (rot_x !== 0) gcode_obj.rotation.x += rot_x;
-              if (rot_y !== 0) gcode_obj.rotation.z += rot_y;
-              if (rot_z !== 0) gcode_obj.rotation.y += rot_z;
+        if (mouse_down || mouse_wheel || reset_rotation || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
+          if (gcode_obj) {
+            // Reset gcode_obj rotational values
+            if (reset_rotation === true) {
+              gcode_obj.rotation.set( 0, 0, 0 );
+              reset_rotation = false;
             }
+
+            // Rotate the gcode_obj
+            if (mouse_down === false) {
+              if (rot_x === 0 && rot_y === 0 && rot_z === 0) {
+                // Animated GIF / APNG generation
+                if (progress.value > 0) {
+                  gif_export ? gcode_obj.rotation.z += 0.03 : gcode_obj.rotation.z += 0.05;
+                }
+              } else {
+                if (rot_x !== 0) gcode_obj.rotation.x += rot_x;
+                if (rot_y !== 0) gcode_obj.rotation.z += rot_y;
+                if (rot_z !== 0) gcode_obj.rotation.y += rot_z;
+              }
+            }
+
+            if (mouse_wheel === true) {
+              if (count > 3) {
+                mouse_wheel = false;
+                count = 0;
+              } else {
+                count += 1;
+              }
+            }
+
+            controls.update();
+            if (gizmo) gizmo.update();
+
+            renderer.clear();
+            renderer.render( scene, camera );
+
+            scene.updateMatrixWorld();
+            camera.updateMatrixWorld();
           }
-
-          controls.update();
-          if (gizmo) gizmo.update();
-
-          renderer.clear();
-        	renderer.render( scene, camera );
-
-          scene.updateMatrixWorld();
-          camera.updateMatrixWorld();
         }
       }
 
@@ -1305,11 +1432,16 @@
           scene.remove( gcode_obj );
         }
 
+        if (gui) gui_reset();
+
         reset_all( true );
 
         console.time( 'Loading Time' );
 
         document.getElementById('div_loading').innerHTML = 'Reload';
+        document.getElementById('div_loading').style.display = 'block';
+
+        mouse_wheel = true;
 
         selected_gcode_file !== null ? loadFile() : loadURLFile();
       }
@@ -1347,6 +1479,15 @@
         gif_export = false;
         reset_rotation = true;
 
+        if (gui_set === true) {
+          document.getElementById('gui_position').style.display = 'none';
+
+          if (scene) {
+            scene.background = null;
+            scene.environment = null;
+          }
+        }
+
         // Reset the view
         if (reset === true) {
           controls.reset();
@@ -1354,7 +1495,22 @@
           set_scene_image();
           set_back_color();
         } else {
-          // Page (re)loading so reset the file input, spinner, error, URL entry and disable controls
+          // Page (re)loading
+          if (scene) {
+            if (gcode_obj) {
+              if (gcode_obj.material) gcode_obj.material.dispose();
+              if (gcode_obj.geometry) gcode_obj.geometry.dispose();
+              if (path.material) path.material.dispose();
+              if (path.geometry) path.geometry.dispose();
+
+              scene.remove( gcode_obj );
+            }
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+          }
+
           document.getElementById('file_input').value = '';
           document.getElementById('div_spinner').style.display = 'block';
           document.getElementById('div_error').style.display = 'none';
@@ -1369,6 +1525,8 @@
         }
 
         disabled_changed();
+
+        mouse_wheel = true;
       }
 
       function enable_disable( disable = false ) {
@@ -1389,6 +1547,8 @@
         document.getElementById('reset').disabled = disable;
         document.getElementById('export_names').disabled = disable;
         disabled_changed();
+
+        mouse_wheel = true;
       }
     </script>
 
@@ -1398,6 +1558,8 @@
           $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
         }
+
+        mouse_wheel = true;
       }
 
       function disabled_changed() {
@@ -1409,6 +1571,20 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
+        });
+
+        $('select').each( function() {
+          if (this.disabled === false) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
         });
 
         $('input[type=color]').each( function() {
@@ -1419,6 +1595,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
       }
 
@@ -1440,6 +1618,8 @@
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
           }
         }
+
+        mouse_wheel = true;
       }
 
       function equi_checked_changed() {
@@ -1455,6 +1635,20 @@
           function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
           function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
         }
+
+        mouse_wheel = true;
+      }
+    </script>
+
+    <script type="module">
+      import { GUI } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/libs/lil-gui.module.min.js';
+
+      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
+
+      if (url_displayed === true) {
+        document.getElementById('gui_position').style.marginTop = '118px';
+      } else {
+        document.getElementById('gui_position').style.marginTop = '80px';
       }
     </script>
   </body>
