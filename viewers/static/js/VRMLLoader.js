@@ -1,6 +1,7 @@
 ( function () {
 
 	var local_ImageTextures;
+	var choices = [];
 
 	class VRMLLoader extends THREE.Loader {
 
@@ -545,6 +546,7 @@
 
 				switch ( nodeName ) {
 
+					case 'Anchor':
 					case 'Group':
 					case 'Transform':
 					case 'Collision':
@@ -630,7 +632,6 @@
 						build = buildWorldInfoNode( node );
 						break;
 
-					case 'Anchor':
 					case 'Billboard':
 					case 'Inline':
 					case 'LOD':
@@ -709,7 +710,15 @@
 							parseFieldChildren( fieldValues, object );
 							break;
 
+						case 'description':
+							// field not supported
+							break;
+
 						case 'collide':
+							// field not supported
+							break;
+
+						case 'parameter':
 							// field not supported
 							break;
 
@@ -735,6 +744,10 @@
 							// field not supported
 							break;
 
+						case 'url':
+							// field not supported
+							break;
+
 						default:
 							console.warn( 'THREE.VRMLLoader: Unknown field:', fieldName );
 							break;
@@ -749,7 +762,7 @@
 
 			function buildSwitchingNode( node ) {
 
-				var object = new THREE.Object3D(); //
+				let object = new THREE.Object3D(); //
 
 				const fields = node.fields;
 
@@ -762,7 +775,9 @@
 					switch ( fieldName ) {
 
 						case 'choice':
+							object.add( buildNode( fieldValues[0].fields[0].values[0] ) );
 							object.add( buildNode( fieldValues[0].fields[0].values[1] ) );
+							//object.add( buildNode( fieldValues[0].fields[0].values[2] ) );
 							break;
 
 						case 'whichChoice':
@@ -1178,7 +1193,7 @@
 							break;
 
 						case 'specularColor':
-							materialData.emissiveColor = new THREE.Color( fieldValues[ 0 ], fieldValues[ 1 ], fieldValues[ 2 ] );
+							materialData.specularColor = new THREE.Color( fieldValues[ 0 ], fieldValues[ 1 ], fieldValues[ 2 ] );
 							break;
 
 						case 'transparency':
@@ -1325,6 +1340,7 @@
 							}
 
 							texture = new THREE.DataTexture( data, width, height, useAlpha === true ? THREE.RGBAFormat : THREE.RGBFormat );
+							texture.colorSpace = THREE.SRGBColorSpace;
 							texture.needsUpdate = true;
 							texture.__type = textureType; // needed for material modifications
 
@@ -1412,6 +1428,7 @@
 
 					texture.wrapS = wrapS;
 					texture.wrapT = wrapT;
+					texture.colorSpace = THREE.SRGBColorSpace;
 
 				}
 
