@@ -73,7 +73,7 @@ function dotbim_Elemment2Mesh(element, geometrys) {
         side: THREE.DoubleSide,
         flatShading: false,
         transparent: true,
-        metalnes: 0.8,
+        metalness: 0.5,
         roughness: 0.3,
         color: 0xFFFFFF
     });
