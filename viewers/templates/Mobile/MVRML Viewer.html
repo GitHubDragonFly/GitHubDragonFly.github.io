@@ -6,8 +6,8 @@
     <meta name="description" content="VRML (Virtual Reality Modeling Language) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script src="https://cdn.jsdelivr.net/npm/chevrotain@10.5.0/lib/chevrotain.min.js" defer></script>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://unpkg.com/chevrotain@10.5.0/lib/chevrotain.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.158.0" defer></script>
     <script src="../../static/js/VRMLLoader.js" defer></script>
     <script src="../../static/js/OrbitControls.js" defer></script>
@@ -177,13 +177,13 @@
     </script>
 
     <script>
-      var manager, vrml_loader, renderer, scene, camera, vrml_obj, render_requested;
-      var controls, mouse_down, mouse_wheel, events_initialized, count = 0;
-      var directionalLight, wireframe_enabled;
+      var manager, vrml_loader, renderer, scene, camera, vrml_obj;
+      var controls, mouse_down, mouse_wheel, events_initialized;
+      var directionalLight, wireframe_enabled, render_requested;
       var ww = window.innerWidth, wh = window.innerHeight;
       var bounding_box, flat_shading_enabled, local_blobs;
-      var url_displayed = false, url_loading = false;
-      var selected_vrml_file, selected_vrml_url_file, selected_url_file = '';
+      var url_displayed = false, url_loading = false, count = 0;
+      var selected_vrml_file, selected_url_file = '';
 
       function set_back_color() {
         scene.background = null;
@@ -222,7 +222,7 @@
         if (scene) {
           if (vrml_obj) {
             vrml_obj.traverse( function( child ) {
-              if (child.type === 'Mesh' || child.isMesh) {
+              if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
                     mtl.dispose();
@@ -264,7 +264,6 @@
         }
 
         selected_vrml_file = null;
-        selected_vrml_url_file = null;
         mouse_down = false;
         mouse_wheel = true;
         local_blobs = '';
@@ -309,7 +308,7 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
-          renderer.toneMapping = THREE.LinearToneMapping;
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
           renderer.toneMappingExposure = 0.7;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
@@ -333,7 +332,7 @@
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 5 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 3.5 );
           directionalLight.position.set( 0, 0, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
@@ -367,13 +366,17 @@
           vrml_obj = object.clone();
 
           vrml_obj.traverse( child => {
-            if (child.type === 'Mesh' || child.isMesh) {
+            if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
               flat_shading_enabled = false;
 
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
-                  mtl.emissiveIntensity = 0.3;
-                  mtl.flatShading = flat_shading_enabled;
+                  if (child.type === 'Points' || child.isPoints) {
+                    mtl.size = 1.5;
+                  } else {
+                    mtl.emissiveIntensity = 0.3;
+                    mtl.flatShading = flat_shading_enabled;
+                  }
 
                   // Default to double side
                   mtl.side = THREE.DoubleSide;
@@ -381,8 +384,12 @@
                   mtl.needsUpdate = true;
                 });
               } else {
-                child.material.emissiveIntensity = 0.3;
-                child.material.flatShading = flat_shading_enabled;
+                if (child.type === 'Points' || child.isPoints) {
+                  child.material.size = 1.5;
+                } else {
+                  child.material.emissiveIntensity = 0.3;
+                  child.material.flatShading = flat_shading_enabled;
+                }
 
                 // Default to double side
                 child.material.side = THREE.DoubleSide;
@@ -410,44 +417,29 @@
 
       function loadURLFile() {
         if (selected_url_file !== '') {
-          if (selected_url_file.indexOf(',') > -1) {
-            let urls = selected_url_file.split(',');
-
-            for (let i = 0; i < urls.length; i++) {
-              let url = urls[ i ].trim();
-
-              if (url.toUpperCase().endsWith('.WRL')) {
-                selected_vrml_url_file = url;
-              }
-            }
-          } else {
-            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-              selected_vrml_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
-            } else {
-              if (selected_url_file.startsWith('https://github.com') === true) {
-                selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
-              }
-
-              if (selected_url_file.toUpperCase().endsWith('.WRL')) selected_vrml_url_file = selected_url_file;
-            }
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          if (selected_vrml_url_file === null) {
-            handle_error( 'Unsupported URL file!' );
-            return;
-          }
+          // No extension checking for URL so it has to point to VRML model
 
-          vrml_loader.load( selected_vrml_url_file, local_blobs, function( object ) {
+          vrml_loader.load( selected_url_file, local_blobs, function( object ) {
             vrml_obj = object.clone();
 
             vrml_obj.traverse( child => {
-              if (child.type === 'Mesh' || child.isMesh) {
+              if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
                 flat_shading_enabled = false;
 
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
-                    mtl.emissiveIntensity = 0.3;
-                    mtl.flatShading = flat_shading_enabled;
+                    if (child.type === 'Points' || child.isPoints) {
+                      mtl.size = 1.5;
+                    } else {
+                      mtl.emissiveIntensity = 0.3;
+                      mtl.flatShading = flat_shading_enabled;
+                    }
 
                     // Default to double side
                     mtl.side = THREE.DoubleSide;
@@ -455,8 +447,12 @@
                     mtl.needsUpdate = true;
                   });
                 } else {
-                  child.material.emissiveIntensity = 0.3;
-                  child.material.flatShading = flat_shading_enabled;
+                  if (child.type === 'Points' || child.isPoints) {
+                    child.material.size = 1.5;
+                  } else {
+                    child.material.emissiveIntensity = 0.3;
+                    child.material.flatShading = flat_shading_enabled;
+                  }
 
                   // Default to double side
                   child.material.side = THREE.DoubleSide;
@@ -528,7 +524,7 @@
           }
 
           vrml_obj.traverse( function( child ) {
-            if (child.isMesh) {
+            if (child.type === 'Mesh' || child.isMesh) {
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
                   mtl.wireframe = wireframe_enabled;
@@ -582,7 +578,7 @@
           if (scene) {
             if (vrml_obj) {
               vrml_obj.traverse( function( child ) {
-                if (child.type === 'Mesh' || child.isMesh) {
+                if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
                   if (Array.isArray( child.material )) {
                     child.material.forEach( mtl => {
                       mtl.dispose();
