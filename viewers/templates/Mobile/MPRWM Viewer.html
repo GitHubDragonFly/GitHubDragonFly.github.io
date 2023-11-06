@@ -6,12 +6,30 @@
     <meta name="description" content="PRWM (Packed Raw WebGL Model) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+      import { PRWMLoader } from "https://cdn.jsdelivr.net/npm/three@0.151.3/examples/jsm/loaders/PRWMLoader.js";
+
+      THREE = three_js;
+      orb_controls = OrbitControls;
+      room_env = RoomEnvironment;
+      mprwm_loader = PRWMLoader;
+      merge_vertices = mergeVertices;
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.157.0" defer></script>
-    <script src="../../static/js/PRWMLoader.js" defer></script>
-    <script src="../../static/js/OrbitControls.js" defer></script>
-    <script src="../../static/js/utils/BufferGeometryUtils.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js" defer></script>
 
     <style>
       body, html {
@@ -179,13 +197,12 @@
     </script>
 
     <script>
-      var manager, prwm_loader, renderer, scene, camera, mesh, render_requested;
-      var controls, mouse_down, mouse_wheel, events_initialized, count = 0;
-      var ambientLight, directionalLight, bounding_box, wireframe_enabled;
+      var THREE, manager, mprwm_loader, prwm_loader, renderer, scene, camera, mesh, render_requested;
+      var controls, orb_controls, mouse_down, mouse_wheel, events_initialized, count = 0;
+      var ambientLight, directionalLight, bounding_box, wireframe_enabled, room_env;
       var pmremGenerator, ww = window.innerWidth, wh = window.innerHeight;
-      var texture_loader, material, textures, current_texture;
-      var url_displayed = false, url_loading = false, flat_shading_enabled;
-      var selected_prwm_file, selected_prwm_url_file, selected_url_file = '';
+      var texture_loader, material, textures, current_texture, flat_shading_enabled, merge_vertices;
+      var selected_prwm_file, selected_url_file = '', url_displayed = false, url_loading = false;
 
       function set_back_color() {
         scene.background = null;
@@ -259,13 +276,12 @@
         }
 
         if (prwm_loader === undefined) {
-          prwm_loader = new THREE.PRWMLoader( manager );
+          prwm_loader = new mprwm_loader( manager );
         }
 
         if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
 
         selected_prwm_file = null;
-        selected_prwm_url_file = null;
         mouse_down = false;
         mouse_wheel = true;
         textures = [];
@@ -311,6 +327,8 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = 0.7;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -347,8 +365,8 @@
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls( camera, renderer.domElement );
-          //controls.enableZoomToCursor = true;
+          controls = new orb_controls( camera, renderer.domElement );
+          controls.zoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
           controls.keyPanSpeed = 0.8; 
@@ -371,7 +389,7 @@
             vertexColors: false,
             flatShading: false,
             transparent: true,
-            metalness: 0.8,
+            metalness: 0.5,
             roughness: 0.3,
             opacity: 1,
             fog: true
@@ -380,7 +398,7 @@
 
         if (scene.environment === null) {
           pmremGenerator = new THREE.PMREMGenerator( renderer );
-          scene.environment = pmremGenerator.fromScene( new THREE.RoomEnvironment(), .005 ).texture;
+          scene.environment = pmremGenerator.fromScene( new room_env(), .005 ).texture;
         }
 
         // Load the prwm file
@@ -410,7 +428,7 @@
         }
 
         smooth.deleteAttribute( 'normal' );
-        smooth = THREE.BufferGeometryUtils.mergeVertices( smooth );
+        smooth = merge_vertices( smooth );
         smooth.computeVertexNormals();
         smooth.center();
 
@@ -430,40 +448,17 @@
 
       function loadURLFile() {
         if (selected_url_file !== '') {
-          if (selected_url_file.indexOf( ',' ) > -1) {
-            let image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF', '.SVG', '.WEBP', 'DIB' ];
-            let urls = selected_url_file.split( ',' );
-
-            for (let i = 0; i < urls.length; i++) {
-              let url = urls[ i ].trim();
-              let url_uc = url.toUpperCase();
-
-              if (image_extensions.some( ext => url_uc.endsWith( ext ) )) {
-                texture_loader.load( url, function( texture ) { textures.push( texture ); });
-                document.getElementById('btn_textures').disabled = false;
-              } else if (url_uc.endsWith('.PRWM')) {
-                selected_prwm_url_file = url;
-              }
-            }
-          } else {
-            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-              selected_prwm_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
-            } else {
-              if (selected_url_file.startsWith('https://github.com') === true) {
-                selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
-              }
-
-              if (selected_url_file.toUpperCase().endsWith('.PRWM')) selected_prwm_url_file = selected_url_file;
-            }
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          if (selected_prwm_url_file !== null) {
-            prwm_loader.load( selected_prwm_url_file, addFileInScene,
-            function( xhr ) { }, // onProgress
-            function ( error ) { handle_error( error ); }); // onError
-          } else {
-            handle_error( 'Unsupported URL model!' );
-          }
+          // No extension checking for URL so it has to point to PRWM model
+
+          prwm_loader.load( selected_url_file, addFileInScene,
+          function( xhr ) { }, // onProgress
+          function ( error ) { handle_error( error ); }); // onError
         }
       }
 
@@ -471,6 +466,7 @@
         console.timeEnd( 'Loading Time' );
         console.log( 'Error loading model!' );
         console.log( error );
+        mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
 
@@ -496,10 +492,9 @@
                 child.material.map = null;
                 child.material.needsUpdate = true;
               } else {
-                if (selected_prwm_url_file) {
+                if (selected_url_file !== '') {
                   // Apply texture
                   child.material.map = textures[ current_texture ];
-
                   child.material.needsUpdate = true;
                 } else {
                   texture_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
@@ -658,6 +653,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
 
         $('input[type=color]').each( function() {
@@ -668,6 +665,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
       }
     </script>
