@@ -330,8 +330,8 @@
 				const map = scope.loadTexture( resolveURL( scope.baseUrl, value ), null, materialName );
 				map.repeat.copy( texParams.scale );
 				map.offset.copy( texParams.offset );
-				map.wrapS = scope.wrap;
-				map.wrapT = scope.wrap;
+				map.wrapS = texParams.wrapS; // map.wrapS = scope.wrap;
+				map.wrapT = texParams.wrapT; // map.wrapT = scope.wrap;
 				params[ mapType ] = map;
 
 			}
@@ -768,10 +768,12 @@
 
 			const texParams = {
 				scale: new THREE.Vector2( 1, 1 ),
-				offset: new THREE.Vector2( 0, 0 )
+				offset: new THREE.Vector2( 0, 0 ),
+				wrapS: THREE.RepeatWrapping,
+				wrapT: THREE.RepeatWrapping
 			};
 
-			let items = prop.split( /\s+/ );
+			const items = prop.split( /\s+/ );
 
 			let pos;
 
@@ -799,6 +801,16 @@
 
 				texParams.offset.set( parseFloat( items[ pos + 1 ] ), parseFloat( items[ pos + 2 ] ) );
 				items.splice( pos, 4 ); // we expect 4 parameters here!
+
+			}
+
+			pos = items.indexOf( '-w' );
+
+			if ( pos >= 0 ) {
+
+				texParams.wrapS = Number( items[ pos + 1 ] );
+				texParams.wrapT = Number( items[ pos + 2 ] );
+				items.splice( pos, 3 ); // we expect 3 parameters here!
 
 			}
 
