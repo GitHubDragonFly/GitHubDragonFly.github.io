@@ -60,6 +60,7 @@ This document would represent a summary of PBR entries that can be found in the 
 
 Entries currently not compatible with the `assimp` library but working fine in the OBJ + MTL Viewer:
 
+ - `-w` - texture wrapping parameter (`wrapS` and `wrapT`)
  - `Pns` - normalScale
  - `Pcn` - clearcoatNormalScale
  - `Pli` - lightMapIntensity
