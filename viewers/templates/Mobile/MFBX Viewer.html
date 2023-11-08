@@ -6,17 +6,34 @@
     <meta name="description" content="FBX (Filmbox) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.157.0" defer></script>
-    <script src="../../static/js/FBXLoader.js" defer></script>
-    <script src="../../static/js/TGALoader.js" defer></script>
-    <script src="../../static/js/DDSLoader.js" defer></script>
-    <script src="../../static/js/OrbitControls.js" defer></script>
-    <script src="../../static/js/libs/fflate.min.js" defer></script>
-    <script src="../../static/js/curves/NURBSCurve.js" defer></script>
-    <script src="../../static/js/curves/NURBSUtils.js" defer></script>
-    <script src="../../static/js/curves/NURBSSurface.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { FBXLoader } from "../../static/jsm/FBXLoader.js";
+      import { DDSLoader } from "three/addons/loaders/DDSLoader.js";
+      import { TGALoader } from "three/addons/loaders/TGALoader.js";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+      THREE = three_js;
+
+      fbx_loader = new FBXLoader( manager );
+      tga_loader = new TGALoader( manager );
+      dds_loader = new DDSLoader( manager );
+
+      orb_controls = OrbitControls;
+      room_env = RoomEnvironment;
+    </script>
 
     <style>
       body, html {
@@ -186,11 +203,11 @@
     <script>
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent );
 
-      var manager, texture_loader, fbx_loader, tga_loader, dds_loader, object_is_points;
-      var animations, animation_mixer, animation_running, current_animation;
-      var renderer, scene, camera, fbx_obj, render_requested, clock;
-      var pmremGenerator, controls, mouse_down, mouse_wheel, events_initialized;
-      var ambientLight, directionalLight, wireframe_enabled;
+      var THREE, manager, texture_loader, fbx_loader, tga_loader, dds_loader, object_is_points;
+      var animations, animation_mixer, animation_running, current_animation, room_env;
+      var renderer, pmremGenerator, scene, camera, fbx_obj, render_requested, clock;
+      var controls, orb_controls, mouse_down, mouse_wheel, events_initialized;
+      var first_run, fr_count, directionalLight, wireframe_enabled;
       var ww = window.innerWidth, wh = window.innerHeight, count = 0;
       var bounding_box, flat_shading_enabled, vertex_colors_enabled;
       var selected_fbx_file, selected_fbx_url_file, selected_url_file = '';
@@ -275,28 +292,21 @@
 
         if (manager === undefined) manager = new THREE.LoadingManager();
 
-        manager.onLoad = function () { mouse_wheel = true; }
+        manager.onLoad = function() { mouse_wheel = true; }
 
         if (texture_loader === undefined) texture_loader = new THREE.TextureLoader( manager );
 
-        if (fbx_loader === undefined) fbx_loader = new THREE.FBXLoader( manager );
-
-        if (tga_loader === undefined) {
-          tga_loader = new THREE.TGALoader( manager );
-          manager.addHandler( /\.tga$/i, tga_loader );
-        }
-
-        if (dds_loader === undefined) {
-          dds_loader = new THREE.DDSLoader( manager );
-          manager.addHandler( /\.dds$/i, dds_loader );
-        }
+        if (tga_loader) manager.addHandler( /\.tga$/i, tga_loader );
+        if (dds_loader) manager.addHandler( /\.dds$/i, dds_loader );
 
         selected_fbx_file = null;
         selected_fbx_url_file = null;
         object_is_points = false;
         resource_path = '';
         mouse_down = false;
-        mouse_wheel = false;
+        mouse_wheel = true;
+        first_run = true;
+        fr_count = 0;
         textures = [];
         animations = [];
         animation_mixer = null;
@@ -353,8 +363,9 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = 0.7;
           renderer.setSize( ww, wh );
-          renderer.outputEncoding = THREE.sRGBEncoding;
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
           renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
@@ -385,8 +396,8 @@
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls( camera, renderer.domElement );
-          //controls.enableZoomToCursor = true;
+          controls = new orb_controls( camera, renderer.domElement );
+          controls.zoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
           controls.keyPanSpeed = 0.8; 
@@ -404,16 +415,11 @@
 
         if (scene.environment === null) {
           pmremGenerator = new THREE.PMREMGenerator( renderer );
-          scene.environment = pmremGenerator.fromScene( new THREE.RoomEnvironment(), .005 ).texture;
+          scene.environment = pmremGenerator.fromScene( new room_env(), .005 ).texture;
         }
-
-        enable_disable( false );
 
         // Load the fbx file
         selected_fbx_file ? loadFile() : loadURLFile();
-
-        render_requested = true;
-        render();
       }
 
       function loadFile(){
@@ -457,13 +463,6 @@
 
           fbx_obj = fbx_scene;
 
-          // Add fbx model to scene
-          scene.add( fbx_obj );
-          camera.lookAt( fbx_obj.position );
-
-          set_initial_scale();
-          resize();
-
           animations = fbx_scene.animations;
 
           if (animations.length > 0) {
@@ -476,10 +475,14 @@
             animation_running = true;
           }
 
-          console.timeEnd( 'Loading Time' );
-          document.getElementById('div_loading').style.display = 'none';
+          // Add fbx model to scene
+          scene.add( fbx_obj );
+          camera.lookAt( fbx_obj.position );
 
-          disabled_changed();
+          set_initial_scale();
+          resize();
+
+          finish_loading();
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
           URL.revokeObjectURL( selected_fbx_file );
@@ -510,75 +513,6 @@
                 fbx_loader.setResourcePath( url );
               }
             }
-
-            if (selected_fbx_url_file) {
-              fbx_loader.load( selected_fbx_url_file, resource_path, function( fbx_scene ) {
-                fbx_scene.traverse( function( child ) {
-              	  if (child.isMesh || child.isPoints) {
-                    child.geometry.computeBoundingBox();
-                    child.geometry.computeBoundingSphere();
-
-                    if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                    child.geometry.normalizeNormals();
-
-                    if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                      vertex_colors_enabled = true;
-                    }
-
-                    if (child.isMesh) {
-                      if (child.isSkinnedMesh) child.frustumCulled = false;
-                    } else {
-                      object_is_points = true;
-                      document.getElementById('btn_wireframe').disabled = true;
-                      document.getElementById('btn_flat').disabled = true;
-                    }
-
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        if (child.isPoints && isMobile === true) mtl.size = 0.8;
-                        mtl.vertexColors = vertex_colors_enabled;
-                        mtl.side = THREE.DoubleSide;
-                      });
-                    } else {
-                      if (child.isPoints && isMobile === true) child.material.size = 0.8;
-                      child.material.vertexColors = vertex_colors_enabled;
-                      child.material.side = THREE.DoubleSide;
-                    }
-    	    	      }
-                });
-
-                fbx_obj = fbx_scene;
-
-                // Add fbx model to scene
-                scene.add( fbx_obj );
-                camera.lookAt( fbx_obj.position );
-
-                set_initial_scale();
-                resize();
-
-                animations = fbx_scene.animations;
-
-                if (animations.length > 0) {
-                  animation_mixer = new THREE.AnimationMixer( fbx_scene );
-                  current_animation = 0;
-                  animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
-                  animation_mixer.clipAction( animations[ 0 ] ).play();
-                  document.getElementById('btn_animate').disabled = false;
-                  document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
-                  animation_running = true;
-                }
-
-                console.timeEnd( 'Loading Time' );
-                document.getElementById('div_loading').style.display = 'none';
-
-                disabled_changed();
-              }, function ( xhr ) { // onProgress
-              }, function ( error ) { // onError
-                handle_error( error );
-              });
-            } else {
-              handle_error( 'Unsupported URL model!' );
-            }
           } else {
             if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
               selected_fbx_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
@@ -589,81 +523,85 @@
 
               if (selected_url_file.toUpperCase().endsWith('.FBX')) selected_fbx_url_file = selected_url_file;
             }
+          }
 
-            if (selected_fbx_url_file !== null) {
-              fbx_loader.load( selected_fbx_url_file, resource_path, function( fbx_scene ) {
-                let child_count = 1;
+          if (selected_fbx_url_file) {
+            fbx_loader.load( selected_fbx_url_file, resource_path, function( fbx_scene ) {
+              fbx_scene.traverse( function( child ) {
+                if (child.isMesh || child.isPoints) {
+                  child.geometry.computeBoundingBox();
+                  child.geometry.computeBoundingSphere();
 
-                fbx_scene.traverse( function( child ) {
-              	  if (child.isMesh || child.isPoints) {
-                    child.geometry.computeBoundingBox();
-                    child.geometry.computeBoundingSphere();
+                  if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                  child.geometry.normalizeNormals();
 
-                    if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                    child.geometry.normalizeNormals();
+                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                    vertex_colors_enabled = true;
+                  }
 
-                    if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                      vertex_colors_enabled = true;
-                    }
+                  if (child.isMesh) {
+                    if (child.isSkinnedMesh) child.frustumCulled = false;
+                  } else {
+                    object_is_points = true;
+                    document.getElementById('btn_wireframe').disabled = true;
+                    document.getElementById('btn_flat').disabled = true;
+                  }
 
-                    if (child.isMesh) {
-                      if (child.isSkinnedMesh) child.frustumCulled = false;
-                    } else {
-                      object_is_points = true;
-                      document.getElementById('btn_wireframe').disabled = true;
-                      document.getElementById('btn_flat').disabled = true;
-                    }
-
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        if (child.isPoints && isMobile === true) mtl.size = 1;
-                        mtl.vertexColors = vertex_colors_enabled;
-                        mtl.side = THREE.DoubleSide;
-                      });
-                    } else {
-                      if (child.isPoints && isMobile === true) child.material.size = 1;
-                      child.material.vertexColors = vertex_colors_enabled;
-                      child.material.side = THREE.DoubleSide;
-                    }
-      	  	      }
-      	        });
-
-                fbx_obj = fbx_scene;
-
-                // Add fbx model to scene
-                scene.add( fbx_obj );
-                camera.lookAt( fbx_obj.position );
-
-                set_initial_scale();
-                resize();
-
-                animations = fbx_scene.animations;
-
-                if (animations.length > 0) {
-                  animation_mixer = new THREE.AnimationMixer( fbx_scene );
-                  current_animation = 0;
-                  animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
-                  animation_mixer.clipAction( animations[ 0 ] ).play();
-                  document.getElementById('btn_animate').disabled = false;
-                  document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
-                  animation_running = true;
+                  if (Array.isArray( child.material )) {
+                    child.material.forEach( mtl => {
+                      if (child.isPoints && isMobile === true) mtl.size = 0.8;
+                      mtl.vertexColors = vertex_colors_enabled;
+                      mtl.side = THREE.DoubleSide;
+                    });
+                  } else {
+                    if (child.isPoints && isMobile === true) child.material.size = 0.8;
+                    child.material.vertexColors = vertex_colors_enabled;
+                    child.material.side = THREE.DoubleSide;
+                  }
                 }
-
-                console.timeEnd( 'Loading Time' );
-                document.getElementById('div_loading').style.display = 'none';
-
-                disabled_changed();
-              }, function ( xhr ) { // onProgress
-              }, function ( error ) { // onError
-                handle_error( error );
               });
-            } else {
-              handle_error( 'Unsupported URL model!' );
-            }
+
+              fbx_obj = fbx_scene;
+
+              animations = fbx_scene.animations;
+
+              if (animations.length > 0) {
+                animation_mixer = new THREE.AnimationMixer( fbx_scene );
+                current_animation = 0;
+                animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+                animation_mixer.clipAction( animations[ 0 ] ).play();
+                document.getElementById('btn_animate').disabled = false;
+                document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+                animation_running = true;
+              }
+
+              // Add fbx model to scene
+              scene.add( fbx_obj );
+              camera.lookAt( fbx_obj.position );
+
+              set_initial_scale();
+              resize();
+
+              finish_loading();
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              handle_error( error );
+            });
+          } else {
+            handle_error( 'Unsupported URL model!' );
           }
 
           mouse_wheel = true;
         }
+      }
+
+      function finish_loading() {
+        console.timeEnd( 'Loading Time' );
+        document.getElementById('div_loading').style.display = 'none';
+        enable_disable( false );
+        render_requested = true;
+        mouse_wheel = true;
+        render();
       }
 
       function handle_error( error ) {
@@ -742,12 +680,18 @@
             scene.updateMatrixWorld();
             camera.updateMatrixWorld();
 
-            if (mouse_wheel === true) {
-              if (count > 3) {
-                mouse_wheel = false;
-                count = 0;
-              } else {
-                count += 1;
+            // If it might be slow to render initially
+            if (first_run === true) {
+              fr_count += 1;
+              if (fr_count === 15) first_run = false;
+            } else {
+              if (mouse_wheel === true) {
+                if (count > 3) {
+                  mouse_wheel = false;
+                  count = 0;
+                } else {
+                  count += 1;
+                }
               }
             }
           }
@@ -823,6 +767,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
 
         $('input[type=color]').each( function() {
@@ -833,6 +779,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
       }
     </script>
