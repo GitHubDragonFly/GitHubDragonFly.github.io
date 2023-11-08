@@ -2590,12 +2590,13 @@
 		generateTracks( rawTracks ) {
 
 			const tracks = [];
+
 			let initialPosition = new THREE.Vector3();
-			let initialRotation = new THREE.Quaternion();
 			let initialScale = new THREE.Vector3();
-			if ( rawTracks.transform ) rawTracks.transform.decompose( initialPosition, initialRotation, initialScale );
+
+			if ( rawTracks.transform ) rawTracks.transform.decompose( initialPosition, new THREE.Quaternion(), initialScale );
+
 			initialPosition = initialPosition.toArray();
-			initialRotation = new THREE.Euler().setFromQuaternion( initialRotation, rawTracks.eulerOrder ).toArray();
 			initialScale = initialScale.toArray();
 
 			if ( rawTracks.T !== undefined && Object.keys( rawTracks.T.curves ).length > 0 ) {
@@ -2607,7 +2608,7 @@
 
 			if ( rawTracks.R !== undefined && Object.keys( rawTracks.R.curves ).length > 0 ) {
 
-				const rotationTrack = this.generateRotationTrack( rawTracks.modelName, rawTracks.R.curves, initialRotation, rawTracks.preRotation, rawTracks.postRotation, rawTracks.eulerOrder );
+				const rotationTrack = this.generateRotationTrack( rawTracks.modelName, rawTracks.R.curves, rawTracks.preRotation, rawTracks.postRotation, rawTracks.eulerOrder );
 				if ( rotationTrack !== undefined ) tracks.push( rotationTrack );
 
 			}
@@ -2638,7 +2639,7 @@
 
 		}
 
-		generateRotationTrack( modelName, curves, initialValue, preRotation, postRotation, eulerOrder ) {
+		generateRotationTrack( modelName, curves, preRotation, postRotation, eulerOrder ) {
 
 			let times, values;
 
@@ -2838,6 +2839,12 @@
 
 			const times = [];
 			const values = [];
+
+			// Add first frame
+			times.push( curvex.times[ 0 ] );
+			values.push( THREE.MathUtils.degToRad( curvex.values[ 0 ] ) );
+			values.push( THREE.MathUtils.degToRad( curvey.values[ 0 ] ) );
+			values.push( THREE.MathUtils.degToRad( curvez.values[ 0 ] ) );
 
 			for ( let i = 1; i < curvex.values.length; i ++ ) {
 
