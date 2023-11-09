@@ -24,9 +24,8 @@ import {
 	CompressedTexture,
 	Vector3,
 	Quaternion,
-} from 'three';
-import { decompress } from './../utils/TextureUtils.js';
-
+} from "three";
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/utils/TextureUtils.js";
 
 /**
  * The KHR_mesh_quantization extension allows these extra attribute component types
