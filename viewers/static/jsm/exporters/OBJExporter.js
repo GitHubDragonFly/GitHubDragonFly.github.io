@@ -1,11 +1,10 @@
 import {
 	Color,
 	Matrix3,
-	Texture,
 	Vector2,
 	Vector3
 } from 'three';
-import { decompress } from './../utils/TextureUtils.js';
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/utils/TextureUtils.js";
 
 class OBJExporter {
 
