@@ -1,5 +1,5 @@
-import * as THREE from 'three';
-import * as fflate from '../libs/fflate.module.js';
+import * as THREE from "three";
+import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/libs/fflate.module.js";
 
 class USDZExporter {
 
