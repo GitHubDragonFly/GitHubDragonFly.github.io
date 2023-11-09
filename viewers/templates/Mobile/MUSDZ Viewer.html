@@ -6,12 +6,35 @@
     <meta name="description" content="USDZ (Universal Scene Description) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.157.0" defer></script>
-    <script src="../../static/js/USDZLoader.js" defer></script>
-    <script src="../../static/js/libs/fflate.min.js" defer></script>
-    <script src="../../static/js/OrbitControls.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { USDZLoader } from "../../static/jsm/loaders/USDZLoader.js";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+      THREE = three_js;
+
+      THREE.DefaultLoadingManager.onLoad = function() { pmremGenerator.dispose(); }
+
+      manager = new THREE.LoadingManager();
+      manager.onLoad = function() { mouse_wheel = true; }
+
+      usdz_loader = new USDZLoader( manager );
+
+      orb_controls = OrbitControls;
+      room_env = RoomEnvironment;
+    </script>
 
     <style>
       body, html {
@@ -178,13 +201,13 @@
     </script>
 
     <script>
-      var manager, renderer, usdz_loader, scene, camera, mesh, render_requested;
-      var pmremGenerator, controls, mouse_down, mouse_wheel, events_initialized;
-      var ambientLight, directionalLight, wireframe_enabled;
+      var THREE, manager, renderer, usdz_loader, scene, camera, mesh, render_requested;
+      var controls, orb_controls, mouse_down, mouse_wheel, events_initialized;
+      var pmremGenerator, ambientLight, directionalLight, wireframe_enabled;
       var ww = window.innerWidth, wh = window.innerHeight;
       var first_run, fr_count, bounding_box, flat_shading_enabled;
       var url_displayed = false, url_loading = false, count = 0;
-      var selected_usdz_file, selected_url_file = '', selected_usdz_url_file;
+      var selected_usdz_file, selected_url_file = '', room_env;
 
       function set_back_color() {
         scene.background = null;
@@ -201,6 +224,8 @@
           mesh.scale.multiplyScalar( 50 / size.y );
         } else if ( size.y > 0.02 ) {
           mesh.scale.multiplyScalar( 25 / size.y );
+        } else if ( size.y > 0.01 ) {
+          mesh.scale.multiplyScalar( 10 / size.y );
         } else {
           mesh.scale.multiplyScalar( 1 / size.y )
         }
@@ -208,6 +233,8 @@
         bounding_box.setFromObject( mesh );
         let center = bounding_box.getCenter(new THREE.Vector3());
         controls.target.set( center.x, center.y, center.z );
+
+        mouse_wheel = true;
       }
 
       function init() {
@@ -235,25 +262,7 @@
 
         enable_disable( true );
 
-        THREE.DefaultLoadingManager.onLoad = function() { pmremGenerator.dispose(); }
-
-        if (manager === undefined) manager = new THREE.LoadingManager();
-
-        manager.onProgress = function ( item, loaded, total ) {
-          if ( loaded === total ) {
-            console.timeEnd( 'Loading Time' );
-            document.getElementById('div_loading').style.display = 'none';
-            enable_disable( false );
-            render_requested = true;
-            mouse_wheel = true;
-            render();
-          }
-        }
-
-        if (usdz_loader === undefined) usdz_loader = new THREE.USDZLoader( manager );
-
         selected_usdz_file = null;
-        selected_usdz_url_file = null;
         mouse_down = false;
         mouse_wheel = true;
         first_run = true;
@@ -271,7 +280,7 @@
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
         if (url_loading === false) {
-          // Loaded files
+          // Loaded local files
           var fi = document.getElementById('file_input');
 
           for (let i = 0; i < fi.files.length; i++) {
@@ -331,8 +340,8 @@
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls( camera, renderer.domElement );
-          //controls.enableZoomToCursor = true;
+          controls = new orb_controls( camera, renderer.domElement );
+          controls.zoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
           controls.keyPanSpeed = 0.8; 
@@ -350,7 +359,7 @@
 
         if (scene.environment === null) {
           pmremGenerator = new THREE.PMREMGenerator( renderer );
-          scene.environment = pmremGenerator.fromScene( new THREE.RoomEnvironment(), .005 ).texture;
+          scene.environment = pmremGenerator.fromScene( new room_env(), .005 ).texture;
         }
 
         // Load the usdz file
@@ -369,7 +378,7 @@
       }
 
       function addFileInScene( usd ) {
-        URL.revokeObjectURL( selected_usdz_file );
+        if (selected_usdz_file !== null) URL.revokeObjectURL( selected_usdz_file );
 
         mesh = usd.clone();
 
@@ -378,14 +387,12 @@
             if (Array.isArray( child.material )) {
               child.material.forEach( mtl => {
                 set_texture_colorSpace( mtl );
-                mtl.format = THREE.RGBAFormat;
                 mtl.flatShading = false;
 
                 mtl.needsUpdate = true;
               });
             } else {
               set_texture_colorSpace( child.material );
-              child.material.format = THREE.RGBAFormat;
               child.material.flatShading = false;
 
               child.material.needsUpdate = true;
@@ -400,42 +407,23 @@
         set_initial_scale();
         resize();
 
-        mouse_wheel = true;
+        finish_loading();
       }
 
       function loadURLFile() {
         if (selected_url_file !== '') {
           if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-            selected_usdz_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
-          } else {
-            if (selected_url_file.startsWith('https://github.com') === true) {
-              selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
-            }
-
-            if (selected_url_file.toUpperCase().endsWith('.USDZ')) selected_usdz_url_file = selected_url_file;
+            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          if (selected_usdz_url_file !== null) {
-            usdz_loader.load( selected_usdz_url_file, addURLFileInScene,
-            function( xhr ) { }, // onProgress
-            function ( error ) { handle_error( error ); }); // onError
-          } else {
-            handle_error( 'Unsupported URL model!' );
-          }
+          // No extension checking for URL so it has to point to USDZ model
+
+          usdz_loader.load( selected_url_file, addFileInScene,
+          function( xhr ) { }, // onProgress
+          function ( error ) { handle_error( error ); }); // onError
         }
-      }
-
-      function addURLFileInScene( usd ) {
-        mesh = usd;
-
-        // Add mesh to the scene
-        scene.add( mesh );
-        camera.lookAt( mesh.position );
-
-        set_initial_scale();
-        resize();
-
-        mouse_wheel = true;
       }
 
       function set_texture_colorSpace( material ) {
@@ -450,6 +438,15 @@
         if (material.clearcoatRoughnessMap) material.clearcoatRoughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
         if (material.specularColorMap) material.specularColorMap.colorSpace = THREE.SRGBColorSpace;
         if (material.transmissionMap) material.transmissionMap.colorSpace = THREE.LinearSRGBColorSpace;
+      }
+
+      function finish_loading() {
+        console.timeEnd( 'Loading Time' );
+        document.getElementById('div_loading').style.display = 'none';
+        enable_disable( false );
+        render_requested = true;
+        mouse_wheel = true;
+        render();
       }
 
       function handle_error( error ) {
@@ -520,7 +517,7 @@
             scene.updateMatrixWorld();
             camera.updateMatrixWorld();
 
-            // Slow to render initially
+            // If it might be slow to render initially
             if (first_run === true) {
               fr_count += 1;
               if (fr_count === 15) first_run = false;
@@ -598,8 +595,6 @@
     <script>
       function disabled_changed() {
         $('button').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
@@ -607,11 +602,11 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
 
         $('input[type=color]').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
@@ -619,6 +614,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
       }
     </script>
