@@ -5,27 +5,61 @@
     <meta name="description" content="STEP + IGES + BREP + BIM Viewer">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.157.0" defer></script>
-    <script src="../static/dotbim/loader/non_module/BIMLoader.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@7.15.0/rhino3dm.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/occt-import-js@0.0.21/dist/occt-import-js.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
+      import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
+      import { BIMLoader } from "../static/dotbim/loader/module/BIMLoader.js";
+      import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
+      import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
+
+      THREE = three_js;
+
+      manager = new THREE.LoadingManager();
+
+      file_loader = new THREE.FileLoader( manager );
+      file_loader.setMimeType( 'text/plain' );
+      file_loader.setResponseType( 'text' );
+
+      bim_loader = new BIMLoader();
+
+      rgbe_loader = new RGBELoader();
+      rgbe_loader.setDataType( THREE.HalfFloatType );
+
+      texture_loader = new THREE.TextureLoader();
+
+      gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
+
+      if (menu_location_bottom === false) {
+        let fixed_menu_bottom = ( parseInt( $("#fixed_menu").outerHeight( true ) ) + 2 ).toString() + "px";
+        document.getElementById("gui_position").style.marginTop = fixed_menu_bottom;
+      } else {
+        document.getElementById("gui_position").style.marginTop = "2px";
+      }
+
+      orb_controls = OrbitControls;
+      orb_controls_gizmo = OrbitControlsGizmo;
+    </script>
+
     <script src="../static/assimpjs/assimpjs.js" defer></script>
-    <script src="../static/js/RGBELoader.js" defer></script>
-    <script src="../static/js/PLYLoader.js" defer></script>
     <script src="../static/js/upng/UPNG.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
     <script src="../static/js/omggif/omggif.js" defer></script>
-    <script src="../static/js/OrbitControls.js" defer></script>
-    <script src="../static/js/OrbitControlsGizmo.js" defer></script>
     <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
-    <script src="../static/js/utils/TextureUtils.js" defer></script>
-    <script src="../static/js/exporters/PLYExporter.js" defer></script>
-    <script src="../static/js/exporters/STLExporter.js" defer></script>
-    <script src="../static/js/exporters/OBJExporter.js" defer></script>
-    <script src="../static/js/exporters/GLTFExporter.js" defer></script>
-    <script src="../static/js/exporters/ColladaExporter.js" defer></script>
     <script src="../static/js/utils/BufferGeometryUtils.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@7.15.0/rhino3dm.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/occt-import-js@0.0.21/dist/occt-import-js.js" defer></script>
     <script src="../static/js/exporters/three-buffergeometry-to-prwm/three-buffergeometry-to-prwm.min.js" defer></script>
 
     <style>
@@ -605,19 +639,19 @@
 
     <script>
       var manager, file_loader, bim_loader, texture_loader, rgbe_loader;
-      var renderer, scene, camera, mesh, render_requested, clock, count = 0;
+      var THREE, renderer, scene, camera, mesh, render_requested, clock;
       var gui, gui_set = false, guiExposure, params, toneMappingOptions;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
-      var controls, gizmo, edges, edges_visible, outline_material;
+      var controls, orb_controls, gizmo, orb_controls_gizmo;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
       var bounding_box, gif_export, bgnd_linear_gradient;
       var flat_shading_enabled, enable_opacity, zip;
-      var multi_mesh_model, iges, brep, bim, tex;
-      var initial_opacity, initial_opacity_array;
-      var initial_transparency, initial_transparency_array;
+      var multi_mesh_model, iges, brep, bim, tex, count = 0;
+      var initial_opacity, initial_opacity_array, edges, edges_visible;
+      var initial_transparency, initial_transparency_array, outline_material;
       var selected_step_file, selected_url_file = '', filename, response, buffer, fileBuffer;
       var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
       var vertex_colors_enabled, original_vertex_color_array, random_vertex_colors_enabled, random_vertex_color_array;
@@ -670,35 +704,37 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let obj_exporter = new THREE.OBJExporter( manager );
+          const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.js" );
+
+          let obj_exporter = new OBJExporter( manager );
 
           let mesh_clone = (bim === true) ? await create_meshes() : mesh.clone();
 
-          let exported = obj_exporter.parse( mesh_clone, filename );
+          await obj_exporter.parse( mesh_clone, filename, async function( exported ) {
+            zip.file( filename + '.obj', exported[ 'obj' ] );
 
-          zip.file( filename + '.obj', exported[ 'obj' ] );
+            if (exported[ 'mtl' ]) {
+              zip.file( filename + '.mtl', exported[ 'mtl' ] );
 
-          if (exported[ 'mtl' ]) {
-            zip.file( filename + '.mtl', exported[ 'mtl' ] );
+              if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
+                let processed_index = 0;
 
-            if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
-              let processed_index = 0;
+                exported[ 'tex' ].forEach( async tex => {
+                  let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
 
-              exported[ 'tex' ].forEach( async tex => {
-                let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+                  zip.file( `${ tex.name }.${ tex.ext }`, blob );
 
-                zip.file( `${ tex.name }.${ tex.ext }`, blob );
+                  if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
 
-                if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
-
-                processed_index += 1;
-              });
+                  processed_index += 1;
+                });
+              } else {
+                await process_zip( '_OBJ' );
+              }
             } else {
               await process_zip( '_OBJ' );
             }
-          } else {
-            await process_zip( '_OBJ' );
-          }
+          });
         }
       }
 
@@ -708,7 +744,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let ply_exporter = new THREE.PLYExporter( manager );
+          const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.js" );
+
+          let ply_exporter = new PLYExporter( manager );
 
           let mesh_clone = (bim === true) ? await create_meshes() : mesh.clone();
 
@@ -736,7 +774,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let stl_exporter = new THREE.STLExporter( manager );
+          const { STLExporter } = await import( "../static/jsm/exporters/STLExporter.js" );
+
+          let stl_exporter = new STLExporter( manager );
 
           let mesh_clone = (bim === true) ? await create_meshes() : mesh.clone();
 
@@ -755,7 +795,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let dae_exporter = new THREE.ColladaExporter( manager );
+          const { ColladaExporter } = await import( "../static/jsm/exporters/ColladaExporter.js" );
+
+          let dae_exporter = new ColladaExporter( manager );
 
           let mesh_clone = (bim === true) ? await create_meshes() : mesh.clone();
 
@@ -787,7 +829,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let gltf_exporter = new THREE.GLTFExporter( manager );
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
 
           let options = { binary: binary, maxTextureSize: 4096 || Infinity };
 
@@ -822,7 +866,9 @@
 
           // Try to convert the scene to glb and then to fbx
 
-          let gltf_exporter = new THREE.GLTFExporter( manager );
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
 
           let options = {	binary: true, maxTextureSize: 4096 || Infinity };
 
@@ -893,14 +939,17 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
+          const { PLYLoader } = await import( "three/addons/loaders/PLYLoader.js" );
+          const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.js" );
+
           let bigEndian = false;
           let arrayBuffer;
 
           let mesh_clone = (bim === true) ? await create_meshes() : mesh.clone();
 
           // Export to PLY format first, load exported model and then export to PRWM
-          new THREE.PLYExporter().parse( mesh_clone, async function( json ) {
-            new THREE.PLYLoader().load( URL.createObjectURL( new Blob( [ json ], { type: 'application/octet-stream' } ) ), async function( json_geometry ) {
+          new PLYExporter().parse( mesh_clone, async function( json ) {
+            new PLYLoader().load( URL.createObjectURL( new Blob( [ json ], { type: 'application/octet-stream' } ) ), async function( json_geometry ) {
               arrayBuffer = threeBuffergeometryToPrwm( json_geometry, bigEndian);
               let blob = new Blob( [ arrayBuffer ], { type: 'application/binary' } );
 
@@ -1751,23 +1800,6 @@
 
         enable_disable( true );
 
-        if (manager === undefined) manager = new THREE.LoadingManager();
-
-        if (file_loader === undefined) {
-          file_loader = new THREE.FileLoader( manager );
-          file_loader.setMimeType( 'text/plain' );
-          file_loader.setResponseType( 'text' );
-        }
-
-        if (bim_loader === undefined) bim_loader = new THREE.BIMLoader( manager );
-
-        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
-
-        if (rgbe_loader === undefined) {
-          rgbe_loader = new THREE.RGBELoader();
-          rgbe_loader.setDataType( THREE.HalfFloatType );
-        }
-
         if (zip === undefined) zip = new JSZip();
 
         if (params === undefined) params = { setEnvMap: false, exposure: 0.7, toneMapping: 'ACESFilmic', blurriness: 0.3 };
@@ -1906,7 +1938,7 @@
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls( camera, renderer.domElement );
+          controls = new orb_controls( camera, renderer.domElement );
           controls.enableZoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
@@ -1924,7 +1956,7 @@
         }
 
         if (gizmo === undefined) {
-          gizmo = new OrbitControlsGizmo( controls, {
+          gizmo = new orb_controls_gizmo( controls, {
             size: 65,
             padding: 4,
             bubbleSizePrimary: 7,
@@ -2983,8 +3015,6 @@
 
       function disabled_changed() {
         $('button').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
@@ -2992,11 +3022,11 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
 
         $('select').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
@@ -3004,11 +3034,11 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
 
         $('input[type=color]').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
@@ -3016,6 +3046,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
       }
 
@@ -3068,18 +3100,6 @@
         }
 
         mouse_wheel = true;
-      }
-    </script>
-
-    <script type="module">
-      import { GUI } from 'https://cdn.jsdelivr.net/npm/three@0.147.0/examples/jsm/libs/lil-gui.module.min.js';
-
-      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
-
-      if (url_displayed === true) {
-        document.getElementById('gui_position').style.marginTop = '118px';
-      } else {
-        document.getElementById('gui_position').style.marginTop = '80px';
       }
     </script>
   </body>
