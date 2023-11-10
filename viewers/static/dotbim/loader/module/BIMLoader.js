@@ -8,11 +8,11 @@ import {
 	InstancedMesh,
 	Loader,
 	Matrix4,
-	MeshPhongMaterial,
+	MeshStandardMaterial,
 	Quaternion,
 	SRGBColorSpace,
 	Vector3
-} from 'three';
+} from "three";
 
 class BIMLoader extends Loader {
 
