@@ -24,7 +24,6 @@ class USDAParser {
 		const data = {};
 
 		const lines = text.split( '\n' );
-		const length = lines.length;
 
 		let group, meta;
 		let string = null;
@@ -35,9 +34,7 @@ class USDAParser {
 
 		function parse_lines() {
 
-			for ( let i = 0; i < length; i++ ) {
-
-				let line = lines[ i ];
+			for ( const line of lines ) {
 
 				if ( line.trim() === '' ) continue;
 
@@ -74,7 +71,7 @@ class USDAParser {
 
 					stack.pop();
 
-					if ( stack.length === 0 ) return;
+					if ( stack.length === 0 ) continue;
 
 					target = stack[ stack.length - 1 ];
 
@@ -92,7 +89,7 @@ class USDAParser {
 
 					stack.pop();
 
-					if ( stack.length === 0 ) return;
+					if ( stack.length === 0 ) continue;
 
 					target = stack[ stack.length - 1 ];
 
