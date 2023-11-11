@@ -7,7 +7,6 @@
 			const data = {};
 
 			const lines = text.split( '\n' );
-			const length = lines.length;
 
 			let group, meta;
 			let string = null;
@@ -18,9 +17,7 @@
 
 			function parse_lines() {
 
-				for ( let i = 0; i < length; i++ ) {
-
-					let line = lines[ i ];
+				for ( const line of lines ) {
 
 					if ( line.trim() === '' ) continue;
 
@@ -57,7 +54,7 @@
 
 						stack.pop();
 
-						if ( stack.length === 0 ) return;
+						if ( stack.length === 0 ) continue;
 
 						target = stack[ stack.length - 1 ];
 
@@ -75,7 +72,7 @@
 
 						stack.pop();
 
-						if ( stack.length === 0 ) return;
+						if ( stack.length === 0 ) continue;
 
 						target = stack[ stack.length - 1 ];
 
