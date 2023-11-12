@@ -44,12 +44,12 @@ Number Type Converter
 
 - Notes about GLTF viewers:
   - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component:
-    - Local loading only supports self-contained models, either embedded GLTF or binary GLB
-    - Error handling narrows down to showing the `ERROR!` message so check the console output for any details 
+    - Local loading currently only supports self-contained models, either embedded GLTF or binary GLB
+    - Error handling narrows down to showing the `ERROR!` message so check the console output for details 
   - `GLTF Viewer` is for v2.0 glTF files and is currently using r158 of three.js:
-    - doesn't support `pbrSpecularGlossiness` extension
+    - doesn't support `pbrSpecularGlossiness`
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js:
-    - supports `pbrSpecularGlossiness` extension
+    - supports `pbrSpecularGlossiness`
     - doesn't support `Anisotropy`
   - `GLTF Legacy` viewer is for v1.0 glTF files and is purely experimental and rather limited (see notes further below)
 
@@ -57,21 +57,21 @@ Number Type Converter
   - This is a revamped version of my GLTF v2.0 Viewer and is a sort of ASSIMP(JS) / three.js hybrid
   - It can be used instead of GLTF v2.0 and GLTF v1.0 Legacy viewers and also provides more export options
   - Might have bugs and interface / library related limitations and slow to load some models
-  - It tries to take advantage of the THREE.MeshPhysicalMaterial to bring a GLTF alike functionality for OBJ + MTL models
+  - It tries to take advantage of the `THREE.MeshPhysicalMaterial` to bring a GLTF alike functionality for OBJ + MTL models
   - Has multiple export options available, with special notes about JSON formats:
     - Use [JSON Viewer](https://githubdragonfly.github.io/viewers/templates/JSON%20Viewer.html) to see all models exported as `JSON`
     - Use [JSON Legacy](https://githubdragonfly.github.io/viewers/templates/JSON%20Legacy.html) viewer to see all models exported as `ASSJSON`
     - Both `JSON` and `ASSJSON` exported files use the same `.json` extension
   - GLTF / GLB v2.0 and DRC models will be handled by three.js, as originally intended
-  - All other formats, including GLTF / GLB v1.0, will be initially handled by ASSIMP(JS), converted to `GLB2` and passed on to three.js `GLTF Loader`
+  - All other formats, including GLTF / GLB v1.0, will be initially handled by ASSIMP(JS), converted to `GLB2` and passed on to three.js `GLTF Loader` for displaying
   - Supported formats: 3D, 3DS, 3MF, A3D, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IFC, IQM, IRR, IRRMESH, KMZ, LWO, LWS, LXO, M3D, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NDO, NFF, OBJ + MTL, OFF, OGEX, PLY, PMX, Q3O, Q3S, RAW, SIB, SMD, STL, TER, X, X3D, XGL, XML, ZAE, ZGL
   - Unsupported formats: BSP, JT, M3, PK3, WRL
     - the viewer will allow you to select these files but they didn't work for me
   - When using the viewer's `URL` option remember the following:
-    - BIN and / or MTL file URLs might need to be added alongside the model URL and comma separated, this would normally apply to GLTF and OBJ files, for example:
+    - BIN and / or MTL file URLs might need to be added alongside the model URL and comma separated, this would normally apply to some GLTF and OBJ files, for example:
       - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/OBJ/spider.obj, https://raw.githubusercontent.com/assimp/assimp/master/test/models/OBJ/spider.mtl`
       - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/glTF/CesiumMilkTruck/CesiumMilkTruck.gltf, https://raw.githubusercontent.com/assimp/assimp/master/test/models/glTF/CesiumMilkTruck/CesiumMilkTruck.bin`
-    - For MD2 models you will have to add their texture URL, for example:
+    - For MD2 models you would have to add their texture URL, for example:
       - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/MD2/faerie.md2, https://raw.githubusercontent.com/assimp/assimp/master/test/models/MD2/faerie2.bmp`
     - If textures are not automatically fetched with the model URL only then add the texture location URL, for example:
       - `https://raw.githubusercontent.com/SaschaWillems/VulkanSponza/master/data/sponza.dae, https://raw.githubusercontent.com/SaschaWillems/VulkanSponza/master/data/sponza/`
@@ -97,9 +97,9 @@ Number Type Converter
 - Menu with controls can be located either on top or on the bottom of the page
 - Almost all viewers include the interactive [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
 - Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers
-  - do note that mobile Safari might be finicky about certain features
-- See `URLS4MODELS.md` file for examples as well as [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) repository
-- Lots of loading instructions in the [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repository
+  - do note that mobile Safari browser might be finicky about certain features
+- See `URLS4MODELS.md` file for examples
+- Some loading instructions also available in [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) and [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repositories
 - Import files locally from a file browser dialog:
   - All files have to be in the same folder
   - Some viewers might have some limitations
@@ -107,6 +107,7 @@ Number Type Converter
   - Make any necessary changes on your device to allow local file browsing
 - Import files via remote URL:
   - Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
+  - Some viewers do support Dropbox and GitHub and URLs without extension (normally applicable to single URL)
   - URLs should have no CORS restrictions
 - Import formats, where applicable, with any optional or required textures:
   - 3DS, 3DM, 3MF, AMF, DAE, FBX, IFC, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, PRWM, USDZ, WRL, XYZ
