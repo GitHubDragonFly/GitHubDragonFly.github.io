@@ -357,7 +357,7 @@ class MaterialCreator {
 			if ( params[ mapType ] ) return; // Keep the first encountered texture
 
 			const texParams = scope.getTextureParams( original_mat[ prop ] );
-			const map = scope.loadTexture( resolveURL( scope.baseUrl, value ) );
+			const map = scope.loadTexture( resolveURL( scope.baseUrl, value ), null, materialName );
 
 			map.repeat.copy( texParams.scale );
 			map.offset.copy( texParams.offset );
@@ -858,10 +858,24 @@ class MaterialCreator {
 
 	}
 
-	loadTexture( url, mapping, onLoad, onProgress, onError ) {
+	loadTexture( url, mapping, materialName, onLoad, onProgress, onError ) {
 
 		const manager = ( this.manager !== undefined ) ? this.manager : DefaultLoadingManager;
-		let loader = manager.getHandler( url );
+
+		let ext = '';
+		if (this.materialsInfo[ materialName ].ext) ext = this.materialsInfo[ materialName ].ext;
+
+		let loader;
+
+		if (ext !== '') {
+
+			loader = manager.getHandler( ext );
+
+		} else {
+
+			loader = manager.getHandler( url );
+
+		}
 
 		if ( loader === null ) {
 
@@ -874,6 +888,8 @@ class MaterialCreator {
 		const texture = loader.load( url, onLoad, onProgress, onError );
 
 		if ( mapping !== undefined ) texture.mapping = mapping;
+
+		if (ext === '.tga') { texture.generateMipmaps = true; texture.flipY = true; }
 
 		return texture;
 
