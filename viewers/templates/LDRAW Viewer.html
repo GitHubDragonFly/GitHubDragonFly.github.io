@@ -5,24 +5,68 @@
     <meta name="description" content="LDRAW (Lego 3D computer creations) Viewer - supported formats: DAT, L3B, LDR, MPD">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.157.0" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
+      import { LDrawLoader } from "three/addons/loaders/LDrawLoader.js";
+      import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
+      import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
+      import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
+
+      THREE = three_js;
+
+      manager = new THREE.LoadingManager();
+
+      manager.onProgress = function ( item, loaded, total ) {
+        if ( loaded === total ) {
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+          enable_disable( false );
+          render_requested = true;
+          mouse_wheel = true;
+          render();
+        }
+      }
+
+      ldraw_loader = new LDrawLoader( manager );
+      ldraw_loader.setPartsLibraryPath( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/' );
+      ldraw_loader.separateObjects = true;
+      ldraw_loader.smoothNormals = true;
+
+      rgbe_loader = new RGBELoader();
+      rgbe_loader.setDataType( THREE.HalfFloatType );
+
+      texture_loader = new THREE.TextureLoader();
+
+      gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
+
+      if (menu_location_bottom === false) {
+        let fixed_menu_bottom = ( parseInt( $("#fixed_menu").outerHeight( true ) ) + 2 ).toString() + "px";
+        document.getElementById("gui_position").style.marginTop = fixed_menu_bottom;
+      } else {
+        document.getElementById("gui_position").style.marginTop = "2px";
+      }
+
+      orb_controls = OrbitControls;
+      orb_controls_gizmo = OrbitControlsGizmo;
+    </script>
+
     <script src="../static/assimpjs/assimpjs.js" defer></script>
-    <script src="../static/js/LDrawLoader.js" defer></script>
-    <script src="../static/js/RGBELoader.js" defer></script>
-    <script src="../static/js/PLYLoader.js" defer></script>
     <script src="../static/js/upng/UPNG.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
     <script src="../static/js/omggif/omggif.js" defer></script>
-    <script src="../static/js/OrbitControls.js" defer></script>
-    <script src="../static/js/OrbitControlsGizmo.js" defer></script>
     <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
-    <script src="../static/js/utils/TextureUtils.js" defer></script>
-    <script src="../static/js/exporters/PLYExporter.js" defer></script>
-    <script src="../static/js/exporters/STLExporter.js" defer></script>
-    <script src="../static/js/exporters/OBJExporter.js" defer></script>
-    <script src="../static/js/exporters/GLTFExporter.js" defer></script>
-    <script src="../static/js/exporters/ColladaExporter.js" defer></script>
 
     <style>
       body,html{
@@ -584,10 +628,11 @@
     </script>
 
     <script>
-      var manager, texture_loader, rgbe_loader, ldraw_loader;
-      var renderer, scene, camera, ldraw_obj, edges, edges_visible, render_requested;
-      var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
-      var gui, gui_set = false, guiExposure, params, toneMappingOptions, tex;
+      var THREE, manager, texture_loader, rgbe_loader, ldraw_loader, renderer;
+      var scene, camera, ldraw_obj, edges, edges_visible, render_requested;
+      var controls, orb_controls, gizmo, orb_controls_gizmo, tex;
+      var grid, polar_grid, grid_visible, polar_grid_visible;
+      var gui, gui_set = false, guiExposure, params, toneMappingOptions;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
@@ -648,9 +693,13 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
+          const { PLYLoader } = await import( "three/addons/loaders/PLYLoader.js" );
+          const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.js" );
+          const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.js" );
+
           // Export to PLY format first, load exported model and then export to OBJ
-          new THREE.PLYExporter().parse( ldraw_obj, async function( json ) {
-            new THREE.PLYLoader().load( URL.createObjectURL( new Blob( [ json ], { type: 'application/octet-stream' } ) ), async function( json_geometry ) {
+          new PLYExporter().parse( ldraw_obj, async function( json ) {
+            new PLYLoader().load( URL.createObjectURL( new Blob( [ json ], { type: 'application/octet-stream' } ) ), async function( json_geometry ) {
               let material = new THREE.MeshPhongMaterial( {
                 side: THREE.DoubleSide,
                 vertexColors: true,
@@ -664,7 +713,7 @@
 
               let ply_model = new THREE.Mesh( json_geometry, material );
 
-              let obj_exporter = new THREE.OBJExporter( manager );
+              let obj_exporter = new OBJExporter( manager );
 
               let exported = obj_exporter.parse( ply_model, filename );
 
@@ -682,7 +731,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let ply_exporter = new THREE.PLYExporter( manager );
+          const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.js" );
+
+          let ply_exporter = new PLYExporter( manager );
 
           ply_exporter.parse( ldraw_obj, async function( json ) {
             let blob;
@@ -708,7 +759,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let stl_exporter = new THREE.STLExporter( manager );
+          const { STLExporter } = await import( "../static/jsm/exporters/STLExporter.js" );
+
+          let stl_exporter = new STLExporter( manager );
 
           let string = stl_exporter.parse( ldraw_obj ).split( ',' );
           let blob = new Blob( [ string ], { type: 'text/plain' } );
@@ -725,7 +778,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let dae_exporter = new THREE.ColladaExporter( manager );
+          const { ColladaExporter } = await import( "../static/jsm/exporters/ColladaExporter.js" );
+
+          let dae_exporter = new ColladaExporter( manager );
 
           let result = dae_exporter.parse( ldraw_obj );
 
@@ -755,7 +810,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let gltf_exporter = new THREE.GLTFExporter( manager );
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
 
           const options = { binary: binary, maxTextureSize: 4096 || Infinity };
 
@@ -788,7 +845,9 @@
 
           // Try to convert the scene to glb and then to fbx
 
-          let gltf_exporter = new THREE.GLTFExporter( manager );
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
 
           let options = {	binary: true, maxTextureSize: 4096 || Infinity };
 
@@ -816,6 +875,9 @@
                   document.getElementById('fixed_menu').style.display = 'block';
                   if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
                   render_requested = true;
+                  mouse_wheel = true;
+                  ajs = null;
+                  result = null;
                   render();
                   return;
                 }
@@ -1516,34 +1578,7 @@
 
         enable_disable( true );
 
-        if (manager === undefined) manager = new THREE.LoadingManager();
-
-        manager.onProgress = function ( item, loaded, total ) {
-          if ( loaded === total ) {
-            console.timeEnd( 'Loading Time' );
-            document.getElementById('div_loading').style.display = 'none';
-            enable_disable( false );
-            render_requested = true;
-            mouse_wheel = true;
-            render();
-          }
-        }
-
-        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
-
-        if (ldraw_loader === undefined) {
-          ldraw_loader = new THREE.LDrawLoader( manager );
-          ldraw_loader.setPartsLibraryPath( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/complete/ldraw/' );
-          ldraw_loader.separateObjects = true;
-          ldraw_loader.smoothNormals = true;
-        }
-
         if (zip === undefined) zip = new JSZip();
-
-        if (rgbe_loader === undefined) {
-          rgbe_loader = new THREE.RGBELoader();
-          rgbe_loader.setDataType( THREE.HalfFloatType );
-        }
 
         if (params === undefined) params = { exposure: 0.7, toneMapping: 'ACESFilmic', blurriness: 0.3 };
 
@@ -1660,7 +1695,7 @@
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls = new orb_controls( camera, renderer.domElement );
           controls.enableZoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
@@ -1678,7 +1713,7 @@
         }
 
         if (gizmo === undefined) {
-          gizmo = new OrbitControlsGizmo( controls, {
+          gizmo = new orb_controls_gizmo( controls, {
             size: 65,
             padding: 4,
             bubbleSizePrimary: 7,
@@ -2519,19 +2554,6 @@
         }
 
         mouse_wheel = true;
-      }
-    </script>
-
-    <script type="module">
-      import { GUI } from 'https://cdn.jsdelivr.net/npm/three@0.157.0/examples/jsm/libs/lil-gui.module.min.js';
-
-      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
-
-      if (menu_location_bottom === false) {
-        let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
-          document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
-      } else {
-        document.getElementById('gui_position').style.marginTop = '2px';
       }
     </script>
   </body>
