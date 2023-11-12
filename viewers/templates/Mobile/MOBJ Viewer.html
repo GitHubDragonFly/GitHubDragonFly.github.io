@@ -6,14 +6,63 @@
     <meta name="description" content="OBJ + MTL (Wavefront Technologies) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0" defer></script>
-    <script src="../../static/js/MTLLoader.js" defer></script>
-    <script src="../../static/js/OBJLoader.js" defer></script>
-    <script src="../../static/js/TGALoader.js" defer></script>
-    <script src="../../static/js/DDSLoader.js" defer></script>
-    <script src="../../static/js/OrbitControls.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { DDSLoader } from "three/addons/loaders/DDSLoader.js";
+      import { TGALoader } from "three/addons/loaders/TGALoader.js";
+      import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+      import { MTLLoader } from "../../static/jsm/loaders/MTLLoader.js";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+      THREE = three_js;
+
+      manager = new THREE.LoadingManager();
+
+      manager.onProgress = function ( item, loaded, total ) {
+        if ( loaded === total ) {
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+          enable_disable( false );
+
+          if (object_is_points === true) {
+            document.getElementById('btn_flat').disabled = true;
+            document.getElementById('btn_wireframe').disabled = true;
+            disabled_changed();
+          }
+
+          render_requested = true;
+          mouse_wheel = true;
+          first_run = true;
+          fr_count = 0;
+          render();
+        }
+      }
+
+      obj_loader = new OBJLoader( manager );
+      mtl_loader = new MTLLoader();
+
+      texture_loader = new THREE.TextureLoader( manager );
+      tga_loader = new TGALoader( manager );
+      dds_loader = new DDSLoader( manager );
+
+      manager.addHandler( /\.tga$/i, tga_loader );
+      manager.addHandler( /\.dds$/i, dds_loader );
+
+      orb_controls = OrbitControls;
+      room_env = RoomEnvironment;
+    </script>
 
     <style>
       body, html {
@@ -187,12 +236,13 @@
     <script>
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent );
 
-      var manager, texture_loader, obj_loader, mtl_loader, tga_loader, dds_loader;
+      var THREE, manager, texture_loader, obj_loader, mtl_loader, tga_loader, dds_loader;
       var renderer, scene, camera, Obj, render_requested, object_is_points, count = 0;
       var pmremGenerator, directionalLight, bounding_box, flat_shading_enabled;
-      var controls, mouse_down, mouse_wheel, events_initialized, wireframe_enabled;
+      var controls, orb_controls, mouse_down, mouse_wheel, events_initialized;
       var ww = window.innerWidth, wh = window.innerHeight;
-      var selected_url_file = '', selected_obj_url_file, count = 0;
+      var selected_url_file = '', selected_obj_url_file;
+      var first_run, fr_count, wireframe_enabled, room_env, count = 0;
       var selected_mtl_file, selected_mtl_url_file, selected_obj_file;
       var url_displayed = false, url_loading = false, vertex_colors_enabled;
       var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif;
@@ -201,6 +251,7 @@
       function set_back_color() {
         scene.background = null;
         document.body.style.backgroundColor = document.getElementById('back_color').value;
+        mouse_wheel = true;
       }
 
       function set_initial_scale() {
@@ -222,6 +273,8 @@
         bounding_box.setFromObject( Obj );
         let center = bounding_box.getCenter( new THREE.Vector3() );
         controls.target.set( center.x, center.y, center.z );
+
+        mouse_wheel = true;
       }
 
       function init(){
@@ -256,42 +309,6 @@
         enable_disable( true );
 
         THREE.DefaultLoadingManager.onLoad = function() { pmremGenerator.dispose(); }
-
-        if (manager === undefined) manager = new THREE.LoadingManager();
-
-        manager.onProgress = function ( item, loaded, total ) {
-          if ( loaded === total ) {
-            console.timeEnd( 'Loading Time' );
-            document.getElementById('div_loading').style.display = 'none';
-            enable_disable( false );
-
-            if (object_is_points === true) {
-              document.getElementById('btn_flat').disabled = true;
-              document.getElementById('btn_wireframe').disabled = true;
-              disabled_changed();
-            }
-
-            render_requested = true;
-            mouse_wheel = true;
-            render();
-          }
-        }
-
-        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
-
-        if (obj_loader === undefined) obj_loader = new THREE.OBJLoader( manager );
-
-        if (mtl_loader === undefined) mtl_loader = new THREE.MTLLoader( manager );
-
-        if (tga_loader === undefined) {
-          tga_loader = new THREE.TGALoader( manager );
-          manager.addHandler( /\.tga$/i, tga_loader );
-        }
-
-        if (dds_loader === undefined) {
-          dds_loader = new THREE.DDSLoader( manager );
-          manager.addHandler( /\.dds$/i, dds_loader );
-        }
 
         obj_loader.setMaterials( null );
 
@@ -382,15 +399,15 @@
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 7.5 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 5 );
           directionalLight.position.set( 0, 0, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls( camera, renderer.domElement );
-          //controls.enableZoomToCursor = true;
+          controls = new orb_controls( camera, renderer.domElement );
+          controls.zoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
           controls.keyPanSpeed = 0.8; 
@@ -408,7 +425,7 @@
 
         if (scene.environment === null) {
           pmremGenerator = new THREE.PMREMGenerator( renderer );
-          scene.environment = pmremGenerator.fromScene( new THREE.RoomEnvironment(), .005 ).texture;
+          scene.environment = pmremGenerator.fromScene( new room_env(), .005 ).texture;
         }
 
         // Load the Obj file
@@ -1011,12 +1028,18 @@
             scene.updateMatrixWorld();
             camera.updateMatrixWorld();
 
-            if (mouse_wheel === true) {
-              if (count > 3) {
-                mouse_wheel = false;
-                count = 0;
-              } else {
-                count += 1;
+            // If it might be slow to render initially
+            if (first_run === true) {
+              fr_count += 1;
+              if (fr_count === 15) first_run = false;
+            } else {
+              if (mouse_wheel === true) {
+                if (count > 3) {
+                  mouse_wheel = false;
+                  count = 0;
+                } else {
+                  count += 1;
+                }
               }
             }
           }
@@ -1068,6 +1091,8 @@
           selected_url_file = '';
           enable_disable( true );
         }
+
+        mouse_wheel = true;
       }
 
       function enable_disable( disable = false ) {
@@ -1075,14 +1100,14 @@
         document.getElementById('btn_flat').disabled = disable;
         document.getElementById('btn_wireframe').disabled = disable;
         disabled_changed();
+
+        mouse_wheel = true;
       }
     </script>
 
     <script>
       function disabled_changed() {
         $('button').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
@@ -1090,11 +1115,11 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
 
         $('input[type=color]').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
@@ -1102,6 +1127,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
       }
     </script>
