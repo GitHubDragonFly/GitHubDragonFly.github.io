@@ -11,6 +11,7 @@ import {
 	LinearMipmapNearestFilter,
 	MathUtils,
 	Matrix4,
+	MeshStandardMaterial,
 	MirroredRepeatWrapping,
 	NearestFilter,
 	NearestMipmapLinearFilter,
@@ -167,12 +168,12 @@ class GLTFExporter {
 	}
 
 	/**
-	 * Parse scenes and generate GLTF output
-	 * @param  {Scene or [THREE.Scenes]} input   Scene or Array of THREE.Scenes
-	 * @param  {Function} onDone  Callback on completed
-	 * @param  {Function} onError  Callback on errors
-	 * @param  {Object} options options
-	 */
+	* Parse scenes and generate GLTF output
+	* @param  {Scene or [Scenes]} input THREE.Scene or Array of THREE.Scenes
+	* @param  {Function} onDone  Callback on completed
+	* @param  {Function} onError  Callback on errors
+	* @param  {Object} options options
+	*/
 	parse( input, onDone, onError, options ) {
 
 		const writer = new GLTFWriter();
@@ -279,11 +280,11 @@ const GLB_CHUNK_TYPE_BIN = 0x004E4942;
 //------------------------------------------------------------------------------
 
 /**
- * Compare two arrays
- * @param  {Array} array1 Array 1 to compare
- * @param  {Array} array2 Array 2 to compare
- * @return {Boolean}        Returns true if both arrays are equal
- */
+* Compare two arrays
+* @param  {Array} array1 Array 1 to compare
+* @param  {Array} array2 Array 2 to compare
+* @return {Boolean}        Returns true if both arrays are equal
+*/
 function equalArray( array1, array2 ) {
 
 	return ( array1.length === array2.length ) && array1.every( function ( element, index ) {
@@ -295,10 +296,10 @@ function equalArray( array1, array2 ) {
 }
 
 /**
- * Converts a string to an ArrayBuffer.
- * @param  {string} text
- * @return {ArrayBuffer}
- */
+* Converts a string to an ArrayBuffer.
+* @param  {string} text
+* @return {ArrayBuffer}
+*/
 function stringToArrayBuffer( text ) {
 
 	return new TextEncoder().encode( text ).buffer;
@@ -306,11 +307,11 @@ function stringToArrayBuffer( text ) {
 }
 
 /**
- * Is identity matrix
- *
- * @param {Matrix4} matrix
- * @returns {Boolean} Returns true, if parameter is identity matrix
- */
+* Is identity matrix
+*
+* @param {Matrix4} matrix
+* @returns {Boolean} Returns true, if parameter is identity matrix
+*/
 function isIdentityMatrix( matrix ) {
 
 	return equalArray( matrix.elements, [ 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1 ] );
@@ -318,12 +319,12 @@ function isIdentityMatrix( matrix ) {
 }
 
 /**
- * Get the min and max vectors from the given attribute
- * @param  {BufferAttribute} attribute Attribute to find the min/max in range from start to start + count
- * @param  {Integer} start
- * @param  {Integer} count
- * @return {Object} Object containing the `min` and `max` values (As an array of attribute.itemSize components)
- */
+* Get the min and max vectors from the given attribute
+* @param  {BufferAttribute} attribute Attribute to find the min/max in range from start to start + count
+* @param  {Integer} start
+* @param  {Integer} count
+* @return {Object} Object containing the `min` and `max` values (As an array of attribute.itemSize components)
+*/
 function getMinMax( attribute, start, count ) {
 
 	const output = {
@@ -341,7 +342,7 @@ function getMinMax( attribute, start, count ) {
 
 			if ( attribute.itemSize > 4 ) {
 
-				 // no support for interleaved data for itemSize > 4
+				// no support for interleaved data for itemSize > 4
 
 				value = attribute.array[ i * attribute.itemSize + a ];
 
@@ -372,13 +373,13 @@ function getMinMax( attribute, start, count ) {
 }
 
 /**
- * Get the required size + padding for a buffer, rounded to the next 4-byte boundary.
- * https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#data-alignment
- *
- * @param {Integer} bufferSize The size the original buffer.
- * @returns {Integer} new buffer size with required padding.
- *
- */
+* Get the required size + padding for a buffer, rounded to the next 4-byte boundary.
+* https://github.com/KhronosGroup/glTF/tree/master/specification/2.0#data-alignment
+*
+* @param {Integer} bufferSize The size the original buffer.
+* @returns {Integer} new buffer size with required padding.
+*
+*/
 function getPaddedBufferSize( bufferSize ) {
 
 	return Math.ceil( bufferSize / 4 ) * 4;
@@ -386,12 +387,12 @@ function getPaddedBufferSize( bufferSize ) {
 }
 
 /**
- * Returns a buffer aligned to 4-byte boundary.
- *
- * @param {ArrayBuffer} arrayBuffer Buffer to pad
- * @param {Integer} paddingByte (Optional)
- * @returns {ArrayBuffer} The same buffer if it's already aligned to 4-byte boundary or a new buffer
- */
+* Returns a buffer aligned to 4-byte boundary.
+*
+* @param {ArrayBuffer} arrayBuffer Buffer to pad
+* @param {Integer} paddingByte (Optional)
+* @returns {ArrayBuffer} The same buffer if it's already aligned to 4-byte boundary or a new buffer
+*/
 function getPaddedArrayBuffer( arrayBuffer, paddingByte = 0 ) {
 
 	const paddedLength = getPaddedBufferSize( arrayBuffer.byteLength );
@@ -439,7 +440,7 @@ function getToBlobPromise( canvas, mimeType ) {
 
 	}
 
-	let quality;
+	let quality = 1.0;
 
 	// Blink's implementation of convertToBlob seems to default to a quality level of 100%
 	// Use the Blink default quality levels of toBlob instead so that file sizes are comparable.
@@ -463,8 +464,8 @@ function getToBlobPromise( canvas, mimeType ) {
 }
 
 /**
- * Writer
- */
+* Writer
+*/
 class GLTFWriter {
 
 	constructor() {
@@ -511,11 +512,11 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Parse scenes and generate GLTF output
-	 * @param  {Scene or [THREE.Scenes]} input   Scene or Array of THREE.Scenes
-	 * @param  {Function} onDone  Callback on completed
-	 * @param  {Object} options options
-	 */
+	* Parse scenes and generate GLTF output
+	* @param  {Scene or [Scenes]} input THREE.Scene or Array of THREE.Scenes
+	* @param  {Function} onDone  Callback on completed
+	* @param  {Object} options options
+	*/
 	async write( input, onDone, options = {} ) {
 
 		this.options = Object.assign( {
@@ -586,8 +587,8 @@ class GLTFWriter {
 				headerView.setUint32( 0, GLB_HEADER_MAGIC, true );
 				headerView.setUint32( 4, GLB_VERSION, true );
 				const totalByteLength = GLB_HEADER_BYTES
-					+ jsonChunkPrefix.byteLength + jsonChunk.byteLength
-					+ binaryChunkPrefix.byteLength + binaryChunk.byteLength;
+				+ jsonChunkPrefix.byteLength + jsonChunk.byteLength
+				+ binaryChunkPrefix.byteLength + binaryChunk.byteLength;
 				headerView.setUint32( 8, totalByteLength, true );
 
 				const glbBlob = new Blob( [
@@ -630,15 +631,14 @@ class GLTFWriter {
 
 		}
 
-
 	}
 
 	/**
-	 * Serializes a userData.
-	 *
-	 * @param {THREE.Object3D|THREE.Material} object
-	 * @param {Object} objectDef
-	 */
+	* Serializes a userData.
+	*
+	* @param {Object3D|Material} object
+	* @param {Object} objectDef
+	*/
 	serializeUserData( object, objectDef ) {
 
 		if ( Object.keys( object.userData ).length === 0 ) return;
@@ -670,17 +670,17 @@ class GLTFWriter {
 		} catch ( error ) {
 
 			console.warn( 'THREE.GLTFExporter: userData of \'' + object.name + '\' ' +
-				'won\'t be serialized because of JSON.stringify error - ' + error.message );
+			'won\'t be serialized because of JSON.stringify error - ' + error.message );
 
 		}
 
 	}
 
 	/**
-	 * Returns ids for buffer attributes.
-	 * @param  {Object} object
-	 * @return {Integer}
-	 */
+	* Returns ids for buffer attributes.
+	* @param  {Object} object
+	* @return {Integer}
+	*/
 	getUID( attribute, isRelativeCopy = false ) {
 
 		if ( this.uids.has( attribute ) === false ) {
@@ -701,11 +701,11 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Checks if normal attribute values are normalized.
-	 *
-	 * @param {BufferAttribute} normal
-	 * @returns {Boolean}
-	 */
+	* Checks if normal attribute values are normalized.
+	*
+	* @param {BufferAttribute} normal
+	* @returns {Boolean}
+	*/
 	isNormalizedNormalAttribute( normal ) {
 
 		const cache = this.cache;
@@ -726,12 +726,12 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Creates normalized normal buffer attribute.
-	 *
-	 * @param {BufferAttribute} normal
-	 * @returns {BufferAttribute}
-	 *
-	 */
+	* Creates normalized normal buffer attribute.
+	*
+	* @param {BufferAttribute} normal
+	* @returns {BufferAttribute}
+	*
+	*/
 	createNormalizedNormalAttribute( normal ) {
 
 		const cache = this.cache;
@@ -767,12 +767,12 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Applies a texture transform, if present, to the map definition. Requires
-	 * the KHR_texture_transform extension.
-	 *
-	 * @param {Object} mapDef
-	 * @param {THREE.Texture} texture
-	 */
+	* Applies a texture transform, if present, to the map definition. Requires
+	* the KHR_texture_transform extension.
+	*
+	* @param {Object} mapDef
+	* @param {Texture} texture
+	*/
 	applyTextureTransform( mapDef, texture ) {
 
 		let didTransform = false;
@@ -835,13 +835,13 @@ class GLTFWriter {
 
 		console.warn( 'THREE.GLTFExporter: Merged metalnessMap and roughnessMap textures.' );
 
-		if ( metalnessMap instanceof CompressedTexture ) {
+		if ( metalnessMap.isCompressedTexture === true ) {
 
 			metalnessMap = decompress( metalnessMap );
 
 		}
 
-		if ( roughnessMap instanceof CompressedTexture ) {
+		if ( roughnessMap.isCompressedTexture === true ) {
 
 			roughnessMap = decompress( roughnessMap );
 
@@ -916,10 +916,10 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Process a buffer to append to the default one.
-	 * @param  {ArrayBuffer} buffer
-	 * @return {Integer}
-	 */
+	* Process a buffer to append to the default one.
+	* @param  {ArrayBuffer} buffer
+	* @return {Integer}
+	*/
 	processBuffer( buffer ) {
 
 		const json = this.json;
@@ -935,14 +935,14 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Process and generate a BufferView
-	 * @param  {BufferAttribute} attribute
-	 * @param  {number} componentType
-	 * @param  {number} start
-	 * @param  {number} count
-	 * @param  {number} target (Optional) Target usage of the BufferView
-	 * @return {Object}
-	 */
+	* Process and generate a BufferView
+	* @param  {BufferAttribute} attribute
+	* @param  {number} componentType
+	* @param  {number} start
+	* @param  {number} count
+	* @param  {number} target (Optional) Target usage of the BufferView
+	* @return {Object}
+	*/
 	processBufferView( attribute, componentType, start, count, target ) {
 
 		const json = this.json;
@@ -960,14 +960,14 @@ class GLTFWriter {
 
 				componentSize = 1;
 
-				break;
+			break;
 
 			case WEBGL_CONSTANTS.SHORT:
 			case WEBGL_CONSTANTS.UNSIGNED_SHORT:
 
 				componentSize = 2;
 
-				break;
+			break;
 
 			default:
 
@@ -987,7 +987,7 @@ class GLTFWriter {
 
 				if ( attribute.itemSize > 4 ) {
 
-					 // no support for interleaved data for itemSize > 4
+					// no support for interleaved data for itemSize > 4
 
 					value = attribute.array[ i * attribute.itemSize + a ];
 
@@ -1076,10 +1076,10 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Process and generate a BufferView from an image Blob.
-	 * @param {Blob} blob
-	 * @return {Promise<Integer>}
-	 */
+	* Process and generate a BufferView from an image Blob.
+	* @param {Blob} blob
+	* @return {Promise<Integer>}
+	*/
 	processBufferViewImage( blob ) {
 
 		const writer = this;
@@ -1111,13 +1111,13 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Process attribute to generate an accessor
-	 * @param  {BufferAttribute} attribute Attribute to process
-	 * @param  {THREE.BufferGeometry} geometry (Optional) Geometry used for truncated draw range
-	 * @param  {Integer} start (Optional)
-	 * @param  {Integer} count (Optional)
-	 * @return {Integer|null} Index of the processed accessor on the "accessors" array
-	 */
+	* Process attribute to generate an accessor
+	* @param  {BufferAttribute} attribute Attribute to process
+	* @param  {BufferGeometry} geometry (Optional) Geometry used for truncated draw range
+	* @param  {Integer} start (Optional)
+	* @param  {Integer} count (Optional)
+	* @return {Integer|null} Index of the processed accessor on the "accessors" array
+	*/
 	processAccessor( attribute, geometry, start, count ) {
 
 		const json = this.json;
@@ -1171,7 +1171,7 @@ class GLTFWriter {
 		}
 
 		if ( start === undefined ) start = 0;
-		if ( count === undefined || count === Infinity ) count = attribute.count;
+		if ( count === undefined ) count = attribute.count;
 
 		// Skip creating an accessor if the attribute doesn't have data to export
 		if ( count === 0 ) return null;
@@ -1209,13 +1209,13 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Process image
-	 * @param  {Image} image to process
-	 * @param  {Integer} format of the image (RGBAFormat)
-	 * @param  {Boolean} flipY before writing out the image
-	 * @param  {String} mimeType export format
-	 * @return {Integer}     Index of the processed texture in the "images" array
-	 */
+	* Process image
+	* @param  {Image} image to process
+	* @param  {Integer} format of the image (THREE.RGBAFormat)
+	* @param  {Boolean} flipY before writing out the image
+	* @param  {String} mimeType export format
+	* @return {Integer} Index of the processed texture in the "images" array
+	*/
 	processImage( image, format, flipY, mimeType = 'image/png' ) {
 
 		if ( image !== null ) {
@@ -1256,7 +1256,7 @@ class GLTFWriter {
 
 				if ( format !== RGBAFormat ) {
 
-					console.error( 'GLTFExporter: Only RGBAFormat is supported.', format );
+					console.error( 'GLTFExporter: Only THREE.RGBAFormat is supported.', format );
 
 				}
 
@@ -1266,18 +1266,9 @@ class GLTFWriter {
 
 				}
 
-				const data = new Uint8ClampedArray( image.height * image.width * 4 );
+				const imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
 
-				for ( let i = 0; i < data.length; i += 4 ) {
-
-					data[ i + 0 ] = image.data[ i + 0 ];
-					data[ i + 1 ] = image.data[ i + 1 ];
-					data[ i + 2 ] = image.data[ i + 2 ];
-					data[ i + 3 ] = image.data[ i + 3 ];
-
-				}
-
-				ctx.putImageData( new ImageData( data, image.width, image.height ), 0, 0 );
+				ctx.putImageData( imgData, 0, 0 );
 
 			} else {
 
@@ -1289,13 +1280,11 @@ class GLTFWriter {
 
 				pending.push(
 
-					getToBlobPromise( canvas, mimeType )
-						.then( blob => writer.processBufferViewImage( blob ) )
-						.then( bufferViewIndex => {
+					getToBlobPromise( canvas, mimeType ).then( blob => writer.processBufferViewImage( blob ) ).then( bufferViewIndex => {
 
-							imageDef.bufferView = bufferViewIndex;
+						imageDef.bufferView = bufferViewIndex;
 
-						} )
+					} )
 
 				);
 
@@ -1309,13 +1298,11 @@ class GLTFWriter {
 
 					pending.push(
 
-						getToBlobPromise( canvas, mimeType )
-							.then( blob => new FileReader().readAsDataURL( blob ) )
-							.then( dataURL => {
+						getToBlobPromise( canvas, mimeType ).then( blob => new FileReader().readAsDataURL( blob ) ).then( dataURL => {
 
-								imageDef.uri = dataURL;
+							imageDef.uri = dataURL;
 
-							} )
+						} )
 
 					);
 
@@ -1336,10 +1323,10 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Process sampler
-	 * @param  {Texture} map Texture to process
-	 * @return {Integer}     Index of the processed texture in the "samplers" array
-	 */
+	* Process sampler
+	* @param  {Texture} map Texture to process
+	* @return {Integer}     Index of the processed texture in the "samplers" array
+	*/
 	processSampler( map ) {
 
 		const json = this.json;
@@ -1358,10 +1345,10 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Process texture
-	 * @param  {Texture} map Map to process
-	 * @return {Integer} Index of the processed texture in the "textures" array
-	 */
+	* Process texture
+	* @param  {Texture} map Map to process
+	* @return {Integer} Index of the processed texture in the "textures" array
+	*/
 	processTexture( map ) {
 
 		const writer = this;
@@ -1374,13 +1361,13 @@ class GLTFWriter {
 		if ( ! json.textures ) json.textures = [];
 
 		// make non-readable textures (e.g. CompressedTexture) readable by blitting them into a new texture
-		if ( map instanceof CompressedTexture ) {
+		if ( map.isCompressedTexture === true ) {
 
 			map = decompress( map, options.maxTextureSize );
 
 		}
 
-		let mimeType = map.userData.mimeType;
+		let mimeType = map.userData ? (map.userData.mimeType || 'image/png') : 'image/png';
 
 		if ( mimeType === 'image/webp' ) mimeType = 'image/png';
 
@@ -1404,10 +1391,10 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Process material
-	 * @param  {THREE.Material} material Material to process
-	 * @return {Integer|null} Index of the processed material in the "materials" array
-	 */
+	* Process material
+	* @param  {Material} material Material to process
+	* @return {Integer|null} Index of the processed material in the "materials" array
+	*/
 	processMaterial( material ) {
 
 		const cache = this.cache;
@@ -1415,17 +1402,10 @@ class GLTFWriter {
 
 		if ( cache.materials.has( material ) ) return cache.materials.get( material );
 
-		if ( material.isShaderMaterial ) {
-
-			console.warn( 'GLTFExporter: THREE.ShaderMaterial not supported.' );
-			return null;
-
-		}
-
 		if ( ! json.materials ) json.materials = [];
 
 		// @QUESTION Should we avoid including any attribute that has the default value?
-		const materialDef = {	pbrMetallicRoughness: {} };
+		const materialDef = { pbrMetallicRoughness: {} };
 
 		if ( material.isMeshStandardMaterial !== true && material.isMeshBasicMaterial !== true ) {
 
@@ -1461,8 +1441,9 @@ class GLTFWriter {
 
 			const metalRoughMapDef = {
 				index: this.processTexture( metalRoughTexture ),
-				channel: metalRoughTexture.channel
+				texCoord: metalRoughTexture.channel
 			};
+
 			this.applyTextureTransform( metalRoughMapDef, metalRoughTexture );
 			materialDef.pbrMetallicRoughness.metallicRoughnessTexture = metalRoughMapDef;
 
@@ -1475,6 +1456,7 @@ class GLTFWriter {
 				index: this.processTexture( material.map ),
 				texCoord: material.map.channel
 			};
+
 			this.applyTextureTransform( baseColorMapDef, material.map );
 			materialDef.pbrMetallicRoughness.baseColorTexture = baseColorMapDef;
 
@@ -1498,6 +1480,7 @@ class GLTFWriter {
 					index: this.processTexture( material.emissiveMap ),
 					texCoord: material.emissiveMap.channel
 				};
+
 				this.applyTextureTransform( emissiveMapDef, material.emissiveMap );
 				materialDef.emissiveTexture = emissiveMapDef;
 
@@ -1565,25 +1548,39 @@ class GLTFWriter {
 		if ( material.side === DoubleSide ) materialDef.doubleSided = true;
 		if ( material.name !== '' ) materialDef.name = material.name;
 
-		this.serializeUserData( material, materialDef );
+		let mtl;
+
+		if ( material.isShaderMaterial === true ) {
+
+			console.warn( 'GLTFExporter: THREE.ShaderMaterial not officially supported.' );
+			mtl = new MeshStandardMaterial();
+			//return null;
+
+		} else {
+
+			mtl = material;
+
+		}
+
+		this.serializeUserData( mtl, materialDef );
 
 		this._invokeAll( function ( ext ) {
 
-			ext.writeMaterial && ext.writeMaterial( material, materialDef );
+			ext.writeMaterial && ext.writeMaterial( mtl, materialDef );
 
 		} );
 
 		const index = json.materials.push( materialDef ) - 1;
-		cache.materials.set( material, index );
+		cache.materials.set( mtl, index );
 		return index;
 
 	}
 
 	/**
-	 * Process mesh
-	 * @param  {THREE.Mesh} mesh Mesh to process
-	 * @return {Integer|null} Index of the processed mesh in the "meshes" array
-	 */
+	* Process mesh
+	* @param  {Mesh} mesh Mesh to process
+	* @return {Integer|null} Index of the processed mesh in the "meshes" array
+	*/
 	processMesh( mesh ) {
 
 		const cache = this.cache;
@@ -1676,8 +1673,7 @@ class GLTFWriter {
 
 			// Prefix all geometry attributes except the ones specifically
 			// listed in the spec; non-spec attributes are considered custom.
-			const validVertexAttributes =
-					/^(POSITION|NORMAL|TANGENT|TEXCOORD_\d+|COLOR_\d+|JOINTS_\d+|WEIGHTS_\d+)$/;
+			const validVertexAttributes = /^(POSITION|NORMAL|TANGENT|TEXCOORD_\d+|COLOR_\d+|JOINTS_\d+|WEIGHTS_\d+)$/;
 
 			if ( ! validVertexAttributes.test( attributeName ) ) attributeName = '_' + attributeName;
 
@@ -1692,9 +1688,7 @@ class GLTFWriter {
 			modifiedAttribute = null;
 			const array = attribute.array;
 
-			if ( attributeName === 'JOINTS_0' &&
-				! ( array instanceof Uint16Array ) &&
-				! ( array instanceof Uint8Array ) ) {
+			if ( attributeName === 'JOINTS_0' && ! ( array instanceof Uint16Array ) && ! ( array instanceof Uint8Array ) ) {
 
 				console.warn( 'GLTFExporter: Attribute "skinIndex" converted to type UNSIGNED_SHORT.' );
 				modifiedAttribute = new BufferAttribute( new Uint16Array( array ), attribute.itemSize, attribute.normalized );
@@ -1892,16 +1886,16 @@ class GLTFWriter {
 	}
 
 	/**
-	 * If a vertex attribute with a
-	 * [non-standard data type](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#meshes-overview)
-	 * is used, it is checked whether it is a valid data type according to the
-	 * [KHR_mesh_quantization](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_mesh_quantization/README.md)
-	 * extension.
-	 * In this case the extension is automatically added to the list of used extensions.
-	 *
-	 * @param {string} attributeName
-	 * @param {THREE.BufferAttribute} attribute
-	 */
+	* If a vertex attribute with a
+	* [non-standard data type](https://registry.khronos.org/glTF/specs/2.0/glTF-2.0.html#meshes-overview)
+	* is used, it is checked whether it is a valid data type according to the
+	* [KHR_mesh_quantization](https://github.com/KhronosGroup/glTF/blob/main/extensions/2.0/Khronos/KHR_mesh_quantization/README.md)
+	* extension.
+	* In this case the extension is automatically added to the list of used extensions.
+	*
+	* @param {string} attributeName
+	* @param {BufferAttribute} attribute
+	*/
 	detectMeshQuantization( attributeName, attribute ) {
 
 		if ( this.extensionsUsed[ KHR_MESH_QUANTIZATION ] ) return;
@@ -1914,25 +1908,25 @@ class GLTFWriter {
 
 				attrType = 'byte';
 
-				break;
+			break;
 
 			case Uint8Array:
 
 				attrType = 'unsigned byte';
 
-				break;
+			break;
 
 			case Int16Array:
 
 				attrType = 'short';
 
-				break;
+			break;
 
 			case Uint16Array:
 
 				attrType = 'unsigned short';
 
-				break;
+			break;
 
 			default:
 
@@ -1954,10 +1948,10 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Process camera
-	 * @param  {THREE.Camera} camera Camera to process
-	 * @return {Integer}      Index of the processed mesh in the "camera" array
-	 */
+	* Process camera
+	* @param  {Camera} camera Camera to process
+	* @return {Integer}      Index of the processed mesh in the "camera" array
+	*/
 	processCamera( camera ) {
 
 		const json = this.json;
@@ -1998,15 +1992,15 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Creates glTF animation entry from AnimationClip object.
-	 *
-	 * Status:
-	 * - Only properties listed in PATH_PROPERTIES may be animated.
-	 *
-	 * @param {THREE.AnimationClip} clip
-	 * @param {THREE.Object3D} root
-	 * @return {number|null}
-	 */
+	* Creates glTF animation entry from AnimationClip object.
+	*
+	* Status:
+	* - Only properties listed in PATH_PROPERTIES may be animated.
+	*
+	* @param {AnimationClip} clip
+	* @param {Object3D} root
+	* @return {number|null}
+	*/
 	processAnimation( clip, root ) {
 
 		const json = this.json;
@@ -2110,10 +2104,10 @@ class GLTFWriter {
 	}
 
 	/**
-	 * @param {THREE.Object3D} object
-	 * @return {number|null}
-	 */
-	 processSkin( object ) {
+	* @param {Object3D} object
+	* @return {number|null}
+	*/
+	processSkin( object ) {
 
 		const json = this.json;
 		const nodeMap = this.nodeMap;
@@ -2155,10 +2149,10 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Process Object3D node
-	 * @param  {THREE.Object3D} node Object3D to processNode
-	 * @return {Integer} Index of the node in the nodes list
-	 */
+	* Process Object3D node
+	* @param  {Object3D} node Object3D to processNode
+	* @return {Integer} Index of the node in the nodes list
+	*/
 	processNode( object ) {
 
 		const json = this.json;
@@ -2263,9 +2257,9 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Process Scene
-	 * @param  {Scene} node Scene to process
-	 */
+	* Process Scene
+	* @param  {Scene} node Scene to process
+	*/
 	processScene( scene ) {
 
 		const json = this.json;
@@ -2307,9 +2301,9 @@ class GLTFWriter {
 	}
 
 	/**
-	 * Creates a Scene to hold a list of objects and parse it
-	 * @param  {Array} objects List of objects to process
-	 */
+	* Creates a Scene to hold a list of objects and parse it
+	* @param  {Array} objects List of objects to process
+	*/
 	processObjects( objects ) {
 
 		const scene = new Scene();
@@ -2328,8 +2322,8 @@ class GLTFWriter {
 	}
 
 	/**
-	 * @param {THREE.Object3D|Array<THREE.Object3D>} input
-	 */
+	* @param {Object3D|Array<Object3D>} input
+	*/
 	processInput( input ) {
 
 		const options = this.options;
@@ -2393,10 +2387,10 @@ class GLTFWriter {
 }
 
 /**
- * Punctual Lights Extension
- *
- * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_lights_punctual
- */
+* Punctual Lights Extension
+*
+* Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_lights_punctual
+*/
 class GLTFLightExtension {
 
 	constructor( writer ) {
@@ -2458,14 +2452,14 @@ class GLTFLightExtension {
 
 		}
 
-		if ( light.target
-				&& ( light.target.parent !== light
+		if ( light.target &&
+			( light.target.parent !== light
 				|| light.target.position.x !== 0
 				|| light.target.position.y !== 0
 				|| light.target.position.z !== - 1 ) ) {
 
 			console.warn( 'THREE.GLTFExporter: Light direction may be lost. For best results, '
-				+ 'make light.target a child of the light with position 0,0,-1.' );
+			+ 'make light.target a child of the light with position 0,0,-1.' );
 
 		}
 
@@ -2488,10 +2482,10 @@ class GLTFLightExtension {
 }
 
 /**
- * Unlit Materials Extension
- *
- * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_unlit
- */
+* Unlit Materials Extension
+*
+* Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_unlit
+*/
 class GLTFMaterialsUnlitExtension {
 
 	constructor( writer ) {
@@ -2521,10 +2515,10 @@ class GLTFMaterialsUnlitExtension {
 }
 
 /**
- * Clearcoat Materials Extension
- *
- * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_clearcoat
- */
+* Clearcoat Materials Extension
+*
+* Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_clearcoat
+*/
 class GLTFMaterialsClearcoatExtension {
 
 	constructor( writer ) {
@@ -2551,6 +2545,7 @@ class GLTFMaterialsClearcoatExtension {
 				index: writer.processTexture( material.clearcoatMap ),
 				texCoord: material.clearcoatMap.channel
 			};
+
 			writer.applyTextureTransform( clearcoatMapDef, material.clearcoatMap );
 			extensionDef.clearcoatTexture = clearcoatMapDef;
 
@@ -2564,6 +2559,7 @@ class GLTFMaterialsClearcoatExtension {
 				index: writer.processTexture( material.clearcoatRoughnessMap ),
 				texCoord: material.clearcoatRoughnessMap.channel
 			};
+
 			writer.applyTextureTransform( clearcoatRoughnessMapDef, material.clearcoatRoughnessMap );
 			extensionDef.clearcoatRoughnessTexture = clearcoatRoughnessMapDef;
 
@@ -2575,6 +2571,7 @@ class GLTFMaterialsClearcoatExtension {
 				index: writer.processTexture( material.clearcoatNormalMap ),
 				texCoord: material.clearcoatNormalMap.channel
 			};
+
 			writer.applyTextureTransform( clearcoatNormalMapDef, material.clearcoatNormalMap );
 			extensionDef.clearcoatNormalTexture = clearcoatNormalMapDef;
 
@@ -2585,16 +2582,15 @@ class GLTFMaterialsClearcoatExtension {
 
 		extensionsUsed[ this.name ] = true;
 
-
 	}
 
 }
 
 /**
- * Iridescence Materials Extension
- *
- * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_iridescence
- */
+* Iridescence Materials Extension
+*
+* Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_iridescence
+*/
 class GLTFMaterialsIridescenceExtension {
 
 	constructor( writer ) {
@@ -2621,6 +2617,7 @@ class GLTFMaterialsIridescenceExtension {
 				index: writer.processTexture( material.iridescenceMap ),
 				texCoord: material.iridescenceMap.channel
 			};
+
 			writer.applyTextureTransform( iridescenceMapDef, material.iridescenceMap );
 			extensionDef.iridescenceTexture = iridescenceMapDef;
 
@@ -2636,6 +2633,7 @@ class GLTFMaterialsIridescenceExtension {
 				index: writer.processTexture( material.iridescenceThicknessMap ),
 				texCoord: material.iridescenceThicknessMap.channel
 			};
+
 			writer.applyTextureTransform( iridescenceThicknessMapDef, material.iridescenceThicknessMap );
 			extensionDef.iridescenceThicknessTexture = iridescenceThicknessMapDef;
 
@@ -2651,10 +2649,10 @@ class GLTFMaterialsIridescenceExtension {
 }
 
 /**
- * Transmission Materials Extension
- *
- * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_transmission
- */
+* Transmission Materials Extension
+*
+* Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_transmission
+*/
 class GLTFMaterialsTransmissionExtension {
 
 	constructor( writer ) {
@@ -2681,6 +2679,7 @@ class GLTFMaterialsTransmissionExtension {
 				index: writer.processTexture( material.transmissionMap ),
 				texCoord: material.transmissionMap.channel
 			};
+
 			writer.applyTextureTransform( transmissionMapDef, material.transmissionMap );
 			extensionDef.transmissionTexture = transmissionMapDef;
 
@@ -2696,10 +2695,10 @@ class GLTFMaterialsTransmissionExtension {
 }
 
 /**
- * Materials Volume Extension
- *
- * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_volume
- */
+* Materials Volume Extension
+*
+* Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_volume
+*/
 class GLTFMaterialsVolumeExtension {
 
 	constructor( writer ) {
@@ -2726,6 +2725,7 @@ class GLTFMaterialsVolumeExtension {
 				index: writer.processTexture( material.thicknessMap ),
 				texCoord: material.thicknessMap.channel
 			};
+
 			writer.applyTextureTransform( thicknessMapDef, material.thicknessMap );
 			extensionDef.thicknessTexture = thicknessMapDef;
 
@@ -2744,10 +2744,10 @@ class GLTFMaterialsVolumeExtension {
 }
 
 /**
- * Materials ior Extension
- *
- * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_ior
- */
+* Materials ior Extension
+*
+* Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_ior
+*/
 class GLTFMaterialsIorExtension {
 
 	constructor( writer ) {
@@ -2778,10 +2778,10 @@ class GLTFMaterialsIorExtension {
 }
 
 /**
- * Materials specular Extension
- *
- * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_specular
- */
+* Materials specular Extension
+*
+* Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_specular
+*/
 class GLTFMaterialsSpecularExtension {
 
 	constructor( writer ) {
@@ -2794,8 +2794,9 @@ class GLTFMaterialsSpecularExtension {
 	writeMaterial( material, materialDef ) {
 
 		if ( ! material.isMeshPhysicalMaterial || ( material.specularIntensity === 1.0 &&
-		       material.specularColor.equals( DEFAULT_SPECULAR_COLOR ) &&
-		     ! material.specularIntensityMap && ! material.specularColorTexture ) ) return;
+			material.specularColor.equals( DEFAULT_SPECULAR_COLOR ) &&
+			! material.specularIntensityMap && ! material.specularColorTexture ) ) return;
+
 
 		const writer = this.writer;
 		const extensionsUsed = writer.extensionsUsed;
@@ -2808,6 +2809,7 @@ class GLTFMaterialsSpecularExtension {
 				index: writer.processTexture( material.specularIntensityMap ),
 				texCoord: material.specularIntensityMap.channel
 			};
+
 			writer.applyTextureTransform( specularIntensityMapDef, material.specularIntensityMap );
 			extensionDef.specularTexture = specularIntensityMapDef;
 
@@ -2819,6 +2821,7 @@ class GLTFMaterialsSpecularExtension {
 				index: writer.processTexture( material.specularColorMap ),
 				texCoord: material.specularColorMap.channel
 			};
+
 			writer.applyTextureTransform( specularColorMapDef, material.specularColorMap );
 			extensionDef.specularColorTexture = specularColorMapDef;
 
@@ -2837,10 +2840,10 @@ class GLTFMaterialsSpecularExtension {
 }
 
 /**
- * Sheen Materials Extension
- *
- * Specification: https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_sheen
- */
+* Sheen Materials Extension
+*
+* Specification: https://github.com/KhronosGroup/glTF/tree/main/extensions/2.0/Khronos/KHR_materials_sheen
+*/
 class GLTFMaterialsSheenExtension {
 
 	constructor( writer ) {
@@ -2865,6 +2868,7 @@ class GLTFMaterialsSheenExtension {
 				index: writer.processTexture( material.sheenRoughnessMap ),
 				texCoord: material.sheenRoughnessMap.channel
 			};
+
 			writer.applyTextureTransform( sheenRoughnessMapDef, material.sheenRoughnessMap );
 			extensionDef.sheenRoughnessTexture = sheenRoughnessMapDef;
 
@@ -2876,6 +2880,7 @@ class GLTFMaterialsSheenExtension {
 				index: writer.processTexture( material.sheenColorMap ),
 				texCoord: material.sheenColorMap.channel
 			};
+
 			writer.applyTextureTransform( sheenColorMapDef, material.sheenColorMap );
 			extensionDef.sheenColorTexture = sheenColorMapDef;
 
@@ -2971,10 +2976,10 @@ class GLTFMaterialsEmissiveStrengthExtension {
 }
 
 /**
- * GPU Instancing Extension
- *
- * Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Vendor/EXT_mesh_gpu_instancing
- */
+* GPU Instancing Extension
+*
+* Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Vendor/EXT_mesh_gpu_instancing
+*/
 class GLTFMeshGpuInstancing {
 
 	constructor( writer ) {
@@ -3001,6 +3006,13 @@ class GLTFMeshGpuInstancing {
 		const quaternion = new Quaternion();
 		const scale = new Vector3();
 
+		let hasPosition = false;
+		let hasRotation = false;
+		let hasScale = false;
+
+		const iQuat = new Quaternion();
+		const iScale = new Vector3( 1, 1, 1 );
+
 		for ( let i = 0; i < mesh.count; i ++ ) {
 
 			mesh.getMatrixAt( i, matrix );
@@ -3010,16 +3022,19 @@ class GLTFMeshGpuInstancing {
 			quaternion.toArray( rotationAttr, i * 4 );
 			scale.toArray( scaleAttr, i * 3 );
 
+			if ( ! hasPosition && position.lengthSq() > 0 ) hasPosition = true;
+			if ( ! hasRotation && ! quaternion.equals( iQuat ) ) hasRotation = true;
+			if ( ! hasScale && ! scale.equals( iScale ) ) hasScale = true;
+
 		}
 
-		const attributes = {
-			TRANSLATION: writer.processAccessor( new BufferAttribute( translationAttr, 3 ) ),
-			ROTATION: writer.processAccessor( new BufferAttribute( rotationAttr, 4 ) ),
-			SCALE: writer.processAccessor( new BufferAttribute( scaleAttr, 3 ) ),
-		};
+		const attributes = {};
 
-		if ( mesh.instanceColor )
-			attributes._COLOR_0 = writer.processAccessor( mesh.instanceColor );
+		if ( hasPosition ) attributes.TRANSLATION = writer.processAccessor( new BufferAttribute( translationAttr, 3 ) );
+		if ( hasRotation ) attributes.ROTATION = writer.processAccessor( new BufferAttribute( rotationAttr, 4 ) );
+		if ( hasScale ) attributes.SCALE = writer.processAccessor( new BufferAttribute( scaleAttr, 3 ) );
+
+		if ( mesh.instanceColor ) attributes.COLOR_0 = writer.processAccessor( mesh.instanceColor );
 
 		nodeDef.extensions = nodeDef.extensions || {};
 		nodeDef.extensions[ this.name ] = { attributes };
@@ -3030,6 +3045,7 @@ class GLTFMeshGpuInstancing {
 	}
 
 }
+
 
 /**
  * Static utility functions
