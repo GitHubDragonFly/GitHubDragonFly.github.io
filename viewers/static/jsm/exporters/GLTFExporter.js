@@ -22,7 +22,6 @@ import {
 	Scene,
 	Source,
 	SRGBColorSpace,
-	CompressedTexture,
 	Vector3,
 	Quaternion,
 } from "three";
