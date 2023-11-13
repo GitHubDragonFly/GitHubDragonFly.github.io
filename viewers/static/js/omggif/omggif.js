@@ -513,7 +513,6 @@ function GifReader(buf) {
 
       default:
         throw new Error("Unknown gif block: 0x" + buf[p-1].toString(16));
-        break;
     }
   }
 
