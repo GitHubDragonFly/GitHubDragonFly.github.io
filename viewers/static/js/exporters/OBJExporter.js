@@ -583,7 +583,9 @@
 						if ( mat.color ) mtlOutput += 'Kd ' + mat.color.r + ' ' + mat.color.g + ' ' + mat.color.b + '\n';
 						if ( mat.emissive ) mtlOutput += 'Ke ' + mat.emissive.r + ' ' + mat.emissive.g + ' ' + mat.emissive.b + '\n';
 						if ( mat.specular ) mtlOutput += 'Ks ' + mat.specular.r + ' ' + mat.specular.g + ' ' + mat.specular.b + '\n';
-						if ( mat.shininess !== undefined && mat.shininess > 0 ) mtlOutput += 'Ns ' + mat.shininess + '\n';
+						if ( ( mat.shininess !== undefined && mat.shininess > 0 ) || ( mat.glossiness !== undefined && mat.glossiness > 0 ) ) {
+							mtlOutput += 'Ns ' + ( mat.shininess ? mat.shininess : mat.glossiness ) + '\n';
+						}
 						if ( mat.metalness !== undefined && mat.metalness >= 0 ) mtlOutput += 'Pm ' + mat.metalness + '\n';
 						if ( mat.roughness !== undefined && mat.roughness >= 0 ) mtlOutput += 'Pr ' + mat.roughness + '\n';
 						if ( mat.ior !== undefined && mat.ior >= 1 && mat.ior !== 1.5 ) {
@@ -893,7 +895,7 @@
 									const yo = mat.metalnessMap.offset.y;
 									const ws = mat.metalnessMap.wrapS;
 									const wt = mat.metalnessMap.wrapT;
-	
+
 									if ( map_uuids.includes( mat.metalnessMap.uuid ) === false ) {
 
 										name = 'metalMap' + count;
