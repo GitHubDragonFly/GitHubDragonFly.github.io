@@ -885,7 +885,7 @@ THREE.LegacyJSONLoader = ( function () {
 
 				}
 
-				var geometry = new THREE.Geometry();
+				let geometry = new THREE.Geometry();
 
 				parseModel( json, geometry );
 				parseSkin( json, geometry );
@@ -895,17 +895,19 @@ THREE.LegacyJSONLoader = ( function () {
 				geometry.computeFaceNormals();
 				geometry.computeBoundingSphere();
 
+				let geometry_only = false, materials;
+
 				if ( json.materials === undefined || json.materials.length === 0 ) {
 
-					return { geometry: geometry };
+					geometry_only = true;
 
 				} else {
 
-					var materials = initMaterials( json.materials, this.resourcePath || path, this.crossOrigin, this.manager );
-
-					return { geometry: geometry, materials: materials };
+					materials = initMaterials( json.materials, this.resourcePath || path, this.crossOrigin, this.manager );
 
 				}
+
+				return geometry_only === true ? { geometry: geometry } : { geometry: geometry, materials: materials };
 
 			};
 

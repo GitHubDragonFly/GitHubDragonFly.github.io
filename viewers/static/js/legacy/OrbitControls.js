@@ -613,9 +613,6 @@
 
 			}
 
-			function handleMouseUp( ) { // no-op
-			}
-
 			function handleMouseWheel( event ) {
 
 				if ( event.deltaY < 0 ) {
@@ -797,11 +794,9 @@
 
 			}
 
-			function handleTouchEnd( ) { // no-op
-			} //
+			//
 			// event handlers - FSM: listen for events and reset state
 			//
-
 
 			function onPointerDown( event ) {
 
@@ -979,7 +974,6 @@
 
 			function onMouseUp( event ) {
 
-				handleMouseUp( event );
 				scope.dispatchEvent( _endEvent );
 				state = STATE.NONE;
 
@@ -1104,7 +1098,6 @@
 
 			function onTouchEnd( event ) {
 
-				handleTouchEnd( event );
 				scope.dispatchEvent( _endEvent );
 				state = STATE.NONE;
 
