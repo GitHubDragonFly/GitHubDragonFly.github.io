@@ -54,13 +54,13 @@ Number Type Converter
   - `GLTF Legacy` viewer is for v1.0 glTF files and is purely experimental and rather limited (see notes further below)
 
 - Special notes about `ASSIMP Viewer` which is using [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and [ASSIMP](https://github.com/assimp/assimp) library:
-  - This is a revamped version of my GLTF v2.0 Viewer and is a sort of ASSIMP(JS) / three.js hybrid
+  - This is a revamped version of my GLTF Viewer and is a sort of ASSIMP(JS) / three.js hybrid
   - It can be used instead of GLTF v2.0 and GLTF v1.0 Legacy viewers and also provides more export options
   - Might have bugs and interface / library related limitations and slow to load some models
   - It tries to take advantage of the `THREE.MeshPhysicalMaterial` to bring a GLTF alike functionality for OBJ + MTL models
   - Has multiple export options available, with special notes about JSON formats:
-    - Use [JSON Viewer](https://githubdragonfly.github.io/viewers/templates/JSON%20Viewer.html) to see all models exported as `JSON`
-    - Use [JSON Legacy](https://githubdragonfly.github.io/viewers/templates/JSON%20Legacy.html) viewer to see all models exported as `ASSJSON`
+    - Try using [JSON Viewer](https://githubdragonfly.github.io/viewers/templates/JSON%20Viewer.html) to see all models exported as `JSON`
+    - Try using [JSON Legacy](https://githubdragonfly.github.io/viewers/templates/JSON%20Legacy.html) viewer to see all models exported as `ASSJSON`
     - Both `JSON` and `ASSJSON` exported files use the same `.json` extension
   - GLTF / GLB v2.0 and DRC models will be handled by three.js, as originally intended
   - All other formats, including GLTF / GLB v1.0, will be initially handled by ASSIMP(JS), converted to `GLB2` and passed on to three.js `GLTF Loader` for displaying
@@ -201,7 +201,7 @@ Number Type Converter
   - `Eq` - equirectangular background
     - `R` - reflectivity (envMap + metalness)
 - JSON viewers support three.js and assimp JS / JSON formats with limitations:
-  - JSON Viewer is currently using r156 of three.js and cannot open legacy formats
+  - JSON Viewer is currently using r158 of three.js and cannot open legacy formats
   - JSON Legacy viewer is using r111 of three.js to support legacy THREE.Geometry:
     - It is using 4 loaders: ObjectLoader, BufferGeometryLoader, LegacyJSONLoader and AssimpJSONLoader
     - It could possibly open and export current three.js JSON format, with limitations of r111
