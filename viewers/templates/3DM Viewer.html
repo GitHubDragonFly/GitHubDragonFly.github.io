@@ -5,22 +5,67 @@
     <meta name="description" content="3DM (Rhino3D) Viewer">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0" defer></script>
-    <script src="../static/js/RGBELoader.js" defer></script>
-    <script src="../static/js/3DMLoader.js" defer></script>
-    <script src="../static/js/upng/UPNG.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
+      import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
+      import { Rhino3dmLoader } from "three/addons/loaders/3DMLoader.js";
+      import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
+      import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
+
+      THREE = three_js;
+
+      manager = new THREE.LoadingManager();
+
+      manager.onProgress = function ( item, loaded, total ) {
+        if ( loaded === total ) {
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+          enable_disable( false );
+          render_requested = true;
+          mouse_wheel = true;
+          render();
+        }
+      }
+
+      rhino_loader = new Rhino3dmLoader( manager );
+      rhino_loader.setLibraryPath( 'https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0-beta2/' );
+
+      manager.addHandler(/\.3dm$/i, rhino_loader);
+
+      rgbe_loader = new RGBELoader();
+      rgbe_loader.setDataType( THREE.HalfFloatType );
+
+      texture_loader = new THREE.TextureLoader();
+
+      lil_gui = GUI;
+
+      if (menu_location_bottom === false) {
+        let fixed_menu_bottom = ( parseInt( $("#fixed_menu").outerHeight( true ) ) + 2 ).toString() + "px";
+        document.getElementById("gui_position").style.marginTop = fixed_menu_bottom;
+      } else {
+        document.getElementById("gui_position").style.marginTop = "2px";
+      }
+
+      orb_controls = OrbitControls;
+      orb_controls_gizmo = OrbitControlsGizmo;
+    </script>
+
+    <script src="../static/js/upng/UPNG.min.js" defer></script>
+    <script src="../static/js/omggif/omggif.min.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
-    <script src="../static/js/omggif/omggif.js" defer></script>
-    <script src="../static/js/OrbitControls.js" defer></script>
-    <script src="../static/js/OrbitControlsGizmo.js" defer></script>
     <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
-    <script src="../static/js/utils/TextureUtils.js" defer></script>
-    <script src="../static/js/exporters/PLYExporter.js" defer></script>
-    <script src="../static/js/exporters/STLExporter.js" defer></script>
-    <script src="../static/js/exporters/OBJExporter.js" defer></script>
-    <script src="../static/js/exporters/GLTFExporter.js" defer></script>
-    <script src="../static/js/exporters/ColladaExporter.js" defer></script>
 
     <style>
       body,html{
@@ -315,8 +360,8 @@
         </select>
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 2px; border-radius: 2px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
-            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="10" step="0.25" value="2" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
-            <span id="dli_val">2</span>
+            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="10" step="0.25" value="2.5" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
+            <span id="dli_val">2.5</span>
           </div>
         </button>
         <button title="Ambient Light Intensity" id="btn_dc_ali" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 2px; border-radius: 2px;" onclick="show_hide_dropdown_ali();">ALi
@@ -593,12 +638,13 @@
     <script>
       const image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF', '.SVG', '.WEBP' ];
 
-      var manager, texture_loader, rgbe_loader, rhino_loader, obj_is_mesh;
+      var THREE, manager, texture_loader, rgbe_loader, rhino_loader, obj_is_mesh;
       var renderer, scene, camera, rhino_obj, render_requested, edges, edges_visible;
-      var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var lil_gui, gui, gui_set = false, gui_multi_layers, params, toneMappingOptions;
       var guiExposure, guiToneMapping, guiBlurriness, guiSetEnvMap;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
+      var controls, orb_controls, gizmo, orb_controls_gizmo;
+      var grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
@@ -661,33 +707,35 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let obj_exporter = new THREE.OBJExporter( manager );
+          const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.js" );
 
-          let exported = obj_exporter.parse( rhino_obj, filename );
+          let obj_exporter = new OBJExporter( manager );
 
-          zip.file( filename + '.obj', exported[ 'obj' ] );
+          await obj_exporter.parse( rhino_obj, filename, async function( exported ) {
+            zip.file( filename + '.obj', exported[ 'obj' ] );
 
-          if (exported[ 'mtl' ]) {
-            zip.file( filename + '.mtl', exported[ 'mtl' ] );
+            if (exported[ 'mtl' ]) {
+              zip.file( filename + '.mtl', exported[ 'mtl' ] );
 
-            if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
-              let processed_index = 0;
+              if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
+                let processed_index = 0;
 
-              exported[ 'tex' ].forEach( async tex => {
-                let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+                exported[ 'tex' ].forEach( async tex => {
+                  let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
 
-                zip.file( `${ tex.name }.${ tex.ext }`, blob );
+                  zip.file( `${ tex.name }.${ tex.ext }`, blob );
 
-                if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
+                  if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
 
-                processed_index += 1;
-              });
+                  processed_index += 1;
+                });
+              } else {
+                await process_zip( '_OBJ' );
+              }
             } else {
               await process_zip( '_OBJ' );
             }
-          } else {
-            await process_zip( '_OBJ' );
-          }
+          });
         }
       }
 
@@ -697,7 +745,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let ply_exporter = new THREE.PLYExporter( manager );
+          const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.js" );
+
+          let ply_exporter = new PLYExporter( manager );
 
           ply_exporter.parse( rhino_obj, async function( json ) {
             let blob;
@@ -723,7 +773,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let stl_exporter = new THREE.STLExporter( manager );
+          const { STLExporter } = await import( "../static/jsm/exporters/STLExporter.js" );
+
+          let stl_exporter = new STLExporter( manager );
 
           let string = stl_exporter.parse( rhino_obj ).split( ',' );
           let blob = new Blob( [ string ], { type: 'text/plain' } );
@@ -740,7 +792,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let dae_exporter = new THREE.ColladaExporter( manager );
+          const { ColladaExporter } = await import( "../static/jsm/exporters/ColladaExporter.js" );
+
+          let dae_exporter = new ColladaExporter( manager );
 
           let result = dae_exporter.parse( rhino_obj );
 
@@ -770,7 +824,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let gltf_exporter = new THREE.GLTFExporter( manager );
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
 
           let options = { binary: binary, maxTextureSize: 1024 || Infinity };
 
@@ -1563,36 +1619,9 @@
 
         enable_disable( true );
 
-        // Manager from ThreeJs to track a loader and its status
-        if (manager === undefined) manager = new THREE.LoadingManager();
-
-        manager.onProgress = function ( item, loaded, total ) {
-          if ( loaded === total ) {
-            console.timeEnd( 'Loading Time' );
-            document.getElementById('div_loading').style.display = 'none';
-            enable_disable( false );
-            render_requested = true;
-            mouse_wheel = true;
-            render();
-          }
-        }
-
-        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
-
-        if (rhino_loader === undefined) {
-          rhino_loader = new THREE.Rhino3dmLoader( manager );
-          rhino_loader.setLibraryPath( 'https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/' );
-          manager.addHandler(/\.3dm$/i, rhino_loader);
-        }
-
         if (zip === undefined) zip = new JSZip();
 
         if (gui === undefined) gui = new lil_gui( { autoPlace: false, container: document.getElementById('gui_position') } );
-
-        if (rgbe_loader === undefined) {
-          rgbe_loader = new THREE.RGBELoader();
-          rgbe_loader.setDataType( THREE.HalfFloatType );
-        }
 
         if (params === undefined) params = { setEnvMap: false, exposure: 0.7, toneMapping: 'ACESFilmic', blurriness: 0.3 };
 
@@ -1716,14 +1745,14 @@
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2.5 );
           directionalLight.position.set( 0, 0, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls( camera, renderer.domElement );
+          controls = new orb_controls( camera, renderer.domElement );
           controls.enableZoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
@@ -1741,7 +1770,7 @@
         }
 
         if (gizmo === undefined) {
-          gizmo = new OrbitControlsGizmo( controls, {
+          gizmo = new orb_controls_gizmo( controls, {
             size: 65,
             padding: 4,
             bubbleSizePrimary: 7,
@@ -2415,7 +2444,7 @@
         // Reset all range values
         document.getElementById('opacity_val').innerText = 1;
         document.getElementById('ali_val').innerText = 0;
-        document.getElementById('dli_val').innerText = 2;
+        document.getElementById('dli_val').innerText = 2.5;
         document.getElementById('x_val').innerText = 0;
         document.getElementById('y_val').innerText = 0;
         document.getElementById('z_val').innerText = 0;
@@ -2430,7 +2459,7 @@
         document.getElementById('ambient_light_color').value = '#FFFFFF';
         document.getElementById('hemisphere_light_color').value = '#000000';
         document.getElementById('directional_light_color').value = '#FFFFFF';
-        document.getElementById('directional_light_intensity').value = 2;
+        document.getElementById('directional_light_intensity').value = 2.5;
         document.getElementById('ambient_light_intensity').value = 0;
 
         // Reset the radio inputs
@@ -2581,6 +2610,7 @@
         if (navigator.userAgent.indexOf('Chrome') !== -1 || navigator.userAgent.indexOf('Safari') !== -1) {
           $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
+          $('#quick_rotation').change( function() { $(this).children(':selected').click(); });
         }
 
         mouse_wheel = true;
@@ -2588,8 +2618,6 @@
 
       function disabled_changed() {
         $('button').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
@@ -2597,11 +2625,11 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
 
         $('select').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
@@ -2609,11 +2637,11 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
 
         $('input[type=color]').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
@@ -2621,6 +2649,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
       }
 
@@ -2673,18 +2703,6 @@
         }
 
         mouse_wheel = true;
-      }
-    </script>
-
-    <script type="module">
-      import { GUI } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/libs/lil-gui.module.min.js';
-
-      lil_gui = GUI;
-
-      if (url_displayed === true) {
-        document.getElementById('gui_position').style.marginTop = '118px';
-      } else {
-        document.getElementById('gui_position').style.marginTop = '80px';
       }
     </script>
   </body>
