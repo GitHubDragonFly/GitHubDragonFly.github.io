@@ -45,6 +45,7 @@ Number Type Converter
 - Notes about GLTF viewers:
   - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component:
     - Local loading currently only supports self-contained models, either embedded GLTF or binary GLB
+    - It supports loading of multiple models, switchable with the viewer's `M` button
     - Error handling narrows down to showing the `ERROR!` message so check the console output for details 
   - `GLTF Viewer` is for v2.0 glTF files and is currently using r158 of three.js:
     - doesn't support `pbrSpecularGlossiness`
