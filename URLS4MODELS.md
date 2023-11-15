@@ -31,7 +31,7 @@ Else, copy any of the following links and then paste it within the `URL` option 
 - access to [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF v1.0 examples for GLTF Legacy viewer, mind the correct path after `1.0`:
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/1.0/VC/glTF-Embedded/VC.gltf`
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/1.0/Avocado/glTF-Embedded/Avocado.gltf`
-- access to [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF v2.0 examples for GLTF Viewer, mind the correct path after `2.0`:
+- access to [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF v2.0 examples for GLTF / GM Viewer, mind the correct path after `2.0`:
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Sponza/glTF/Sponza.gltf`
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf`
 - for multiple camera GLB example try downloading the fixed `VC-v2.glb.zip` file posted by donmccurdy [here](https://github.com/KhronosGroup/glTF-Sample-Models/issues/275)
