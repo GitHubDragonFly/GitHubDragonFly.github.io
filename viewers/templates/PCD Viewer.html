@@ -5,23 +5,43 @@
     <meta name="description" content="PCD (Point Cloud Data) and XYZ Viewer">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js" defer></script>
-    <script src="../static/assimpjs/assimpjs.js" defer></script>
-    <script src="../static/js/PCDLoader.js" defer></script>
-    <script src="../static/js/XYZLoader.js" defer></script>
-    <script src="../static/js/upng/UPNG.js" defer></script>
-    <script src="../static/js/pako/dist/pako.min.js" defer></script>
-    <script src="../static/js/omggif/omggif.js" defer></script>
-    <script src="../static/js/OrbitControls.js" defer></script>
-    <script src="../static/js/OrbitControlsGizmo.js" defer></script>
-    <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
-    <script src="../static/js/utils/TextureUtils.js" defer></script>
-    <script src="../static/js/exporters/PLYExporter.js" defer></script>
-    <script src="../static/js/exporters/OBJExporter.js" defer></script>
-    <script src="../static/js/exporters/GLTFExporter.js" defer></script>
-    <script src="../static/js/exporters/ColladaExporter.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/rhino3dm.min.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { PCDLoader } from "three/addons/loaders/PCDLoader.js";
+      import { XYZLoader } from "../../static/jsm/loaders/XYZLoader.js";
+      import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
+      import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
+
+      THREE = three_js;
+
+      manager = new THREE.LoadingManager();
+      manager.onLoad = function() { mouse_wheel = true; }
+
+      pcd_loader = new PCDLoader( manager );
+      xyz_loader = new XYZLoader( manager );
+      texture_loader = new THREE.TextureLoader();
+
+      orb_controls = OrbitControls;
+      orb_controls_gizmo = OrbitControlsGizmo;
+    </script>
+
+    <script src="../static/assimpjs/assimpjs.js" defer></script>
+    <script src="../static/js/upng/UPNG.min.js" defer></script>
+    <script src="../static/js/omggif/omggif.min.js" defer></script>
+    <script src="../static/js/pako/dist/pako.min.js" defer></script>
+    <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
 
     <style>
       body, html {
@@ -495,15 +515,16 @@
     </script>
 
     <script>
-      var manager, texture_loader, pcd_loader, xyz_loader, xyz_format;
-      var renderer, scene, camera, pcd_obj, controls, render_requested;
+      var THREE, manager, texture_loader, pcd_loader, xyz_loader, xyz_format;
+      var renderer, scene, camera, pcd_obj, render_requested, count = 0;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
-      var gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
-      var ww = window.innerWidth, wh = window.innerHeight, count = 0;
+      var controls, orb_controls, gizmo, orb_controls_gizmo;
+      var grid, polar_grid, grid_visible, polar_grid_visible;
+      var ww = window.innerWidth, wh = window.innerHeight;
       var rot_x = 0, rot_y = 0, rot_z = 0, filename;
       var bounding_box, bgnd_linear_gradient, gif_export;
+      var selected_pcd_file, selected_url_file = '', zip;
       var original_material_opacity, original_material_color, enable_opacity;
-      var selected_pcd_file, selected_pcd_url_file, selected_url_file = '', zip;
       var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
       var vertex_colors_enabled, original_vertex_color_array, random_vertex_colors_enabled, random_vertex_color_array;
 
@@ -525,7 +546,7 @@
         if (selected_pcd_file) {
           filename = selected_pcd_file.name.substring( 0, selected_pcd_file.name.lastIndexOf('.') );
         } else {
-          filename = selected_pcd_url_file.substring( selected_pcd_url_file.lastIndexOf('/') + 1, selected_pcd_url_file.lastIndexOf('.') );
+          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') );
         }
       }
 
@@ -553,33 +574,35 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let obj_exporter = new THREE.OBJExporter( manager );
+          const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.js" );
 
-          let exported = obj_exporter.parse( pcd_obj, filename );
+          let obj_exporter = new OBJExporter( manager );
 
-          zip.file( filename + '.obj', exported[ 'obj' ] );
+          await obj_exporter.parse( pcd_obj, filename, async function( exported ) {
+            zip.file( filename + '.obj', exported[ 'obj' ] );
 
-          if (exported[ 'mtl' ]) {
-            zip.file( filename + '.mtl', exported[ 'mtl' ] );
+            if (exported[ 'mtl' ]) {
+              zip.file( filename + '.mtl', exported[ 'mtl' ] );
 
-            if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
-              let processed_index = 0;
+              if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
+                let processed_index = 0;
 
-              exported[ 'tex' ].forEach( async tex => {
-                let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+                exported[ 'tex' ].forEach( async tex => {
+                  let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
 
-                zip.file( `${ tex.name }.${ tex.ext }`, blob );
+                  zip.file( `${ tex.name }.${ tex.ext }`, blob );
 
-                if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
+                  if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
 
-                processed_index += 1;
-              });
+                  processed_index += 1;
+                });
+              } else {
+                await process_zip( '_OBJ' );
+              }
             } else {
               await process_zip( '_OBJ' );
             }
-          } else {
-            await process_zip( '_OBJ' );
-          }
+          });
         }
       }
 
@@ -589,7 +612,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let ply_exporter = new THREE.PLYExporter( manager );
+          const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.js" );
+
+          let ply_exporter = new PLYExporter( manager );
 
           ply_exporter.parse( pcd_obj, async function( json ) {
             let blob;
@@ -615,7 +640,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let dae_exporter = new THREE.ColladaExporter( manager );
+          const { ColladaExporter } = await import( "../static/jsm/exporters/ColladaExporter.js" );
+
+          let dae_exporter = new ColladaExporter( manager );
 
           let result = dae_exporter.parse( pcd_obj );
 
@@ -645,9 +672,11 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let gltf_exporter = new THREE.GLTFExporter( manager );
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
 
-          let options = { binary: binary, maxTextureSize: 4096 || Infinity };
+          let gltf_exporter = new GLTFExporter( manager );
+
+          let options = { binary: binary, maxTextureSize: 1024 || Infinity };
 
           gltf_exporter.parse( pcd_obj, async json => {
             let blob;
@@ -678,9 +707,11 @@
 
           // Try to convert the scene to glb and then to fbx
 
-          let gltf_exporter = new THREE.GLTFExporter( manager );
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
 
-          let options = {	binary: true, maxTextureSize: 4096 || Infinity };
+          let gltf_exporter = new GLTFExporter( manager );
+
+          let options = {	binary: true, maxTextureSize: 1024 || Infinity };
 
           gltf_exporter.parse( pcd_obj, function( json ) {
             let blob = new Blob( [ json ], { type: 'application/octet-stream' } );
@@ -1309,18 +1340,9 @@
 
         enable_disable( true );
 
-        // Manager from ThreeJs to track a loader and its status
-        if (manager === undefined) manager = new THREE.LoadingManager();
-
-        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
-
-        if (pcd_loader === undefined) pcd_loader = new THREE.PCDLoader( manager );
-        if (xyz_loader === undefined) xyz_loader = new THREE.XYZLoader( manager );
-
         if (zip === undefined) zip = new JSZip();
 
         selected_pcd_file = null;
-        selected_pcd_url_file = null;
         xyz_format = false;
         mouse_down = false;
         mouse_wheel = true;
@@ -1393,7 +1415,7 @@
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls = new orb_controls( camera, renderer.domElement );
           controls.enableZoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
@@ -1411,7 +1433,7 @@
         }
 
         if (gizmo === undefined) {
-          gizmo = new OrbitControlsGizmo( controls, {
+          gizmo = new orb_controls_gizmo( controls, {
             size: 65,
             padding: 4,
             bubbleSizePrimary: 7,
@@ -1512,41 +1534,61 @@
 
       function loadURLFile() {
         if (selected_url_file !== '') {
-          if (selected_url_file.indexOf( ',' ) > -1) {
-            let urls = selected_url_file.split( ',' );
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+          }
 
-            for (let i = 0; i < urls.length; i++) {
-              let url = urls[ i ].trim();
+          // No extension checking for URL so it has to point to PCD or XYZ model
 
-              if (url.startsWith('https://github.com') === true) {
-                url = ( url.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
-              }
+          pcd_loader.load( selected_url_file, function( points ) {
+            points.geometry.computeBoundingBox();
+            points.geometry.computeBoundingSphere();
+            points.geometry.computeVertexNormals();
+            points.geometry.center();
+            points.geometry.rotateX( Math.PI );
 
-              if (url.toUpperCase().endsWith('.PCD')) selected_pcd_url_file = url;
-              else if (url.toUpperCase().endsWith('.XYZ')) { selected_pcd_url_file = url; xyz_format = true; }
-            }
-          } else {
-            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-              selected_pcd_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+            original_material_opacity = points.material.opacity;
+            points.material.transparent = true;
+
+            if (points.material.vertexColors) {
+              vertex_colors_enabled = true;
+              original_material_color = { r: 1, g: 1, b: 1 };
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
             } else {
-              if (selected_url_file.startsWith('https://github.com') === true) {
-                selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
-              }
-
-              if (selected_url_file.toUpperCase().endsWith('.PCD')) selected_pcd_url_file = selected_url_file;
-              else if (selected_url_file.toUpperCase().endsWith('.XYZ')) { selected_pcd_url_file = selected_url_file; xyz_format = true; }
+              original_material_color = new THREE.Color( points.material.color );
             }
-          }
 
-          if (selected_pcd_url_file === null) {
-            handle_error( 'Unsupported URL model!' );
-            return;
-          }
+            points.name = 'pcd_points';
 
-          let loader = (xyz_format === true) ? xyz_loader : pcd_loader;
+            pcd_obj = points.clone();
 
-          loader.load( selected_pcd_url_file, function( points ) {
-            if (xyz_format === true) {
+            pcd_obj.sizeAttenuation = true;
+            pcd_obj.sortPoints = true;
+
+            pcd_obj.traverse( ( child ) => {
+              if (child.isPoints) {
+                random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+                original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+
+                child.material.vertexColors = vertex_colors_enabled;
+                child.material.needsUpdate = true;
+              }
+            });
+
+            // Add pcd_obj to the scene
+            scene.add( pcd_obj );
+            camera.lookAt( pcd_obj.position );
+
+            set_initial_scale();
+            resize();
+
+            finish_loading();
+          }, function ( xhr ) { // onProgress
+          }, function ( error1 ) { // onError
+            xyz_loader.load( selected_url_file, function( points ) {
               points.computeBoundingBox();
               points.computeBoundingSphere();
               points.computeVertexNormals();
@@ -1568,54 +1610,29 @@
               xyz_points.name = 'xyz_points';
 
               pcd_obj = xyz_points;
-            } else {
-              points.geometry.computeBoundingBox();
-              points.geometry.computeBoundingSphere();
-              points.geometry.computeVertexNormals();
-              points.geometry.center();
-              points.geometry.rotateX( Math.PI );
 
-              original_material_opacity = points.material.opacity;
-              points.material.transparent = true;
+              pcd_obj.traverse( ( child ) => {
+                if (child.isPoints) {
+                  random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+                  original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
 
-              if (points.material.vertexColors) {
-                vertex_colors_enabled = true;
-                original_material_color = { r: 1, g: 1, b: 1 };
-                document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                document.getElementById('btn_random_vertex_colors').disabled = false;
-              } else {
-                original_material_color = new THREE.Color( points.material.color );
-              }
+                  child.material.vertexColors = vertex_colors_enabled;
+                  child.material.needsUpdate = true;
+                }
+              });
 
-              points.name = 'pcd_points';
+              // Add pcd_obj to the scene
+              scene.add( pcd_obj );
+              camera.lookAt( pcd_obj.position );
 
-              pcd_obj = points.clone();
-            }
+              set_initial_scale();
+              resize();
 
-            pcd_obj.sizeAttenuation = true;
-            pcd_obj.sortPoints = true;
-
-            // Add pcd_obj to the scene
-            scene.add( pcd_obj );
-            camera.lookAt( pcd_obj.position );
-
-            set_initial_scale();
-            resize();
-
-            pcd_obj.traverse( ( child ) => {
-              if (child.isPoints) {
-                random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-                original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
-
-                child.material.vertexColors = vertex_colors_enabled;
-                child.material.needsUpdate = true;
-              }
+              finish_loading();
+            }, function ( xhr ) { // onProgress
+            }, function ( error2 ) { // onError
+              handle_error( error2 );
             });
-
-            finish_loading();
-          }, function ( xhr ) { // onProgress
-          }, function ( error ) { // onError
-            handle_error( error );
           });
         }
       }
@@ -1928,8 +1945,6 @@
 
       function disabled_changed() {
         $('button').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
@@ -1937,11 +1952,23 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
+        });
+
+        $('select').each( function() {
+          if (this.disabled === false) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
         });
 
         $('input[type=color]').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
@@ -1949,6 +1976,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
       }
 
