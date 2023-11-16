@@ -80,7 +80,7 @@ Number Type Converter
 - Special notes about `Quick Viewer` which is using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
   - It is purely online based and can be used as standalone HTML file (just delete `favicon.ico` import)
   - Seems to have a rather good fit on mobile devices due to its simple GUI
-  - It can currently export to OBJ / GLB / GLTF formats even on a mobile phone (as tested on an Android device)
+  - It can currently export to BIM, PLY, STL, OBJ, OFF, GLB and GLTF formats even on a mobile phone (as tested on an Android device)
   - Supported import formats: 3DS, 3DM, 3MF, AMF, BIM, BREP, BRP, DAE, FBX, GLB, GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
   - Unsupported import format: FCSTD (requires accessing a remote worker)
   - For proper viewing and additional features use the actual [Online 3D Viewer](https://3dviewer.net/) website
