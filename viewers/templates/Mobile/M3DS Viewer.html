@@ -6,13 +6,50 @@
     <meta name="description" content="3DS (3D Studio) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0" defer></script>
-    <script src="../../static/js/TDSLoader.js" defer></script>
-    <script src="../../static/js/TGALoader.js" defer></script>
-    <script src="../../static/js/DDSLoader.js" defer></script>
-    <script src="../../static/js/OrbitControls.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { DDSLoader } from "three/addons/loaders/DDSLoader.js";
+      import { TGALoader } from "three/addons/loaders/TGALoader.js";
+      import { TDSLoader } from "../../static/jsm/loaders/TDSLoader.js";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+      THREE = three_js;
+
+      manager = new THREE.LoadingManager();
+
+      manager.onProgress = function ( item, loaded, total ) {
+        if ( loaded === total ) {
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+          enable_disable( false );
+          render_requested = true;
+          mouse_wheel = true;
+          render();
+        }
+      }
+
+      tds_loader = new TDSLoader( manager );
+      tga_loader = new TGALoader( manager );
+      dds_loader = new DDSLoader( manager );
+
+      manager.addHandler( /\.tga$/i, tga_loader );
+      manager.addHandler( /\.dds$/i, dds_loader );
+
+      orb_controls = OrbitControls;
+      room_env = RoomEnvironment;
+    </script>
 
     <style>
       body,html{
@@ -179,13 +216,13 @@
     </script>
 
     <script>
-      var manager, tds_loader, tga_loader, dds_loader, textures;
-      var renderer, scene, camera, tds_obj, render_requested;
-      var controls, mouse_down, mouse_wheel, events_initialized;
-      var ambientLight, directionalLight, wireframe_enabled;
-      var ww = window.innerWidth, wh = window.innerHeight, count = 0;
-      var pmremGenerator, bounding_box, flatShading_enabled, vertex_colors_enabled;
-      var selected_tds_file, selected_tds_url_file, selected_url_file = '';
+      var THREE, manager, tds_loader, tga_loader, dds_loader, textures;
+      var renderer, scene, camera, tds_obj, render_requested, count = 0;
+      var controls, orb_controls, mouse_down, mouse_wheel, events_initialized;
+      var directionalLight, wireframe_enabled, flatShading_enabled;
+      var ww = window.innerWidth, wh = window.innerHeight, room_env;
+      var pmremGenerator, bounding_box, vertex_colors_enabled;
+      var selected_tds_file, selected_url_file = '', selected_tds_url_file;
       var url_displayed = false, url_loading = false, resource_path, url_resource_path;
 
       function set_back_color() {
@@ -204,6 +241,8 @@
           tds_obj.scale.multiplyScalar( 50 / size.y );
         } else if ( size.y > 0.02 ) {
           tds_obj.scale.multiplyScalar( 25 / size.y );
+        } else if ( size.y > 0.01 ) {
+          tds_obj.scale.multiplyScalar( 10 / size.y );
         } else {
           tds_obj.scale.multiplyScalar( 1 / size.y )
         }
@@ -211,6 +250,8 @@
         bounding_box.setFromObject( tds_obj );
         let center = bounding_box.getCenter(new THREE.Vector3());
         controls.target.set( center.x, center.y, center.z );
+
+        mouse_wheel = true;
       }
 
       function init() {
@@ -241,31 +282,6 @@
         enable_disable( true );
 
         THREE.DefaultLoadingManager.onLoad = function() { pmremGenerator.dispose(); }
-
-        if (manager === undefined) manager = new THREE.LoadingManager();
-
-        manager.onProgress = function ( item, loaded, total ) {
-          if ( loaded === total ) {
-            console.timeEnd( 'Loading Time' );
-            document.getElementById('div_loading').style.display = 'none';
-            enable_disable( false );
-            render_requested = true;
-            mouse_wheel = true;
-            render();
-          }
-        }
-
-        if (tds_loader === undefined) tds_loader = new THREE.TDSLoader( manager );
-
-        if (tga_loader === undefined) {
-          tga_loader = new THREE.TGALoader( manager );
-          manager.addHandler( /\.tga$/i, tga_loader );
-        }
-
-        if (dds_loader === undefined) {
-          dds_loader = new THREE.DDSLoader( manager );
-          manager.addHandler( /\.dds$/i, dds_loader );
-        }
 
         selected_tds_file = null;
         selected_tds_url_file = null;
@@ -319,6 +335,8 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = 0.7;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -341,15 +359,15 @@
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 1.75 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2.25 );
           directionalLight.position.set( 0, 0, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls( camera, renderer.domElement );
-          //controls.enableZoomToCursor = true;
+          controls = new orb_controls( camera, renderer.domElement );
+          controls.zoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
           controls.keyPanSpeed = 0.8; 
@@ -367,7 +385,7 @@
 
         if (scene.environment === null) {
           pmremGenerator = new THREE.PMREMGenerator( renderer );
-          scene.environment = pmremGenerator.fromScene( new THREE.RoomEnvironment(), .005 ).texture;
+          scene.environment = pmremGenerator.fromScene( new room_env(), .005 ).texture;
         }
 
         // Load 3DS file
@@ -398,10 +416,12 @@
 
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
+                  set_texture_colorSpace( mtl );
                   mtl.side = THREE.DoubleSide;
                   mtl.vertexColors = vertex_colors_enabled;
                 });
               } else {
+                set_texture_colorSpace( child.material );
                 child.material.side = THREE.DoubleSide;
                 child.material.vertexColors = vertex_colors_enabled;
               }
@@ -429,37 +449,36 @@
         if (selected_url_file != '') {
           if (selected_url_file.indexOf( ',' ) > -1) {
             let urls = selected_url_file.split( ',' );
-            let image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF', '.SVG', '.WEBP', '.TGA', '.DDS' ];
 
             for (let i = 0; i < urls.length; i++) {
               let url = urls[ i ].trim();
-              let url_uc = url.toUpperCase();
 
-              if (url_uc.endsWith('.3DS')) {
-                selected_tds_url_file = url;
-              } else if (image_extensions.includes( url_uc.substring( url_uc.lastIndexOf( '.' ) ))) {
-                url_resource_path += url.substring(url.lastIndexOf('/') + 1) + ',' + url + ',';
-              } else if (url.endsWith('/')) {
+              if (url.startsWith('https://www.dropbox.com') === true) {
+                url = url.replace('www.dropbox.com', 'dl.dropbox.com');
+              } else if (url.startsWith('https://github.com') === true) {
+                url = ( url.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+              }
+
+              // No extension checking for URLs so one has to point to 3DS model
+
+              if (url.endsWith('/')) {
                 tds_loader.setResourcePath( url );
+              } else {
+                selected_tds_url_file = url;
               }
             }
 
             if (url_resource_path !== '') url_resource_path = url_resource_path.substring( 0, url_resource_path.length - 1 );
           } else {
             if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-              selected_tds_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
-            } else {
-              if (selected_url_file.startsWith('https://github.com') === true) {
-                selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
-              }
-
-              if (selected_url_file.toUpperCase().endsWith('.3DS')) selected_tds_url_file = selected_url_file;
+              selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+            } else if (selected_url_file.startsWith('https://github.com') === true) {
+              selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
             }
-          }
 
-          if (selected_tds_url_file === null) {
-            handle_error( 'Unsupported URL model!' );
-            return;
+            // No extension checking for URL so it has to point to 3DS model
+
+            selected_tds_url_file = selected_url_file;
           }
 
           tds_loader.load( selected_tds_url_file, resource_path, url_resource_path, function( object ) {
@@ -479,10 +498,12 @@
 
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
+                    set_texture_colorSpace( mtl );
                     mtl.side = THREE.DoubleSide;
                     mtl.vertexColors = vertex_colors_enabled;
                   });
                 } else {
+                  set_texture_colorSpace( child.material );
                   child.material.side = THREE.DoubleSide;
                   child.material.vertexColors = vertex_colors_enabled;
                 }
@@ -502,6 +523,16 @@
         }
 
         mouse_wheel = true;
+      }
+
+      function set_texture_colorSpace( material ) {
+        if (material.map) material.map.colorSpace = THREE.SRGBColorSpace;
+        if (material.aoMap) material.aoMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.alphaMap) material.alphaMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.lightMap) material.lightMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.emissiveMap) material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+        if (material.normalMap) material.normalMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.specularColorMap) material.specularColorMap.colorSpace = THREE.SRGBColorSpace;
       }
 
       function handle_error( error ) {
@@ -536,9 +567,9 @@
               child.material.flatShading = flatShading_enabled;
               child.material.needsUpdate = true;
             }
-
-            mouse_wheel = true;
           }
+
+          mouse_wheel = true;
         });
       }
 
@@ -561,9 +592,9 @@
               } else {
                 child.material.wireframe = wireframe_enabled;
               }
-
-              mouse_wheel = true;
             }
+
+            mouse_wheel = true;
           });
         }
       }
@@ -645,14 +676,14 @@
         document.getElementById('btn_wireframe').disabled = disable;
         document.getElementById('btn_flat').disabled = disable;
         disabled_changed();
+
+        mouse_wheel = true;
       }
     </script>
 
     <script>
       function disabled_changed() {
         $('button').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
@@ -660,11 +691,11 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
 
         $('input[type=color]').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
@@ -672,6 +703,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
       }
     </script>
