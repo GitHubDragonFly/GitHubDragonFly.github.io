@@ -105,7 +105,7 @@ Number Type Converter
 - See `URLS4MODELS.md` file for examples
 - Some loading instructions also available in [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) and [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repositories
 - Import files locally from a file browser dialog:
-  - All files have to be in the same folder
+  - All files have to be in the same folder (zip files are currently not supported)
   - Some viewers might have some limitations
   - Possibly update your models to look for textures in the same folder
   - Make any necessary changes on your device to allow local file browsing
