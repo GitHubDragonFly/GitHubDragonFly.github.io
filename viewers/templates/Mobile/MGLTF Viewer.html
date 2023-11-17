@@ -17,6 +17,7 @@
 
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_decoder.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
     <script type="module">
       import * as three_js from "three";
@@ -33,6 +34,8 @@
 
       THREE = three_js;
       fflate = fflate_js;
+
+      default_camera = new THREE.Object3D();
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
@@ -106,12 +109,53 @@
       input[type=file] {
         vertical-align: middle;
         margin: 2px 0 2px 0;
-        max-width: 170px;
+        max-width: 165px;
+      }
+
+      input[type=range] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        min-width: 30px;
       }
 
       input[type=text] {
         vertical-align: middle;
         margin: 2px 2px 2px 0;
+      }
+
+      .dropdown {
+        background-color: transparent;
+        vertical-align: middle;
+        display: inline-block;
+        position: relative;
+        min-width: 40px;
+        font-size: 85%;
+        color: blue;
+        border: none;
+        padding: 1px;
+      }
+
+      .dropdown-content {
+        background-color: #FFFAD5;
+        border: 1px solid #DEAF64;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        position: absolute;
+        margin-top: 2px;
+        z-index: 10;
+      }
+
+      select {
+        vertical-align: middle;
+        border: 1px solid blue;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        background: none;
+        min-width: 70px;
+        height: 22px;
+        padding: 2px;
+        margin: 2px;
+        color: blue;
       }
 
       .error_msg {
@@ -166,16 +210,20 @@
 
     <title>GLTF v2.0 Viewer</title>
   </head>
-  <body onload="reset_all(); disabled_changed();" onresize="resize();">
+  <body onload="reset_all(); disabled_changed(); document_ready();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".gltf, .glb, .drc, .bin, .dds, .ktx2, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
-        <label for="back_color" title="Background Color">BG</label>
-        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
-        <button title="Variants" id="btn_variants" onclick="switch_variant();" disabled>V</button>
-        <button title="Animations" id="btn_animate" onclick="animate_gltf();" disabled>A</button>
-        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
+        <select title="Export" id="export_names" disabled>
+          <option value="" selected disabled>Export</option>
+          <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
+          <option title="DAE - Collada Format" value="dae" onclick="export_dae();">DAE</option>
+          <option title="PLY - Polygon File Format ascii" value="ply" onclick="export_ply( false );">PLY_a</option>
+          <option title="PLY - Polygon File Format binary" value="ply" onclick="export_ply( true );">PLY_b</option>
+          <option title="JSON - Three.js Format" value="json" onclick="export_json();">JSON</option>
+          <option title="USDZ - Universal Scene Description Format" value="usdz" onclick="export_usdz();">USDZ</option>
+        </select>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
@@ -183,12 +231,51 @@
         <button onclick="load_url_file();" style="min-width: 38px; margin-right: 3px;">Load</button>
         <button onclick="clear_url();" style="min-width: 38px; margin-right: 1px;">Clear</button>
       </div>
+      <div class="fm">
+        <label for="back_color" title="Background Color">BG</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <label for="directional_light_color" title="Directional Light Color">DL</label>
+        <input type="color" title="Directional Light Color" id="directional_light_color" onchange="set_directional_light_color();" disabled />
+        <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 2px; border-radius: 2px;" onclick="show_hide_dropdown_dli();">DLi
+          <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
+            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="10" step="0.25" value="3.75" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
+            <span id="dli_val">3.75</span>
+          </div>
+        </button>
+        <button title="Variants" id="btn_variants" onclick="switch_variant();" disabled>V</button>
+        <button title="Animations" id="btn_animate" onclick="animate_gltf();" disabled>A</button>
+        <button title="Morphs" id="btn_extras" onclick="animate_extra();" disabled>X</button>
+        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
+        <button title="Cameras" id="btn_cameras" onclick="switch_camera();" style="min-width: 28px;" disabled>C0</button>
+      </div>
+      <div class="fm" title="Export Download Link" id="div_download" style="display: none;">
+        <a id="link" href="#" target="_blank" onclick="document.getElementById('div_download').style.display = 'none';">Download Exported Model</a>
+        <button title="Cancel Download" onclick="cancel_download();" style="min-width: 50px; margin: 2px 0 2px 15px;">Cancel</button>
+      </div>
     </div>
 
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">Loading</div>
 
     <script>
+      function hide_dropdown_dli() { $('#dc_dli').fadeOut(); mouse_wheel = true; }
+
+      function show_hide_dropdown_dli() {
+        if ($('#dc_dli')[ 0 ].style.display === 'none') {
+          $('#dc_dli').fadeIn();
+
+          $('#dc_dli')[ 0 ].style.marginTop = '2px';
+
+          $('#directional_light_intensity').focus();
+        } else {
+          $('#dc_dli').fadeOut();
+        }
+
+        mouse_wheel = true;
+      }
+
+      function return_false() { return false; }
+
       function show_url() {
         if (url_displayed === true) {
           document.getElementById('url').style.display = 'none';
@@ -218,8 +305,8 @@
 
           renderer.setSize( window.innerWidth, window.innerHeight );
 
-          camera.aspect = window.innerWidth / window.innerHeight;
-          camera.updateProjectionMatrix();
+          default_camera.aspect = window.innerWidth / window.innerHeight;
+          default_camera.updateProjectionMatrix();
 
           ww = window.innerWidth;
           wh = window.innerHeight;
@@ -235,9 +322,10 @@
       var g_loader, ktx2_loader, texture_loader, gltf_loader, draco_loader, tga_loader, dds_loader;
       var THREE, fflate, gltf_obj, controls, orb_controls, wireframe_enabled, bounding_box, resource_path;
       var animations, animation_mixer, animation_running, current_animation, room_env;
+      var extras, current_extra, extra_running, render_requested, zip, clock;
       var variants, current_variant, variants_available, draco_material;
       var gltfMaterialsVariantsExtension, gltfVideoTextureExtension;
-      var manager, renderer, scene, camera, clock, render_requested;
+      var manager, renderer, scene, default_camera, camera, cameras, cam_id;
       var url_displayed = false, url_loading = false, vertex_colors_enabled;
       var directionalLight, ww = window.innerWidth, wh = window.innerHeight;
       var selected_gltf_file, selected_draco_file, selected_url_file = '';
@@ -245,9 +333,252 @@
       var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif, texture_files_dds;
       var texture_files_svg, texture_files_webp, texture_files_ktx2, texture_files_tga, bin_buffer_files;
 
+      function start_export() {
+        render_requested = false;
+        document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = 'Please wait ...';
+        document.getElementById('div_loading').style.display = 'block';
+        if (document.getElementById('div_download').style.display !== 'none') cancel_download();
+
+        set_filename();
+      }
+
+      function set_filename() {
+        if (selected_gltf_file) {
+          filename = selected_gltf_file.name.substring( 0, selected_gltf_file.name.lastIndexOf('.') );
+        } else if (selected_draco_file) {
+          filename = selected_draco_file.name.substring( 0, selected_draco_file.name.lastIndexOf('.') );
+        } else {
+          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') );
+        }
+      }
+
+      async function process_zip( ext = '' ) {
+        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 9 } } ).then( function( zipped_file ) {
+          let link = document.getElementById('link');
+          link.href = URL.createObjectURL( zipped_file );
+          URL.revokeObjectURL( zipped_file );
+          link.download = filename + ext + '.zip';
+
+          document.getElementById('div_loading').innerHTML = '';
+          document.getElementById('div_loading').style.display = 'none';
+          document.getElementById('fixed_menu').style.display = 'block';
+          document.getElementById('div_download').style.display = 'block';
+          render_requested = true;
+          mouse_wheel = true;
+          render();
+
+          zip = new JSZip();
+        });
+      }
+
+      function cancel_download() {
+        document.getElementById('div_download').style.display = 'none';
+        document.getElementById('link').download = '';
+        document.getElementById('link').href = '#';
+      }
+
+      async function export_obj() {
+        if (gltf_obj) {
+          start_export();
+
+          await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+          const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.js" );
+
+          let obj_exporter = new OBJExporter( manager );
+
+          await obj_exporter.parse( gltf_obj, filename, async function( exported ) {
+            zip.file( filename + '.obj', exported[ 'obj' ] );
+
+            if (exported[ 'mtl' ]) {
+              zip.file( filename + '.mtl', exported[ 'mtl' ] );
+
+              if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
+                let processed_index = 0;
+
+                exported[ 'tex' ].forEach( tex => {
+                  let blob = new Blob( [ tex.data ], { type: 'image/png' } );
+
+                  let img = new Image();
+
+                  img.onload = async function() {
+                    let canvas = document.createElement('canvas');
+
+                    canvas.width = img.naturalWidth;
+                    canvas.height = img.naturalHeight;
+
+                    const ctx = canvas.getContext( '2d' );
+
+                    // Flip image vertically
+                    ctx.scale( 1, -1 );
+                    ctx.drawImage( img, 0, -canvas.height );
+
+                    await new Promise( resolve => canvas.toBlob( resolve ) ).then( async function( canvas_blob ) {
+                      zip.file( `${ tex.name }.${ tex.ext }`, canvas_blob );
+
+                      if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
+                    });
+
+                    processed_index += 1;
+                  }
+
+                  img.src = URL.createObjectURL( blob );
+                  URL.revokeObjectURL( blob );
+                });
+              } else {
+                await process_zip( '_OBJ' );
+              }
+            } else {
+              await process_zip( '_OBJ' );
+            }
+          });
+        }
+      }
+
+      async function export_ply( binary = false ) {
+        if (gltf_obj) {
+          start_export();
+
+          await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+          const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.js" );
+
+          let ply_exporter = new PLYExporter( manager );
+
+          let options;
+
+          if (object_is_points === true) {
+            options = { binary: binary, excludeAttributes: [ 'index' ], littleEndian: true };
+          } else {
+            options = { binary: binary, littleEndian: true };
+          }
+
+          await ply_exporter.parse( gltf_obj, async function( json ) {
+            let blob;
+
+            if (binary === true) {
+              blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+            } else {
+              let string = json.split( ',' );
+              blob = new Blob( [ string ], { type: 'text/plain' } );
+            }
+
+            zip.file( filename + '.ply', blob );
+
+            await process_zip( binary === true ? '_PLY_binary' : '_PLY_ascii' );
+
+          }, options );
+        }
+      }
+
+      async function export_dae() {
+        if (gltf_obj) {
+          start_export();
+
+          await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+          const { ColladaExporter } = await import( "../static/jsm/exporters/ColladaExporter.js" );
+
+          let dae_exporter = new ColladaExporter( manager );
+
+          let result = dae_exporter.parse( gltf_obj );
+
+          zip.file( filename + '.dae', result.data );
+
+          if (result.textures && result.textures.length > 0) {
+            let processed_index = 0;
+
+            result.textures.forEach( tex => {
+              let blob = new Blob( [ tex.data ], { type: 'image/png' } );
+
+              let img = new Image();
+
+              img.onload = async function() {
+                let canvas = document.createElement('canvas');
+
+                canvas.width = img.naturalWidth;
+                canvas.height = img.naturalHeight;
+
+                const ctx = canvas.getContext( '2d' );
+
+                // Flip image vertically
+                ctx.scale( 1, -1 );
+                ctx.drawImage( img, 0, -canvas.height );
+
+                await new Promise( resolve => canvas.toBlob( resolve ) ).then( async function( canvas_blob ) {
+                  zip.file( `${ tex.name }.${ tex.ext }`, canvas_blob );
+
+                  if (processed_index === result.textures.length - 1) await process_zip( '_DAE' );
+                });
+
+                processed_index += 1;
+              }
+
+              img.src = URL.createObjectURL( blob );
+              URL.revokeObjectURL( blob );
+            });
+          } else {
+            await process_zip( '_DAE' );
+          }
+        }
+      }
+
+      async function export_json() {
+        if (gltf_obj) {
+          start_export();
+
+          await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+          if (animations.length > 0) gltf_obj.animations = animations;
+
+          let json = JSON.stringify( gltf_obj.toJSON() );
+          let blob = new Blob( [ json ], { type: 'text/plain' } );
+
+          zip.file( filename + '.json', blob );
+
+          await process_zip( '_JSON' );
+        }
+      }
+
+      async function export_usdz() {
+        if (gltf_obj) {
+          start_export();
+
+          await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+          const { USDZExporter } = await import( "../static/jsm/exporters/USDZExporter.js" );
+
+          let usdz_exporter = new USDZExporter( manager );
+
+          let arraybuffer = await usdz_exporter.parse( gltf_obj );
+          let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
+
+          zip.file( filename + '.usdz', blob );
+
+          await process_zip( '_USDZ' );
+        }
+      }
+
       function set_back_color() {
         scene.background = null;
         document.body.style.backgroundColor = document.getElementById('back_color').value;
+        mouse_wheel = true;
+      }
+
+      function set_directional_light_color() {
+        let dl_colors = document.getElementById('directional_light_color').value; // hex format '#rrggbb'
+        directionalLight.color.setRGB( parseInt( dl_colors.substring( 1, 3 ), 16 ) / 255.0, parseInt( dl_colors.substring( 3, 5 ), 16 ) / 255.0, parseInt( dl_colors.substring( 5 ), 16 ) / 255.0 );
+
+        mouse_wheel = true;
+      }
+
+      function set_directional_light_intensity() {
+        let dli_value = document.getElementById('directional_light_intensity').value;
+        document.getElementById('dli_val').innerText = dli_value;
+        directionalLight.intensity = parseFloat( dli_value );
+
         mouse_wheel = true;
       }
 
@@ -255,11 +586,13 @@
         // Set the initial scale of the object so it comes to view
 
         bounding_box.setFromObject( gltf_obj );
-        let size = bounding_box.getSize(new THREE.Vector3());
+        let size = bounding_box.getSize( new THREE.Vector3() );
 
-        if ( size.y > 1 ) {
+        if ( size.y > 100 ) {
+          gltf_obj.scale.multiplyScalar( 150 / size.y );
+        } else if ( size.y > 20 ) {
           gltf_obj.scale.multiplyScalar( 50 / size.y );
-        } else if ( size.y > 0.02 ) {
+        } else if ( size.y > 1 ) {
           gltf_obj.scale.multiplyScalar( 25 / size.y );
         } else if ( size.y > 0.01 ) {
           gltf_obj.scale.multiplyScalar( 10 / size.y );
@@ -270,6 +603,26 @@
         bounding_box.setFromObject( gltf_obj );
         let center = bounding_box.getCenter( new THREE.Vector3() );
         controls.target.set( center.x, center.y, center.z );
+
+        mouse_wheel = true;
+      }
+
+      function switch_camera() {
+        render_requested = false;
+
+        if (cam_id === cameras.length) {
+          cam_id = 0;
+          default_camera = camera;
+        } else {
+          default_camera = cameras[ cam_id ];
+          cam_id ++;
+        }
+
+        document.getElementById('btn_cameras').innerHTML = 'C' + cam_id;
+
+        render_requested = true;
+
+        mouse_wheel = true;
       }
 
       function switch_variant() {
@@ -289,6 +642,61 @@
           });
 
           mouse_wheel = true;
+        }
+      }
+
+      function animate_extra() {
+        if (extra_running === true) {
+          if (current_extra === extras.length - 1) {
+            gltf_obj.traverse( function( child ) {
+              if (child.isMesh) {
+                if (child.id === extras[ current_extra ][ 0 ]) {
+                  child.morphTargetInfluences[ extras[ current_extra ][ 2 ] ] = 0;
+                }
+              }
+
+              mouse_wheel = true;
+            });
+
+            document.getElementById('btn_extras').style.backgroundColor = 'transparent';
+            current_extra = 0;
+            extra_running = false;
+          } else {
+            gltf_obj.traverse( function( child ) {
+              if (child.isMesh) {
+                if (child.id === extras[ current_extra ][ 0 ]) {
+                  child.morphTargetInfluences[ extras[ current_extra ][ 2 ] ] = 0;
+                }
+              }
+
+              mouse_wheel = true;
+            });
+
+            current_extra += 1;
+
+            gltf_obj.traverse( function( child ) {
+              if (child.isMesh) {
+                if (child.id === extras[ current_extra ][ 0 ]) {
+                  child.morphTargetInfluences[ extras[ current_extra ][ 2 ] ] = 1;
+                }
+              }
+
+              mouse_wheel = true;
+            });
+          }
+        } else {
+          document.getElementById('btn_extras').style.backgroundColor = 'lightgreen';
+          extra_running = true;
+
+          gltf_obj.traverse( function( child ) {
+            if (child.isMesh) {
+              if (child.id === extras[ 0 ][ 0 ]) {
+                child.morphTargetInfluences[ extras[ 0 ][ 2 ] ] = 1;
+              }
+            }
+
+            mouse_wheel = true;
+          });
         }
       }
 
@@ -357,6 +765,8 @@
 
         THREE.DefaultLoadingManager.onLoad = function() { pmremGenerator.dispose(); }
 
+        if (zip === undefined) zip = new JSZip();
+
         selected_gltf_file = null;
         selected_draco_file = null;
         mouse_down = false;
@@ -372,7 +782,11 @@
         texture_files_webp = [];
         texture_files_ktx2 = [];
         resource_path = '';
+        extras = [];
+        extra_running = false;
         variants = null;
+        cameras = null;
+        cam_id = 0;
         animations = [];
         animation_mixer = null;
         animation_running = false;
@@ -383,8 +797,13 @@
 
         document.getElementById('btn_animate').style.backgroundColor = 'transparent';
         document.getElementById('btn_animate').disabled = true;
+        document.getElementById('btn_extras').style.backgroundColor = 'transparent';
+        document.getElementById('btn_extras').disabled = true;
         document.getElementById('btn_variants').style.backgroundColor = 'transparent';
         document.getElementById('btn_variants').disabled = true;
+        document.getElementById('btn_cameras').style.backgroundColor = 'transparent';
+        document.getElementById('btn_cameras').disabled = true;
+        document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
         document.getElementById('btn_wireframe').disabled = false;
 
         console.time( 'Loading Time' );
@@ -537,19 +956,21 @@
         if (camera === undefined) {
           camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 2500 );
           camera.position.set( 0, 0, 250 );
-          scene.add( camera );
+
+          default_camera = camera;
+          scene.add( default_camera );
         }
 
-        // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
+        // Add DirectionalLight to the default_camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
           directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 3.75 );
           directionalLight.position.set( 0, 0, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
-          camera.add( directionalLight );
+          default_camera.add( directionalLight );
         }
 
         if (controls === undefined) {
-          controls = new orb_controls( camera, renderer.domElement );
+          controls = new orb_controls( default_camera, renderer.domElement );
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
@@ -578,6 +999,15 @@
       function loadFile() {
         gltf_loader.load( URL.createObjectURL( selected_gltf_file ), async function( gltf ) {
           URL.revokeObjectURL( selected_gltf_file );
+
+          cameras = gltf.cameras;
+
+          if (cameras && cameras.length > 0) {
+            document.getElementById('btn_cameras').disabled = false;
+            document.getElementById('btn_cameras').style.backgroundColor = 'lightgreen';
+          } else {
+            document.getElementById('btn_cameras').disabled = true;
+          }
 
           animations = gltf.animations;
 
@@ -616,6 +1046,13 @@
                 if (child.isSkinnedMesh) child.frustumCulled = false;
               } else {
                 document.getElementById('btn_wireframe').disabled = true;
+              }
+
+              // Check for morph targets
+              if (child.material.morphTargets) {
+                Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
+                  extras.push( [ child.id, key, index ] );
+                });
               }
 
               if (Array.isArray( child.material )) {
@@ -708,7 +1145,7 @@
           // Add gltf model to scene
           scene.add( gltf_obj );
           gltf_obj.position.set( 0, 0, 0 );
-          camera.lookAt( gltf_obj.position );
+          default_camera.lookAt( gltf_obj.position );
 
           set_initial_scale();
           resize();
@@ -720,7 +1157,10 @@
             animation_running = true;
           }
 
-          mouse_wheel = true;
+          if (extras.length > 0) {
+            document.getElementById('btn_extras').disabled = false;
+            current_extra = 0;
+          }
 
           finish_loading();
         }, function ( xhr ) { // onProgress
@@ -761,7 +1201,7 @@
                 // Add DRACO model to scene
                 scene.add( gltf_obj );
                 gltf_obj.position.set( 0, 0, 0 );
-                camera.lookAt( gltf_obj.position );
+                default_camera.lookAt( gltf_obj.position );
 
                 set_initial_scale();
                 resize();
@@ -787,7 +1227,7 @@
                 // Add DRACO model to scene
                 scene.add( gltf_obj );
                 gltf_obj.position.set( 0, 0, 0 );
-                camera.lookAt( gltf_obj.position );
+                default_camera.lookAt( gltf_obj.position );
 
                 set_initial_scale();
                 resize();
@@ -813,7 +1253,7 @@
                 // Add DRACO model to scene
                 scene.add( gltf_obj );
                 gltf_obj.position.set( 0, 0, 0 );
-                camera.lookAt( gltf_obj.position );
+                default_camera.lookAt( gltf_obj.position );
 
                 set_initial_scale();
                 resize();
@@ -841,7 +1281,7 @@
                 // Add DRACO model to scene
                 scene.add( gltf_obj );
                 gltf_obj.position.set( 0, 0, 0 );
-                camera.lookAt( gltf_obj.position );
+                default_camera.lookAt( gltf_obj.position );
 
                 set_initial_scale();
                 resize();
@@ -858,7 +1298,7 @@
             // Add DRACO model to scene
             scene.add( gltf_obj );
             gltf_obj.position.set( 0, 0, 0 );
-            camera.lookAt( gltf_obj.position );
+            default_camera.lookAt( gltf_obj.position );
 
             set_initial_scale();
             resize();
@@ -889,6 +1329,15 @@
           console.log( 'Trying GLTF Loader...' );
 
           gltf_loader.load( selected_url_file, async gltf => {
+            cameras = gltf.cameras;
+
+            if (cameras && cameras.length > 0) {
+              document.getElementById('btn_cameras').disabled = false;
+              document.getElementById('btn_cameras').style.backgroundColor = 'lightgreen';
+            } else {
+              document.getElementById('btn_cameras').disabled = true;
+            }
+
             animations = gltf.animations;
 
             if (animations.length > 0) {
@@ -928,6 +1377,13 @@
                   document.getElementById('btn_wireframe').disabled = true;
                 }
 
+                // Check for morph targets
+                if (child.material.morphTargets) {
+                  Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
+                    extras.push( [ child.id, key, index ] );
+                  });
+                }
+
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
                     if (child.isPoints === true) isMobile === true ? mtl.size = 0.5 : mtl.size = 0.3;
@@ -962,10 +1418,15 @@
             // Add gltf model to scene
             scene.add( gltf_obj );
             gltf_obj.position.set( 0, 0, 0 );
-            camera.lookAt( gltf_obj.position );
+            default_camera.lookAt( gltf_obj.position );
 
             set_initial_scale();
             resize();
+
+            if (extras.length > 0) {
+              document.getElementById('btn_extras').disabled = false;
+              current_extra = 0;
+            }
 
             finish_loading();
           }, function ( xhr ) { // onProgress
@@ -987,7 +1448,7 @@
               // Add DRACO model to scene
               scene.add( gltf_obj );
               gltf_obj.position.set( 0, 0, 0 );
-              camera.lookAt( gltf_obj.position );
+              default_camera.lookAt( gltf_obj.position );
 
               set_initial_scale();
               resize();
@@ -1060,10 +1521,10 @@
             controls.update();
 
             renderer.clear();
-            renderer.render( scene, camera );
+            renderer.render( scene, default_camera );
 
             scene.updateMatrixWorld();
-            camera.updateMatrixWorld();
+            default_camera.updateMatrixWorld();
 
             if (mouse_wheel === true) {
               if (count > 3) {
@@ -1138,12 +1599,18 @@
 
           document.getElementById('file_input').value = '';
           document.getElementById('back_color').value = '#000000';
-          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('directional_light_color').value = '#FFFFFF';
           document.getElementById('btn_animate').disabled = true;
           document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+          document.getElementById('btn_extras').disabled = true;
+          document.getElementById('btn_extras').style.backgroundColor = 'transparent';
           document.getElementById('btn_variants').disabled = true;
           document.getElementById('btn_variants').style.backgroundColor = 'transparent';
+          document.getElementById('btn_cameras').disabled = true;
+          document.getElementById('btn_cameras').style.backgroundColor = 'transparent';
           document.getElementById('btn_wireframe').disabled = true;
+          document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+          document.getElementById('div_error').style.display = 'none';
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
           enable_disable( true );
@@ -1153,15 +1620,39 @@
       }
 
       function enable_disable( disable = false ) {
+        document.getElementById('directional_light_intensity').disabled = disable;
+        document.getElementById('directional_light_color').disabled = disable;
+        document.getElementById('btn_dc_dli').disabled = disable;
         document.getElementById('back_color').disabled = disable;
+        document.getElementById('export_names').disabled = disable;
         disabled_changed();
+
+        mouse_wheel = true;
       }
     </script>
 
     <script>
+      function document_ready() {
+        if (navigator.userAgent.indexOf('Chrome') !== -1 || navigator.userAgent.indexOf('Safari') !== -1 || isMobile === true) {
+          $('#export_names').change( function() { $(this).children(':selected').click(); });
+        }
+      }
+
       function disabled_changed() {
         $('button').each( function() {
           if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+
+        $('select').each( function() {
+          if (this.disabled === false) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
