@@ -83,7 +83,9 @@ Number Type Converter
   - It can currently export to BIM, PLY, STL, OBJ, OFF, GLB and GLTF formats even on a mobile phone (as tested on an Android device)
   - Supported import formats: 3DS, 3DM, 3MF, AMF, BIM, BREP, BRP, DAE, FBX, GLB, GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
   - Unsupported import format: FCSTD (requires accessing a remote worker)
-  - For proper viewing and additional features use the actual [Online 3D Viewer](https://3dviewer.net/) website
+  - Loading via URL currently requires all model files URLs and comma separated (no files will be fetched automatically), here is an example for Khronos [CesiumMilkTruck](https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/CesiumMilkTruck):
+    - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck.gltf, https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck_data.bin, https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck.jpg`
+  - For proper viewing and additional features try using the actual [Online 3D Viewer](https://3dviewer.net/) website
   - Might have bugs and library related limitations
   - Most of the following notes do not apply to Quick Viewer in general
 
