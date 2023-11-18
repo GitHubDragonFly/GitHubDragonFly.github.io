@@ -6,18 +6,56 @@
     <meta name="description" content="Collada DAE (Digital Asset Exchange) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_decoder.js" defer></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/20.0.0/tween.umd.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0" defer></script>
-    <script src="../../static/js/BasisTextureLoader.js" defer></script>
-    <script src="../../static/js/utils/WorkerPool.js" defer></script>
-    <script src="../../static/js/ColladaLoader.js" defer></script>
-    <script src="../../static/js/KTX2Loader.js" defer></script>
-    <script src="../../static/js/TGALoader.js" defer></script>
-    <script src="../../static/js/DDSLoader.js" defer></script>
-    <script src="../../static/js/OrbitControls.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { DDSLoader } from "three/addons/loaders/DDSLoader.js";
+      import { TGALoader } from "three/addons/loaders/TGALoader.js";
+      import { KTX2Loader } from "three/addons/loaders/KTX2Loader.js";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { ColladaLoader } from "../../static/jsm/loaders/ColladaLoader.js";
+      import { BasisTextureLoader } from "../../static/jsm/loaders/BasisTextureLoader.js";
+      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+      THREE = three_js;
+
+      manager = new THREE.LoadingManager();
+      manager.onLoad = function() { mouse_wheel = true; }
+
+      ktx2_loader = new KTX2Loader( manager );
+      ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/libs/basis/" );
+
+      manager.addHandler( /\.ktx2$/i, ktx2_loader );
+
+      dae_loader = new ColladaLoader( manager );
+
+      basis_loader = new BasisTextureLoader( manager );
+      basis_loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/libs/basis/' );
+
+      manager.addHandler( /\.basis$/i, basis_loader );
+
+      texture_loader = new THREE.TextureLoader( manager );
+      tga_loader = new TGALoader( manager );
+      dds_loader = new DDSLoader( manager );
+
+      manager.addHandler( /\.tga$/i, tga_loader );
+      manager.addHandler( /\.dds$/i, dds_loader );
+
+      orb_controls = OrbitControls;
+      room_env = RoomEnvironment;
+    </script>
 
     <style>
       body, html {
@@ -188,15 +226,15 @@
     <script>
       const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent );
 
-      var manager, ktx2_loader, texture_loader, dae_loader, basis_loader, tga_loader, dds_loader;
+      var THREE, manager, ktx2_loader, texture_loader, dae_loader, basis_loader, tga_loader, dds_loader;
       var renderer, render_requested, scene, camera, dae_obj, object_is_points, clock, duration;
-      var animations, animation_mixer, animation_running, current_animation, count = 0;
-      var pmremGenerator, controls, mouse_down, mouse_wheel, events_initialized;
-      var ambientLight, directionalLight, wireframe_enabled;
-      var ww = window.innerWidth, wh = window.innerHeight;
+      var animations, animation_mixer, animation_running, current_animation, count = 0, room_env;
+      var pmremGenerator, controls, orb_controls, mouse_down, mouse_wheel, events_initialized;
+      var directionalLight, wireframe_enabled, flat_shading_enabled;
       var kinematics, kinematics_running, kinematicsTween, tween;
-      var tex, extra, technique, flat_shading_enabled, bounding_box;
-      var selected_dae_file, selected_dae_url_file, selected_url_file = '';
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var tex, extra, technique, bounding_box;
+      var selected_dae_file, selected_url_file = '';
       var url_displayed = false, url_loading = false, vertex_colors_enabled;
       var texture_files_ktx2, texture_files_dds, texture_files_tga, texture_files_svg;
       var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif, texture_files_webp;
@@ -220,6 +258,8 @@
           dae_obj.scale.multiplyScalar( 50 / size.y );
         } else if ( size.y > 0.02 ) {
           dae_obj.scale.multiplyScalar( 25 / size.y );
+        } else if ( size.y > 0.01 ) {
+          dae_obj.scale.multiplyScalar( 10 / size.y );
         } else {
           dae_obj.scale.multiplyScalar( 1 / size.y )
         }
@@ -227,6 +267,8 @@
         bounding_box.setFromObject( dae_obj );
         let center = bounding_box.getCenter(new THREE.Vector3());
         controls.target.set( center.x, center.y, center.z );
+
+        mouse_wheel = true;
       }
 
       function dae_animations() {
@@ -279,44 +321,10 @@
 
         THREE.DefaultLoadingManager.onLoad = function() { pmremGenerator.dispose(); }
 
-        if (manager === undefined) {
-          manager = new THREE.LoadingManager();
-          manager.addHandler( /\.basis$/i, ktx2_loader );
-        }
-
-        manager.onLoad = function () { mouse_wheel = true; }
-
-        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
-
-        if (dae_loader === undefined) dae_loader = new THREE.ColladaLoader( manager );
-
-        if (basis_loader === undefined) {
-          basis_loader = new THREE.BasisTextureLoader( manager );
-          basis_loader.setTranscoderPath( '../static/js/libs/basis/' );
-          manager.addHandler(/\.basis$/i, basis_loader);
-        }
-
-        if (ktx2_loader === undefined) {
-          ktx2_loader = new THREE.KTX2Loader( manager );
-          ktx2_loader.setTranscoderPath('../static/js/libs/basis/');
-          manager.addHandler(/\.ktx2$/i, ktx2_loader);
-        }
-
-        if (tga_loader === undefined) {
-          tga_loader = new THREE.TGALoader( manager );
-          manager.addHandler( /\.tga$/i, tga_loader );
-        }
-
-        if (dds_loader === undefined) {
-          dds_loader = new THREE.DDSLoader( manager );
-          manager.addHandler( /\.dds$/i, dds_loader );
-        }
-
         if (tween === undefined) tween = TWEEN;
 
         duration = THREE.MathUtils.randInt( 1000, 5000 );
 
-        selected_dae_url_file = null;
         selected_dae_file = null;
         object_is_points = false;
         mouse_down = false;
@@ -383,7 +391,7 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
-          renderer.toneMapping = THREE.LinearToneMapping;
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
           renderer.toneMappingExposure = 0.7;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
@@ -411,15 +419,15 @@
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 4.5 );
           directionalLight.position.set( 0, 250, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls( camera, renderer.domElement );
-          //controls.enableZoomToCursor = true;
+          controls = new orb_controls( camera, renderer.domElement );
+          controls.zoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
           controls.keyPanSpeed = 0.8; 
@@ -437,7 +445,7 @@
 
         if (scene.environment === null) {
           pmremGenerator = new THREE.PMREMGenerator( renderer );
-          scene.environment = pmremGenerator.fromScene( new THREE.RoomEnvironment(), .005 ).texture;
+          scene.environment = pmremGenerator.fromScene( new room_env(), .005 ).texture;
         }
 
         // Load the dae file
@@ -701,6 +709,7 @@
                       let params = value1.profile.technique.parameters;
 
                       if (key2_string === 'ambient' || (params.ambient && params.ambient.texture && params.ambient.texture.id.startsWith(key2_string))) {
+                        tex.colorSpace = THREE.SRGBColorSpace;
                         collada.library.materials[ key ].build.lightMap = tex;
                       }
 
@@ -709,26 +718,33 @@
                       }
 
                       if (key2_string === 'emissive' || (params.emission && params.emission.texture && params.emission.texture.id.startsWith(key2_string))) {
+                        tex.colorSpace = THREE.SRGBColorSpace;
                         collada.library.materials[ key ].build.emissiveMap = tex;
                       }
 
                       if (key2_string === 'specular' || (params.specular && params.specular.texture && params.specular.texture.id.startsWith(key2_string))) {
+                        tex.colorSpace = THREE.SRGBColorSpace;
                         collada.library.materials[ key ].build.specularMap = tex;
                       }
 
                       if (params.diffuse && params.diffuse.texture && params.diffuse.texture.id.startsWith(key2_string)) {
+                        tex.colorSpace = THREE.SRGBColorSpace;
                         collada.library.materials[ key ].build.map = tex;
                       }
                     } else {
                       if (key2_string === 'ambient') {
+                        tex.colorSpace = THREE.SRGBColorSpace;
                         collada.library.materials[ key ].build.lightMap = tex;
                       } else if (key2_string === 'bump') {
                         collada.library.materials[ key ].build.normalMap = tex;
                       } else if (key2_string === 'emissive') {
+                        tex.colorSpace = THREE.SRGBColorSpace;
                         collada.library.materials[ key ].build.emissiveMap = tex;
                       } else if (key2_string === 'specular') {
+                        tex.colorSpace = THREE.SRGBColorSpace;
                         collada.library.materials[ key ].build.specularMap = tex;
                       } else {
+                        tex.colorSpace = THREE.SRGBColorSpace;
                         collada.library.materials[ key ].build.map = tex;
                       }
                     }
@@ -879,14 +895,6 @@
           dae_obj = collada.scene;
           dae_obj.name = 'local_model';
 
-          // Add dae model to scene
-          scene.add( dae_obj );
-          dae_obj.position.set( 0, 0, 0 );
-          camera.lookAt( dae_obj.position );
-
-          set_initial_scale();
-          resize();
-
           kinematics = collada.kinematics;
           if (Object.keys( kinematics ).length !== 0 && tween) document.getElementById('btn_kinematics').disabled = false;
 
@@ -902,6 +910,14 @@
             animation_running = true;
           }
 
+          // Add dae model to scene
+          scene.add( dae_obj );
+          dae_obj.position.set( 0, 0, 0 );
+          camera.lookAt( dae_obj.position );
+
+          set_initial_scale();
+          resize();
+
           finish_loading();
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
@@ -915,110 +931,102 @@
       function loadURLFile() {
         if (selected_url_file !== '') {
           if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-            selected_dae_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
-          } else {
-            if (selected_url_file.startsWith('https://github.com') === true) {
-              selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
-            }
-
-            if (selected_url_file.toUpperCase().endsWith('.DAE')) selected_dae_url_file = selected_url_file;
+            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          if (selected_dae_url_file !== null) {
-            dae_loader.load( selected_dae_url_file, function( collada ) {
-              let mesh_included = false;
-              let points_included = false;
+          // No extension checking for URL so it has to point to DAE model
 
-              collada.scene.traverse( function( child ) {
-            	  if (child.isMesh || child.isPoints) {
-                  child.geometry.computeBoundingBox();
-                  child.geometry.computeBoundingSphere();
+          dae_loader.load( selected_url_file, function( collada ) {
+            let mesh_included = false;
+            let points_included = false;
 
-                  if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                  child.geometry.normalizeNormals();
+            collada.scene.traverse( function( child ) {
+              if (child.isMesh || child.isPoints) {
+                child.geometry.computeBoundingBox();
+                child.geometry.computeBoundingSphere();
 
-                  if (child.isMesh) {
-                    if (child.isSkinnedMesh) child.frustumCulled = false;
-                    mesh_included = true;
-                  } else {
-                    object_is_points = true;
-                    points_included = true;
-                  }
+                if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                child.geometry.normalizeNormals();
 
-                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                    vertex_colors_enabled = true;
-                  }
+                if (child.isMesh) {
+                  if (child.isSkinnedMesh) child.frustumCulled = false;
+                  mesh_included = true;
+                } else {
+                  object_is_points = true;
+                  points_included = true;
+                }
 
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      if (child.isPoints) {
-                        (isMobile === true) ? mtl.size = 0.8 : mtl.size = 0.3;
-                        child.sizeAttenuation = true;
-                        child.sortPoints = true;
-                      }
+                if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                  vertex_colors_enabled = true;
+                }
 
-                      mtl.vertexColors = vertex_colors_enabled;
-                      mtl.side = THREE.DoubleSide;
-                      mtl.flatShading = false;
-                      mtl.skinning = true;
-                    });
-                  } else {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
                     if (child.isPoints) {
-                      (isMobile === true) ? child.material.size = 0.8 : child.material.size = 0.3;
+                      (isMobile === true) ? mtl.size = 0.8 : mtl.size = 0.3;
                       child.sizeAttenuation = true;
                       child.sortPoints = true;
                     }
 
-                    child.material.vertexColors = vertex_colors_enabled;
-                    child.material.side = THREE.DoubleSide;
-                    child.material.flatShading = false;
-                    child.material.skinning = true;
+                    mtl.vertexColors = vertex_colors_enabled;
+                    mtl.side = THREE.DoubleSide;
+                    mtl.flatShading = false;
+                    mtl.skinning = true;
+                  });
+                } else {
+                  if (child.isPoints) {
+                    (isMobile === true) ? child.material.size = 0.8 : child.material.size = 0.3;
+                    child.sizeAttenuation = true;
+                    child.sortPoints = true;
                   }
-    		        }
-              });
 
-              if (mesh_included === true) {
-                document.getElementById('btn_wireframe').disabled = false;
-              } else if (points_included === true) {
-                document.getElementById('btn_wireframe').disabled = true;
+                  child.material.vertexColors = vertex_colors_enabled;
+                  child.material.side = THREE.DoubleSide;
+                  child.material.flatShading = false;
+                  child.material.skinning = true;
+                }
               }
-
-              dae_obj = collada.scene;
-              dae_obj.name = 'url_model';
-
-              // Add dae model to scene
-              scene.add( dae_obj );
-              dae_obj.position.set( 0, 0, 0 );
-              camera.lookAt( dae_obj.position );
-
-              set_initial_scale();
-              resize();
-
-              kinematics = collada.kinematics;
-              if (Object.keys( kinematics ).length !== 0 && tween) document.getElementById('btn_kinematics').disabled = false;
-
-              animations = collada.scene.animations;
-
-              if (animations.length > 0) {
-                animation_mixer = new THREE.AnimationMixer( collada.scene );
-                current_animation = 0;
-                animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
-                animation_mixer.clipAction( animations[ 0 ] ).play();
-                document.getElementById('btn_animate').disabled = false;
-                document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
-                animation_running = true;
-              }
-
-              finish_loading();
-            }, function ( xhr ) { // onProgress
-            }, function ( error ) { // onError
-              handle_error( error );
             });
-          } else {
-            handle_error( 'Unsupported URL model!' );
-          }
 
-          mouse_wheel = true;
+            if (mesh_included === true) {
+              document.getElementById('btn_wireframe').disabled = false;
+            } else if (points_included === true) {
+              document.getElementById('btn_wireframe').disabled = true;
+            }
+
+            dae_obj = collada.scene;
+            dae_obj.name = 'url_model';
+
+            kinematics = collada.kinematics;
+            if (Object.keys( kinematics ).length !== 0 && tween) document.getElementById('btn_kinematics').disabled = false;
+
+            animations = collada.scene.animations;
+
+            if (animations.length > 0) {
+              animation_mixer = new THREE.AnimationMixer( collada.scene );
+              current_animation = 0;
+              animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+              animation_mixer.clipAction( animations[ 0 ] ).play();
+              document.getElementById('btn_animate').disabled = false;
+              document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+              animation_running = true;
+            }
+
+            // Add dae model to scene
+            scene.add( dae_obj );
+            dae_obj.position.set( 0, 0, 0 );
+            camera.lookAt( dae_obj.position );
+
+            set_initial_scale();
+            resize();
+
+            finish_loading();
+          }, function ( xhr ) { // onProgress
+          }, function ( error ) { // onError
+            handle_error( error );
+          });
         }
       }
 
@@ -1035,6 +1043,7 @@
         console.timeEnd( 'Loading Time' );
         console.log( 'Error loading model!' );
         console.log( error );
+        mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
 
@@ -1106,9 +1115,9 @@
               } else {
                 child.material.wireframe = wireframe_enabled;
               }
-
-              mouse_wheel = true;
             }
+
+            mouse_wheel = true;
       	  });
         }
       }
@@ -1195,6 +1204,8 @@
       function enable_disable( disable = false ) {
         document.getElementById('back_color').disabled = disable;
         disabled_changed();
+
+        mouse_wheel = true;
       }
     </script>
 
@@ -1210,11 +1221,11 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
 
         $('input[type=color]').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
@@ -1222,6 +1233,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
       }
     </script>
