@@ -5,31 +5,69 @@
     <meta name="description" content="FBX (Filmbox) Viewer">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.157.0" defer></script>
-    <script src="../static/js/RGBELoader.js" defer></script>
-    <script src="../static/js/FBXLoader.js" defer></script>
-    <script src="../static/js/TGALoader.js" defer></script>
-    <script src="../static/js/DDSLoader.js" defer></script>
-    <script src="../static/js/upng/UPNG.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/rhino3dm.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import * as fflate_js from "three/addons/libs/fflate.module.js";
+      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
+      import { DDSLoader } from "three/addons/loaders/DDSLoader.js";
+      import { TGALoader } from "three/addons/loaders/TGALoader.js";
+      import { FBXLoader } from "../static/jsm/loaders/FBXLoader.js";
+      import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
+      import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
+      import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
+      import { GifLoader } from "../static/jsm/loaders/three-gif-loader/gif-loader.js";
+      import { GifWriter } from "../static/jsm/libs/omggif/omggif.js";
+
+      THREE = three_js;
+      fflate = fflate_js;
+
+      manager = new THREE.LoadingManager();
+      manager.onLoad = function() { mouse_wheel = true; }
+
+      fbx_loader = new FBXLoader( manager );
+
+      rgbe_loader = new RGBELoader( manager );
+      rgbe_loader.setDataType( THREE.HalfFloatType );
+
+      texture_loader = new THREE.TextureLoader( manager );
+      tga_loader = new TGALoader( manager );
+      dds_loader = new DDSLoader( manager );
+
+      manager.addHandler( /\.tga$/i, tga_loader );
+      manager.addHandler( /\.dds$/i, dds_loader );
+
+      gif_writer = GifWriter;
+      gif_loader = new GifLoader( manager );
+
+      gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
+
+      if (menu_location_bottom === false) {
+        let fixed_menu_bottom = ( parseInt( $("#fixed_menu").outerHeight( true ) ) + 2 ).toString() + "px";
+        document.getElementById("gui_position").style.marginTop = fixed_menu_bottom;
+      } else {
+        document.getElementById("gui_position").style.marginTop = "2px";
+      }
+
+      orb_controls = OrbitControls;
+      orb_controls_gizmo = OrbitControlsGizmo;
+    </script>
+
+    <script src="../static/js/upng/UPNG.min.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
-    <script src="../static/js/omggif/omggif.js" defer></script>
-    <script src="../static/js/OrbitControls.js" defer></script>
-    <script src="../static/js/OrbitControlsGizmo.js" defer></script>
-    <script src="../static/js/libs/fflate.min.js" defer></script>
-    <script src="../static/js/curves/NURBSCurve.js" defer></script>
-    <script src="../static/js/curves/NURBSUtils.js" defer></script>
-    <script src="../static/js/curves/NURBSSurface.js" defer></script>
     <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
-    <script src="../static/js/utils/TextureUtils.js" defer></script>
-    <script src="../static/js/exporters/PLYExporter.js" defer></script>
-    <script src="../static/js/exporters/STLExporter.js" defer></script>
-    <script src="../static/js/exporters/OBJExporter.js" defer></script>
-    <script src="../static/js/exporters/GLTFExporter.js" defer></script>
-    <script src="../static/js/exporters/ColladaExporter.js" defer></script>
-    <script src="../static/three-gif-loader/lib/gif-texture.js" defer></script>
-    <script src="../static/three-gif-loader/lib/gif-loader.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/rhino3dm.js" defer></script>
 
     <style>
       body, html {
@@ -604,11 +642,11 @@
     </script>
 
     <script>
-      var manager, texture_loader, fbx_loader, rgbe_loader, tga_loader, dds_loader, gif_loader, object_is_points;
+      var THREE, fflate, manager, texture_loader, fbx_loader, rgbe_loader, tga_loader, dds_loader, gif_loader, gif_writer;
       var animations, animation_mixer, animation_running, current_animation, render_requested, clock, count = 0;
       var renderer, scene, camera, fbx_obj, edges, edges_visible, extras, current_extra, extra_running;
-      var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
-      var gui, gui_set = false, guiExposure, params, toneMappingOptions;
+      var controls, orb_controls, gizmo, orb_controls_gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
+      var gui, gui_set = false, guiExposure, params, toneMappingOptions, object_is_points;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
@@ -672,33 +710,35 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let obj_exporter = new THREE.OBJExporter( manager );
+          const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.js" );
 
-          let exported = obj_exporter.parse( fbx_obj, filename );
+          let obj_exporter = new OBJExporter( manager );
 
-          zip.file( filename + '.obj', exported[ 'obj' ] );
+          await obj_exporter.parse( fbx_obj, filename, async function( exported ) {
+            zip.file( filename + '.obj', exported[ 'obj' ] );
 
-          if (exported[ 'mtl' ]) {
-            zip.file( filename + '.mtl', exported[ 'mtl' ] );
+            if (exported[ 'mtl' ]) {
+              zip.file( filename + '.mtl', exported[ 'mtl' ] );
 
-            if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
-              let processed_index = 0;
+              if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
+                let processed_index = 0;
 
-              exported[ 'tex' ].forEach( async tex => {
-                let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+                exported[ 'tex' ].forEach( async tex => {
+                  let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
 
-                zip.file( `${ tex.name }.${ tex.ext }`, blob );
+                  zip.file( `${ tex.name }.${ tex.ext }`, blob );
 
-                if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
+                  if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
 
-                processed_index += 1;
-              });
+                  processed_index += 1;
+                });
+              } else {
+                await process_zip( '_OBJ' );
+              }
             } else {
               await process_zip( '_OBJ' );
             }
-          } else {
-            await process_zip( '_OBJ' );
-          }
+          });
         }
       }
 
@@ -708,7 +748,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let ply_exporter = new THREE.PLYExporter( manager );
+          const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.js" );
+
+          let ply_exporter = new PLYExporter( manager );
 
           ply_exporter.parse( fbx_obj, async function( json ) {
             let blob;
@@ -739,7 +781,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let stl_exporter = new THREE.STLExporter( manager );
+          const { STLExporter } = await import( "../static/jsm/exporters/STLExporter.js" );
+
+          let stl_exporter = new STLExporter( manager );
 
           let string = stl_exporter.parse( fbx_obj ).split( ',' );
           let blob = new Blob( [ string ], { type: 'text/plain' } );
@@ -756,7 +800,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let dae_exporter = new THREE.ColladaExporter( manager );
+          const { ColladaExporter } = await import( "../static/jsm/exporters/ColladaExporter.js" );
+
+          let dae_exporter = new ColladaExporter( manager );
 
           let result = dae_exporter.parse( fbx_obj );
 
@@ -786,7 +832,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let gltf_exporter = new THREE.GLTFExporter( manager );
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
 
           let options;
 
@@ -1101,7 +1149,7 @@
       function gif_encode( gif_frames ) {
         let buffer = new Uint8ClampedArray( 187500000 ); // 500 * 500 * 150 * 5
         let pixels = new Uint8ClampedArray( 250000 ); // 500 * 500
-        let writer = new GifWriter( buffer, 500, 500, { loop: 0 } );
+        let writer = new gif_writer( buffer, 500, 500, { loop: 0 } );
 
         // Skip the first frame since it might be all zeros due to rendering
         // Any subsequent frame that might be all zeros will throw an error
@@ -1768,31 +1816,6 @@
 
         enable_disable( true );
 
-        if (manager === undefined) manager = new THREE.LoadingManager();
-
-        manager.onLoad = function() { mouse_wheel = true; }
-
-        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
-
-        if (fbx_loader === undefined) fbx_loader = new THREE.FBXLoader( manager );
-
-        if (tga_loader === undefined) {
-          tga_loader = new THREE.TGALoader( manager );
-          manager.addHandler( /\.tga$/i, tga_loader );
-        }
-
-        if (dds_loader === undefined) {
-          dds_loader = new THREE.DDSLoader( manager );
-          manager.addHandler( /\.dds$/i, dds_loader );
-        }
-
-        if (rgbe_loader === undefined) {
-          rgbe_loader = new THREE.RGBELoader();
-          rgbe_loader.setDataType( THREE.HalfFloatType );
-        }
-
-        if (gif_loader === undefined) gif_loader = new THREE.GifLoader( manager );
-
         if (zip === undefined) zip = new JSZip();
 
         if (params === undefined) params = { setEnvMap: false, exposure: 0.7, toneMapping: 'ACESFilmic', blurriness: 0.3 };
@@ -1951,7 +1974,7 @@
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls = new orb_controls(camera, renderer.domElement);
           controls.enableZoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
@@ -1969,7 +1992,7 @@
         }
 
         if (gizmo === undefined) {
-          gizmo = new OrbitControlsGizmo( controls, {
+          gizmo = new orb_controls_gizmo( controls, {
             size: 65,
             padding: 4,
             bubbleSizePrimary: 7,
@@ -3067,18 +3090,6 @@
         }
 
         mouse_wheel = true;
-      }
-    </script>
-
-    <script type="module">
-      import { GUI } from 'https://cdn.jsdelivr.net/npm/three@0.147.0/examples/jsm/libs/lil-gui.module.min.js';
-
-      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
-
-      if (url_displayed === true) {
-        document.getElementById('gui_position').style.marginTop = '118px';
-      } else {
-        document.getElementById('gui_position').style.marginTop = '80px';
       }
     </script>
   </body>
