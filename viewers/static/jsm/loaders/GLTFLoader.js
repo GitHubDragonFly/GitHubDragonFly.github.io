@@ -67,6 +67,9 @@ import {
 	SRGBColorSpace,
 	InstancedBufferAttribute
 } from "three";
+import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/DDSLoader.js";
+import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/TGALoader.js";
+import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/EXRLoader.js";
 
 class GLTFLoader extends Loader {
 
@@ -3328,30 +3331,18 @@ class GLTFParser {
 
 		if ( source.uri && source.uri.toLowerCase().endsWith( '.tga' ) || ( source.name && source.name.toLowerCase().endsWith( '.tga' ) ) ) {
 
-			if ( TGALoader ) {
-
-				loader = new TGALoader( options.manager );
-				source.mimeType = 'image/tga';
-
-			}
+			loader = new TGALoader( options.manager );
+			source.mimeType = 'image/tga';
 
 		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.dds' ) || ( source.name && source.name.toLowerCase().endsWith( '.dds' ) ) ) {
 
-			if ( DDSLoader ) {
-
-				loader = new DDSLoader( options.manager );
-				source.mimeType = 'image/dds';
-
-			}
+			loader = new DDSLoader( options.manager );
+			source.mimeType = 'image/dds';
 
 		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.exr' ) || ( source.name && source.name.toLowerCase().endsWith( '.exr' ) ) ) {
 
-			if ( EXRLoader ) {
-
-				loader = new EXRLoader( options.manager );
-				source.mimeType = 'image/exr';
-
-			}
+			loader = new EXRLoader( options.manager );
+			source.mimeType = 'image/exr';
 
 		} else if ( source.uri ) {
 
