@@ -6,12 +6,45 @@
     <meta name="description" content="AMF (Additive Manufacturing Format) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0" defer></script>
-    <script src="../../static/js/AMFLoader.js" defer></script>
-    <script src="../../static/js/OrbitControls.js" defer></script>
-    <script src="../../static/js/libs/fflate.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import * as fflate_js from "three/addons/libs/fflate.module.js";
+      import { AMFLoader } from "three/addons/loaders/AMFLoader.js";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+      THREE = three_js;
+      fflate = fflate_js;
+
+      manager = new THREE.LoadingManager();
+
+      manager.onProgress = function ( item, loaded, total ) {
+        if ( loaded === total ) {
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+          enable_disable( false );
+          render_requested = true;
+          mouse_wheel = true;
+          render();
+        }
+      }
+
+      amf_loader = new AMFLoader( manager );
+
+      orb_controls = OrbitControls;
+      room_env = RoomEnvironment;
+    </script>
 
     <style>
       body, html {
@@ -178,12 +211,12 @@
     </script>
 
     <script>
-      var manager, renderer, scene, camera, amf_loader, amf_obj, render_requested;
-      var pmremGenerator, controls, mouse_down, mouse_wheel, events_initialized;
-      var ambientLight, directionalLight, bounding_box, wireframe_enabled;
-      var ww = window.innerWidth, wh = window.innerHeight, flat_shading_enabled;
+      var THREE, fflate, manager, renderer, scene, camera, amf_loader, amf_obj, render_requested;
+      var pmremGenerator, controls, orb_controls, mouse_down, mouse_wheel, events_initialized;
+      var ambientLight, directionalLight, bounding_box, flat_shading_enabled, wireframe_enabled;
+      var ww = window.innerWidth, wh = window.innerHeight, room_env, count = 0;
       var selected_amf_file, selected_amf_url_file, selected_url_file = '';
-      var url_displayed = false, url_loading = false, vertex_colors_enabled, count = 0;
+      var url_displayed = false, url_loading = false, vertex_colors_enabled;
 
       function set_back_color() {
         scene.background = null;
@@ -201,6 +234,8 @@
           amf_obj.scale.multiplyScalar( 50 / size.y );
         } else if ( size.y > 0.02 ) {
           amf_obj.scale.multiplyScalar( 25 / size.y );
+        } else if ( size.y > 0.01 ) {
+          amf_obj.scale.multiplyScalar( 10 / size.y );
         } else {
           amf_obj.scale.multiplyScalar( 1 / size.y )
         }
@@ -294,6 +329,8 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = 0.7;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -316,15 +353,15 @@
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 1.5 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 4.5 );
           directionalLight.position.set( 0, 0, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls( camera, renderer.domElement );
-          //controls.enableZoomToCursor = true;
+          controls = new orb_controls( camera, renderer.domElement );
+          controls.zoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
           controls.keyPanSpeed = 0.8; 
@@ -342,7 +379,7 @@
 
         if (scene.environment === null) {
           pmremGenerator = new THREE.PMREMGenerator( renderer );
-          scene.environment = pmremGenerator.fromScene( new THREE.RoomEnvironment(), .005 ).texture;
+          scene.environment = pmremGenerator.fromScene( new room_env(), .005 ).texture;
         }
 
         // Load AMF file
@@ -350,46 +387,8 @@
       }
 
       function loadFile(){
-        amf_loader.load( URL.createObjectURL( selected_amf_file ), function( object ) {
-          URL.revokeObjectURL( selected_amf_file );
-
-          amf_obj = object.clone();
-
-          amf_obj.traverse( function( child ) {
-            if (child.isMesh) {
-              child.geometry.computeBoundingBox();
-              child.geometry.computeBoundingSphere();
-
-              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-              child.geometry.normalizeNormals();
-
-              if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                vertex_colors_enabled = true;
-              }
-
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.side = THREE.DoubleSide;
-                  mtl.flatShading = flat_shading_enabled;
-                  mtl.vertexColors = vertex_colors_enabled;
-                });
-              } else {
-                child.material.side = THREE.DoubleSide;
-                child.material.flatShading = flat_shading_enabled;
-                child.material.vertexColors = vertex_colors_enabled;
-              }
-            }
-          });
-
-          amf_obj.rotation.x -= Math.PI / 2;
-
-          // Add amf_obj to the scene
-          scene.add( amf_obj );
-          camera.lookAt( amf_obj.position );
-
-          set_initial_scale();
-          resize();
-        }, function ( xhr ) { // onProgress
+        amf_loader.load( URL.createObjectURL( selected_amf_file ), addFileInScene,
+        function ( xhr ) { // onProgress
         }, function ( error ) { // onError
           handle_error( error );
           URL.revokeObjectURL( selected_amf_file );
@@ -398,72 +397,60 @@
         mouse_wheel = true;
       }
 
+      function addFileInScene( object ) {
+        if (selected_amf_file) URL.revokeObjectURL( selected_amf_file );
+
+        amf_obj = object.clone();
+
+        amf_obj.traverse( function( child ) {
+          if (child.isMesh) {
+            child.geometry.computeBoundingBox();
+            child.geometry.computeBoundingSphere();
+
+            if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+            child.geometry.normalizeNormals();
+
+            if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+              vertex_colors_enabled = true;
+            }
+
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtl => {
+                mtl.side = THREE.DoubleSide;
+                mtl.flatShading = flat_shading_enabled;
+                mtl.vertexColors = vertex_colors_enabled;
+              });
+            } else {
+              child.material.side = THREE.DoubleSide;
+              child.material.flatShading = flat_shading_enabled;
+              child.material.vertexColors = vertex_colors_enabled;
+            }
+          }
+        });
+
+        amf_obj.rotation.x -= Math.PI / 2;
+
+        // Add amf_obj to the scene
+        scene.add( amf_obj );
+        camera.lookAt( amf_obj.position );
+
+        set_initial_scale();
+        resize();
+      }
+
       function loadURLFile() {
         if (selected_url_file !== '') {
-          if (selected_url_file.indexOf( ',' ) > -1) {
-            let urls = selected_url_file.split( ',' );
-
-            for (let i = 0; i < urls.length; i++) {
-              let url = urls[ i ].trim();
-
-              if (url.toUpperCase().endsWith('.AMF')) selected_amf_url_file = url;
-            }
-          } else {
-            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-              selected_amf_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
-            } else {
-              if (selected_url_file.startsWith('https://github.com') === true) {
-                selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
-              }
-
-              if (selected_url_file.toUpperCase().endsWith('.AMF')) selected_amf_url_file = selected_url_file;
-            }
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          if (selected_amf_url_file === null) {
-            handle_error( 'Unsupported URL file!' );
-            return;
-          }
+          // No extension checking for URL so it has to point to AMF model
 
-          amf_loader.load( selected_amf_url_file, function( object ) {
-            amf_obj = object.clone();
-
-            amf_obj.traverse( function( child ) {
-              if (child.isMesh) {
-                child.geometry.computeBoundingBox();
-                child.geometry.computeBoundingSphere();
-
-                if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                child.geometry.normalizeNormals();
-
-                if (Array.isArray( child.material )) {
-                  child.material.forEach( mtl => {
-                    mtl.side = THREE.DoubleSide;
-                    mtl.flatShading = flat_shading_enabled;
-                    mtl.vertexColors = vertex_colors_enabled;
-                  });
-                } else {
-                  child.material.side = THREE.DoubleSide;
-                  child.material.flatShading = flat_shading_enabled;
-                  child.material.vertexColors = vertex_colors_enabled;
-                }
-              }
-            });
-
-            amf_obj.rotation.x -= Math.PI / 2;
-
-            // Add amf_obj to the scene
-            scene.add( amf_obj );
-            camera.lookAt( amf_obj.position );
-
-            set_initial_scale();
-            resize();
-          }, function ( xhr ) { // onProgress
-          }, function ( error ) { // onError
-            handle_error( error );
-          });
-
-          mouse_wheel = true;
+          amf_loader.load( selected_url_file, addFileInScene,
+          function ( xhr ) { // onProgress
+          }, function ( error ) { handle_error( error ); }); // onError
         }
       }
 
@@ -471,6 +458,7 @@
         console.timeEnd( 'Loading Time' );
         console.log( 'Error loading model!' );
         console.log( error );
+        mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
 
@@ -498,10 +486,10 @@
               child.material.flatShading = flat_shading_enabled;
               child.material.needsUpdate = true;
             }
-
-            mouse_wheel = true;
     		  }
-    	  });
+
+          mouse_wheel = true;
+        });
       }
 
       function show_wireframe() {
@@ -523,9 +511,9 @@
               } else {
                 child.material.wireframe = wireframe_enabled;
               }
-
-              mouse_wheel = true;
             }
+
+            mouse_wheel = true;
           });
         }
       }
@@ -607,14 +595,14 @@
         document.getElementById('btn_flat').disabled = disable;
         document.getElementById('btn_wireframe').disabled = disable;
         disabled_changed();
+
+        mouse_wheel = true;
       }
     </script>
 
     <script>
       function disabled_changed() {
         $('button').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
@@ -622,11 +610,11 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
 
         $('input[type=color]').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
@@ -634,6 +622,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
       }
     </script>
