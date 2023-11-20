@@ -24,11 +24,13 @@
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
       import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
       import { ThreeMFLoader } from "three/addons/loaders/3MFLoader.js";
+      import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
       import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
       import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
 
       THREE = three_js;
       fflate = fflate_js;
+      merge_vertices = mergeVertices;
 
       manager = new THREE.LoadingManager();
 
@@ -393,6 +395,7 @@
         <label for="edge_color" title="Edge Color">EC</label>
         <input type="color" title="Edge Color" id="edge_color" onchange="set_edge_color();" disabled />
         <button title="Edges" id="btn_edges" onclick="show_edges();" disabled>E</button>
+        <button title="Flat Shading" id="btn_flat" onclick="set_flat();" disabled >F</button>
         <button title="Vertex Colors" id="btn_vertex_colors" onclick="set_vertex_colors();" style="min-width: 28px;" disabled>VC</button>
         <button title="Random Vertex Colors" id="btn_random_vertex_colors" onclick="set_random_vertex_colors();" style="min-width: 12px;" disabled>!</button>
         <button title="Grid" id="btn_grid" onclick="show_grid();" disabled>#</button>
@@ -645,8 +648,8 @@
 
     <script>
       var THREE, fflate, manager, texture_loader, rgbe_loader, tmf_loader, tmf_obj;
-      var renderer, scene, camera, render_requested, edges, edges_visible;
-      var controls, orb_controls, gizmo, orb_controls_gizmo, count = 0;
+      var merge_vertices, renderer, scene, camera, render_requested, edges, edges_visible;
+      var controls, orb_controls, gizmo, orb_controls_gizmo, flat_shading_enabled, count = 0;
       var grid, polar_grid, grid_visible, polar_grid_visible, tex;
       var gui, gui_set = false, guiExposure, params, toneMappingOptions;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
@@ -1697,6 +1700,7 @@
         initial_transparency_array = {};
         enable_opacity = false;
         bgnd_linear_gradient = false;
+        flat_shading_enabled = false;
         vertex_colors_enabled = false;
         random_vertex_colors_enabled = false;
         original_vertex_color_array = {};
@@ -1831,72 +1835,85 @@
       }
 
       function loadFile(){
-        tmf_loader.load( URL.createObjectURL( selected_tmf_file ), function( object ) {
-          URL.revokeObjectURL( selected_tmf_file );
-
-          tmf_obj = object.clone();
-
-          let child_count = 1;
-
-          tmf_obj.traverse( function( child ) {
-            if (child.isMesh) {
-              if (child.name === '') {
-                child.name = 'child_' + child_count;
-                child_count += 1;
-              }
-
-              random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-              original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
-
-              if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                vertex_colors_enabled = true;
-                document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                document.getElementById('btn_random_vertex_colors').disabled = false;
-                random_vertex_changed();
-              }
-
-              if (Array.isArray( child.material )) {
-                let child_count_array = 1;
-
-                initial_opacity_array[ child.name ] = {};
-                initial_transparency_array[ child.name ] = {};
-
-                child.material.forEach( mtl => {
-                  initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
-                  initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
-
-                  mtl.side = THREE.DoubleSide;
-                  mtl.vertexColors = vertex_colors_enabled;
-
-                  child_count_array += 1;
-                });
-              } else {
-                initial_opacity[ child.name ] = child.material.opacity;
-                initial_transparency[ child.name ] = child.material.transparent;
-
-                child.material.side = THREE.DoubleSide;
-                child.material.vertexColors = vertex_colors_enabled;
-              }
-
-              if (child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
-            }
-          });
-
-          tmf_obj.rotation.x -= Math.PI / 2;
-
-          initial_rotation = tmf_obj.rotation;
-
-          // Add tmf_obj to the scene
-          scene.add( tmf_obj );
-          camera.lookAt( tmf_obj.position );
-
-          set_initial_scale();
-          resize();
-        }, function ( xhr ) { // onProgress
-        }, function ( error ) { // onError
+        tmf_loader.load( URL.createObjectURL( selected_tmf_file ), addFileInScene,
+        function( xhr ) { }, // onProgress
+        function ( error ) { // onError
           handle_error( error );
           URL.revokeObjectURL( selected_tmf_file );
         });
+      }
+
+      function addFileInScene( object ) {
+        if (selected_tmf_file) URL.revokeObjectURL( selected_tmf_file );
+
+        tmf_obj = object.clone();
+
+        let child_count = 1;
+
+        tmf_obj.traverse( function( child ) {
+          if (child.isMesh) {
+            if (child.name === '') {
+              child.name = 'child_' + child_count;
+              child_count += 1;
+            }
+
+            child.geometry.computeBoundingBox();
+            child.geometry.computeBoundingSphere();
+
+            child.geometry.deleteAttribute('normal');
+            child.geometry = merge_vertices( child.geometry );
+            child.geometry.computeVertexNormals();
+            child.geometry.normalizeNormals();
+
+            random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+            original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+
+            if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+              vertex_colors_enabled = true;
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+              random_vertex_changed();
+            }
+
+            if (Array.isArray( child.material )) {
+              let child_count_array = 1;
+
+              initial_opacity_array[ child.name ] = {};
+              initial_transparency_array[ child.name ] = {};
+
+              child.material.forEach( mtl => {
+                initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
+
+                mtl.side = THREE.DoubleSide;
+                mtl.flatShading = flat_shading_enabled;
+                mtl.vertexColors = vertex_colors_enabled;
+
+                child_count_array += 1;
+              });
+            } else {
+              initial_opacity[ child.name ] = child.material.opacity;
+              initial_transparency[ child.name ] = child.material.transparent;
+
+              child.material.side = THREE.DoubleSide;
+              child.material.flatShading = flat_shading_enabled;
+              child.material.vertexColors = vertex_colors_enabled;
+            }
+
+            if (child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+          }
+        });
+
+        tmf_obj.rotation.x -= Math.PI / 2;
+
+        initial_rotation = tmf_obj.rotation;
+
+        // Add tmf_obj to the scene
+        scene.add( tmf_obj );
+        camera.lookAt( tmf_obj.position );
+
+        set_initial_scale();
+        resize();
       }
 
       function loadURLFile() {
@@ -1909,69 +1926,9 @@
 
           // No extension checking for URL so it has to point to 3MF model
 
-          tmf_loader.load( selected_url_file, function( object ) {
-            tmf_obj = object.clone();
-
-            let child_count = 1;
-
-            tmf_obj.traverse( function( child ) {
-              if (child.isMesh) {
-                if (child.name === '') {
-                  child.name = 'child_' + child_count;
-                  child_count += 1;
-                }
-
-                random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-                original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
-
-                if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                  vertex_colors_enabled = true;
-                  document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                  document.getElementById('btn_random_vertex_colors').disabled = false;
-                  random_vertex_changed();
-                }
-
-                if (Array.isArray( child.material )) {
-                  let child_count_array = 1;
-
-                  initial_opacity_array[ child.name ] = {};
-                  initial_transparency_array[ child.name ] = {};
-
-                  child.material.forEach( mtl => {
-                    initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
-                    initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
-
-                    mtl.side = THREE.DoubleSide;
-                    mtl.vertexColors = vertex_colors_enabled;
-
-                    child_count_array += 1;
-                  });
-                } else {
-                  initial_opacity[ child.name ] = child.material.opacity;
-                  initial_transparency[ child.name ] = child.material.transparent;
-
-                  child.material.side = THREE.DoubleSide;
-                  child.material.vertexColors = vertex_colors_enabled;
-                }
-
-                if (child.geometry.attributes.position) edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
-              }
-            });
-
-            tmf_obj.rotation.x -= Math.PI / 2;
-
-            initial_rotation = tmf_obj.rotation;
-
-            // Add tmf_obj to the scene
-            scene.add( tmf_obj );
-            camera.lookAt( tmf_obj.position );
-
-            set_initial_scale();
-            resize();
-          }, function ( xhr ) { // onProgress
-          }, function ( error ) { // onError
-            handle_error( error );
-          });
+          tmf_loader.load( selected_url_file, addFileInScene,
+          function ( xhr ) { // onProgress
+          }, function ( error ) { handle_error( error ); }); // onError
         }
       }
 
@@ -2078,6 +2035,32 @@
         });
 
         mouse_wheel = true;
+      }
+
+      function set_flat() {
+        if (flat_shading_enabled === true) {
+          document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
+          flat_shading_enabled = false;
+        } else {
+          document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+          flat_shading_enabled = true;
+        }
+
+        tmf_obj.traverse( function( child ) {
+    	    if (child.isMesh && child.material) {
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtl => {
+                mtl.flatShading = flat_shading_enabled;
+                mtl.needsUpdate = true;
+              });
+            } else {
+              child.material.flatShading = flat_shading_enabled;
+              child.material.needsUpdate = true;
+            }
+    		  }
+
+          mouse_wheel = true;
+        });
       }
 
       function show_wireframe() {
@@ -2284,13 +2267,15 @@
         document.getElementById('equi').checked = false;
         document.getElementById('wireframe').checked = false;
 
-        // Reset opacity, edges, reflectivity and vertex colors values
+        // Reset opacity, edges, flat, reflectivity and vertex colors values
         enable_opacity = false;
         document.getElementById('model_opacity').value = 1;
         document.getElementById('model_opacity').disabled = true;
         document.getElementById('btn_dc_opacity').style.backgroundColor = 'transparent';
         edges_visible = false;
         document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
+        flat_shading_enabled = false;
+        document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         bgnd_linear_gradient = false;
         document.getElementById('btn_bgnd_linear_gradient').disabled = false;
         document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
@@ -2391,6 +2376,7 @@
         document.getElementById('ambient_light_intensity').disabled = disable;
         document.getElementById('back_color').disabled = disable;
         document.getElementById('btn_edges').disabled = disable;
+        document.getElementById('btn_flat').disabled = disable;
         document.getElementById('btn_dc_x').disabled = disable;
         document.getElementById('btn_dc_y').disabled = disable;
         document.getElementById('btn_dc_z').disabled = disable;
