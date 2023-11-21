@@ -63,9 +63,9 @@ class XYZLoader extends Loader {
 
 				// XYZ
 
-				vertices.push( parseFloat( lineValues[ 0 ] ) );
-				vertices.push( parseFloat( lineValues[ 1 ] ) );
-				vertices.push( parseFloat( lineValues[ 2 ] ) );
+				vertices.push( parseFloat( lineValues[ 0 ] ) || 0 );
+				vertices.push( parseFloat( lineValues[ 1 ] ) || 0 );
+				vertices.push( parseFloat( lineValues[ 2 ] ) || 0 );
 
 			} else {
 
@@ -75,9 +75,9 @@ class XYZLoader extends Loader {
 
 					// XYZ
 
-					vertices.push( parseFloat( lineValues[ 0 ] ) );
-					vertices.push( parseFloat( lineValues[ 1 ] ) );
-					vertices.push( parseFloat( lineValues[ 2 ] ) );
+					vertices.push( parseFloat( lineValues[ 0 ] ) || 0 );
+					vertices.push( parseFloat( lineValues[ 1 ] ) || 0 );
+					vertices.push( parseFloat( lineValues[ 2 ] ) || 0 );
 
 				}
 
