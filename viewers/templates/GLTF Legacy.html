@@ -6,13 +6,23 @@
     <meta name="viewport" content="width=device-width, user-scalable=no">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
-    <script src="../static/model-tag/dist/model-gltf.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js" defer></script>
-    <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
-    <script src="../static/js/utils/TextureUtils.js" defer></script>
-    <script src="../static/js/exporters/OBJExporter.js" defer></script>
-    <script src="../static/js/exporters/GLTFExporter.js" defer></script>
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+    <script src="../static/model-tag/dist/model-gltf.min.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      THREE = three_js;
+    </script>
 
     <style>
       body, html {
@@ -273,8 +283,8 @@
     </script>
 
     <script>
-      var manager, filename, local_blobs, url_displayed = false, url_loading = false;
-      var selected_model_file, selected_url_model_file, selected_url_file = '', zip;
+      var THREE, local_blobs, url_displayed = false, url_loading = false;
+      var selected_model_file, selected_url_file = '', filename = 'Model', zip;
 
       const link = document.createElement( 'a' );
       link.style.display = 'none';
@@ -292,8 +302,6 @@
       function set_filename() {
         if (selected_model_file) {
           filename = selected_model_file.name.substring( 0, selected_model_file.name.lastIndexOf('.') );
-        } else if (selected_url_model_file) {
-          filename = selected_url_model_file.substring( selected_url_model_file.lastIndexOf('/') + 1, selected_url_model_file.lastIndexOf('.') );
         }
       }
 
@@ -350,53 +358,55 @@
           }
         });
 
-        let obj_exporter = new THREE.OBJExporter( manager );
+        const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.js" );
 
-        let exported = obj_exporter.parse( mesh, filename );
+        let obj_exporter = new OBJExporter();
 
-        zip.file( filename + '.obj', exported[ 'obj' ] );
+        await obj_exporter.parse( mesh, filename, async function( exported ) {
+          zip.file( filename + '.obj', exported[ 'obj' ] );
 
-        if (exported[ 'mtl' ]) {
-          zip.file( filename + '.mtl', exported[ 'mtl' ] );
+          if (exported[ 'mtl' ]) {
+            zip.file( filename + '.mtl', exported[ 'mtl' ] );
 
-          if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
-            let processed_index = 0;
+            if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
+              let processed_index = 0;
 
-            exported[ 'tex' ].forEach( tex => {
-              let blob = new Blob( [ tex.data ], { type: 'image/png' } );
+              exported[ 'tex' ].forEach( tex => {
+                let blob = new Blob( [ tex.data ], { type: 'image/png' } );
 
-              let img = new Image();
+                let img = new Image();
 
-              img.onload = async function() {
-                let canvas = document.createElement('canvas');
+                img.onload = async function() {
+                  let canvas = document.createElement('canvas');
 
-                canvas.width = img.naturalWidth;
-                canvas.height = img.naturalHeight;
+                  canvas.width = img.naturalWidth;
+                  canvas.height = img.naturalHeight;
 
-                const ctx = canvas.getContext( '2d' );
+                  const ctx = canvas.getContext( '2d' );
 
-                // Flip image vertically
-                ctx.scale( 1, -1 );
-                ctx.drawImage( img, 0, -canvas.height );
+                  // Flip image vertically
+                  ctx.scale( 1, -1 );
+                  ctx.drawImage( img, 0, -canvas.height );
 
-                await new Promise( resolve => canvas.toBlob( resolve ) ).then( async function( canvas_blob ) {
-                  zip.file( `${ tex.name }.${ tex.ext }`, canvas_blob );
+                  await new Promise( resolve => canvas.toBlob( resolve ) ).then( async function( canvas_blob ) {
+                    zip.file( `${ tex.name }.${ tex.ext }`, canvas_blob );
 
-                  if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
-                });
+                    if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
+                  });
 
-                processed_index += 1;
-              }
+                  processed_index += 1;
+                }
 
-              img.src = URL.createObjectURL( blob );
-              URL.revokeObjectURL( blob );
-            });
+                img.src = URL.createObjectURL( blob );
+                URL.revokeObjectURL( blob );
+              });
+            } else {
+              await process_zip( '_OBJ' );
+            }
           } else {
             await process_zip( '_OBJ' );
           }
-        } else {
-          await process_zip( '_OBJ' );
-        }
+        });
       }
 
       async function export_gltf( binary = false ) {
@@ -437,7 +447,9 @@
           }
         });
 
-        let gltf_exporter = new THREE.GLTFExporter( manager );
+        const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
+
+        let gltf_exporter = new GLTFExporter();
 
         let options = {	binary: binary, maxTextureSize: 4096 || Infinity };
 
@@ -462,8 +474,6 @@
       }
 
       function init() {
-        if (manager === undefined) manager = new THREE.LoadingManager();
-
         if (zip === undefined) zip = new JSZip();
 
         reset( true );
@@ -494,7 +504,6 @@
 
           if (local_blobs.length > 0) local_blobs = local_blobs.slice( 0, - 1 );
         } else {
-          selected_url_model_file = null;
           selected_model_file = null;
           url_loading = false;
 
@@ -555,61 +564,50 @@
 
       async function loadURLFile() {
         if (selected_url_file !== '') {
-          if (selected_url_file.indexOf( ',' ) > -1) {
-            let urls = selected_url_file.split( ',' );
-
-            for (let i = 0; i < urls.length; i++) {
-              let url = urls[ i ].trim();
-              let ext = url.toUpperCase().substring( url.lastIndexOf( '.' ) );
-
-              if (model_extensions.includes( ext )) selected_url_model_file = url;
-            }
-          } else {
-            let ext = selected_url_file.toUpperCase().substring( selected_url_file.lastIndexOf( '.' ) );
-            if (model_extensions.includes( ext )) selected_url_model_file = selected_url_file;
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          if (selected_url_model_file !== null) {
-            let div_mdl_gltf = document.getElementById('div_model_gltf');
-            let mdl_gltf = document.getElementById('model_gltf');
-            mdl_gltf.attributes.src = '#';
+          // No extension checking for URL so it has to point to GLTF model
 
-            await new Promise( resolve => setTimeout( resolve, 50 ) ); // adjust timing if necessary
+          let div_mdl_gltf = document.getElementById('div_model_gltf');
+          let mdl_gltf = document.getElementById('model_gltf');
+          mdl_gltf.attributes.src = '#';
 
-            div_mdl_gltf.removeChild( mdl_gltf );
+          await new Promise( resolve => setTimeout( resolve, 50 ) ); // adjust timing if necessary
 
-            let src_attr = document.createAttribute('src');
-            src_attr.value = selected_url_model_file;
+          div_mdl_gltf.removeChild( mdl_gltf );
 
-            let model_gltf = document.createElement('model-gltf');
-            model_gltf.id = 'model_gltf';
+          let src_attr = document.createAttribute('src');
+          src_attr.value = selected_url_file;
 
-            div_mdl_gltf.appendChild( model_gltf );
+          let model_gltf = document.createElement('model-gltf');
+          model_gltf.id = 'model_gltf';
 
-            model_gltf.onLoad = function( data ) {
-              enable_disable( false );
+          div_mdl_gltf.appendChild( model_gltf );
 
-              if (data.cameras && data.cameras.length > 1) {
-                document.getElementById('camera_id').max = data.cameras.length - 1;
-                document.getElementById('camera_x').value = data.cameras[ 0 ].position.x;
-                document.getElementById('camera_y').value = data.cameras[ 0 ].position.y;
-                document.getElementById('camera_z').value = data.cameras[ 0 ].position.z;
-              } else {
-                document.getElementById('camera_id').disabled = true;
-              }
+          model_gltf.onLoad = function( data ) {
+            enable_disable( false );
+
+            if (data.cameras && data.cameras.length > 1) {
+              document.getElementById('camera_id').max = data.cameras.length - 1;
+              document.getElementById('camera_x').value = data.cameras[ 0 ].position.x;
+              document.getElementById('camera_y').value = data.cameras[ 0 ].position.y;
+              document.getElementById('camera_z').value = data.cameras[ 0 ].position.z;
+            } else {
+              document.getElementById('camera_id').disabled = true;
             }
-
-            model_gltf.onError = function( error ) {
-              document.getElementById('div_error').style.display = 'block';
-              document.getElementById('div_error').innerText = error;
-              return;
-            }
-
-            model_gltf.attributes.setNamedItem( src_attr );
-          } else {
-            console.log( 'No valid URL model file selected!' );
-            enable_disable( true );
           }
+
+          model_gltf.onError = function( error ) {
+            document.getElementById('div_error').style.display = 'block';
+            document.getElementById('div_error').innerText = error;
+            return;
+          }
+
+          model_gltf.attributes.setNamedItem( src_attr );
         }
       }
     </script>
