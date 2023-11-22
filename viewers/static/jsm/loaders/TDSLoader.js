@@ -598,13 +598,18 @@ class TDSLoader extends Loader {
 				if ( localPath !== '' ) {
 
 					let blobs = localPath.split( ',' );
-					let temp_blob_name;
+					let temp_blob_name_12, temp_blob_name_8_4;
 
 					blobs.forEach( ( blob_name, index ) => {
 
-						if ( blob_name.length > 12 ) temp_blob_name = blob_name.substring( 0, 12 );
+						if ( blob_name.length > 12 ) {
 
-						if ( name.toUpperCase() === blob_name.toUpperCase() || ( temp_blob_name && name.toUpperCase() === temp_blob_name.toUpperCase() ) ) {
+							temp_blob_name_12 = blob_name.substring( 0, 12 );
+							temp_blob_name_8_4 = blob_name.substring( 0, 8 ) + blob_name.slice( -4 );
+
+						}
+
+						if ( name.toUpperCase() === blob_name.toUpperCase() || ( temp_blob_name_12 && name.toUpperCase() === temp_blob_name_12.toUpperCase() ) || ( temp_blob_name_8_4 && name.toUpperCase() === temp_blob_name_8_4.toUpperCase() ) ) {
 
 							local_texture_blob = blobs[ index + 1 ].substring( blobs[ index + 1 ].lastIndexOf( '/' ) + 1 );
 
@@ -1032,13 +1037,16 @@ class TDSLoader extends Loader {
 }
 
 // const NULL_CHUNK = 0x0000;
-const M3DMAGIC = 0x4D4D; // const SMAGIC = 0x2D2D;
+const M3DMAGIC = 0x4D4D;
+// const SMAGIC = 0x2D2D;
 // const LMAGIC = 0x2D3D;
 
-const MLIBMAGIC = 0x3DAA; // const MATMAGIC = 0x3DFF;
+const MLIBMAGIC = 0x3DAA;
+// const MATMAGIC = 0x3DFF;
 
 const CMAGIC = 0xC23D;
-const M3D_VERSION = 0x0002; // const M3D_KFVERSION = 0x0005;
+const M3D_VERSION = 0x0002;
+// const M3D_KFVERSION = 0x0005;
 
 const COLOR_F = 0x0010;
 const COLOR_24 = 0x0011;
@@ -1048,7 +1056,8 @@ const INT_PERCENTAGE = 0x0030;
 const FLOAT_PERCENTAGE = 0x0031;
 const MDATA = 0x3D3D;
 const MESH_VERSION = 0x3D3E;
-const MASTER_SCALE = 0x0100; // const LO_SHADOW_BIAS = 0x1400;
+const MASTER_SCALE = 0x0100;
+// const LO_SHADOW_BIAS = 0x1400;
 // const HI_SHADOW_BIAS = 0x1410;
 // const SHADOW_MAP_SIZE = 0x1420;
 // const SHADOW_SAMPLES = 0x1430;
@@ -1077,25 +1086,30 @@ const MAT_NAME = 0xA000;
 const MAT_AMBIENT = 0xA010;
 const MAT_DIFFUSE = 0xA020;
 const MAT_SPECULAR = 0xA030;
-const MAT_SHININESS = 0xA040; // const MAT_SHIN2PCT = 0xA041;
+const MAT_SHININESS = 0xA040;
+// const MAT_SHIN2PCT = 0xA041;
 
-const MAT_TRANSPARENCY = 0xA050; // const MAT_XPFALL = 0xA052;
+const MAT_TRANSPARENCY = 0xA050;
+// const MAT_XPFALL = 0xA052;
 // const MAT_USE_XPFALL = 0xA240;
 // const MAT_REFBLUR = 0xA053;
 // const MAT_SHADING = 0xA100;
 // const MAT_USE_REFBLUR = 0xA250;
 // const MAT_SELF_ILLUM = 0xA084;
 
-const MAT_TWO_SIDE = 0xA081; // const MAT_DECAL = 0xA082;
+const MAT_TWO_SIDE = 0xA081;
+// const MAT_DECAL = 0xA082;
 
 const MAT_ADDITIVE = 0xA083;
-const MAT_WIRE = 0xA085; // const MAT_FACEMAP = 0xA088;
+const MAT_WIRE = 0xA085;
+// const MAT_FACEMAP = 0xA088;
 // const MAT_TRANSFALLOFF_IN = 0xA08A;
 // const MAT_PHONGSOFT = 0xA08C;
 // const MAT_WIREABS = 0xA08E;
 
 const MAT_WIRE_SIZE = 0xA087;
-const MAT_TEXMAP = 0xA200; // const MAT_SXP_TEXT_DATA = 0xA320;
+const MAT_TEXMAP = 0xA200;
+// const MAT_SXP_TEXT_DATA = 0xA320;
 // const MAT_TEXMASK = 0xA33E;
 // const MAT_SXP_TEXTMASK_DATA = 0xA32A;
 // const MAT_TEX2MAP = 0xA33A;
@@ -1103,15 +1117,18 @@ const MAT_TEXMAP = 0xA200; // const MAT_SXP_TEXT_DATA = 0xA320;
 // const MAT_TEX2MASK = 0xA340;
 // const MAT_SXP_TEXT2MASK_DATA = 0xA32C;
 
-const MAT_OPACMAP = 0xA210; // const MAT_SXP_OPAC_DATA = 0xA322;
+const MAT_OPACMAP = 0xA210;
+// const MAT_SXP_OPAC_DATA = 0xA322;
 // const MAT_OPACMASK = 0xA342;
 // const MAT_SXP_OPACMASK_DATA = 0xA32E;
 
-const MAT_BUMPMAP = 0xA230; // const MAT_SXP_BUMP_DATA = 0xA324;
+const MAT_BUMPMAP = 0xA230;
+// const MAT_SXP_BUMP_DATA = 0xA324;
 // const MAT_BUMPMASK = 0xA344;
 // const MAT_SXP_BUMPMASK_DATA = 0xA330;
 
-const MAT_SPECMAP = 0xA204; // const MAT_SXP_SPEC_DATA = 0xA325;
+const MAT_SPECMAP = 0xA204;
+// const MAT_SXP_SPEC_DATA = 0xA325;
 // const MAT_SPECMASK = 0xA348;
 // const MAT_SXP_SPECMASK_DATA = 0xA332;
 // const MAT_SHINMAP = 0xA33C;
@@ -1127,20 +1144,23 @@ const MAT_SPECMAP = 0xA204; // const MAT_SXP_SPEC_DATA = 0xA325;
 // const MAT_SXP_REFLMASK_DATA = 0xA338;
 // const MAT_ACUBIC = 0xA310;
 
-const MAT_MAPNAME = 0xA300; // const MAT_MAP_TILING = 0xA351;
+const MAT_MAPNAME = 0xA300;
+// const MAT_MAP_TILING = 0xA351;
 // const MAT_MAP_TEXBLUR = 0xA353;
 
 const MAT_MAP_USCALE = 0xA354;
 const MAT_MAP_VSCALE = 0xA356;
 const MAT_MAP_UOFFSET = 0xA358;
-const MAT_MAP_VOFFSET = 0xA35A; // const MAT_MAP_ANG = 0xA35C;
+const MAT_MAP_VOFFSET = 0xA35A;
+// const MAT_MAP_ANG = 0xA35C;
 // const MAT_MAP_COL1 = 0xA360;
 // const MAT_MAP_COL2 = 0xA362;
 // const MAT_MAP_RCOL = 0xA364;
 // const MAT_MAP_GCOL = 0xA366;
 // const MAT_MAP_BCOL = 0xA368;
 
-const NAMED_OBJECT = 0x4000; // const N_DIRECT_LIGHT = 0x4600;
+const NAMED_OBJECT = 0x4000;
+// const N_DIRECT_LIGHT = 0x4600;
 // const DL_OFF = 0x4620;
 // const DL_OUTER_RANGE = 0x465A;
 // const DL_INNER_RANGE = 0x4659;
@@ -1171,13 +1191,16 @@ const NAMED_OBJECT = 0x4000; // const N_DIRECT_LIGHT = 0x4600;
 // const OBJ_FROZEN = 0x4016;
 
 const N_TRI_OBJECT = 0x4100;
-const POINT_ARRAY = 0x4110; // const POINT_FLAG_ARRAY = 0x4111;
+const POINT_ARRAY = 0x4110;
+// const POINT_FLAG_ARRAY = 0x4111;
 
 const FACE_ARRAY = 0x4120;
-const MSH_MAT_GROUP = 0x4130; // const SMOOTH_GROUP = 0x4150;
+const MSH_MAT_GROUP = 0x4130;
+// const SMOOTH_GROUP = 0x4150;
 // const MSH_BOXMAP = 0x4190;
 
 const TEX_VERTS = 0x4140;
-const MESH_MATRIX = 0x4160; // const MESH_COLOR = 0x4165;
+const MESH_MATRIX = 0x4160;
+// const MESH_COLOR = 0x4165;
 
 export { TDSLoader };
