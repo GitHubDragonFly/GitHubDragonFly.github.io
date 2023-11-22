@@ -258,7 +258,8 @@ class TDSLoader extends Loader {
 
 		const chunk = this.readChunk( data );
 		let next = this.nextChunk( data, chunk );
-		const material = new MeshPhysicalMaterial( { metalness: 0.6, roughness: 0.5 } );
+		let specular_present = false;
+		const material = new MeshPhysicalMaterial( { metalness: 0.5, roughness: 0.4 } );
 
 		while ( next !== 0 ) {
 
@@ -295,6 +296,7 @@ class TDSLoader extends Loader {
 
 			} else if ( next === MAT_SPECULAR ) {
 
+				specular_present = true;
 				this.debugMessage( '   Specular THREE.Color' );
 				material.specularColor = this.readColor( data );
 
@@ -336,6 +338,7 @@ class TDSLoader extends Loader {
 
 			} else if ( next === MAT_SPECMAP ) {
 
+				specular_present = true;
 				this.debugMessage( '   SpecularMap' );
 				this.resetPosition( data );
 				material.specularColorMap = this.readMap( data, path );
@@ -347,6 +350,13 @@ class TDSLoader extends Loader {
 			}
 
 			next = this.nextChunk( data, chunk );
+
+		}
+
+		if ( specular_present === true ) {
+
+			material.metalness = 0.3;
+			material.roughness = 0.8;
 
 		}
 
