@@ -259,7 +259,7 @@ class TDSLoader extends Loader {
 		const chunk = this.readChunk( data );
 		let next = this.nextChunk( data, chunk );
 		let specular_present = false;
-		const material = new MeshPhysicalMaterial( { metalness: 0.5, roughness: 0.4 } );
+		const material = new MeshPhysicalMaterial( { metalness: 0.6, roughness: 0.5 } );
 
 		while ( next !== 0 ) {
 
@@ -355,8 +355,8 @@ class TDSLoader extends Loader {
 
 		if ( specular_present === true ) {
 
-			material.metalness = 0.3;
-			material.roughness = 0.8;
+			material.metalness = 0.475;
+			material.roughness = 0.725;
 
 		}
 
