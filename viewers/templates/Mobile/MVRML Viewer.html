@@ -6,11 +6,44 @@
     <meta name="description" content="VRML (Virtual Reality Modeling Language) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://cdn.jsdelivr.net/npm/chevrotain@10.5.0/lib/chevrotain.min.js" defer></script>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0" defer></script>
-    <script src="../../static/js/VRMLLoader.js" defer></script>
-    <script src="../../static/js/OrbitControls.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { VRMLLoader } from "../static/jsm/loaders/VRMLLoader.js";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+
+      THREE = three_js;
+
+      manager = new THREE.LoadingManager();
+
+      manager.onProgress = function ( item, loaded, total ) {
+        if ( loaded === total ) {
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+          enable_disable( false );
+          render_requested = true;
+          mouse_wheel = true;
+          render();
+        }
+      }
+
+      vrml_loader = new VRMLLoader( manager );
+
+      orb_controls = OrbitControls;
+      room_env = RoomEnvironment;
+    </script>
 
     <style>
       body, html {
@@ -177,9 +210,9 @@
     </script>
 
     <script>
-      var manager, vrml_loader, renderer, scene, camera, vrml_obj;
-      var controls, mouse_down, mouse_wheel, events_initialized;
-      var directionalLight, wireframe_enabled, render_requested;
+      var THREE, manager, vrml_loader, renderer, scene, camera, vrml_obj;
+      var controls, orb_controls, mouse_down, mouse_wheel, events_initialized;
+      var directionalLight, wireframe_enabled, render_requested, room_env;
       var ww = window.innerWidth, wh = window.innerHeight;
       var bounding_box, flat_shading_enabled, local_blobs;
       var url_displayed = false, url_loading = false, count = 0;
@@ -193,7 +226,6 @@
 
       function set_initial_scale() {
         // Set the initial scale of the object so it comes to view
-
         bounding_box.setFromObject( vrml_obj );
         let bounding_sphere = bounding_box.getBoundingSphere( new THREE.Sphere() );
 
@@ -216,6 +248,8 @@
         bounding_box.setFromObject( vrml_obj );
         let center = bounding_box.getCenter( new THREE.Vector3() );
         controls.target.set( center.x, center.y, center.z );
+
+        mouse_wheel = true;
       }
 
       function init() {
@@ -245,23 +279,7 @@
 
         enable_disable( true );
 
-        if (manager === undefined) manager = new THREE.LoadingManager();
-
-        manager.onProgress = function ( item, loaded, total ) {
-          if ( loaded === total ) {
-            console.timeEnd( 'Loading Time' );
-            document.getElementById('div_loading').style.display = 'none';
-            enable_disable( false );
-            render_requested = true;
-            mouse_wheel = true;
-            render();
-          }
-        }
-
-        if (vrml_loader === undefined) {
-          vrml_loader = new THREE.VRMLLoader( manager );
-          manager.addHandler(/\.wrl$/i, vrml_loader);
-        }
+        THREE.DefaultLoadingManager.onLoad = function() { pmremGenerator.dispose(); }
 
         selected_vrml_file = null;
         mouse_down = false;
@@ -332,15 +350,15 @@
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 3.5 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 4.5 );
           directionalLight.position.set( 0, 0, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls(camera, renderer.domElement);
-          controls.enableZoomToCursor = true;
+          controls = new orb_controls( camera, renderer.domElement );
+          controls.zoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
           controls.keyPanSpeed = 0.8; 
@@ -360,59 +378,66 @@
       }
 
       function loadFile() {
-        vrml_loader.load( URL.createObjectURL( selected_vrml_file ), local_blobs, function( object ) {
-          URL.revokeObjectURL( selected_vrml_file );
-
-          vrml_obj = object.clone();
-
-          vrml_obj.traverse( child => {
-            if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
-              flat_shading_enabled = false;
-
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  if (child.type === 'Points' || child.isPoints) {
-                    mtl.size = 1.5;
-                  } else {
-                    mtl.emissiveIntensity = 0.3;
-                    mtl.flatShading = flat_shading_enabled;
-                  }
-
-                  // Default to double side
-                  mtl.side = THREE.DoubleSide;
-
-                  mtl.needsUpdate = true;
-                });
-              } else {
-                if (child.type === 'Points' || child.isPoints) {
-                  child.material.size = 1.5;
-                } else {
-                  child.material.emissiveIntensity = 0.3;
-                  child.material.flatShading = flat_shading_enabled;
-                }
-
-                // Default to double side
-                child.material.side = THREE.DoubleSide;
-
-                child.material.needsUpdate = true;
-              }
-            }
-          });
-
-          vrml_obj.position.set( 0, 0, 0 );
-
-          // Add vrml_obj to the scene
-          scene.add( vrml_obj );
-
-          set_initial_scale();
-          resize();
-        }, function ( xhr ) { // onProgress
-        }, function ( error ) { // onError
+        vrml_loader.load( URL.createObjectURL( selected_vrml_file ), local_blobs, addFileInScene,
+        function ( xhr ) { }, // onProgress
+        function ( error ) { // onError
           handle_error( error );
           URL.revokeObjectURL( selected_vrml_file );
         });
 
         mouse_wheel = true;
+      }
+
+      function addFileInScene( object ) {
+        if (selected_vrml_file !== null) URL.revokeObjectURL( selected_vrml_file );
+
+        vrml_obj = object.clone();
+
+        vrml_obj.traverse( child => {
+          if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
+            flat_shading_enabled = false;
+
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtl => {
+                set_texture_colorSpace( mtl );
+
+                if (child.type === 'Points' || child.isPoints) {
+                  mtl.size = 1.5;
+                } else {
+                  mtl.emissiveIntensity = 0.3;
+                  mtl.flatShading = flat_shading_enabled;
+                }
+
+                // Default to double side
+                mtl.side = THREE.DoubleSide;
+
+                mtl.needsUpdate = true;
+              });
+            } else {
+              set_texture_colorSpace( child.material );
+
+              if (child.type === 'Points' || child.isPoints) {
+                child.material.size = 1.5;
+              } else {
+                child.material.emissiveIntensity = 0.3;
+                child.material.flatShading = flat_shading_enabled;
+              }
+
+              // Default to double side
+              child.material.side = THREE.DoubleSide;
+
+              child.material.needsUpdate = true;
+            }
+          }
+        });
+
+        vrml_obj.position.set( 0, 0, 0 );
+
+        // Add vrml_obj to the scene
+        scene.add( vrml_obj );
+
+        set_initial_scale();
+        resize();
       }
 
       function loadURLFile() {
@@ -423,57 +448,23 @@
             selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          // No extension checking for URL so it has to point to VRML model
+          // No extension checking for URL so it has to point to VRML (WRL) model
 
-          vrml_loader.load( selected_url_file, local_blobs, function( object ) {
-            vrml_obj = object.clone();
-
-            vrml_obj.traverse( child => {
-              if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
-                flat_shading_enabled = false;
-
-                if (Array.isArray( child.material )) {
-                  child.material.forEach( mtl => {
-                    if (child.type === 'Points' || child.isPoints) {
-                      mtl.size = 1.5;
-                    } else {
-                      mtl.emissiveIntensity = 0.3;
-                      mtl.flatShading = flat_shading_enabled;
-                    }
-
-                    // Default to double side
-                    mtl.side = THREE.DoubleSide;
-
-                    mtl.needsUpdate = true;
-                  });
-                } else {
-                  if (child.type === 'Points' || child.isPoints) {
-                    child.material.size = 1.5;
-                  } else {
-                    child.material.emissiveIntensity = 0.3;
-                    child.material.flatShading = flat_shading_enabled;
-                  }
-
-                  // Default to double side
-                  child.material.side = THREE.DoubleSide;
-
-                  child.material.needsUpdate = true;
-                }
-              }
-            });
-
-            vrml_obj.position.set( 0, 0, 0 );
-
-            // Add vrml_obj to the scene
-            scene.add( vrml_obj );
-
-            set_initial_scale();
-            resize();
-          }, function ( xhr ) { // onProgress
-          }, function ( error ) { // onError
-            handle_error( error );
-          });
+          vrml_loader.load( selected_url_file, local_blobs, addFileInScene,
+          function ( xhr ) { }, // onProgress
+          function ( error ) { handle_error( error ); }); // onError
         }
+      }
+
+      function set_texture_colorSpace( material ) {
+        if (material.map) material.map.colorSpace = THREE.SRGBColorSpace;
+        if (material.aoMap) material.aoMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.alphaMap) material.alphaMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.bumpMap) material.bumpMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.lightMap) material.lightMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.emissiveMap) material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+        if (material.normalMap) material.normalMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.specularMap) material.specularMap.colorSpace = THREE.SRGBColorSpace;
       }
 
       function handle_error( error ) {
@@ -614,14 +605,14 @@
         document.getElementById('btn_flat').disabled = disable;
         document.getElementById('btn_wireframe').disabled = disable;
         disabled_changed();
+
+        mouse_wheel = true;
       }
     </script>
 
     <script>
       function disabled_changed() {
         $('button').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
@@ -629,11 +620,11 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
 
         $('input[type=color]').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
@@ -641,6 +632,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
       }
     </script>
