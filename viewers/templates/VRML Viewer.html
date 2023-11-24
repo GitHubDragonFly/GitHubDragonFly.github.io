@@ -5,24 +5,66 @@
     <meta name="description" content="VRML (Virtual Reality Modeling Language) Viewer">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://cdn.jsdelivr.net/npm/chevrotain@10.5.0/lib/chevrotain.min.js" defer></script>
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0" defer></script>
-    <script src="../static/js/VRMLLoader.js" defer></script>
-    <script src="../static/js/RGBELoader.js" defer></script>
-    <script src="../static/js/upng/UPNG.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/rhino3dm.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
+      import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
+      import { VRMLLoader } from "../static/jsm/loaders/VRMLLoader.js";
+      import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
+      import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
+
+      THREE = three_js;
+
+      manager = new THREE.LoadingManager();
+
+      manager.onProgress = function ( item, loaded, total ) {
+        if ( loaded === total ) {
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+          enable_disable( false );
+          render_requested = true;
+          mouse_wheel = true;
+          render();
+        }
+      }
+
+      vrml_loader = new VRMLLoader( manager );
+
+      rgbe_loader = new RGBELoader();
+      rgbe_loader.setDataType( THREE.HalfFloatType );
+
+      texture_loader = new THREE.TextureLoader();
+
+      gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
+
+      if (menu_location_bottom === false) {
+        let fixed_menu_bottom = ( parseInt( $("#fixed_menu").outerHeight( true ) ) + 2 ).toString() + "px";
+        document.getElementById("gui_position").style.marginTop = fixed_menu_bottom;
+      } else {
+        document.getElementById("gui_position").style.marginTop = "2px";
+      }
+
+      orb_controls = OrbitControls;
+      orb_controls_gizmo = OrbitControlsGizmo;
+    </script>
+
+    <script src="../static/js/upng/UPNG.min.js" defer></script>
+    <script src="../static/js/omggif/omggif.min.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
-    <script src="../static/js/omggif/omggif.js" defer></script>
-    <script src="../static/js/OrbitControls.js" defer></script>
-    <script src="../static/js/OrbitControlsGizmo.js" defer></script>
-    <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
-    <script src="../static/js/utils/TextureUtils.js" defer></script>
-    <script src="../static/js/exporters/PLYExporter.js" defer></script>
-    <script src="../static/js/exporters/STLExporter.js" defer></script>
-    <script src="../static/js/exporters/OBJExporter.js" defer></script>
-    <script src="../static/js/exporters/GLTFExporter.js" defer></script>
-    <script src="../static/js/exporters/ColladaExporter.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/rhino3dm.js" defer></script>
 
     <style>
       body, html {
@@ -348,7 +390,7 @@
     </div>
     <div id="gui_position"></div>
     <div id="animation_progress" style="display: none; background-color: whitesmoke; border: none;">
-      <progress id="progress" value="0" max="1"></progress>
+      <progress id="progress" value="0" max="1" style="width: 99.5%; margin-left: 3px; margin-right: 3px;"></progress>
     </div>
 
     <div id="div_spinner" class="spinner"></div>
@@ -591,9 +633,10 @@
     </script>
 
     <script>
-      var manager, texture_loader, vrml_loader, rgbe_loader, renderer, scene, camera, vrml_obj, render_requested;
-      var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible, edges, edges_visible;
-      var gui, gui_set = false, guiExposure, params, toneMappingOptions, tex, count = 0;
+      var THREE, manager, texture_loader, vrml_loader, rgbe_loader, renderer, vrml_obj, render_requested;
+      var scene, camera, controls, orb_controls, gizmo, orb_controls_gizmo, edges, edges_visible;
+      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
+      var grid, polar_grid, grid_visible, polar_grid_visible, tex, count = 0;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
@@ -601,8 +644,8 @@
       var bounding_box, filename, flat_shading_enabled;
       var initial_transparency, initial_transparency_array;
       var initial_opacity, initial_opacity_array, enable_opacity;
-      var original_side, original_side_array, bgnd_linear_gradient, zip;
-      var selected_vrml_file, selected_url_file = '', local_blobs;
+      var original_side, original_side_array, bgnd_linear_gradient;
+      var selected_vrml_file, selected_url_file = '', local_blobs, zip;
       var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
       var vertex_colors_enabled, original_vertex_color_array, random_vertex_colors_enabled, random_vertex_color_array;
 
@@ -624,10 +667,8 @@
       function set_filename() {
         if (selected_vrml_file) {
           filename = selected_vrml_file.name.substring( 0, selected_vrml_file.name.lastIndexOf('.') );
-        } else if (selected_url_file !== '' && selected_url_file.toUpperCase().endsWith('.WRL')) {
-          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') );
         } else {
-          filename = 'model';
+          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') );
         }
       }
 
@@ -656,33 +697,35 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let obj_exporter = new THREE.OBJExporter( manager );
+          const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.js" );
 
-          let exported = obj_exporter.parse( vrml_obj, filename );
+          let obj_exporter = new OBJExporter( manager );
 
-          zip.file( filename + '.obj', exported[ 'obj' ] );
+          await obj_exporter.parse( vrml_obj, filename, async function( exported ) {
+            zip.file( filename + '.obj', exported[ 'obj' ] );
 
-          if (exported[ 'mtl' ]) {
-            zip.file( filename + '.mtl', exported[ 'mtl' ] );
+            if (exported[ 'mtl' ]) {
+              zip.file( filename + '.mtl', exported[ 'mtl' ] );
 
-            if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
-              let processed_index = 0;
+              if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
+                let processed_index = 0;
 
-              exported[ 'tex' ].forEach( async tex => {
-                let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+                exported[ 'tex' ].forEach( async tex => {
+                  let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
 
-                zip.file( `${ tex.name }.${ tex.ext }`, blob );
+                  zip.file( `${ tex.name }.${ tex.ext }`, blob );
 
-                if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '.OBJ' );
+                  if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '.OBJ' );
 
-                processed_index += 1;
-              });
+                  processed_index += 1;
+                });
+              } else {
+                await process_zip( '.OBJ' );
+              }
             } else {
               await process_zip( '.OBJ' );
             }
-          } else {
-            await process_zip( '.OBJ' );
-          }
+          });
         }
       }
 
@@ -692,7 +735,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let ply_exporter = new THREE.PLYExporter( manager );
+          const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.js" );
+
+          let ply_exporter = new PLYExporter( manager );
 
           ply_exporter.parse( vrml_obj, async function( json ) {
             let blob;
@@ -718,7 +763,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let stl_exporter = new THREE.STLExporter( manager );
+          const { STLExporter } = await import( "../static/jsm/exporters/STLExporter.js" );
+
+          let stl_exporter = new STLExporter( manager );
 
           let string = stl_exporter.parse( vrml_obj ).split( ',' );
           let blob = new Blob( [ string ], { type: 'text/plain' } );
@@ -735,7 +782,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let dae_exporter = new THREE.ColladaExporter( manager );
+          const { ColladaExporter } = await import( "../static/jsm/exporters/ColladaExporter.js" );
+
+          let dae_exporter = new ColladaExporter( manager );
 
           let result = dae_exporter.parse( vrml_obj );
 
@@ -765,7 +814,9 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let gltf_exporter = new THREE.GLTFExporter( manager );
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
 
           let options = { binary: binary, maxTextureSize: 4096 || Infinity };
 
@@ -1187,7 +1238,7 @@
           document.getElementById('opacity_val').innerText = opacity_value;
 
           vrml_obj.traverse( function( child ) {
-            if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
+            if (child.type === 'Mesh' || child.isMesh) {
               if (Array.isArray( child.material )) {
                 let child_count_array = 1;
 
@@ -1219,7 +1270,7 @@
             set_model_opacity();
 
             vrml_obj.traverse( function( child ) {
-              if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
+              if (child.type === 'Mesh' || child.isMesh) {
                 if (Array.isArray( child.material )) {
                   let child_count_array = 1;
 
@@ -1244,7 +1295,7 @@
             show_dropdown_opacity();
 
             vrml_obj.traverse( function ( child ) {
-              if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
+              if (child.type === 'Mesh' || child.isMesh) {
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
                     mtl.transparent = true;
@@ -1366,6 +1417,8 @@
         mouse_wheel = true;
 
         gui.reset();
+
+        set_envMap( false );
 
         document.getElementById('gui_position').style.display = 'none';
 
@@ -1598,7 +1651,7 @@
 
           if (vrml_obj) {
             vrml_obj.traverse( function( child ) {
-              if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
+              if (child.type === 'Mesh' || child.isMesh) {
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
                     mtl.dispose();
@@ -1616,36 +1669,10 @@
 
           if (gui) gui_reset();
 
-          // Reset all values
           reset_all( true );
         }
 
         enable_disable( true );
-
-        if (manager === undefined) manager = new THREE.LoadingManager();
-
-        manager.onProgress = function ( item, loaded, total ) {
-          if ( loaded === total ) {
-            console.timeEnd( 'Loading Time' );
-            document.getElementById('div_loading').style.display = 'none';
-            enable_disable( false );
-            render_requested = true;
-            mouse_wheel = true;
-            render();
-          }
-        }
-
-        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
-
-        if (vrml_loader === undefined) {
-          vrml_loader = new THREE.VRMLLoader( manager );
-          manager.addHandler(/\.wrl$/i, vrml_loader);
-        }
-
-        if (rgbe_loader === undefined) {
-          rgbe_loader = new THREE.RGBELoader();
-          rgbe_loader.setDataType( THREE.HalfFloatType );
-        }
 
         if (zip === undefined) zip = new JSZip();
 
@@ -1662,7 +1689,6 @@
         selected_vrml_file = null;
         mouse_down = false;
         mouse_wheel = true;
-        guiExposure = null;
         local_blobs = '';
         edges = {};
         edges_visible = false;
@@ -1771,7 +1797,7 @@
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls = new orb_controls( camera, renderer.domElement );
           controls.enableZoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
@@ -1789,7 +1815,7 @@
         }
 
         if (gizmo === undefined) {
-          gizmo = new OrbitControlsGizmo( controls, {
+          gizmo = new orb_controls_gizmo( controls, {
             size: 65,
             padding: 4,
             bubbleSizePrimary: 7,
@@ -1816,83 +1842,91 @@
       }
 
       function loadFile() {
-        vrml_loader.load( URL.createObjectURL( selected_vrml_file ), local_blobs, function( object ) {
-          URL.revokeObjectURL( selected_vrml_file );
-
-          vrml_obj = object.clone();
-
-          let child_count = 1;
-
-          vrml_obj.traverse( child => {
-            if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
-              if (child.name === '') {
-                child.name = 'child_' + child_count;
-                child_count += 1;
-              }
-
-              random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-              original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
-
-              if (vertex_colors_enabled === false && child.geometry.attributes.color && child.geometry.attributes.color.count > 0) {
-                document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                document.getElementById('btn_random_vertex_colors').disabled = false;
-                vertex_colors_enabled = true;
-                random_vertex_changed();
-              }
-
-              if (Array.isArray( child.material )) {
-                let child_count_array = 1;
-
-                initial_transparency_array[ child.name ] = {};
-                initial_opacity_array[ child.name ] = {};
-                original_side_array[ child.name ] = {};
-
-                child.material.forEach( mtl => {
-                  mtl.emissiveIntensity = 0.3;
-                  mtl.flatShading = flat_shading_enabled;
-                  if (child.type === 'Points' || child.isPoints) mtl.size = 1.5;
-
-                  initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
-                  initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
-                  original_side_array[ child.name ][ child_count_array ] = mtl.side;
-                  child_count_array += 1;
-
-                  // Default to double side
-                  mtl.side = THREE.DoubleSide;
-
-                  mtl.needsUpdate = true;
-                });
-              } else {
-                child.material.emissiveIntensity = 0.3;
-                child.material.flatShading = flat_shading_enabled;
-                if (child.type === 'Points' || child.isPoints) child.material.size = 1.5;
-
-                initial_transparency[ child.name ] = child.material.transparent;
-                initial_opacity[ child.name ] = child.material.opacity;
-                original_side[ child.name ] = child.material.side;
-
-                // Default to double side
-                child.material.side = THREE.DoubleSide;
-
-                child.material.needsUpdate = true;
-              }
-
-              edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
-            }
-          });
-
-          vrml_obj.position.set( 0, 0, 0 );
-
-          // Add vrml_obj to the scene
-          scene.add( vrml_obj );
-
-          set_initial_scale();
-          resize();
-        }, function ( xhr ) { // onProgress
-        }, function ( error ) { // onError
+        vrml_loader.load( URL.createObjectURL( selected_vrml_file ), local_blobs, addFileInScene,
+        function ( xhr ) { }, // onProgress
+        function ( error ) { // onError
           handle_error( error );
           URL.revokeObjectURL( selected_vrml_file );
         });
+      }
+
+      function addFileInScene( object ) {
+        if (selected_vrml_file !== null) URL.revokeObjectURL( selected_vrml_file );
+
+        vrml_obj = object.clone();
+
+        let child_count = 1;
+
+        vrml_obj.traverse( child => {
+          if (child.type === 'Mesh' || child.isMesh) {
+            if (child.name === '') {
+              child.name = 'child_' + child_count;
+              child_count += 1;
+            }
+
+            random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+            original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+
+            if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+              vertex_colors_enabled = true;
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+              random_vertex_changed();
+            }
+
+            if (Array.isArray( child.material )) {
+              let child_count_array = 1;
+
+              initial_transparency_array[ child.name ] = {};
+              initial_opacity_array[ child.name ] = {};
+              original_side_array[ child.name ] = {};
+
+              child.material.forEach( mtl => {
+                initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
+                initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                original_side_array[ child.name ][ child_count_array ] = mtl.side;
+
+                set_texture_colorSpace( mtl );
+
+                mtl.emissiveIntensity = 0.3;
+                mtl.flatShading = flat_shading_enabled;
+                mtl.vertexColors = vertex_colors_enabled;
+
+                child_count_array += 1;
+
+                // Default to double side
+                mtl.side = THREE.DoubleSide;
+
+                mtl.needsUpdate = true;
+              });
+            } else {
+              initial_transparency[ child.name ] = child.material.transparent;
+              initial_opacity[ child.name ] = child.material.opacity;
+              original_side[ child.name ] = child.material.side;
+
+              set_texture_colorSpace( child.material );
+
+              child.material.emissiveIntensity = 0.3;
+              child.material.flatShading = flat_shading_enabled;
+              child.material.vertexColors = vertex_colors_enabled;
+
+              // Default to double side
+              child.material.side = THREE.DoubleSide;
+
+              child.material.needsUpdate = true;
+            }
+
+            edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
+          }
+        });
+
+        vrml_obj.position.set( 0, 0, 0 );
+
+        // Add vrml_obj to the scene
+        scene.add( vrml_obj );
+
+        set_initial_scale();
+        resize();
       }
 
       function loadURLFile() {
@@ -1903,83 +1937,23 @@
             selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          // No extension checking for URL so it has to point to VRML model
+          // No extension checking for URL so it has to point to VRML (WRL) model
 
-          vrml_loader.load( selected_url_file, local_blobs, function( object ) {
-            vrml_obj = object.clone();
-
-            let child_count = 1;
-
-            vrml_obj.traverse( child => {
-              if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
-                if (child.name === '') {
-                  child.name = 'child_' + child_count;
-                  child_count += 1;
-                }
-
-                random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: child.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-                original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
-
-                if (vertex_colors_enabled === false && child.geometry.attributes.color && child.geometry.attributes.color.count > 0) {
-                  document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                  document.getElementById('btn_random_vertex_colors').disabled = false;
-                  vertex_colors_enabled = true;
-                  random_vertex_changed();
-                }
-
-                if (Array.isArray( child.material )) {
-                  let child_count_array = 1;
-
-                  initial_transparency_array[ child.name ] = {};
-                  initial_opacity_array[ child.name ] = {};
-                  original_side_array[ child.name ] = {};
-
-                  child.material.forEach( mtl => {
-                    mtl.emissiveIntensity = 0.3;
-                    mtl.flatShading = flat_shading_enabled;
-                    if (child.type === 'Points' || child.isPoints) mtl.size = 1.5;
-
-                    initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
-                    initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
-                    original_side_array[ child.name ][ child_count_array ] = mtl.side;
-                    child_count_array += 1;
-
-                    // Default to double side
-                    mtl.side = THREE.DoubleSide;
-
-                    mtl.needsUpdate = true;
-                  });
-                } else {
-                  child.material.emissiveIntensity = 0.3;
-                  child.material.flatShading = flat_shading_enabled;
-                  if (child.type === 'Points' || child.isPoints) child.material.size = 1.5;
-
-                  initial_transparency[ child.name ] = child.material.transparent;
-                  initial_opacity[ child.name ] = child.material.opacity;
-                  original_side[ child.name ] = child.material.side;
-
-                  // Default to double side
-                  child.material.side = THREE.DoubleSide;
-
-                  child.material.needsUpdate = true;
-                }
-
-                edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), new THREE.LineBasicMaterial( { color: 0xFF0000 } ) );
-              }
-            });
-
-            vrml_obj.position.set( 0, 0, 0 );
-
-            // Add vrml_obj to the scene
-            scene.add( vrml_obj );
-
-            set_initial_scale();
-            resize();
-          }, function ( xhr ) { // onProgress
-          }, function ( error ) { // onError
-            handle_error( error );
-          });
+          vrml_loader.load( selected_url_file, local_blobs, addFileInScene,
+          function ( xhr ) { }, // onProgress
+          function ( error ) { handle_error( error ); }); // onError
         }
+      }
+
+      function set_texture_colorSpace( material ) {
+        if (material.map) material.map.colorSpace = THREE.SRGBColorSpace;
+        if (material.aoMap) material.aoMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.alphaMap) material.alphaMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.bumpMap) material.bumpMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.lightMap) material.lightMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.emissiveMap) material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+        if (material.normalMap) material.normalMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.specularMap) material.specularMap.colorSpace = THREE.SRGBColorSpace;
       }
 
       function handle_error( error ) {
@@ -2017,7 +1991,7 @@
         random_vertex_changed();
 
         vrml_obj.traverse( function( child ) {
-    	    if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
+    	    if (child.type === 'Mesh' || child.isMesh) {
             if (Array.isArray( child.material )) {
               child.material.forEach( mtl => {
                 mtl.vertexColors = vertex_colors_enabled;
@@ -2043,7 +2017,7 @@
         }
 
         vrml_obj.traverse( function( child ) {
-    	    if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
+    	    if (child.type === 'Mesh' || child.isMesh) {
             if (random_vertex_colors_enabled === true) {
               child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3, false ) );
             } else {
@@ -2327,7 +2301,7 @@
         if (grid_visible === true) show_grid();
 
         vrml_obj.traverse( function( child ) {
-          if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
+          if (child.type === 'Mesh' || child.isMesh) {
             if (Array.isArray( child.material )) {
               child.material.forEach( mtl => {
                 mtl.dispose();
@@ -2445,7 +2419,7 @@
           if (scene) {
             if (vrml_obj) {
               vrml_obj.traverse( function( child ) {
-                if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
+                if (child.type === 'Mesh' || child.isMesh) {
                   if (Array.isArray( child.material )) {
                     child.material.forEach( mtl => {
                       mtl.dispose();
@@ -2617,19 +2591,6 @@
         }
 
         mouse_wheel = true;
-      }
-    </script>
-
-    <script type="module">
-      import { GUI } from 'https://cdn.jsdelivr.net/npm/three@0.156.0/examples/jsm/libs/lil-gui.module.min.js';
-
-      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
-
-      if (menu_location_bottom === false) {
-        let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
-          document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
-      } else {
-        document.getElementById('gui_position').style.marginTop = '2px';
       }
     </script>
   </body>
