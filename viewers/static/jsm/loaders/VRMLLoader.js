@@ -25,7 +25,6 @@ import {
 	PointsMaterial,
 	Quaternion,
 	RGBAFormat,
-	RGBFormat,
 	RepeatWrapping,
 	Scene,
 	ShapeUtils,
@@ -33,9 +32,7 @@ import {
 	TextureLoader,
 	Vector2,
 	Vector3
-} from "../../build/three.module.js";
-import chevrotain from "../../libs/chevrotain.module.min.js";
-
+} from "three";
 
 var local_ImageTextures;
 
@@ -1385,7 +1382,7 @@ class VRMLLoader extends Loader {
 
 						}
 
-						texture = new DataTexture( data, width, height, ( useAlpha === true ) ? RGBAFormat : RGBFormat );
+						texture = new DataTexture( data, width, height, RGBAFormat );
 						texture.needsUpdate = true;
 						texture.__type = textureType; // needed for material modifications
 						break;
