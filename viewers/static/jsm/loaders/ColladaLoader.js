@@ -41,8 +41,8 @@ import {
 	VectorKeyframeTrack,
 	SRGBColorSpace
 } from "three";
-import { TGALoader } from "three/addons/loaders/TGALoader.js";
-import { DDSLoader } from "three/addons/loaders/DDSLoader.js";
+import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/TGALoader.js";
+import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/loaders/DDSLoader.js";
 
 class ColladaLoader extends Loader {
 
@@ -1502,7 +1502,7 @@ class ColladaLoader extends Loader {
 
 						}
 
-						texture.flipY = false;
+						texture.flipY = true;
 
 						if ( colorSpace !== null ) {
 
@@ -3734,10 +3734,10 @@ class ColladaLoader extends Loader {
 		const textureLoader = new TextureLoader( this.manager );
 		textureLoader.setPath( this.resourcePath || path ).setCrossOrigin( this.crossOrigin );
 
-		let tgaLoader = new TGALoader( this.manager );
+		const tgaLoader = new TGALoader( this.manager );
 		tgaLoader.setPath( this.resourcePath || path );
 
-		let ddsLoader = new DDSLoader( this.manager );
+		const ddsLoader = new DDSLoader( this.manager );
 		ddsLoader.setPath( this.resourcePath || path );
 
 		const animations = [];
@@ -3760,6 +3760,7 @@ class ColladaLoader extends Loader {
 			physicsModels: {},
 			kinematicsScenes: {}
 		};
+
 		parseLibrary( collada, 'library_animations', 'animation', parseAnimation );
 		parseLibrary( collada, 'library_animation_clips', 'animation_clip', parseAnimationClip );
 		parseLibrary( collada, 'library_controllers', 'controller', parseController );
