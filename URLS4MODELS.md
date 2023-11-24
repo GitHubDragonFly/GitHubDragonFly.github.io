@@ -7,6 +7,7 @@ Else, copy any of the following links and then paste it within the `URL` option 
 - access to [three.js](https://github.com/mrdoob/three.js/tree/master/examples) examples can be achieved with the following URL format, mind the correct path after `models`:
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/RobotExpressive/RobotExpressive.glb`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/collada/abb_irb52_7_120.dae`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/usdz/saeukkang.usdz`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vrml/extrusion3.wrl`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/fbx/stanford-bunny.fbx`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pdb/diamond.pdb`
