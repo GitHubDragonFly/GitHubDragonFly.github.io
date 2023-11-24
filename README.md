@@ -27,7 +27,7 @@ Main Menu Page
 # Notes about Number Type Converter
 
 - Appears to be fully functional for binary, hex, octal, signed and unsigned 8 / 16 / 32 / 64 / 128-bit integers and 32 / 64-bit floating-point numbers
-- This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/NumberConversion) so check its description
+- This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/Number_Type_Converter) so check its description
 - An open mind and some knowledge of number systems, hopefully binary, will help understand the displayed values
 - Possibly of good use to those who deal with Programmable Logic Controllers (PLC) and students
 - Note about float parser: if it encounters an invalid character, as per standard number rules, then it will stop and complete parsing of the string as a valid number which was present up to that point (ex. if you would enter `-75-88.5` under Float32 then it will be parsed as `-75`)
