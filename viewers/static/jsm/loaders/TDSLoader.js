@@ -6,12 +6,14 @@ import {
 	FileLoader,
 	Float32BufferAttribute,
 	Group,
+	LinearSRGBColorSpace,
 	Loader,
 	LoaderUtils,
 	Matrix4,
 	Mesh,
 	MeshPhysicalMaterial,
-	TextureLoader
+	TextureLoader,
+	SRGBColorSpace
 } from "three";
 
 /**
@@ -270,8 +272,8 @@ class TDSLoader extends Loader {
 
 			} else if ( next === MAT_WIRE ) {
 
-				this.debugMessage( '   Wireframe' );
 				material.wireframe = true;
+				this.debugMessage( '   Wireframe' );
 
 			} else if ( next === MAT_WIRE_SIZE ) {
 
@@ -286,24 +288,24 @@ class TDSLoader extends Loader {
 
 			} else if ( next === MAT_ADDITIVE ) {
 
-				this.debugMessage( '   Additive Blending' );
 				material.blending = AdditiveBlending;
+				this.debugMessage( '   Additive Blending' );
 
 			} else if ( next === MAT_DIFFUSE ) {
 
-				this.debugMessage( '   Diffuse THREE.Color' );
 				material.color = this.readColor( data );
+				this.debugMessage( '   Diffuse THREE.Color' );
 
 			} else if ( next === MAT_SPECULAR ) {
 
 				specular_present = true;
-				this.debugMessage( '   Specular THREE.Color' );
 				material.specularColor = this.readColor( data );
+				this.debugMessage( '   Specular THREE.Color' );
 
 			} else if ( next === MAT_AMBIENT ) {
 
-				this.debugMessage( '   Ambient color' );
 				material.color = this.readColor( data );
+				this.debugMessage( '   Ambient color' );
 
 			} else if ( next === MAT_SHININESS ) {
 
@@ -315,33 +317,37 @@ class TDSLoader extends Loader {
 
 				const transparency = this.readPercentage( data );
 				material.opacity = 1 - transparency;
-				this.debugMessage( '  Transparency : ' + transparency );
 				material.transparent = material.opacity < 1 ? true : false;
+				this.debugMessage( '  Transparency : ' + transparency );
 
 			} else if ( next === MAT_TEXMAP ) {
 
-				this.debugMessage( '   ColorMap' );
 				this.resetPosition( data );
 				material.map = this.readMap( data, path );
+				material.map.colorSpace = SRGBColorSpace;
+				this.debugMessage( '   ColorMap' );
 
 			} else if ( next === MAT_BUMPMAP ) {
 
-				this.debugMessage( '   BumpMap' );
 				this.resetPosition( data );
 				material.bumpMap = this.readMap( data, path );
+				material.bumpMap.colorSpace = LinearSRGBColorSpace;
+				this.debugMessage( '   BumpMap' );
 
 			} else if ( next === MAT_OPACMAP ) {
 
-				this.debugMessage( '   OpacityMap' );
 				this.resetPosition( data );
 				material.alphaMap = this.readMap( data, path );
+				material.alphaMap.colorSpace = LinearSRGBColorSpace;
+				this.debugMessage( '   OpacityMap' );
 
 			} else if ( next === MAT_SPECMAP ) {
 
 				specular_present = true;
-				this.debugMessage( '   SpecularMap' );
 				this.resetPosition( data );
 				material.specularColorMap = this.readMap( data, path );
+				material.specularColorMap.colorSpace = SRGBColorSpace;
+				this.debugMessage( '   SpecularMap' );
 
 			} else {
 
@@ -433,27 +439,35 @@ class TDSLoader extends Loader {
 
 				}
 
-				const matrix = new Matrix4(); //X Line
+				const matrix = new Matrix4();
+
+				//X Line
 
 				matrix.elements[ 0 ] = values[ 0 ];
 				matrix.elements[ 1 ] = values[ 6 ];
 				matrix.elements[ 2 ] = values[ 3 ];
-				matrix.elements[ 3 ] = values[ 9 ]; //Y Line
+				matrix.elements[ 3 ] = values[ 9 ];
+
+				//Y Line
 
 				matrix.elements[ 4 ] = values[ 2 ];
 				matrix.elements[ 5 ] = values[ 8 ];
 				matrix.elements[ 6 ] = values[ 5 ];
-				matrix.elements[ 7 ] = values[ 11 ]; //Z Line
+				matrix.elements[ 7 ] = values[ 11 ];
+
+				//Z Line
 
 				matrix.elements[ 8 ] = values[ 1 ];
 				matrix.elements[ 9 ] = values[ 7 ];
 				matrix.elements[ 10 ] = values[ 4 ];
-				matrix.elements[ 11 ] = values[ 10 ]; //W Line
+				matrix.elements[ 11 ] = values[ 10 ];
 
-				matrix.elements[ 12 ] = 0;
-				matrix.elements[ 13 ] = 0;
-				matrix.elements[ 14 ] = 0;
-				matrix.elements[ 15 ] = 1;
+				//W Line
+
+				//matrix.elements[ 12 ] = 0;
+				//matrix.elements[ 13 ] = 0;
+				//matrix.elements[ 14 ] = 0;
+				//matrix.elements[ 15 ] = 1;
 
 				matrix.transpose();
 
@@ -630,13 +644,18 @@ class TDSLoader extends Loader {
 				} else if ( urlPath !== '' ) {
 
 					let urls = urlPath.split( ',' );
-					let temp_url_name;
+					let temp_url_name_12, temp_url_name_8_4;
 
 					urls.forEach( ( url_name, index ) => {
 
-						if ( url_name.length > 12 ) temp_url_name = url_name.substring( 0, 12 );
+						if ( url_name.length > 12 ) {
 
-						if ( name.toUpperCase() === url_name.toUpperCase() || ( temp_url_name && name.toUpperCase() === temp_url_name.toUpperCase() ) ) {
+							temp_url_name_12 = url_name.substring( 0, 12 );
+							temp_url_name_8_4 = url_name.substring( 0, 8 ) + url_name.slice( -4 );
+
+						}
+
+						if ( name.toUpperCase() === url_name.toUpperCase() || ( temp_url_name_12 && name.toUpperCase() === temp_url_name_12.toUpperCase() ) || ( temp_url_name_8_4 && name.toUpperCase() === temp_url_name_8_4.toUpperCase() ) ) {
 
 							url_texture = urls[ index + 1 ];
 
@@ -660,7 +679,16 @@ class TDSLoader extends Loader {
 
 				}
 
-				if ( name.toLowerCase().endsWith( '.tga' ) ) { texture.generateMipmaps = true; texture.flipY = true; }
+				if ( name.toLowerCase().endsWith( '.tga' ) ) {
+
+					texture.generateMipmaps = true;
+					texture.flipY = true;
+
+				} else if ( name.toLowerCase().endsWith( '.dds' ) ) {
+
+					texture.repeat.y = - 1;
+
+				}
 
 				this.debugMessage( '      File: ' + path + name );
 
@@ -683,6 +711,11 @@ class TDSLoader extends Loader {
 
 				texture.repeat.y = this.readFloat( data );
 				this.debugMessage( '      RepeatY: ' + texture.repeat.y );
+
+			} else if ( next === MAT_MAP_ANG ) {
+
+				texture.rotation = this.readFloat( data );
+				this.debugMessage( '      Rotation: ' + texture.rotation );
 
 			} else {
 
@@ -747,7 +780,7 @@ class TDSLoader extends Loader {
 			const r = this.readByte( data );
 			const g = this.readByte( data );
 			const b = this.readByte( data );
-			color.setRGB( r / 255, g / 255, b / 255 );
+			color.setRGB( r / 255, g / 255, b / 255, LinearSRGBColorSpace );
 			this.debugMessage( '      THREE.Color: ' + color.r + ', ' + color.g + ', ' + color.b );
 
 		} else if ( chunk.id === COLOR_F || chunk.id === LIN_COLOR_F ) {
@@ -755,7 +788,7 @@ class TDSLoader extends Loader {
 			const r = this.readFloat( data );
 			const g = this.readFloat( data );
 			const b = this.readFloat( data );
-			color.setRGB( r, g, b );
+			color.setRGB( r, g, b, LinearSRGBColorSpace );
 			this.debugMessage( '      THREE.Color: ' + color.r + ', ' + color.g + ', ' + color.b );
 
 		} else {
@@ -1152,7 +1185,7 @@ const MAT_MAP_USCALE = 0xA354;
 const MAT_MAP_VSCALE = 0xA356;
 const MAT_MAP_UOFFSET = 0xA358;
 const MAT_MAP_VOFFSET = 0xA35A;
-// const MAT_MAP_ANG = 0xA35C;
+const MAT_MAP_ANG = 0xA35C;
 // const MAT_MAP_COL1 = 0xA360;
 // const MAT_MAP_COL2 = 0xA362;
 // const MAT_MAP_RCOL = 0xA364;
