@@ -1413,14 +1413,17 @@ class ColladaLoader extends Loader {
 
 				case 'tga':
 					loader = tgaLoader;
+					dds_texture_used = false;
 					break;
 
 				case 'dds':
 					loader = ddsLoader;
+					dds_texture_used = true;
 					break;
 
 				default:
 					loader = textureLoader;
+					dds_texture_used = false;
 
 			}
 
@@ -1502,6 +1505,8 @@ class ColladaLoader extends Loader {
 
 						}
 
+						if ( dds_texture_used === true ) texture.repeat.y = - 1;
+	
 						texture.flipY = true;
 
 						if ( colorSpace !== null ) {
@@ -3727,6 +3732,7 @@ class ColladaLoader extends Loader {
 
 		} // metadata
 
+		let dds_texture_used = false;
 
 		const version = collada.getAttribute( 'version' );
 		console.log( 'THREE.ColladaLoader: File version', version );
