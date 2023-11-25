@@ -60,7 +60,10 @@ Number Type Converter
 
 - Special notes about `ASSIMP Viewer` which is using [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and [ASSIMP](https://github.com/assimp/assimp) library:
   - This is a revamped version of my GLTF Viewer and is a sort of ASSIMP(JS) / three.js hybrid
-  - It can be used instead of GLTF v2.0 and GLTF v1.0 Legacy viewers and also provides more export options
+  - It can be used instead of both GLTF v1.0 and v2.0 viewers and also provides more export options, here is an example URLs for GLTF v1.0 of the [Barramundi Fish](https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/1.0/BarramundiFish) so just pay attention to the special case of the `glTF + BIN + textures` formatting:
+    - `https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF-Binary/BarramundiFish.glb`
+    - `https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF-Embedded/BarramundiFish.gltf`
+    - `https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish.gltf, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish.bin, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0001.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0002.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0003.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0004.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish0FS.glsl, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish0VS.glsl`
   - Might have bugs and interface / library related limitations and slow to load some models
   - It tries to take advantage of the `THREE.MeshPhysicalMaterial` to bring a GLTF alike functionality for OBJ + MTL models
   - Has multiple export options available, with special notes about JSON formats:
