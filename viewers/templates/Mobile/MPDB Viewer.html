@@ -6,12 +6,47 @@
     <meta name="description" content="PDB (Protein Data Bank) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0" defer></script>
-    <script src="../../static/js/renderers/CSS2DRenderer.js" defer></script>
-    <script src="../../static/js/PDBLoader.js" defer></script>
-    <script src="../../static/js/OrbitControls.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { PDBLoader } from "three/addons/loaders/PDBLoader.js";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
+      import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.js";
+
+      THREE = three_js;
+
+      manager = new THREE.LoadingManager();
+
+      manager.onProgress = function ( item, loaded, total ) {
+        if ( loaded === total ) {
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+          enable_disable( false );
+          render_requested = true;
+          mouse_wheel = true;
+          render();
+        }
+      }
+
+      pdb_loader = new PDBLoader( manager );
+
+      css2d_object = CSS2DObject;
+      css2d_renderer = CSS2DRenderer;
+
+      orb_controls = OrbitControls;
+      room_env = RoomEnvironment;
+    </script>
 
     <style>
       body, html {
@@ -181,16 +216,17 @@
     </script>
 
     <script>
-      var manager, pdb_loader, pdb_obj, render_requested;
-      var renderer, labelRenderer, scene, camera, controls;
+      var THREE, manager, pdb_loader, pdb_obj, scene, camera, controls, orb_controls;
+      var renderer, labelRenderer, css2d_renderer, css2d_object, render_requested;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
-      var ambientLight, directionalLight, bounding_box;
-      var ww = window.innerWidth, wh = window.innerHeight, count = 0;
+      var directionalLight, bounding_box, room_env, count = 0;
+      var ww = window.innerWidth, wh = window.innerHeight;
       var pmremGenerator, root, position, color, offset, start, end;
       var boxGeometry, sphereGeometry, geometryAtoms, geometryBonds;
-      var atoms, labels, bonds, atoms_visible, labels_visible, bonds_visible;
-      var selected_pdb_file, selected_pdb_url_file, selected_url_file = '';
-      var url_displayed = false, url_loading = false, json, positions, colors;
+      var atoms, labels, bonds, positions, colors, json;
+      var atoms_visible, labels_visible, bonds_visible;
+      var url_displayed = false, url_loading = false;
+      var selected_pdb_file, selected_url_file = '';
 
       function set_back_color() {
         scene.background = null;
@@ -262,7 +298,6 @@
         if (pdb_loader === undefined) pdb_loader = new THREE.PDBLoader( manager );
 
         selected_pdb_file = null;
-        selected_pdb_url_file = null;
         mouse_down = false;
         mouse_wheel = true;
         render_requested = false;
@@ -319,7 +354,7 @@
         }
 
         if (labelRenderer === undefined) {
-          labelRenderer = new THREE.CSS2DRenderer();
+          labelRenderer = new css2d_renderer();
           labelRenderer.setSize( ww, wh );
           labelRenderer.domElement.style.position = 'absolute';
           labelRenderer.domElement.style.top = '0px';
@@ -341,15 +376,15 @@
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 0.75 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2.75 );
           directionalLight.position.set( 0, 0, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls(camera, renderer.domElement);
-          //controls.enableZoomToCursor = true;
+          controls = new orb_controls(camera, renderer.domElement);
+          controls.zoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
           controls.keyPanSpeed = 0.8; 
@@ -367,7 +402,7 @@
 
         if (scene.environment === null) {
           pmremGenerator = new THREE.PMREMGenerator( renderer );
-          scene.environment = pmremGenerator.fromScene( new THREE.RoomEnvironment(), .005 ).texture;
+          scene.environment = pmremGenerator.fromScene( new room_env(), .005 ).texture;
         }
 
         // Load PDB file
@@ -400,21 +435,14 @@
       function loadURLFile() {
         if (selected_url_file !== '') {
           if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-            selected_pdb_url_file = selected_url_file.replace( 'www.dropbox.com', 'dl.dropbox.com' );
-          } else {
-            if (selected_url_file.startsWith('https://github.com') === true) {
-              selected_url_file = ( selected_url_file.replace( 'github.com', 'raw.githubusercontent.com' ) ).replace( 'blob/', '' );
-            }
-
-            if (selected_url_file.toUpperCase().endsWith('.PDB')) selected_pdb_url_file = selected_url_file;
+            selected_url_file = selected_url_file.replace( 'www.dropbox.com', 'dl.dropbox.com' );
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace( 'github.com', 'raw.githubusercontent.com' ) ).replace( 'blob/', '' );
           }
 
-          if (selected_pdb_url_file === null) {
-            handle_error( 'Unsupported URL file!' );
-            return;
-          }
+          // No extension checking for URL so it has to point to PDB model
 
-          pdb_loader.load( selected_pdb_url_file, function( pdb ) {
+          pdb_loader.load( selected_url_file, function( pdb ) {
             set_atoms_labels_bonds( pdb );
 
             pdb_obj = root;
@@ -429,8 +457,6 @@
           }, function ( error ) { // onError
             handle_error( error );
           });
-
-          mouse_wheel = true;
         }
       }
 
@@ -482,7 +508,7 @@
           text.style.textShadow = '1px 1px 1px #000';
           text.textContent = atom[ 4 ];
 
-          let label = new THREE.CSS2DObject( text );
+          let label = new css2d_object( text );
 
           label.position.copy( object.position );
           labels.push( label );
@@ -531,6 +557,8 @@
           labels_visible = true;
           document.getElementById('btn_labels').style.backgroundColor = 'lightgreen';
         }
+
+        mouse_wheel = true;
       }
 
       function show_atoms() {
@@ -544,7 +572,6 @@
           document.getElementById('btn_atoms').style.backgroundColor = 'lightgreen';
 
           atoms.forEach( element => { pdb_obj.add( element ); });
-          show_wireframe();
         }
 
         mouse_wheel = true;
@@ -577,7 +604,6 @@
           document.getElementById('btn_bonds').style.backgroundColor = 'lightgreen';
 
           bonds.forEach( element => { pdb_obj.add( element ); });
-          show_wireframe();
         }
 
         mouse_wheel = true;
@@ -587,6 +613,7 @@
         console.timeEnd( 'Loading Time' );
         console.log( 'Error loading model!' );
         console.log( error );
+        mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
 
@@ -670,14 +697,14 @@
         document.getElementById('btn_labels').disabled = disable;
         document.getElementById('btn_bonds').disabled = disable;
         disabled_changed();
+
+        mouse_wheel = true;
       }
     </script>
 
     <script>
       function disabled_changed() {
         $('button').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
@@ -685,11 +712,11 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
 
         $('input[type=color]').each( function() {
-          mouse_wheel = true;
-
           if (this.disabled === false ) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
@@ -697,6 +724,8 @@
           } else {
             $(this).unbind('mouseenter mouseleave');
           }
+
+          mouse_wheel = true;
         });
       }
     </script>
