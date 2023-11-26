@@ -3281,7 +3281,7 @@ class GLTFParser {
 
 					}
 
-				} else if ( ( source.uri && source.uri === blobs[ i ] ) || ( source.name && ( source.name === blobs[ i ] || source.name.endsWith( blobs[ i ] ) ) ) || ( ( temp_name !== '' ) && ( temp_name === blobs[ i ] ) ) ) {
+				} else if ( ( source.uri && source.uri.toUpperCase() === blobs[ i ].toUpperCase() ) || ( source.name && ( source.name.toUpperCase() === blobs[ i ].toUpperCase() || source.name.toUpperCase().endsWith( blobs[ i ].toUpperCase() ) ) ) || ( ( temp_name !== '' ) && ( temp_name.toUpperCase() === blobs[ i ].toUpperCase() ) ) ) {
 
 					if ( texture_set === false ) {
 

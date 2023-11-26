@@ -783,6 +783,12 @@ class MaterialCreator {
 
 				}
 
+				if ( params.roughnessMap !== undefined && params.roughness === 1 ) {
+
+					params.roughness = 0.95;
+
+				}
+
 				if ( params.metalnessMap === undefined && params.roughnessMap === undefined ) {
 
 					if ( params.metalness === undefined && ( params.roughness === undefined || params.roughness === 1.0 ) ) {
