@@ -3233,7 +3233,7 @@ class GLTFParser {
 
 		if ( options.resourcePath.includes( ',' ) === true ) {
 
-			let temp_name = '';
+			let temp_name = '', temp_name_12 = '', temp_name_8_4 = '';
 			let any_texture = false;
 			let blobs = options.resourcePath.split( ',' );
 
@@ -3254,6 +3254,13 @@ class GLTFParser {
 
 			for ( let i = 0; i < blobs.length; i += 2 ) {
 
+				if ( blobs[ i ].length > 12 ) {
+
+					temp_name_12 = ( blobs[ i ].substring( 0, 12 ) ).toUpperCase();
+					temp_name_8_4 = ( blobs[ i ].substring( 0, 8 ) + blobs[ i ].slice( -4 ) ).toUpperCase();
+
+				}
+
 				if ( any_texture === true ) {
 
 					let image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF', '.SVG', '.WEBP', 'DIB', '.DDS', '.EXR', '.KTX2', '.TGA' ];
@@ -3270,7 +3277,9 @@ class GLTFParser {
 
 					}
 
-				} else if ( ( source.uri && source.uri.toUpperCase() === blobs[ i ].toUpperCase() ) || ( source.name && ( source.name.toUpperCase() === blobs[ i ].toUpperCase() || source.name.toUpperCase().endsWith( blobs[ i ].toUpperCase() ) ) ) || ( ( temp_name !== '' ) && ( temp_name.toUpperCase() === blobs[ i ].toUpperCase() ) ) ) {
+				} else if ( ( source.uri && ( source.uri.toUpperCase() === blobs[ i ].toUpperCase() || source.uri.toUpperCase() === temp_name_12 || source.uri.toUpperCase() === temp_name_8_4 ) )
+				|| ( source.name && ( source.name.toUpperCase() === blobs[ i ].toUpperCase() || source.name.toUpperCase() === temp_name_12 || source.name.toUpperCase() === temp_name_8_4 || source.name.toUpperCase().endsWith( blobs[ i ].toUpperCase() ) ) )
+				 || ( ( temp_name !== '' ) && ( temp_name === blobs[ i ].toUpperCase() || temp_name === temp_name_12 || temp_name === temp_name_8_4 ) ) ) {
 
 					if ( texture_set === false ) {
 
