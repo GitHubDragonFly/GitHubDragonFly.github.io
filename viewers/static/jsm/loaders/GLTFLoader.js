@@ -150,6 +150,12 @@ class GLTFLoader extends Loader {
 
 		this.register( function ( parser ) {
 
+			return new GLTFMaterialsBumpExtension( parser );
+
+		} );
+
+		this.register( function ( parser ) {
+
 			return new GLTFMaterialsAnisotropyExtension( parser );
 
 		} );
@@ -191,7 +197,9 @@ class GLTFLoader extends Loader {
 
 			resourcePath = LoaderUtils.extractUrlBase( url );
 
-		} // Tells the LoadingManager to track an extra item, which resolves after
+		}
+
+		// Tells the LoadingManager to track an extra item, which resolves after
 		// the model is fully loaded. This means the count of items loaded will
 		// be incorrect, but ensures manager.onLoad() does not fire early.
 
@@ -351,7 +359,9 @@ class GLTFLoader extends Loader {
 		for ( let i = 0; i < this.pluginCallbacks.length; i ++ ) {
 
 			const plugin = this.pluginCallbacks[ i ]( parser );
-			plugins[ plugin.name ] = plugin; // Workaround to avoid determining as unknown extension
+			plugins[ plugin.name ] = plugin;
+
+			// Workaround to avoid determining as unknown extension
 			// in addUnknownExtensionsToUserData().
 			// Remove this workaround if we move all the existing
 			// extension handlers to plugin system
@@ -371,10 +381,6 @@ class GLTFLoader extends Loader {
 
 					case EXTENSIONS.KHR_MATERIALS_UNLIT:
 						extensions[ extensionName ] = new GLTFMaterialsUnlitExtension();
-						break;
-
-					case EXTENSIONS.KHR_MATERIALS_PBR_SPECULAR_GLOSSINESS:
-						extensions[ extensionName ] = new GLTFMaterialsPbrSpecularGlossinessExtension();
 						break;
 
 					case EXTENSIONS.KHR_DRACO_MESH_COMPRESSION:
@@ -451,7 +457,6 @@ const EXTENSIONS = {
 	KHR_DRACO_MESH_COMPRESSION: 'KHR_draco_mesh_compression',
 	KHR_LIGHTS_PUNCTUAL: 'KHR_lights_punctual',
 	KHR_MATERIALS_CLEARCOAT: 'KHR_materials_clearcoat',
-	KHR_MATERIALS_PBR_SPECULAR_GLOSSINESS: 'KHR_materials_pbrSpecularGlossiness',
 	KHR_MATERIALS_IOR: 'KHR_materials_ior',
 	KHR_MATERIALS_SHEEN: 'KHR_materials_sheen',
 	KHR_MATERIALS_SPECULAR: 'KHR_materials_specular',
@@ -464,6 +469,7 @@ const EXTENSIONS = {
 	KHR_TEXTURE_TRANSFORM: 'KHR_texture_transform',
 	KHR_MESH_QUANTIZATION: 'KHR_mesh_quantization',
 	KHR_MATERIALS_EMISSIVE_STRENGTH: 'KHR_materials_emissive_strength',
+	EXT_MATERIALS_BUMP: 'EXT_materials_bump',
 	EXT_TEXTURE_WEBP: 'EXT_texture_webp',
 	EXT_TEXTURE_AVIF: 'EXT_texture_avif',
 	EXT_MESHOPT_COMPRESSION: 'EXT_meshopt_compression',
@@ -484,6 +490,7 @@ class GLTFLightsExtension {
 		this.name = EXTENSIONS.KHR_LIGHTS_PUNCTUAL;
 
 		// Object3D instance caches
+
 		this.cache = { refs: {}, uses: {} };
 
 	}
@@ -543,10 +550,13 @@ class GLTFLightsExtension {
 			case 'spot':
 				lightNode = new SpotLight( color );
 				lightNode.distance = range;
+
 				// Handle spotlight properties.
+
 				lightDef.spot = lightDef.spot || {};
 				lightDef.spot.innerConeAngle = lightDef.spot.innerConeAngle !== undefined ? lightDef.spot.innerConeAngle : 0;
 				lightDef.spot.outerConeAngle = lightDef.spot.outerConeAngle !== undefined ? lightDef.spot.outerConeAngle : Math.PI / 4.0;
+
 				lightNode.angle = lightDef.spot.outerConeAngle;
 				lightNode.penumbra = 1.0 - lightDef.spot.innerConeAngle / lightDef.spot.outerConeAngle;
 				lightNode.target.position.set( 0, 0, - 1 );
@@ -560,6 +570,7 @@ class GLTFLightsExtension {
 
 		// Some lights (e.g. spot) default to a position other than the origin. Reset the position
 		// here, because node-level parsing will only override position if explicitly specified.
+
 		lightNode.position.set( 0, 0, 0 );
 
 		lightNode.decay = 2;
@@ -666,6 +677,7 @@ class GLTFMaterialsUnlitExtension {
 *
 * Specification: https://github.com/KhronosGroup/glTF/blob/5768b3ce0ef32bc39cdf1bef10b948586635ead3/extensions/2.0/Khronos/KHR_materials_emissive_strength/README.md
 */
+
 class GLTFMaterialsEmissiveStrengthExtension {
 
 	constructor( parser ) {
@@ -1172,6 +1184,61 @@ class GLTFMaterialsSpecularExtension {
 		if ( extension.specularColorTexture !== undefined ) {
 
 			pending.push( parser.assignTexture( materialParams, 'specularColorMap', extension.specularColorTexture, SRGBColorSpace ) );
+
+		}
+
+		return Promise.all( pending );
+
+	}
+
+}
+
+/**
+* Materials bump Extension
+*
+* Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/EXT_materials_bump
+*/
+
+class GLTFMaterialsBumpExtension {
+
+	constructor( parser ) {
+
+		this.parser = parser;
+		this.name = EXTENSIONS.EXT_MATERIALS_BUMP;
+
+	}
+
+	getMaterialType( materialIndex ) {
+
+		const parser = this.parser;
+		const materialDef = parser.json.materials[ materialIndex ];
+
+		if ( ! materialDef.extensions || ! materialDef.extensions[ this.name ] ) return null;
+
+		return MeshPhysicalMaterial;
+
+	}
+
+	extendMaterialParams( materialIndex, materialParams ) {
+
+		const parser = this.parser;
+		const materialDef = parser.json.materials[ materialIndex ];
+
+		if ( ! materialDef.extensions || ! materialDef.extensions[ this.name ] ) {
+
+			return Promise.resolve();
+
+		}
+
+		const pending = [];
+
+		const extension = materialDef.extensions[ this.name ];
+
+		materialParams.bumpScale = extension.bumpFactor !== undefined ? extension.bumpFactor : 1.0;
+
+		if ( extension.bumpTexture !== undefined ) {
+
+			pending.push( parser.assignTexture( materialParams, 'bumpMap', extension.bumpTexture ) );
 
 		}
 
@@ -1942,251 +2009,6 @@ class GLTFMeshQuantizationExtension {
 	constructor() {
 
 		this.name = EXTENSIONS.KHR_MESH_QUANTIZATION;
-
-	}
-
-}
-
-/**
-* Specular-Glossiness Extension
-*
-* Specification: https://github.com/KhronosGroup/glTF/tree/master/extensions/2.0/Khronos/KHR_materials_pbrSpecularGlossiness
-*/
-
-/**
-* A sub class of StandardMaterial with some of the functionality
-* changed via the `onBeforeCompile` callback
-* @pailhead
-*/
-
-class GLTFMeshStandardSGMaterial extends MeshStandardMaterial {
-
-	constructor( params ) {
-
-		super();
-		this.isGLTFSpecularGlossinessMaterial = true; //various chunks that need replacing
-
-		const specularMapParsFragmentChunk = [ '#ifdef USE_SPECULARMAP', '	uniform sampler2D specularMap;', '#endif' ].join( '\n' );
-		const glossinessMapParsFragmentChunk = [ '#ifdef USE_GLOSSINESSMAP', '	uniform sampler2D glossinessMap;', '#endif' ].join( '\n' );
-		const specularMapFragmentChunk = [ 'vec3 specularFactor = specular;', '#ifdef USE_SPECULARMAP', '	vec4 texelSpecular = texture2D( specularMap, vUv );', '	texelSpecular = vec4( mix( pow( texelSpecular.rgb * 0.9478672986 + vec3( 0.0521327014 ), vec3( 2.4 ) ), texelSpecular.rgb * 0.0773993808, vec3( lessThanEqual( texelSpecular.rgb, vec3( 0.04045 ) ) ) ), texelSpecular.a );', '	// reads channel RGB, compatible with a glTF Specular-Glossiness (RGBA) texture', '	specularFactor *= texelSpecular.rgb;', '#endif' ].join( '\n' );
-		const glossinessMapFragmentChunk = [ 'float glossinessFactor = glossiness;', '#ifdef USE_GLOSSINESSMAP', '	vec4 texelGlossiness = texture2D( glossinessMap, vUv );', '	// reads channel A, compatible with a glTF Specular-Glossiness (RGBA) texture', '	glossinessFactor *= texelGlossiness.a;', '#endif' ].join( '\n' );
-		const lightPhysicalFragmentChunk = [ 'PhysicalMaterial material;', 'material.diffuseColor = diffuseColor.rgb * ( 1. - max( specularFactor.r, max( specularFactor.g, specularFactor.b ) ) );', 'vec3 dxy = max( abs( dFdx( geometryNormal ) ), abs( dFdy( geometryNormal ) ) );', 'float geometryRoughness = max( max( dxy.x, dxy.y ), dxy.z );', 'material.roughness = max( 1.0 - glossinessFactor, 0.0525 ); // 0.0525 corresponds to the base mip of a 256 cubemap.', 'material.roughness += geometryRoughness;', 'material.roughness = min( material.roughness, 1.0 );', 'material.specularColor = specularFactor;' ].join( '\n' );
-
-		const uniforms = {
-			specular: {
-				value: new Color().setHex( 0xffffff )
-			},
-			glossiness: {
-				value: 1
-			},
-			specularMap: {
-				value: null
-			},
-			glossinessMap: {
-				value: null
-			}
-		};
-
-		this._extraUniforms = uniforms;
-
-		this.onBeforeCompile = function ( shader ) {
-
-			for ( const uniformName in uniforms ) {
-
-				shader.uniforms[ uniformName ] = uniforms[ uniformName ];
-
-			}
-
-			shader.fragmentShader = shader.fragmentShader.replace( 'uniform float roughness;', 'uniform vec3 specular;' ).replace( 'uniform float metalness;', 'uniform float glossiness;' ).replace( '#include <roughnessmap_pars_fragment>', specularMapParsFragmentChunk ).replace( '#include <metalnessmap_pars_fragment>', glossinessMapParsFragmentChunk ).replace( '#include <roughnessmap_fragment>', specularMapFragmentChunk ).replace( '#include <metalnessmap_fragment>', glossinessMapFragmentChunk ).replace( '#include <lights_physical_fragment>', lightPhysicalFragmentChunk );
-
-		};
-
-		Object.defineProperties( this, {
-			specular: {
-				get: function () {
-
-					return uniforms.specular.value;
-
-				},
-				set: function ( v ) {
-
-					uniforms.specular.value = v;
-
-				}
-			},
-			specularMap: {
-				get: function () {
-
-					return uniforms.specularMap.value;
-
-				},
-				set: function ( v ) {
-
-					uniforms.specularMap.value = v;
-
-					if ( v ) {
-
-						this.defines.USE_SPECULARMAP = ''; // USE_UV is set by the renderer for specular maps
-
-					} else {
-
-						delete this.defines.USE_SPECULARMAP;
-
-					}
-
-				}
-			},
-			glossiness: {
-				get: function () {
-
-					return uniforms.glossiness.value;
-
-				},
-				set: function ( v ) {
-
-					uniforms.glossiness.value = v;
-
-				}
-			},
-			glossinessMap: {
-				get: function () {
-
-					return uniforms.glossinessMap.value;
-
-				},
-				set: function ( v ) {
-
-					uniforms.glossinessMap.value = v;
-
-					if ( v ) {
-
-						this.defines.USE_GLOSSINESSMAP = '';
-						this.defines.USE_UV = '';
-
-					} else {
-
-						delete this.defines.USE_GLOSSINESSMAP;
-						delete this.defines.USE_UV;
-
-					}
-
-				}
-			}
-		} );
-
-		delete this.metalness;
-		delete this.roughness;
-		delete this.metalnessMap;
-		delete this.roughnessMap;
-		this.setValues( params );
-
-	}
-
-	copy( source ) {
-
-		super.copy( source );
-		this.specularMap = source.specularMap;
-		this.specular.copy( source.specular );
-		this.glossinessMap = source.glossinessMap;
-		this.glossiness = source.glossiness;
-		delete this.metalness;
-		delete this.roughness;
-		delete this.metalnessMap;
-		delete this.roughnessMap;
-		return this;
-
-	}
-
-}
-
-class GLTFMaterialsPbrSpecularGlossinessExtension {
-
-	constructor() {
-
-		this.name = EXTENSIONS.KHR_MATERIALS_PBR_SPECULAR_GLOSSINESS;
-		this.specularGlossinessParams = [ 'color', 'map', 'lightMap', 'lightMapIntensity', 'aoMap', 'aoMapIntensity', 'emissive', 'emissiveIntensity', 'emissiveMap', 'bumpMap', 'bumpScale', 'normalMap', 'normalMapType', 'displacementMap', 'displacementScale', 'displacementBias', 'specularMap', 'specular', 'glossinessMap', 'glossiness', 'alphaMap', 'envMap', 'envMapIntensity', 'refractionRatio' ];
-
-	}
-
-	getMaterialType() {
-
-		return GLTFMeshStandardSGMaterial;
-
-	}
-
-	extendParams( materialParams, materialDef, parser ) {
-
-		const pbrSpecularGlossiness = materialDef.extensions[ this.name ];
-		materialParams.color = new Color( 1.0, 1.0, 1.0 );
-		materialParams.opacity = 1.0;
-		const pending = [];
-
-		if ( Array.isArray( pbrSpecularGlossiness.diffuseFactor ) ) {
-
-			const array = pbrSpecularGlossiness.diffuseFactor;
-			materialParams.color.fromArray( array );
-			materialParams.opacity = array[ 3 ];
-
-		}
-
-		if ( pbrSpecularGlossiness.diffuseTexture !== undefined ) {
-
-			pending.push( parser.assignTexture( materialParams, 'map', pbrSpecularGlossiness.diffuseTexture ) );
-
-		}
-
-		materialParams.emissive = new Color( 0.0, 0.0, 0.0 );
-		materialParams.glossiness = pbrSpecularGlossiness.glossinessFactor !== undefined ? pbrSpecularGlossiness.glossinessFactor : 1.0;
-		materialParams.specular = new Color( 1.0, 1.0, 1.0 );
-
-		if ( Array.isArray( pbrSpecularGlossiness.specularFactor ) ) {
-
-			materialParams.specular.fromArray( pbrSpecularGlossiness.specularFactor );
-
-		}
-
-		if ( pbrSpecularGlossiness.specularGlossinessTexture !== undefined ) {
-
-			const specGlossMapDef = pbrSpecularGlossiness.specularGlossinessTexture;
-			pending.push( parser.assignTexture( materialParams, 'glossinessMap', specGlossMapDef ) );
-			pending.push( parser.assignTexture( materialParams, 'specularMap', specGlossMapDef ) );
-
-		}
-
-		return Promise.all( pending );
-
-	}
-
-	createMaterial( materialParams ) {
-
-		const material = new GLTFMeshStandardSGMaterial( materialParams );
-		material.fog = true;
-		material.color = materialParams.color;
-		material.map = materialParams.map === undefined ? null : materialParams.map;
-		material.lightMap = null;
-		material.lightMapIntensity = 1.0;
-		material.aoMap = materialParams.aoMap === undefined ? null : materialParams.aoMap;
-		material.aoMapIntensity = 1.0;
-		material.emissive = materialParams.emissive;
-		material.emissiveIntensity = 1.0;
-		material.emissiveMap = materialParams.emissiveMap === undefined ? null : materialParams.emissiveMap;
-		material.bumpMap = materialParams.bumpMap === undefined ? null : materialParams.bumpMap;
-		material.bumpScale = 1;
-		material.normalMap = materialParams.normalMap === undefined ? null : materialParams.normalMap;
-		material.normalMapType = TangentSpaceNormalMap;
-		if ( materialParams.normalScale ) material.normalScale = materialParams.normalScale;
-		material.displacementMap = null;
-		material.displacementScale = 1;
-		material.displacementBias = 0;
-		material.specularMap = materialParams.specularMap === undefined ? null : materialParams.specularMap;
-		material.specular = materialParams.specular;
-		material.glossinessMap = materialParams.glossinessMap === undefined ? null : materialParams.glossinessMap;
-		material.glossiness = materialParams.glossiness;
-		material.alphaMap = null;
-		material.envMap = materialParams.envMap === undefined ? null : materialParams.envMap;
-		material.envMapIntensity = 1.0;
-		material.refractionRatio = 0.98;
-		return material;
 
 	}
 
@@ -3680,13 +3502,7 @@ class GLTFParser {
 		const materialExtensions = materialDef.extensions || {};
 		const pending = [];
 
-		if ( materialExtensions[ EXTENSIONS.KHR_MATERIALS_PBR_SPECULAR_GLOSSINESS ] ) {
-
-			const sgExtension = extensions[ EXTENSIONS.KHR_MATERIALS_PBR_SPECULAR_GLOSSINESS ];
-			materialType = sgExtension.getMaterialType();
-			pending.push( sgExtension.extendParams( materialParams, materialDef, parser ) );
-
-		} else if ( materialExtensions[ EXTENSIONS.KHR_MATERIALS_UNLIT ] ) {
+		if ( materialExtensions[ EXTENSIONS.KHR_MATERIALS_UNLIT ] ) {
 
 			const kmuExtension = extensions[ EXTENSIONS.KHR_MATERIALS_UNLIT ];
 			materialType = kmuExtension.getMaterialType();
@@ -3810,17 +3626,7 @@ class GLTFParser {
 
 		return Promise.all( pending ).then( function () {
 
-			let material;
-
-			if ( materialType === GLTFMeshStandardSGMaterial ) {
-
-				material = extensions[ EXTENSIONS.KHR_MATERIALS_PBR_SPECULAR_GLOSSINESS ].createMaterial( materialParams );
-
-			} else {
-
-				material = new materialType( materialParams );
-
-			}
+			const material = new materialType( materialParams );
 
 			if ( materialDef.name ) material.name = materialDef.name;
 
