@@ -5,20 +5,69 @@
     <meta name="description" content="GCODE (3D-printing) Viewer">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/"
+        }
+      }
+    </script>
+
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.6.4/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js" defer></script>
-    <script src="../static/js/GCodeLoader.js" defer></script>
-    <script src="../static/js/RGBELoader.js" defer></script>
-    <script src="../static/js/upng/UPNG.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
+      import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
+      import { GCodeLoader } from "three/addons/loaders/GCodeLoader.js";
+      import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
+      import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
+
+      THREE = three_js;
+
+      manager = new THREE.LoadingManager();
+
+      manager.onProgress = function ( item, loaded, total ) {
+        if ( loaded === total ) {
+          set_initial_scale();
+          resize();
+
+          console.timeEnd( 'Loading Time' );
+          document.getElementById('div_loading').style.display = 'none';
+          enable_disable( false );
+          render_requested = true;
+          mouse_wheel = true;
+          render();
+
+          gcode_obj.rotation.x -= Math.PI / 2;
+        }
+      }
+
+      gcode_loader = new GCodeLoader( manager );
+
+      rgbe_loader = new RGBELoader( manager );
+      rgbe_loader.setDataType( THREE.HalfFloatType );
+
+      texture_loader = new THREE.TextureLoader( manager );
+
+      gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
+
+      if (menu_location_bottom === false) {
+        let fixed_menu_bottom = ( parseInt( $("#fixed_menu").outerHeight( true ) ) + 2 ).toString() + "px";
+        document.getElementById("gui_position").style.marginTop = fixed_menu_bottom;
+      } else {
+        document.getElementById("gui_position").style.marginTop = "2px";
+      }
+
+      orb_controls = OrbitControls;
+      orb_controls_gizmo = OrbitControlsGizmo;
+    </script>
+
+    <script src="../static/js/upng/UPNG.min.js" defer></script>
+    <script src="../static/js/omggif/omggif.min.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
-    <script src="../static/js/omggif/omggif.js" defer></script>
-    <script src="../static/js/OrbitControls.js" defer></script>
-    <script src="../static/js/OrbitControlsGizmo.js" defer></script>
-    <script src="../static/js/jszip/dist/jszip.min.js" defer></script>
-    <script src="../static/js/utils/TextureUtils.js" defer></script>
-    <script src="../static/js/exporters/OBJExporter.js" defer></script>
-    <script src="../static/js/exporters/GLTFExporter.js" defer></script>
-    <script src="../static/js/exporters/ColladaExporter.js" defer></script>
 
     <style>
       body, html {
@@ -484,15 +533,16 @@
     </script>
 
     <script>
-      var manager, texture_loader, rgbe_loader, gcode_loader, count = 0, tex;
-      var renderer, scene, camera, gcode_obj, path, path_visible, render_requested;
-      var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
+      var THREE, manager, texture_loader, rgbe_loader, gcode_loader, gcode_obj;
+      var renderer, scene, camera, path, path_visible, render_requested, tex;
       var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
+      var controls, orb_controls, gizmo, orb_controls_gizmo;
+      var grid, polar_grid, grid_visible, polar_grid_visible;
       var ww = window.innerWidth, wh = window.innerHeight;
-      var rot_x = 0, rot_y = 0, rot_z = 0, slider_height = 0;
-      var bounding_box, filename, gif_export, bgnd_linear_gradient, zip;
-      var selected_gcode_file, selected_gcode_url_file, selected_url_file = '';
+      var rot_x = 0, rot_y = 0, rot_z = 0, count = 0, zip;
+      var bounding_box, filename, gif_export, bgnd_linear_gradient;
+      var selected_gcode_file, selected_url_file = '', slider_height = 0;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
 
       const link = document.createElement( 'a' );
@@ -514,7 +564,7 @@
         if (selected_gcode_file) {
           filename = selected_gcode_file.name.substring( 0, selected_gcode_file.name.lastIndexOf('.') );
         } else {
-          filename = selected_gcode_url_file.substring( selected_gcode_url_file.lastIndexOf('/') + 1, selected_gcode_url_file.lastIndexOf('.') );
+          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') );
         }
       }
 
@@ -538,50 +588,54 @@
       }
 
       async function export_obj() {
-        start_export();
-
-        await new Promise( resolve => setTimeout( resolve, 20 ) );
-
-        let obj_exporter = new THREE.OBJExporter( manager );
-
         if (gcode_obj) {
-          let exported = obj_exporter.parse( gcode_obj, filename );
+          start_export();
 
-          zip.file( filename + '.obj', exported[ 'obj' ] );
+          await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          if (exported[ 'mtl' ]) {
-            zip.file( filename + '.mtl', exported[ 'mtl' ] );
+          const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.js" );
 
-            if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
-              let processed_index = 0;
+          let obj_exporter = new OBJExporter( manager );
 
-              exported[ 'tex' ].forEach( async tex => {
-                let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+          await obj_exporter.parse( gcode_obj, filename, async function( exported ) {
+            zip.file( filename + '.obj', exported[ 'obj' ] );
 
-                zip.file( `${ tex.name }.${ tex.ext }`, blob );
+            if (exported[ 'mtl' ]) {
+              zip.file( filename + '.mtl', exported[ 'mtl' ] );
 
-                if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
+              if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
+                let processed_index = 0;
 
-                processed_index += 1;
-              });
+                exported[ 'tex' ].forEach( async tex => {
+                  let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+
+                  zip.file( `${ tex.name }.${ tex.ext }`, blob );
+
+                  if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
+
+                  processed_index += 1;
+                });
+              } else {
+                await process_zip( '_OBJ' );
+              }
             } else {
               await process_zip( '_OBJ' );
             }
-          } else {
-            await process_zip( '_OBJ' );
-          }
+          });
         }
       }
 
       async function export_gltf( binary = false ) {
-        start_export();
-
-        await new Promise( resolve => setTimeout( resolve, 20 ) );
-
-        let gltf_exporter = new THREE.GLTFExporter( manager );
-
         if (gcode_obj) {
-          let options = { binary: binary, maxTextureSize: 4096 || Infinity };
+          start_export();
+
+          await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
+
+          let options = { binary: binary, maxTextureSize: 1024 || Infinity };
 
           gltf_exporter.parse( gcode_obj, async json => {
             let blob;
@@ -966,7 +1020,7 @@
       }
 
       function gui_reset() {
-        params.toneMapping = 'ACESFilmic';
+        params.toneMapping = 'Linear';
         renderer.toneMappingExposure = params.exposure = 0.7;
         params.blurriness = 0.3;
 
@@ -1100,33 +1154,9 @@
 
         enable_disable( true );
 
-        if (manager === undefined) manager = new THREE.LoadingManager();
-
-        manager.onProgress = function ( item, loaded, total ) {
-          if ( loaded === total ) {
-            console.timeEnd( 'Loading Time' );
-            document.getElementById('div_loading').style.display = 'none';
-            enable_disable( false );
-            render_requested = true;
-            mouse_wheel = true;
-            render();
-
-            gcode_obj.rotation.x -= Math.PI / 2;
-          }
-        }
-
-        if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
-
-        if (gcode_loader === undefined) gcode_loader = new THREE.GCodeLoader( manager );
-
         if (zip === undefined) zip = new JSZip();
 
-        if (rgbe_loader === undefined) {
-          rgbe_loader = new THREE.RGBELoader();
-          rgbe_loader.setDataType( THREE.HalfFloatType );
-        }
-
-        if (params === undefined) params = { exposure: 0.7, toneMapping: 'ACESFilmic', blurriness: 0.3 };
+        if (params === undefined) params = { exposure: 0.7, toneMapping: 'Linear', blurriness: 0.3 };
 
         if (toneMappingOptions === undefined) toneMappingOptions = {
           None: THREE.NoToneMapping,
@@ -1139,7 +1169,6 @@
         path = null;
         path_visible = false;
         selected_gcode_file = null;
-        selected_gcode_url_file = null;
         mouse_down = false;
         mouse_wheel = true;
         bgnd_linear_gradient = false;
@@ -1177,7 +1206,7 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
-          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMapping = THREE.LinearToneMapping;
           renderer.toneMappingExposure = 0.7;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
@@ -1204,7 +1233,7 @@
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls = new orb_controls( camera, renderer.domElement );
           controls.enableZoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
@@ -1222,7 +1251,7 @@
         }
 
         if (gizmo === undefined) {
-          gizmo = new OrbitControlsGizmo( controls, {
+          gizmo = new orb_controls_gizmo( controls, {
             size: 65,
             padding: 4,
             bubbleSizePrimary: 7,
@@ -1262,9 +1291,6 @@
           // Add gcode_obj to the scene
           scene.add( gcode_obj );
           camera.lookAt( gcode_obj.position );
-
-          set_initial_scale();
-          resize();
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
           handle_error( error );
@@ -1280,6 +1306,8 @@
             selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
+          // No extension checking for URL so it has to point to GCODE / NCC / NGC model
+
           gcode_loader.load( selected_url_file, function( object ) {
             object.children[ 0 ].name += '_extruded';
             object.children[ 1 ].name += '_path';
@@ -1290,13 +1318,8 @@
             // Add gcode_obj to the scene
             scene.add( gcode_obj );
             camera.lookAt( gcode_obj.position );
-
-            set_initial_scale();
-            resize();
           }, function ( xhr ) { // onProgress
-          }, function ( error ) { // onError
-            handle_error( error );
-          });
+          }, function ( error ) { handle_error( error ); }); // onError
         }
       }
 
@@ -1647,18 +1670,6 @@
         }
 
         mouse_wheel = true;
-      }
-    </script>
-
-    <script type="module">
-      import { GUI } from 'https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/libs/lil-gui.module.min.js';
-
-      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
-
-      if (url_displayed === true) {
-        document.getElementById('gui_position').style.marginTop = '118px';
-      } else {
-        document.getElementById('gui_position').style.marginTop = '80px';
       }
     </script>
   </body>
