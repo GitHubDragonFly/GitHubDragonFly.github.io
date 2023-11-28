@@ -3099,15 +3099,52 @@ class GLTFParser {
 
 					}
 
-				} else if ( ( source.uri && ( source.uri.toUpperCase() === blobs[ i ].toUpperCase() || source.uri.toUpperCase() === temp_name_12 || source.uri.toUpperCase() === temp_name_8_4 ) )
-				|| ( source.name && ( source.name.toUpperCase() === blobs[ i ].toUpperCase() || source.name.toUpperCase() === temp_name_12 || source.name.toUpperCase() === temp_name_8_4 || source.name.toUpperCase().endsWith( blobs[ i ].toUpperCase() ) ) )
-				 || ( ( temp_name !== '' ) && ( temp_name === blobs[ i ].toUpperCase() || temp_name === temp_name_12 || temp_name === temp_name_8_4 ) ) ) {
+				} else if ( source.uri ) {
 
-					if ( texture_set === false ) {
+					let su_uc = source.uri.toUpperCase();
+					let sn_uc = source.name ? source.name.toUpperCase() : '';
+					let b_uc = blobs[ i ].toUpperCase();
 
-						if ( source.name === undefined ) if (source.uri) source.name = source.uri;
-						source.uri = blobs[ i + 1 ];
-						texture_set = true;
+					if ( su_uc === b_uc || su_uc.endsWith( b_uc ) || su_uc === temp_name_12 || su_uc === temp_name_8_4 ) {
+
+						if ( texture_set === false ) {
+
+							if ( source.name === undefined ) source.name = source.uri;
+							source.uri = blobs[ i + 1 ];
+							texture_set = true;
+
+						}
+
+					}
+
+				} else if ( source.name ) {
+
+					let sn_uc = source.name ? source.name.toUpperCase() : '';
+					let b_uc = blobs[ i ].toUpperCase();
+
+					if ( sn_uc === b_uc || sn_uc.endsWith( b_uc ) || sn_uc === temp_name_12 || sn_uc === temp_name_8_4 ) {
+
+						if ( texture_set === false ) {
+
+							source.uri = blobs[ i + 1 ];
+							texture_set = true;
+
+						}
+
+					}
+
+				} else if ( temp_name !== '' ) {
+
+					let b_uc = blobs[ i ].toUpperCase();
+
+					if ( temp_name === b_uc || temp_name === temp_name_12 || temp_name === temp_name_8_4 ) {
+
+						if ( texture_set === false ) {
+
+							source.uri = blobs[ i + 1 ];
+							texture_set = true;
+
+						}
 
 					}
 
