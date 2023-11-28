@@ -3493,7 +3493,7 @@ class GLTFParser {
 
 			}
 
-		} else if ( source.uri && ( source.uri.toLowerCase().endsWith( '.ktx2' ) || source.uri.toLowerCase().endsWith( '.avif' ) ) ) {
+		} else if ( options.resourcePath.includes( ',' ) === true && source.uri && ( source.uri.toLowerCase().endsWith( '.ktx2' ) || source.uri.toLowerCase().endsWith( '.avif' ) ) ) {
 
 			this.processLocalBlobs( source, options );
 
