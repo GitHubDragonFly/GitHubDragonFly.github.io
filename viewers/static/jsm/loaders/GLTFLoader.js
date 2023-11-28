@@ -3051,108 +3051,10 @@ class GLTFParser {
 		const textureDef = json.textures[ textureIndex ];
 		const source = json.images[ textureDef.source ];
 		let loader = this.textureLoader;
-		let texture_set = false;
 
 		if ( options.resourcePath.includes( ',' ) === true ) {
 
-			let temp_name = '', temp_name_12 = '', temp_name_8_4 = '';
-			let any_texture = false;
-			let blobs = options.resourcePath.split( ',' );
-
-			if ( source.uri && source.uri.includes( '/' ) === true ) {
-
-				let delimiter = ( ( source.uri.includes( '\\') === true ) && ( source.uri.lastIndexOf( '\\') > source.uri.lastIndexOf( '/') ) ) ? '\\' : '/';
-				temp_name = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
-
-			} else if ( source.uri && source.uri.includes( '\\' ) === true ) {
-
-				temp_name = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
-
-			} else if ( source.uri && ( source.uri === '$texture_dummy.bmp' || source.uri === 'default.bmp' || source.uri === 'any_texture' ) ) {
-
-				any_texture = true;
-
-			}
-
-			for ( let i = 0; i < blobs.length; i += 2 ) {
-
-				if ( blobs[ i ].length > 12 ) {
-
-					temp_name_12 = ( blobs[ i ].substring( 0, 12 ) ).toUpperCase();
-					temp_name_8_4 = ( blobs[ i ].substring( 0, 8 ) + blobs[ i ].slice( -4 ) ).toUpperCase();
-
-				}
-
-				if ( any_texture === true ) {
-
-					let image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF', '.SVG', '.WEBP', 'DIB', '.DDS', '.EXR', '.KTX2', '.TGA' ];
-
-					if ( texture_set === false ) {
-
-						if ( image_extensions.some( ext => blobs[ i ].toUpperCase().endsWith( ext ) ) ) {
-
-							if ( source.name === undefined ) source.name = blobs[ i ];
-							source.uri = blobs[ i + 1 ];
-							texture_set = true;
-
-						}
-
-					}
-
-				} else if ( source.uri ) {
-
-					let su_uc = source.uri.toUpperCase();
-					let sn_uc = source.name ? source.name.toUpperCase() : '';
-					let b_uc = blobs[ i ].toUpperCase();
-
-					if ( su_uc === b_uc || su_uc.endsWith( b_uc ) || su_uc === temp_name_12 || su_uc === temp_name_8_4 ) {
-
-						if ( texture_set === false ) {
-
-							if ( source.name === undefined ) source.name = source.uri;
-							source.uri = blobs[ i + 1 ];
-							texture_set = true;
-
-						}
-
-					}
-
-				} else if ( source.name ) {
-
-					let sn_uc = source.name ? source.name.toUpperCase() : '';
-					let b_uc = blobs[ i ].toUpperCase();
-
-					if ( sn_uc === b_uc || sn_uc.endsWith( b_uc ) || sn_uc === temp_name_12 || sn_uc === temp_name_8_4 ) {
-
-						if ( texture_set === false ) {
-
-							source.uri = blobs[ i + 1 ];
-							texture_set = true;
-
-						}
-
-					}
-
-				} else if ( temp_name !== '' ) {
-
-					let b_uc = blobs[ i ].toUpperCase();
-
-					if ( temp_name === b_uc || temp_name === temp_name_12 || temp_name === temp_name_8_4 ) {
-
-						if ( texture_set === false ) {
-
-							source.uri = blobs[ i + 1 ];
-							texture_set = true;
-
-						}
-
-					}
-
-				}
-
-			}
-
-			if ( texture_set === false && options.path.includes( '.bin' ) === false ) options.path = '';
+			this.processLocalBlobs( source, options );
 
 		} else {
 
@@ -3223,10 +3125,114 @@ class GLTFParser {
 
 	}
 
+	processLocalBlobs( source, options ) {
+
+		let temp_name = '', temp_name_12 = '', temp_name_8_4 = '';
+		let texture_set = false;
+		let any_texture = false;
+		let blobs = options.resourcePath.split( ',' );
+
+		if ( source.uri && source.uri.includes( '/' ) === true ) {
+
+			let delimiter = ( ( source.uri.includes( '\\') === true ) && ( source.uri.lastIndexOf( '\\') > source.uri.lastIndexOf( '/') ) ) ? '\\' : '/';
+			temp_name = ( source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 ) ).toUpperCase();
+
+		} else if ( source.uri && source.uri.includes( '\\' ) === true ) {
+
+			temp_name = ( source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 ) ).toUpperCase();
+
+		} else if ( source.uri && ( source.uri === '$texture_dummy.bmp' || source.uri === 'default.bmp' || source.uri === 'any_texture' ) ) {
+
+			any_texture = true;
+
+		}
+
+		for ( let i = 0; i < blobs.length; i += 2 ) {
+
+			if ( blobs[ i ].length > 12 ) {
+
+				temp_name_12 = ( blobs[ i ].substring( 0, 12 ) ).toUpperCase();
+				temp_name_8_4 = ( blobs[ i ].substring( 0, 8 ) + blobs[ i ].slice( -4 ) ).toUpperCase();
+
+			}
+
+			if ( any_texture === true ) {
+
+				let image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF', '.SVG', '.WEBP', 'DIB', '.DDS', '.EXR', '.KTX2', '.TGA' ];
+
+				if ( texture_set === false ) {
+
+					if ( image_extensions.some( ext => blobs[ i ].toUpperCase().endsWith( ext ) ) ) {
+
+						if ( source.name === undefined ) source.name = blobs[ i ];
+						source.uri = blobs[ i + 1 ];
+						texture_set = true;
+
+					}
+
+				}
+
+			} else if ( source.uri ) {
+
+				let su_uc = source.uri.toUpperCase();
+				let b_uc = blobs[ i ].toUpperCase();
+
+				if ( su_uc === b_uc || su_uc.endsWith( b_uc ) || su_uc === temp_name_12 || su_uc === temp_name_8_4 ) {
+
+					if ( texture_set === false ) {
+
+						if ( source.name === undefined ) source.name = source.uri;
+						source.uri = blobs[ i + 1 ];
+						texture_set = true;
+
+					}
+
+				}
+
+			} else if ( source.name ) {
+
+				let sn_uc = ( source.name && source.name !== '' ) ? source.name.toUpperCase() : '';
+				let b_uc = blobs[ i ].toUpperCase();
+
+				if ( sn_uc === b_uc || sn_uc.endsWith( b_uc ) || sn_uc === temp_name_12 || sn_uc === temp_name_8_4 ) {
+
+					if ( texture_set === false ) {
+
+						source.uri = blobs[ i + 1 ];
+						texture_set = true;
+
+					}
+
+				}
+
+			} else if ( temp_name !== '' ) {
+
+				let b_uc = blobs[ i ].toUpperCase();
+
+				if ( temp_name === b_uc || temp_name === temp_name_12 || temp_name === temp_name_8_4 ) {
+
+					if ( texture_set === false ) {
+
+						source.uri = blobs[ i + 1 ];
+						texture_set = true;
+
+					}
+
+				}
+
+			}
+
+		}
+
+		if ( texture_set === false && options.path.includes( '.bin' ) === false ) options.path = '';
+
+	}
+
 	loadTextureImage( textureIndex, source, loader ) {
 
 		const parser = this;
 		const json = this.json;
+		const options = this.options;
 
 		if ( ! source.uri && ! source.bufferView ) {
 
@@ -3236,9 +3242,12 @@ class GLTFParser {
 
 			}
 
+		} else if ( source.uri && ( source.uri.toLowerCase().endsWith( '.ktx2' ) || source.uri.toLowerCase().endsWith( '.avif' ) ) ) {
+
+			this.processLocalBlobs( source, options );
+
 		}
 
-		const options = this.options;
 		const textureDef = json.textures[ textureIndex ];
 		const cacheKey = ( source.uri || source.bufferView ) + ':' + textureDef.sampler;
 
