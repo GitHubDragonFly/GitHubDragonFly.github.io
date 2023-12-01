@@ -112,8 +112,9 @@ Number Type Converter
   - do note that mobile Safari browser might be finicky about certain features
 - See `URLS4MODELS.md` file for examples
 - Some loading instructions also available in [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) and [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repositories
+- ZIP files and drag-and-drop are currently not supported
 - Import files locally from a file browser dialog:
-  - All files have to be in the same folder (zip files are currently not supported)
+  - All files have to be in the same folder
   - Some viewers might have some limitations
   - Possibly update your models to look for textures in the same folder
   - Make any necessary changes on your device to allow local file browsing
