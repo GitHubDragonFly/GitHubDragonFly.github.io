@@ -767,6 +767,23 @@ class MaterialCreator {
 			if ( refraction_present === true ) params.ior = refraction_value;
 			if ( params.iridescence ) params.iridescenceThicknessRange = iridescenceThicknessRange;
 
+			// Anisotropy works fine in GLTF Viewer but is inverted in OBJ Viewer
+			// The following modifications seem to work but might be incorrect
+
+			if ( params.anisotropy && params.anisotropyMap && params.anisotropyRotation ) {
+
+				params.anisotropyRotation = - ( Math.asin( params.anisotropyRotation ) / params.anisotropy );
+
+			} else if ( params.anisotropyMap && params.anisotropy && ! params.anisotropyRotation ) {
+
+				params.anisotropyRotation = - Math.PI / 3;
+
+			} else if ( ! params.anisotropyMap && params.anisotropy && params.anisotropyRotation ) {
+
+				params.anisotropyRotation = - params.anisotropyRotation;
+
+			}
+
 			// Check params to allow correct transmission effect
 
 			if ( params.transmission && params.transmission > 0 ) {
