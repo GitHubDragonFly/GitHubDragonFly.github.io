@@ -171,6 +171,7 @@ Number Type Converter
       - Delete all other copies of that same texture
       - This bug might eventually get fixed
     - PLY exporter will include vertex colors and will convert material color to vertex color if the material has no texture
+  - BIM and OFF exports are only available in Quick Viewer, as stated above
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
