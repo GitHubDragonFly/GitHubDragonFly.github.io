@@ -31,7 +31,6 @@
       import { mergeVertices } from "../../static/jsm/utils/BufferGeometryUtils.js";
       import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.js";
       import GLTFVideoTextureExtension from "../../static/jsm/extensions/loaders/EXT_texture_video/EXT_texture_video.js";
-      import GLTFMaterialsVariantsExtension from "../../static/jsm/extensions/loaders/KHR_materials_variants/KHR_materials_variants.js";
 
       THREE = three_js;
       fflate = fflate_js;
@@ -51,8 +50,7 @@
         }
       }
 
-      gltfVideoTextureExtension = GLTFVideoTextureExtension;
-      gltfMaterialsVariantsExtension = GLTFMaterialsVariantsExtension;
+      gltf_VideoTextureExtension = GLTFVideoTextureExtension;
 
       ktx2_loader = new KTX2Loader();
       ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/libs/basis/" );
@@ -109,7 +107,7 @@
 
       input[type=color] {
         border: 1px solid whitesmoke;
-        margin: 2px 2px 2px -2px;
+        margin: 2px 3px 2px -2px;
         vertical-align: middle;
         background: none;
         height: 20px;
@@ -120,7 +118,7 @@
       input[type=file] {
         vertical-align: middle;
         margin: 2px 0 2px 0;
-        max-width: 170px;
+        max-width: 175px;
       }
 
       input[type=text] {
@@ -253,7 +251,7 @@
       var g_loader, ktx2_loader, texture_loader, gltf_loader, draco_loader, tga_loader, dds_loader;
       var THREE, fflate, manager, renderer, scene, camera, model_loading, render_requested, clock;
       var animations, animation_running, animation_mixer, current_animation, merge_vertices;
-      var gltfMaterialsVariantsExtension, gltfVideoTextureExtension, room_env;
+      var parser, gltf_VideoTextureExtension, room_env;
       var gltf_obj, assimp_load, resource_path, wireframe_enabled, bounding_box;
       var pmremGenerator, variants, current_variant, variants_available, draco_material;
       var controls, orb_controls, mouse_down, mouse_wheel, reset_rotation, events_initialized;
@@ -275,7 +273,11 @@
         bounding_box.setFromObject( gltf_obj );
         let size = bounding_box.getSize(new THREE.Vector3());
 
-        if ( size.y > 1 ) {
+        if ( size.y > 200 ) {
+          gltf_obj.scale.multiplyScalar( 250 / size.y );
+        } else if ( size.y > 100 ) {
+          gltf_obj.scale.multiplyScalar( 150 / size.y );
+        } else if ( size.y > 10 ) {
           gltf_obj.scale.multiplyScalar( 50 / size.y );
         } else if ( size.y > 0.02 ) {
           gltf_obj.scale.multiplyScalar( 25 / size.y );
@@ -288,6 +290,8 @@
         bounding_box.setFromObject( gltf_obj );
         let center = bounding_box.getCenter(new THREE.Vector3());
         controls.target.set( center.x, center.y, center.z );
+
+        mouse_wheel = true;
       }
 
       function switch_variant() {
@@ -299,8 +303,8 @@
           }
 
           gltf_obj.traverse( function( child ) {
-      	    if (child.isMesh && child.userData.variantMaterials) {
-              child.material = child.userData.variantMaterials[ variants[ current_variant ] ].material;
+      	    if (child.isMesh && child.material && child.userData.variantMaterials) {
+              child.material = child.userData.variantMaterials[ variants[ current_variant ] ];
               child.material.wireframe = wireframe_enabled; 
               child.material.needsUpdate = true;
             }
@@ -657,8 +661,7 @@
           gltf_loader.setKTX2Loader( ktx2_loader );
           gltf_loader.setDRACOLoader( draco_loader );
           gltf_loader.setMeshoptDecoder( MeshoptDecoder );
-          gltf_loader.register( parser => new gltfMaterialsVariantsExtension( parser ) );
-          gltf_loader.register( parser => new gltfVideoTextureExtension( parser, THREE ) );
+          gltf_loader.register( parser => new gltf_VideoTextureExtension( parser, THREE ) );
         }
 
         if (resource_path !== '') {
@@ -725,6 +728,7 @@
         gltf_loader.load( URL.createObjectURL( selected_gltf_file ), async function( gltf ) {
           URL.revokeObjectURL( selected_gltf_file );
 
+          parser = gltf.parser;
           animations = gltf.animations;
 
           if (animations.length > 0) {
@@ -733,20 +737,18 @@
             animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
           }
 
-          variants = gltf.userData.variants;
+          if (gltf.userData.gltfExtensions && gltf.userData.gltfExtensions[ 'KHR_materials_variants' ]) {
+            variants = gltf.userData.gltfExtensions[ 'KHR_materials_variants' ].variants.map( ( variant ) => variant.name );
+          }
 
           if (variants) {
-            for (let i = variants.length - 1; i > -1; i--) {
-              await gltf.functions.selectVariant( gltf.scene, variants[ i ] );
-            }
-
             current_variant = 0;
             variants_available = true;
             document.getElementById('btn_variants').disabled = false;
             document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
           }
 
-          gltf.scene.traverse( function( child ) {
+          gltf.scene.traverse( async function( child ) {
             if ( child.isLineSegments || child.isConditionalLine ) {
               child.geometry.computeBoundingBox();
               child.geometry.computeBoundingSphere();
@@ -774,6 +776,22 @@
 
               if (child.isMesh) {
                 if (child.isSkinnedMesh) child.frustumCulled = false;
+
+                if (variants_available === true && child.material && child.userData.gltfExtensions) {
+                  child.userData.variantMaterials = {};
+                  const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
+
+                  for (let i = 0; i < variants.length; i++) {
+                    const mapping = meshVariants.mappings.find( ( mapping ) => mapping.variants.includes( i ) );
+
+                    if (mapping) {
+                      await parser.getDependency( 'material', mapping.material ).then( function( material ) {
+                        child.userData.variantMaterials[ variants[ i ] ] = material;
+                        if (i === 0) child.material = material;
+                      });
+                    }
+                  }
+                }
               } else {
                 document.getElementById('btn_flat').disabled = true;
                 document.getElementById('btn_wireframe').disabled = true;
@@ -1171,6 +1189,7 @@
             });
           } else {
             gltf_loader.load( selected_gltf_url_file, async function( gltf ) {
+              parser = gltf.parser;
               animations = gltf.animations;
 
               if (animations.length > 0) {
@@ -1179,20 +1198,18 @@
                 animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
               }
 
-              variants = gltf.userData.variants;
+              if (gltf.userData.gltfExtensions && gltf.userData.gltfExtensions[ 'KHR_materials_variants' ]) {
+                variants = gltf.userData.gltfExtensions[ 'KHR_materials_variants' ].variants.map( ( variant ) => variant.name );
+              }
 
               if (variants) {
-                for (let i = variants.length - 1; i > -1; i--) {
-                  await gltf.functions.selectVariant( gltf.scene, variants[ i ] );
-                }
-
                 current_variant = 0;
                 variants_available = true;
                 document.getElementById('btn_variants').disabled = false;
                 document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
               }
 
-              gltf.scene.traverse( function( child ) {
+              gltf.scene.traverse( async function( child ) {
                 if ( child.isLineSegments || child.isConditionalLine ) {
                   child.geometry.computeBoundingBox();
                   child.geometry.computeBoundingSphere();
@@ -1220,6 +1237,22 @@
 
                   if (child.isMesh) {
                     if (child.isSkinnedMesh) child.frustumCulled = false;
+
+                    if (variants_available === true && child.material && child.userData.gltfExtensions) {
+                      child.userData.variantMaterials = {};
+                      const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
+
+                      for (let i = 0; i < variants.length; i++) {
+                        const mapping = meshVariants.mappings.find( ( mapping ) => mapping.variants.includes( i ) );
+
+                        if (mapping) {
+                          await parser.getDependency( 'material', mapping.material ).then( function( material ) {
+                            child.userData.variantMaterials[ variants[ i ] ] = material;
+                            if (i === 0) child.material = material;
+                          });
+                        }
+                      }
+                    }
                   } else {
                     document.getElementById('btn_flat').disabled = true;
                     document.getElementById('btn_wireframe').disabled = true;
@@ -1438,6 +1471,7 @@
           if (variants_available === true) {
             current_variant = variants.length - 1;
             switch_variant();
+            parser = null;
           }
         } else {
           // Page (re)loading
@@ -1501,6 +1535,8 @@
         document.getElementById('btn_flat').disabled = disable;
         document.getElementById('btn_wireframe').disabled = disable;
         disabled_changed();
+
+        mouse_wheel = true;
       }
     </script>
 
