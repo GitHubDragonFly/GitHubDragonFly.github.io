@@ -34,7 +34,6 @@
       import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
       import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
       import GLTFVideoTextureExtension from "../static/jsm/extensions/loaders/EXT_texture_video/EXT_texture_video.js";
-      import GLTFMaterialsVariantsExtension from "../static/jsm/extensions/loaders/KHR_materials_variants/KHR_materials_variants.js";
 
       THREE = three_js;
       fflate = fflate_js;
@@ -46,7 +45,6 @@
       manager.onLoad = function() { mouse_wheel = true; }
 
       gltfVideoTextureExtension = GLTFVideoTextureExtension;
-      gltfMaterialsVariantsExtension = GLTFMaterialsVariantsExtension;
 
       ktx2_loader = new KTX2Loader( manager );
       ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/libs/basis/" );
@@ -676,13 +674,12 @@
       const image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF', '.SVG', '.WEBP', 'DIB', '.DDS', '.EXR', '.KTX2', '.TGA' ];
 
       var g_loader, ktx2_loader, texture_loader, gltf_loader, draco_loader, tga_loader, dds_loader, exr_loader, rgbe_loader;
-      var THREE, fflate, manager, renderer, scene, scenes, default_camera, camera, cameras, cam_id, object_is_points;
+      var THREE, fflate, manager, renderer, parser, scene, scenes, default_camera, camera, cameras, cam_id, object_is_points;
       var controls, orb_controls, gizmo, orb_controls_gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var animations, animation_mixer, current_animation, extras, current_extra, clock, outline_material;
-      var gltf_obj, assimp_load, current_side, resource_path, edges, edges_visible, count = 0;
-      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions, merge_vertices;
+      var gltf_obj, gltfVideoTextureExtension, assimp_load, current_side, resource_path, edges, edges_visible;
+      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions, merge_vertices, count = 0;
       var variants, current_variant, variants_available, draco_material;
-      var gltfMaterialsVariantsExtension, gltfVideoTextureExtension;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
@@ -1493,7 +1490,7 @@
             if (child.isMesh || child.isPoints) {
               if (child.userData.variantMaterials) {
                 Object.keys( child.userData.variantMaterials ).forEach( key => {
-                  child.userData.variantMaterials[ key ].material.opacity = opacity_value;
+                  child.userData.variantMaterials[ key ].opacity = opacity_value;
                 });
               }
 
@@ -1531,7 +1528,7 @@
               if (child.isMesh || child.isPoints) {
                 if (child.userData.variantMaterials) {
                   Object.keys( child.userData.variantMaterials ).forEach( key => {
-                    child.userData.variantMaterials[ key ].material.transparent = false;
+                    child.userData.variantMaterials[ key ].transparent = false;
                   });
                 }
 
@@ -1560,7 +1557,7 @@
               if (child.isMesh || child.isPoints) {
                 if (child.userData.variantMaterials) {
                   Object.keys( child.userData.variantMaterials ).forEach( key => {
-                    child.userData.variantMaterials[ key ].material.transparent = true;
+                    child.userData.variantMaterials[ key ].transparent = true;
                   });
                 }
 
@@ -1905,9 +1902,9 @@
           }
 
           gltf_obj.traverse( function( child ) {
-      	    if (child.isMesh && child.userData.variantMaterials) {
-              child.material = child.userData.variantMaterials[ variants[ current_variant ] ].material;
-              if (child.material.isShaderMaterial === false) child.material.flatShading = flat_shading_enabled;
+      	    if (child.isMesh && child.material && child.userData.variantMaterials) {
+              child.material = child.userData.variantMaterials[ variants[ current_variant ] ];
+              child.material.flatShading = flat_shading_enabled;
               child.material.vertexColors = vertex_colors_enabled;
 
               switch ( current_side ) {
@@ -2406,7 +2403,6 @@
           gltf_loader.setKTX2Loader( ktx2_loader );
           gltf_loader.setDRACOLoader( draco_loader );
           gltf_loader.setMeshoptDecoder( MeshoptDecoder );
-          gltf_loader.register( parser => new gltfMaterialsVariantsExtension( parser ) );
           gltf_loader.register( parser => new gltfVideoTextureExtension( parser, THREE ) );
         }
 
@@ -2515,6 +2511,7 @@
         gltf_loader.load( URL.createObjectURL( selected_gltf_file ), async function( gltf ) {
           URL.revokeObjectURL( selected_gltf_file );
 
+          parser = gltf.parser;
           scenes = gltf.scenes;
           cameras = gltf.cameras;
 
@@ -2533,13 +2530,11 @@
             animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
           }
 
-          variants = gltf.userData.variants;
+          if (gltf.userData.gltfExtensions && gltf.userData.gltfExtensions[ 'KHR_materials_variants' ]) {
+            variants = gltf.userData.gltfExtensions[ 'KHR_materials_variants' ].variants.map( ( variant ) => variant.name );
+          }
 
           if (variants) {
-            for (let i = variants.length - 1; i > -1; i--) {
-              await gltf.functions.selectVariant( gltf.scene, variants[ i ] );
-            }
-
             current_variant = 0;
             variants_available = true;
             document.getElementById('btn_variants').disabled = false;
@@ -2549,7 +2544,7 @@
 
           let child_count = 1;
 
-          gltf.scene.traverse( function( child ) {
+          gltf.scene.traverse( async function( child ) {
             if (child.isLineSegments) {
               if (child.name === '') child.name = 'childLines_' + child_count;
 
@@ -2588,6 +2583,22 @@
 
               if (child.isMesh) {
                 if (child.isSkinnedMesh) child.frustumCulled = false;
+
+                if (variants_available === true && child.material && child.userData.gltfExtensions) {
+                  child.userData.variantMaterials = {};
+                  const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
+
+                  for (let i = 0; i < variants.length; i++) {
+                    const mapping = meshVariants.mappings.find( ( mapping ) => mapping.variants.includes( i ) );
+
+                    if (mapping) {
+                      await parser.getDependency( 'material', mapping.material ).then( function( material ) {
+                        child.userData.variantMaterials[ variants[ i ] ] = material;
+                        if (i === 0) child.material = material;
+                      });
+                    }
+                  }
+                }
               } else {
                 object_is_points = true;
                 child.sizeAttenuation = true;
@@ -2617,10 +2628,6 @@
                   if ( mtl.transmission && mtl.transmission > 0 ) {
                     if ( mtl.metalnessMap && ! mtl.metalness ) {
                       mtl.metalness = 0.01;
-                    }
-
-                    if ( mtl.roughnessMap && ! mtl.roughness ) {
-                      mtl.roughness = 0.01;
                     }
 
                     if ( mtl.roughnessMap && mtl.roughness === 1 ) {
@@ -2663,10 +2670,6 @@
                 if ( child.material.transmission && child.material.transmission > 0 ) {
                   if ( child.material.metalnessMap && ! child.material.metalness ) {
                     child.material.metalness = 0.01;
-                  }
-
-                  if ( child.material.roughnessMap && ! child.material.roughness ) {
-                    child.material.roughness = 0.01;
                   }
 
                   if ( child.material.roughnessMap && child.material.roughness === 1 ) {
@@ -3090,6 +3093,7 @@
             });
           } else {
             gltf_loader.load( selected_gltf_url_file, async function( gltf ) {
+              parser = gltf.parser;
               scenes = gltf.scenes;
               cameras = gltf.cameras;
 
@@ -3108,13 +3112,11 @@
                 animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
               }
 
-              variants = gltf.userData.variants;
+              if (gltf.userData.gltfExtensions && gltf.userData.gltfExtensions[ 'KHR_materials_variants' ]) {
+                variants = gltf.userData.gltfExtensions[ 'KHR_materials_variants' ].variants.map( ( variant ) => variant.name );
+              }
 
               if (variants) {
-                for (let i = variants.length - 1; i > -1; i--) {
-                  await gltf.functions.selectVariant( gltf.scene, variants[ i ] );
-                }
-
                 current_variant = 0;
                 variants_available = true;
                 document.getElementById('btn_variants').disabled = false;
@@ -3124,7 +3126,7 @@
 
               let child_count = 1;
 
-              gltf.scene.traverse( function( child ) {
+              gltf.scene.traverse( async function( child ) {
                 if (child.isLineSegments) {
                   if (child.name === '') child.name = 'childLines_' + child_count;
 
@@ -3163,6 +3165,22 @@
 
                   if (child.isMesh) {
                     if (child.isSkinnedMesh) child.frustumCulled = false;
+
+                    if (variants_available === true && child.material && child.userData.gltfExtensions) {
+                      child.userData.variantMaterials = {};
+                      const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
+
+                      for (let i = 0; i < variants.length; i++) {
+                        const mapping = meshVariants.mappings.find( ( mapping ) => mapping.variants.includes( i ) );
+
+                        if (mapping) {
+                          await parser.getDependency( 'material', mapping.material ).then( function( material ) {
+                            child.userData.variantMaterials[ variants[ i ] ] = material;
+                            if (i === 0) child.material = material;
+                          });
+                        }
+                      }
+                    }
                   } else {
                     object_is_points = true;
                     child.sizeAttenuation = true;
@@ -3192,10 +3210,6 @@
                       if ( mtl.transmission && mtl.transmission > 0 ) {
                         if ( mtl.metalnessMap && ! mtl.metalness ) {
                           mtl.metalness = 0.01;
-                        }
-
-                        if ( mtl.roughnessMap && ! mtl.roughness ) {
-                          mtl.roughness = 0.01;
                         }
 
                         if ( mtl.roughnessMap && mtl.roughness === 1 ) {
@@ -3238,10 +3252,6 @@
                     if ( child.material.transmission && child.material.transmission > 0 ) {
                       if ( child.material.metalnessMap && ! child.material.metalness ) {
                         child.material.metalness = 0.01;
-                      }
-
-                      if ( child.material.roughnessMap && ! child.material.roughness ) {
-                        child.material.roughness = 0.01;
                       }
 
                       if ( child.material.roughnessMap && child.material.roughness === 1 ) {
@@ -3866,6 +3876,7 @@
           }
         }
 
+        parser = null;
         gif_export = false;
         reset_rotation = true;
         object_is_points = false;
