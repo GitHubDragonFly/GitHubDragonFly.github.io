@@ -28,9 +28,6 @@
 
       manager.onProgress = function ( item, loaded, total ) {
         if ( loaded === total ) {
-          set_center();
-          resize();
-
           console.timeEnd( 'Loading Time' );
           document.getElementById('div_loading').style.display = 'none';
           enable_disable( false );
@@ -380,11 +377,6 @@
         </select>
         <select title="Export" id="export_names" disabled>
           <option value="" selected disabled>Export</option>
-          <option title="GIF - Animated GIF" value="gif" onclick="export_animated_gif();">GIF</option>
-          <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
-          <option title="GLB - GL Transmission Format binary" value="glb" onclick="export_gltf( true );">GLB</option>
-          <option title="GLTF - GL Transmission Format ascii" value="gltf" onclick="export_gltf( false );">GLTF</option>
-          <option title="JSON - Three.js Format" value="json" onclick="export_json();">JSON</option>
           <option title="APNG - Animated PNG" value="apng" onclick="export_animated_png();">APNG</option>
         </select>
         <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; width: 40px;" disabled>RST</button>
@@ -584,263 +576,12 @@
       link.style.display = 'none';
       document.body.appendChild( link );
 
-      function start_export() {
-        render_requested = false;
-        document.getElementById('export_names').selectedIndex = 0;
-        document.getElementById('fixed_menu').style.display = 'none';
-        document.getElementById('div_loading').innerHTML = 'Please wait ...';
-        document.getElementById('div_loading').style.display = 'block';
-        if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
-
-        set_filename();
-      }
-
       function set_filename() {
         if (selected_file) {
           filename = selected_file.name.substring( 0, selected_file.name.lastIndexOf('.') );
         } else {
           filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') );
         }
-      }
-
-      async function process_zip( ext = '' ) {
-        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 9 } } ).then( function( zipped_file ) {
-          link.href = URL.createObjectURL( zipped_file );
-          URL.revokeObjectURL( zipped_file );
-          link.download = filename + ext + '.zip';
-          link.click();
-
-          document.getElementById('div_loading').innerHTML = '';
-          document.getElementById('div_loading').style.display = 'none';
-          document.getElementById('fixed_menu').style.display = 'block';
-          if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
-          render_requested = true;
-          mouse_wheel = true;
-          render();
-
-          zip = new JSZip();
-        });
-      }
-
-      async function export_obj() {
-        if (splats) {
-          start_export();
-
-          await new Promise( resolve => setTimeout( resolve, 20 ) );
-
-          const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.js" );
-
-          let obj_exporter = new OBJExporter( manager );
-
-          await obj_exporter.parse( splats, filename, async function( exported ) {
-            zip.file( filename + '.obj', exported[ 'obj' ] );
-
-            if (exported[ 'mtl' ]) {
-              zip.file( filename + '.mtl', exported[ 'mtl' ] );
-
-              if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
-                let processed_index = 0;
-
-                exported[ 'tex' ].forEach( async tex => {
-                  let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
-
-                  zip.file( `${ tex.name }.${ tex.ext }`, blob );
-
-                  if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
-
-                  processed_index += 1;
-                });
-              } else {
-                await process_zip( '_OBJ' );
-              }
-            } else {
-              await process_zip( '_OBJ' );
-            }
-          });
-        }
-      }
-
-      async function export_gltf( binary = false ) {
-        if (splats) {
-          start_export();
-
-          await new Promise( resolve => setTimeout( resolve, 20 ) );
-
-          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
-
-          let gltf_exporter = new GLTFExporter( manager );
-
-          let options = { binary: binary, maxTextureSize: 1024 || Infinity };
-
-          gltf_exporter.parse( splats, async json => {
-            let blob;
-
-            if (binary === true) {
-              blob = new Blob( [ json ], { type: 'application/octet-stream' } );
-            } else {
-              let string = JSON.stringify( json, null, 2 );
-              blob = new Blob( [ string ], { type: 'text/plain' } );
-            }
-
-            let ext = (binary === true) ? '.glb' : '.gltf';
-
-            zip.file( filename + ext, blob );
-
-            ext = (binary === true) ? '_GLB' : '_GLTF';
-
-            await process_zip( ext );
-          }, function( error ) { console.log( error ); }, options);
-        }
-      }
-
-      async function export_json() {
-        start_export();
-
-        await new Promise( resolve => setTimeout( resolve, 20 ) );
-
-        if (splats) {
-          let json = JSON.stringify( splats.toJSON() );
-          let blob = new Blob( [ json ], { type: 'text/plain' } );
-
-          zip.file( filename + '.json', blob );
-
-          await process_zip( '_JSON' );
-        }
-      }
-
-      async function export_animated_gif() {
-        document.getElementById('export_names').selectedIndex = 0;
-
-        gif_export = true;
-
-        set_filename();
-
-        // Generate
-
-        let fx = Math.ceil( ( renderer.domElement.width - 500 ) / 2.0 );
-        let fy = Math.ceil( ( renderer.domElement.height - 500 ) / 2.0 );
-
-        let frames = 211;
-        let gif_frames = [];
-
-        await generateGIF( render, frames, fx, fy, gif_frames );
-      }
-
-      function generateGIF( renderFunction, frames, frame_x, frame_y, gif_frames ) {
-        let canvas;
-
-        if (navigator.userAgent.indexOf('Safari') !== -1) {
-          canvas = document.createElement( 'canvas' );
-          canvas.width = 500;
-          canvas.height = 500;
-        } else {
-          canvas = new OffscreenCanvas( 500, 500 );
-        }
-
-        let context = canvas.getContext( '2d', { willReadFrequently: true } );
-
-        let before_last = frames - 2;
-        let current = 0;
-
-        async function addFrame() {
-          if (current <= frames) {
-            if (current > 0) {
-              context.clearRect( 0, 0, 500, 500 );
-
-              renderFunction();
-
-              context.drawImage( renderer.domElement, frame_x, frame_y, 500, 500, 0, 0, 500, 500 );
-              gif_frames.push( context.getImageData( 0, 0, 500, 500 ).data );
-
-              progress.value = current / frames;
-
-              if (current === before_last) {
-                document.getElementById('div_loading').innerHTML = 'Please wait ...';
-                document.getElementById('div_loading').style.display = 'block';
-              }
-
-              setTimeout( addFrame, 0 );
-            } else {
-              document.getElementById('fixed_menu').style.display = 'none';
-              document.getElementById('animation_progress').style.display = 'block';
-              document.getElementById('div_gif_rectangle').style.display = 'block';
-              if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
-
-              setTimeout( addFrame, 100 );
-            }
-          } else {
-            // Download
-
-            let blob = await gif_encode( gif_frames );
-
-            document.getElementById('div_loading').innerHTML = '';
-            document.getElementById('div_loading').style.display = 'none';
-
-            context = null;
-            canvas = null;
-
-            link.href = URL.createObjectURL( blob );
-            link.download = filename + '.gif';
-            link.click();
-
-            progress.value = 0;
-            document.getElementById('fixed_menu').style.display = 'block';
-            document.getElementById('animation_progress').style.display = 'none';
-            document.getElementById('div_gif_rectangle').style.display = 'none';
-            if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
-
-            gif_export = false;
-
-            if (render_requested === true) render();
-
-            return;
-          }
-
-          current ++;
-        }
-
-        addFrame();
-      }
-
-      function gif_encode( gif_frames ) {
-        let buffer = new Uint8ClampedArray( 187500000 ); // 500 * 500 * 150 * 5
-        let pixels = new Uint8ClampedArray( 250000 ); // 500 * 500
-        let writer = new GifWriter( buffer, 500, 500, { loop: 0 } );
-
-        // Skip the first frame since it might be all zeros due to rendering
-        // Any subsequent frame that might be all zeros will throw an error
-        for ( let i = 1; i < gif_frames.length; i++ ) {
-          let data = gif_frames[ i ];
-          let palette = [];
-
-          for ( var j = 0, k = 0, jl = data.length; j < jl; j += 4, k ++ ) {
-            let r = Math.floor( data[ j + 0 ] * 0.1 ) * 10;
-            let g = Math.floor( data[ j + 1 ] * 0.1 ) * 10;
-            let b = Math.floor( data[ j + 2 ] * 0.1 ) * 10;
-            let color = r << 16 | g << 8 | b << 0;
-
-            let index = palette.indexOf( color );
-
-            if (index === -1) {
-              pixels[ k ] = palette.length;
-              palette.push( color );
-            } else {
-              pixels[ k ] = index;
-            }
-          }
-
-          // Force palette to be power of 2
-          let powof2 = 1;
-          while ( powof2 < palette.length ) powof2 <<= 1;
-          if (powof2 > 256) powof2 = 256;
-          palette.length = powof2;
-
-          let options = { palette: new Uint32Array( palette ), delay: 4 };
-
-          writer.addFrame( 0, 0, 500, 500, pixels, options );
-        }
-
-        return new Blob( [ buffer.subarray( 0, writer.end() ) ], { type: 'image/gif' } );
       }
 
       async function export_animated_png() {
@@ -1247,6 +988,9 @@
 
         scene.add( splats );
 
+        set_center();
+        resize();
+
         // filter splats to only show foreground layers
         splats.semanticsMask = lss.FOREGROUND;
       }
@@ -1265,6 +1009,9 @@
           splats.material.transparent = false;
 
           scene.add( splats );
+
+          set_center();
+          resize();
 
           // filter splats to only show foreground layers
           splats.semanticsMask = lss.FOREGROUND;
@@ -1351,7 +1098,7 @@
               if (rot_x === 0 && rot_y === 0 && rot_z === 0) {
                 // Animated GIF / APNG generation
                 if (progress.value > 0) {
-                  gif_export ? splats.rotation.z += 0.03 : splats.rotation.z += 0.05;
+                  splats.rotation.y += 0.05;
                 }
               } else {
                 if (rot_x !== 0) splats.rotation.x += rot_x;
@@ -1505,6 +1252,7 @@
         if (navigator.userAgent.indexOf('Chrome') !== -1 || navigator.userAgent.indexOf('Safari') !== -1) {
           $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
+          $('#quick_rotation').change( function() { $(this).children(':selected').click(); });
         }
 
         mouse_wheel = true;
