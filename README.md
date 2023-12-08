@@ -47,8 +47,10 @@ Number Type Converter
   - Zoom In / Out = mouse scroll wheel
 
 - Notes about SPLAT Viewer:
-  - It is using [Luma WebGL Library](https://lumalabs.ai/luma-web-library)
-  - It requires a good / fast graphics computer
+  - It is using [Luma WebGL Library](https://lumalabs.ai/luma-web-library) which makes it Luma specific
+  - It is designed to be used on mobile devices as well
+  - It requires a good / fast graphics hardware
+  - There is an untested VR button available
   - Local blob loading is not supported
   - Only APNG exporter is available
   - It is currently highly experimental and tested with Luma URL examples only
