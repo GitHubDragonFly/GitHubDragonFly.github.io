@@ -46,6 +46,10 @@ Number Type Converter
   - Move = right-click + hold + drag
   - Zoom In / Out = mouse scroll wheel
 
+- Notes about SPLAT Viewer:
+  - Is using [Luma WebGL Library](https://lumalabs.ai/luma-web-library)
+  - Is currently highly experimental and tested with Luma URL examples only
+
 - Notes about GLTF viewers:
   - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component:
     - Local loading currently only supports self-contained models, either embedded GLTF or binary GLB
