@@ -49,6 +49,7 @@ Number Type Converter
 - Notes about SPLAT Viewer:
   - It is using [Luma WebGL Library](https://lumalabs.ai/luma-web-library)
   - It requires a good / fast graphics computer
+  - Local blob loading is not supported
   - Only APNG exporter is available
   - It is currently highly experimental and tested with Luma URL examples only
 
