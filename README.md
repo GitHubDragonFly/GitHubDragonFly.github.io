@@ -47,10 +47,10 @@ Number Type Converter
   - Zoom In / Out = mouse scroll wheel
 
 - Notes about SPLAT Viewer:
-  - Is using [Luma WebGL Library](https://lumalabs.ai/luma-web-library)
+  - It is using [Luma WebGL Library](https://lumalabs.ai/luma-web-library)
   - It requires a good / fast graphics computer
-  - Is currently highly experimental and tested with Luma URL examples only
-  - Exporters currently don't work and might eventually be removed
+  - Only APNG exporter is available
+  - It is currently highly experimental and tested with Luma URL examples only
 
 - Notes about GLTF viewers:
   - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component:
