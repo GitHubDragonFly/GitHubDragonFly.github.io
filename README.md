@@ -48,6 +48,7 @@ Number Type Converter
 
 - Notes about SPLAT Viewer:
   - Is using [Luma WebGL Library](https://lumalabs.ai/luma-web-library)
+  - It requires a good / fast graphics computer
   - Is currently highly experimental and tested with Luma URL examples only
 
 - Notes about GLTF viewers:
