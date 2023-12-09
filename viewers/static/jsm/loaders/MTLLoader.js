@@ -11,7 +11,7 @@ import {
 	SRGBColorSpace,
 	TextureLoader,
 	Vector2
-} from 'three';
+} from "three";
 
 /**
  * Loads a Wavefront .mtl file specifying materials

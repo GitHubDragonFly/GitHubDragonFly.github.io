@@ -15,7 +15,7 @@ import {
 	Vector2,
 } from "three";
 
-import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/libs/fflate.module.js";
+import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/libs/fflate.module.js";
 
 class USDAParser {
 
