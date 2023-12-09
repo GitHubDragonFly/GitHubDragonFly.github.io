@@ -62,7 +62,7 @@ Number Type Converter
     - Local loading currently only supports self-contained models, either embedded GLTF or binary GLB
     - It supports loading of multiple models, switchable with the viewer's `M` button
     - Error handling narrows down to showing the `ERROR!` message so check the console output for details 
-  - `GLTF Viewer` is for v2.0 glTF files and is currently using r158 of three.js:
+  - `GLTF Viewer` is for v2.0 glTF files and is currently using r159 of three.js:
     - doesn't support `pbrSpecularGlossiness`
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js:
     - supports `pbrSpecularGlossiness`
@@ -226,7 +226,7 @@ Number Type Converter
   - `Eq` - equirectangular background
     - `R` - reflectivity (envMap + metalness)
 - JSON viewers support three.js and assimp JS / JSON formats with limitations:
-  - JSON Viewer is currently using r158 of three.js and cannot open legacy formats
+  - JSON Viewer is currently using r159 of three.js and cannot open legacy formats
   - JSON Legacy viewer is using r111 of three.js to support legacy THREE.Geometry:
     - It is using 4 loaders: ObjectLoader, BufferGeometryLoader, LegacyJSONLoader and AssimpJSONLoader
     - It could possibly open and export current three.js JSON format, with limitations of r111
