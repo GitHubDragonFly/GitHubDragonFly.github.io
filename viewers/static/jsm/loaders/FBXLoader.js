@@ -487,6 +487,7 @@ import { NURBSCurve } from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/
 
 				 loader.setPath( this.textureLoader.path );
 				 texture = loader.load( fileName );
+				 texture.repeat.y = - 1;
 
 			 }
 
