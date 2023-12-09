@@ -54,6 +54,8 @@ Number Type Converter
   - Local blob loading is not supported
   - Only APNG exporter is available
   - It is currently highly experimental and tested with Luma URL examples only
+  - For any other splat testing you could resort to using [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) and here is a URL that works in a browser and can show you a lego brick made of points and available in my repository:
+    - `https://antimatter15.com/splat/?url=https://raw.githubusercontent.com/GitHubDragonFly/GitHubDragonFly.github.io/main/viewers/examples/legobrick.splat`
 
 - Notes about GLTF viewers:
   - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component:
