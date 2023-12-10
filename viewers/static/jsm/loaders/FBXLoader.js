@@ -46,8 +46,8 @@ import {
 	ShapeUtils,
 	SRGBColorSpace
 } from "three";
-import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/libs/fflate.module.js";
-import { NURBSCurve } from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/curves/NURBSCurve.js";
+import * as fflate from "three/addons/libs/fflate.module.js";
+import { NURBSCurve } from "three/addons/curves/NURBSCurve.js";
 
 /**
  * THREE.Loader loads FBX file and generates THREE.Group representing FBX scene.

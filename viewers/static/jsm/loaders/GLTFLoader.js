@@ -63,10 +63,10 @@ import {
 	VectorKeyframeTrack,
 	SRGBColorSpace
 } from "three";
-import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/DDSLoader.js";
-import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/TGALoader.js";
-import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/EXRLoader.js";
-import { toTrianglesDrawMode } from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/utils/BufferGeometryUtils.js";
+import { DDSLoader } from "three/addons/loaders/DDSLoader.js";
+import { TGALoader } from "three/addons/loaders/TGALoader.js";
+import { EXRLoader } from "three/addons/loaders/EXRLoader.js";
+import { toTrianglesDrawMode } from "three/addons/utils/BufferGeometryUtils.js";
 
 class GLTFLoader extends Loader {
 

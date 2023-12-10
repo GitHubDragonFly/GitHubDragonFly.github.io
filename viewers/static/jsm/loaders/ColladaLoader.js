@@ -41,8 +41,8 @@ import {
 	VectorKeyframeTrack,
 	SRGBColorSpace
 } from "three";
-import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/TGALoader.js";
-import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/DDSLoader.js";
+import { TGALoader } from "three/addons/loaders/TGALoader.js";
+import { DDSLoader } from "three/addons/loaders/DDSLoader.js";
 
 class ColladaLoader extends Loader {
 
