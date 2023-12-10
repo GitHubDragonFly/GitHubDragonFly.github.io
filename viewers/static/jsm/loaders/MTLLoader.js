@@ -772,10 +772,12 @@ class MaterialCreator {
 
 			if ( params.anisotropy && params.anisotropyMap && params.anisotropyRotation ) {
 
+				params.anisotropyMap.mapping = 300;
 				params.anisotropyRotation = - ( Math.asin( params.anisotropyRotation ) / params.anisotropy );
 
 			} else if ( params.anisotropyMap && params.anisotropy && ! params.anisotropyRotation ) {
 
+				params.anisotropyMap.mapping = 300;
 				params.anisotropyRotation = - Math.PI / 3;
 
 			} else if ( ! params.anisotropyMap && params.anisotropy && params.anisotropyRotation ) {
