@@ -310,34 +310,7 @@ class OBJExporter {
 
 			if ( line.material ) {
 
-				if ( Array.isArray( line.material ) ) {
-
-					line.material.forEach( mtl => {
-
-						if ( mtl.name ) {
-
-							if ( mtl.name === '' ) {
-
-								mtl.name = 'line_material_' + line_count;
-
-							} else {
-
-								mtl.name = mtl.name.replaceAll( '#', '' );
-								mtl.name = mtl.name.replaceAll( ' ', '_' );
-
-							}
-
-						} else {
-
-							mtl[ 'name' ] = 'line_material_' + line_count;
-
-						}
-
-						output += 'usemtl ' + mtl.name + '\n';
-
-					});
-
-				} else {
+				if ( line.material ) {
 
 					if ( line.material.name ) {
 
@@ -359,6 +332,9 @@ class OBJExporter {
 					}
 
 					output += 'usemtl ' + line.material.name + '\n';
+					materials[ line.material.name ] = line.material;
+
+					line_count += 1;
 
 				}
 
