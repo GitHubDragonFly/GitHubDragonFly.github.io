@@ -25,7 +25,7 @@ import {
 	Vector3,
 	Quaternion,
 } from "three";
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/utils/TextureUtils.js";
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/utils/TextureUtils.js";
 
 /**
  * The KHR_mesh_quantization extension allows these extra attribute component types
@@ -60,7 +60,6 @@ const KHR_mesh_quantization_ExtraAttrTypes = {
 		'unsigned short',
 	],
 };
-
 
 class GLTFExporter {
 
@@ -1176,7 +1175,7 @@ class GLTFWriter {
 		}
 
 		if ( start === undefined ) start = 0;
-		if ( count === undefined ) count = attribute.count;
+		if ( count === undefined || count === Infinity ) count = attribute.count;
 
 		// Skip creating an accessor if the attribute doesn't have data to export
 		if ( count === 0 ) return null;
@@ -2832,8 +2831,7 @@ class GLTFMaterialsSpecularExtension {
 
 		if ( ! material.isMeshPhysicalMaterial || ( material.specularIntensity === 1.0 &&
 			material.specularColor.equals( DEFAULT_SPECULAR_COLOR ) &&
-			! material.specularIntensityMap && ! material.specularColorTexture ) ) return;
-
+			! material.specularIntensityMap && ! material.specularColorMap ) ) return;
 
 		const writer = this.writer;
 		const extensionsUsed = writer.extensionsUsed;
