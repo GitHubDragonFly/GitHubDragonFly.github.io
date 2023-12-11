@@ -2378,9 +2378,12 @@ class GLTFMeshGpuInstancing {
 
 				for ( const attributeName in attributes ) {
 
-					if ( attributeName !== 'TRANSLATION' &&
-						 attributeName !== 'ROTATION' &&
-						 attributeName !== 'SCALE' ) {
+					if ( attributeName === '_COLOR_0' ) {
+
+						const attr = attributes[ attributeName ];
+						instancedMesh.instanceColor = new THREE.InstancedBufferAttribute( attr.array, attr.itemSize, attr.normalized );
+
+					} else if ( attributeName !== 'TRANSLATION' && attributeName !== 'ROTATION' && attributeName !== 'SCALE' ) {
 
 						mesh.geometry.setAttribute( attributeName, attributes[ attributeName ] );
 
