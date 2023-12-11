@@ -46,6 +46,14 @@ Number Type Converter
   - Move = right-click + hold + drag
   - Zoom In / Out = mouse scroll wheel
 
+- Notes about A-FRAME Viewer:
+  - It is using [A-Frame Library / Framework](https://aframe.io) which makes it A-Frame specific
+  - It is currently highly experimental so not sure if everything works as it should be
+  - It is supposed to be used mainly on mobile devices supporting AR / VR
+  - Supported formats: DAE, FBX, GLB, GLTF, PLY, USDZ
+    - Local and remote URL loading is supported
+    - Local model files should be self-contained (embedded or binary)
+
 - Notes about SPLAT Viewer:
   - It is using [Luma WebGL Library](https://lumalabs.ai/luma-web-library) which makes it Luma specific
   - It is designed to be used on mobile devices as well
