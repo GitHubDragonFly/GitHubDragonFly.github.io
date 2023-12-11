@@ -1,0 +1,549 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="A-Frame Viewer - Single Model or Scene">
+    <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/aframe@1.5.0/dist/aframe-v1.5.0.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_decoder.js" defer></script>
+
+    <style>
+      body, html {
+        position: relative;
+        display: block;
+        background-color: #2735f8;
+        width: 100%;
+        min-height: 100vh;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button {
+        background-color: #d1cefc;
+        border: 1px solid blue;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        text-align: center;
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+        min-width: 22px;
+        height: 22px;
+        padding: 1px;
+      }
+
+      label {
+        vertical-align: middle;
+        height: 22px;
+        margin: 2px 0 2px 0;
+      }
+
+      input[type=color] {
+        border: 1px solid whitesmoke;
+        margin: 2px 3px 2px -2px;
+        vertical-align: middle;
+        background: none;
+        height: 20px;
+        width: 16px;
+        padding: 0;
+      }
+
+      input[type=file] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        max-width: 175px;
+      }
+
+      input[type=checkbox] {
+        vertical-align: middle;
+        margin: 2px 2px 2px 5px;
+      }
+
+      input[type=text] {
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+      }
+
+      .error_msg {
+        background-color: transparent;
+        position: absolute;
+        text-align: center;
+        font-size: x-large;
+        display: none;
+        color: red;
+        width: 240px;
+        height: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .loading_msg {
+        background-color: transparent;
+        color: greenyellow;
+        position: absolute;
+        text-align: center;
+        font-size: large;
+        display: none;
+        height: 240px;
+        width: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .fm { color: navy; width: calc(100% - 4px); border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
+
+      .fixed-menu {
+        background-color: whitesmoke;
+        display: inline-block;
+        position: fixed;
+        padding: 1px;
+        width: 100%;
+        z-index: 1;
+        margin: 0;
+      }
+    </style>
+
+    <!-- Using A-Frame Library from: https://aframe.io -->
+
+    <title>A-Frame Viewer</title>
+  </head>
+  <body onload="reset_all();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <label for="file_input" title="DAE, FBX, GLB, GLTF, PLY or USDZ Format" style="color: #553801;">3D</label>
+        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
+        <input type="file" id="file_input" name="file" onchange="init()" accept=".dae, .fbx, .glb, .gltf, .ply, .usdz" />
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="width: 70%; margin-right: 3px;" />
+        <button title="Load Button" onclick="load_url_file();" style="min-width: 38px; margin-right: 3px;">Load</button>
+        <button title="Clear Button" onclick="clear_url();" style="min-width: 38px; margin-right: 1px;">Clear</button>
+      </div>
+    </div>
+
+    <a-scene id="a_scene">
+      <a-sky color="#000325"></a-sky>
+    </a-scene>
+
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">Loading</div>
+
+    <script>
+      function show_url() {
+        if (url_displayed === true) {
+          document.getElementById('url').style.display = 'none';
+          url_displayed = false;
+        } else {
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+    </script>
+
+    <script>
+      const model_extensions = [ '.DAE', '.FBX', '.GLB', '.GLTF', '.PLY', '.USDZ' ];
+
+      const manager = new THREE.LoadingManager();
+
+      var selected_url_file = '', url_displayed = false, url_loading = false, extension;
+
+      const material = new THREE.MeshPhongMaterial( {
+        side: THREE.DoubleSide,
+        vertexColors: false,
+        specular: 0xA0A0A0,
+        flatShading: true,
+        shininess: 50,
+        transparent: true,
+        opacity: 1,
+        fog: true
+      });
+
+      function set_initial_scale( model ) {
+        let bounding_box = new THREE.Box3().setFromObject( model );
+        let size = bounding_box.getSize( new THREE.Vector3() );
+
+        if ( size.y > 190 ) {
+          model.scale.multiplyScalar( 250 / size.y );
+        } else if ( size.y > 90 ) {
+          model.scale.multiplyScalar( 150 / size.y );
+        } else if ( size.y > 40 ) {
+          model.scale.multiplyScalar( 100 / size.y );
+        } else if ( size.y > 1 ) {
+          model.scale.multiplyScalar( 50 / size.y );
+        } else if ( size.y > 0.02 ) {
+          model.scale.multiplyScalar( 25 / size.y );
+        } else if ( size.y > 0.01 ) {
+          model.scale.multiplyScalar( 10 / size.y );
+        } else {
+          model.scale.multiplyScalar( 1 / size.y );
+        }
+
+        return model;
+      }
+
+      async function load_model( url = '', extension = '' ) {
+        if (extension === '') {
+          handle_error( 'Invalid extension!' );
+          return;
+        }
+
+        let scene = document.getElementById('a_scene').object3D;
+
+        scene.traverse( ( child ) => {
+          if (child.name && child.name === 'loaded_model') {
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtl => {
+                mtl.dispose();
+              });
+            } else {
+              child.material.dispose();
+            }
+
+            child.geometry.dispose();
+
+            scene.remove( child );
+          }
+        });
+
+        switch ( extension ) {
+          case '.DAE':
+            const { ColladaLoader } = await import( "../static/jsm/loaders/ColladaLoader.js" );
+
+            const dae_loader = new ColladaLoader( manager );
+
+            dae_loader.load( url, function( collada ) {
+              collada.scene = set_initial_scale( collada.scene );
+              collada.scene.position.set( -5, 0, -70 );
+              collada.scene.name = 'loaded_model';
+
+              let vertex_colors = false;
+
+              collada.scene.traverse( ( child ) => {
+                if (child.isMesh || child.isPoints) {
+                  child.geometry.computeBoundingBox();
+                  child.geometry.computeBoundingSphere();
+
+                  if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                  child.geometry.normalizeNormals();
+
+                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                    vertex_colors = true;
+                  }
+
+                  if (Array.isArray( child.material )) {
+                    child.material.forEach( mtl => {
+                      set_texture_colorSpace( mtl );
+                      mtl.vertexColors = vertex_colors;
+                      mtl.format = THREE.RGBAFormat;
+                      mtl.flatShading = false;
+
+                      mtl.needsUpdate = true;
+                    });
+                  } else {
+                    set_texture_colorSpace( child.material );
+                    child.material.vertexColors = vertex_colors;
+                    child.material.format = THREE.RGBAFormat;
+                    child.material.flatShading = false;
+
+                    child.material.needsUpdate = true;
+                  }
+                }
+              });
+
+              scene.add( collada.scene );
+            });
+
+            break;
+
+          case '.FBX':
+            const { FBXLoader } = await import( "../static/jsm/loaders/FBXLoader.js" );
+            const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.js" );
+            const { TGALoader } = await import( "three/addons/loaders/TGALoader.js" );
+
+            const fbx_loader = new FBXLoader( manager );
+
+            const dds_loader = new DDSLoader( manager );
+            manager.addHandler( /\.dds$/i, dds_loader );
+
+            const tga_loader = new TGALoader( manager );
+            manager.addHandler( /\.tga$/i, dds_loader );
+
+            fbx_loader.load( url, function( fbx_scene ) {
+              fbx_scene = set_initial_scale( fbx_scene );
+              fbx_scene.position.set( -5, -5, -70 );
+              fbx_scene.name = 'loaded_model';
+
+              let vertex_colors = false;
+
+              fbx_scene.traverse( ( child ) => {
+                if (child.isMesh || child.isPoints) {
+                  child.geometry.computeBoundingBox();
+                  child.geometry.computeBoundingSphere();
+
+                  if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                  child.geometry.normalizeNormals();
+
+                  if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+                    vertex_colors = true;
+                  }
+
+                  if (Array.isArray( child.material )) {
+                    child.material.forEach( mtl => {
+                      set_texture_colorSpace( mtl );
+                      mtl.vertexColors = vertex_colors;
+
+                      mtl.needsUpdate = true;
+                    });
+                  } else {
+                    set_texture_colorSpace( child.material );
+                    child.material.vertexColors = vertex_colors;
+
+                    child.material.needsUpdate = true;
+                  }
+                }
+              });
+
+              scene.add( fbx_scene );
+            });
+
+            break;
+
+          case '.GLB':
+          case '.GLTF':
+            const { GLTFLoader } = await import( "../static/jsm/loaders/GLTFLoader.js" );
+            const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.js" );
+            const { DRACOLoader } = await import( "three/addons/loaders/DRACOLoader.js" );
+
+            const gltf_loader = new GLTFLoader( manager );
+
+            const draco_loader = new DRACOLoader( manager );
+            draco_loader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/libs/draco/" );
+            draco_loader.setDecoderConfig( { type: 'js' } );
+            draco_loader.preload();
+
+            const ktx2_loader = new KTX2Loader( manager );
+            ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/libs/basis/" );
+            ktx2_loader.detectSupport( new THREE.WebGLRenderer( { antialias: true, alpha: true } ) );
+            manager.addHandler( /\.basis$/i, ktx2_loader );
+
+            gltf_loader.setKTX2Loader( ktx2_loader );
+            gltf_loader.setDRACOLoader( draco_loader );
+            gltf_loader.setMeshoptDecoder( MeshoptDecoder );
+
+            gltf_loader.load( url, function( gltf ) {
+              gltf.scene = set_initial_scale( gltf.scene );
+              gltf.scene.position.set( -5, 0, -70 );
+              gltf.scene.name = 'loaded_model';
+
+              scene.add( gltf.scene );
+            });
+
+            break;
+
+          case '.PLY':
+            const { PLYLoader } = await import( "three/addons/loaders/PLYLoader.js" );
+
+            const ply_loader = new PLYLoader( manager );
+
+            ply_loader.load( url, function( geometry ) {
+              if (geometry.attributes.color && geometry.attributes.color.array.length > 0) {
+                material.vertexColors = true;
+              }
+
+              let mesh = new THREE.Mesh( geometry, material );
+
+              mesh = set_initial_scale( mesh );
+              mesh.position.set( -5, 0, -70 );
+              mesh.name = 'loaded_model';
+
+              scene.add( mesh );
+            });
+
+            break;
+
+          case '.USDZ':
+            const { USDZLoader } = await import( "../static/jsm/loaders/USDZLoader.js" );
+
+            const usdz_loader = new USDZLoader( manager );
+
+            usdz_loader.load( url, function( usd ) {
+              usd = set_initial_scale( usd );
+              usd.position.set( -5, 0, -70 );
+              usd.name = 'loaded_model';
+
+              usd.traverse( ( child ) => {
+                if (child.isMesh) {
+                  if (Array.isArray( child.material )) {
+                    child.material.forEach( mtl => {
+                      set_texture_colorSpace( mtl );
+                      mtl.format = THREE.RGBAFormat;
+                      mtl.flatShading = false;
+
+                      mtl.needsUpdate = true;
+                    });
+                  } else {
+                    set_texture_colorSpace( child.material );
+                    child.material.format = THREE.RGBAFormat;
+                    child.material.flatShading = false;
+
+                    child.material.needsUpdate = true;
+                  }
+                }
+              });
+
+              scene.add( usd );
+            });
+
+            break;
+
+          default:
+            break;
+        }
+
+        finish_loading();
+      }
+
+      async function init() {
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        extension = '';
+
+        if (url_loading === false) {
+          // Load local model file
+          let fi = document.getElementById('file_input');
+
+          console.time( 'Loading Time' );
+
+          let fn_uc = fi.files[ 0 ].name.toUpperCase();
+          extension = fn_uc.substring( fn_uc.lastIndexOf( '.' ) );
+
+          if ( model_extensions.some( ext => fn_uc.endsWith( ext ) ) ) {
+            let url = URL.createObjectURL( fi.files[ 0 ] );
+            await load_model( url, extension );
+            URL.revokeObjectURL( fi.files[ 0 ] );
+          } else {
+            console.log( 'No valid model file selected!' );
+            document.getElementById('div_loading').style.display = 'none';
+            document.getElementById('div_error').style.display = 'block';
+            return;
+          }
+
+          selected_url_file = '';
+        } else {
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          url_loading = false;
+
+          if (selected_url_file.indexOf( ',' ) !== -1) {
+            handle_error( 'Only a single URL is allowed!' );
+            return;
+          }
+
+          if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+          }
+
+          let url_uc = selected_url_file.toUpperCase();
+          extension = url_uc.substring( url_uc.lastIndexOf( '.' ) );
+
+          if ( model_extensions.some( ext => url_uc.endsWith( ext ) ) ) {
+            console.time( 'Loading Time' );
+            await load_model( selected_url_file, extension );
+          } else {
+            console.log( 'Not a valid URL for supported models!' );
+            document.getElementById('div_loading').style.display = 'none';
+            document.getElementById('div_error').style.display = 'block';
+            return;
+          }
+        }
+      }
+
+      function set_texture_colorSpace( material ) {
+        if (material.map) material.map.colorSpace = THREE.SRGBColorSpace;
+        if (material.aoMap) material.aoMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.alphaMap) material.alphaMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.emissiveMap) material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+        if (material.metalnessMap) material.metalnessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.normalMap) material.normalMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.roughnessMap) material.roughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.clearcoatMap) material.clearcoatMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.clearcoatRoughnessMap) material.clearcoatRoughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.specularColorMap) material.specularColorMap.colorSpace = THREE.SRGBColorSpace;
+        if (material.transmissionMap) material.transmissionMap.colorSpace = THREE.LinearSRGBColorSpace;
+      }
+
+      function finish_loading() {
+        console.timeEnd( 'Loading Time' );
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'none';
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      function reset_all() {
+        document.getElementById('file_input').value = '';
+        document.getElementById('div_loading').innerHTML = '';
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').innerHTML = '';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('url_entry').value = '';
+        selected_url_file = '';
+
+        let scene = document.getElementById('a_scene').object3D;
+
+        scene.traverse( ( child ) => {
+          if (child.name && child.name === 'loaded_model') {
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtl => {
+                mtl.dispose();
+              });
+            } else {
+              child.material.dispose();
+            }
+
+            child.geometry.dispose();
+
+            scene.remove( child );
+          }
+        });
+      }
+    </script>
+  </body>
+</html>
