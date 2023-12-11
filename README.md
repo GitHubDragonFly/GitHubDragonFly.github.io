@@ -50,7 +50,7 @@ Number Type Converter
   - It is using [A-Frame Library / Framework](https://aframe.io) which makes it A-Frame specific
   - It is currently highly experimental so not sure if everything works as it should be
   - It is supposed to be used mainly on mobile devices supporting AR / VR
-  - Supported formats: DAE, FBX, GLB, GLTF, PLY, USDZ
+  - Supported formats (single model or scene only): DAE, FBX, GLB, GLTF, PLY, USDZ:
     - Local and remote URL loading is supported
     - Local model files should be self-contained (embedded or binary)
 
