@@ -3,16 +3,14 @@
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="SPLAT (3D Gaussian Splatting) Viewer">
+    <meta name="description" content="Luma SPLAT (3D Gaussian Splatting) Viewer">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
     <script type="importmap">
       {
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/",
-          "three/examples/jsm/postprocessing/Pass": "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/postprocessing/Pass.js",
-          "three/examples/jsm/utils/BufferGeometryUtils": "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/utils/BufferGeometryUtils.js"
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/"
         }
       }
     </script>
@@ -22,17 +20,13 @@
     <script src="../static/js/upng/UPNG.min.js" defer></script>
 
     <script type="module">
-      import * as three_js from "three";
+      import * as THREE from "three";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
       import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
       import { OrbitControls } from "three/addons/controls/OrbitControls.js";
       import { VRButton } from "three/addons/webxr/VRButton.js";
       import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.js';
-      import { Splat, SplatLoader } from "https://cdn.jsdelivr.net/npm/@pmndrs/vanilla@1.14.1/core/Splat.js";
-
-      THREE = three_js;
-      vr_button = VRButton;
-      xr_controller = XRControllerModelFactory;
+      import { LumaSplatsSemantics, LumaSplatsThree } from "https://cdn.jsdelivr.net/npm/@lumaai/luma-web@0.1.15/dist/library/luma-web.module.js";
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
@@ -41,6 +35,71 @@
       rgbe_loader.setDataType( THREE.HalfFloatType );
 
       texture_loader = new THREE.TextureLoader( manager );
+
+      renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+      renderer.setPixelRatio( window.devicePixelRatio );
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 0.7;
+      renderer.setSize( ww, wh );
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+      renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
+      renderer.autoClear = false;
+      renderer.xr.enabled = true;
+
+      document.body.appendChild( renderer.domElement );
+
+      let vr_Button = VRButton.createButton( renderer );
+      document.body.appendChild( vr_Button );
+
+      scene = new THREE.Scene();
+
+      if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+      // The XRControllerModelFactory will automatically fetch controller models
+      // that match what the user is holding as closely as possible. The models
+      // should be attached to the object returned from getControllerGrip in
+      // order to match the orientation of the held device.
+
+      controller = new XRControllerModelFactory();
+
+      controllerGrip1 = renderer.xr.getControllerGrip( 0 );
+      controllerGrip1.add( controller.createControllerModel( controllerGrip1 ) );
+      scene.add( controllerGrip1 );
+
+      controllerGrip2 = renderer.xr.getControllerGrip( 1 );
+      controllerGrip2.add( controller.createControllerModel( controllerGrip2 ) );
+      scene.add( controllerGrip2 );
+
+      camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 5000 );
+      camera.position.set( 0, 0, 50 );
+      scene.add( camera );
+
+      controls = new OrbitControls( camera, renderer.domElement );
+      controls.zoomToCursor = true;
+      controls.zoomSpeed = 0.8;
+      controls.rotateSpeed = 0.8;
+      controls.keyPanSpeed = 0.8; 
+      controls.panSpeed = 0.8;
+      //controls.enableDamping = true;
+      //controls.dampingFactor = 0.3;
+      //controls.enableKeys = false;
+      //controls.enableZoom = true;
+      //controls.maxPolarAngle = 2.2;
+      //controls.minPolarAngle = 1.1;
+      //controls.rotateSpeed = 0.2;
+      //controls.minDistance = 2;
+      //controls.maxDistance = 500;
+
+      params = { exposure: 0.7, toneMapping: 'ACESFilmic', blurriness: 0.3 };
+
+      toneMappingOptions = {
+        None: THREE.NoToneMapping,
+        Linear: THREE.LinearToneMapping,
+        Reinhard: THREE.ReinhardToneMapping,
+        Cineon: THREE.CineonToneMapping,
+        ACESFilmic: THREE.ACESFilmicToneMapping
+      };
 
       gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
 
@@ -51,9 +110,15 @@
         document.getElementById("gui_position").style.marginTop = "2px";
       }
 
-      orb_controls = OrbitControls;
-      splat_loader = SplatLoader;
-      splat = Splat;
+      lst = LumaSplatsThree;
+      lss = LumaSplatsSemantics;
+
+      bgnd_texture = THREE.Texture;
+      bounding_box = new THREE.Box3();
+      size_vector = new THREE.Vector3();
+      center_vector = new THREE.Vector3();
+      aces_mapping = THREE.ACESFilmicToneMapping;
+      equi_mapping = THREE.EquirectangularReflectionMapping;
     </script>
 
     <style>
@@ -143,27 +208,6 @@
         z-index: 1;
       }
 
-      .spinner {
-        background-color: transparent;
-        position: absolute;
-        display: block;
-        width: 240px;
-        height: 240px;
-        padding: 4px;
-        top: calc(50% - 130px);
-        left: calc(50% - 130px);
-        border: 6px solid blue;
-        -webkit-border-radius: 50%;
-        border-radius: 50%;
-        border-top-color: lightblue;
-        border-bottom-color: lightblue;
-        -webkit-animation: spin 8s ease-in-out infinite;
-        animation: spin 8s ease-in-out infinite;
-      }
-
-      @-webkit-keyframes spin { to { -webkit-transform: rotate( 360deg ); } }
-      @keyframes spin { to { transform: rotate( 360deg ); } }
-
       .error_msg {
         background-color: transparent;
         position: absolute;
@@ -239,26 +283,27 @@
       }
     </style>
 
-    <!-- Using @pmndrs/drei-vanilla Library from: https://github.com/pmndrs/drei-vanilla#splat -->
-    <!-- A declarative abstraction around antimatter15/splat from: https://github.com/antimatter15/splat -->
+    <!-- Using Luma WebGL Library from: https://lumalabs.ai/luma-web-library -->
     <!-- Animated PNG file export support powered by: -->
     <!--   https://github.com/photopea/UPNG.js -->
     <!--   https://github.com/nodeca/pako -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>SPLAT Viewer</title>
+    <title>Luma Splat Viewer</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
-        <label for="btn_url" title="Remote Splat URL" style="color: #553801; margin-left: 3px;"></label>
+        <label for="btn_url" title="Luma Splat URL" style="color: #553801; margin-left: 3px;"></label>
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".splat" />
         <button title="Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
         <label for="back_color" title="Background Color">BG</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <label title="Equirectangular Background">Eq<input type="checkbox" id="equi" onchange="set_equi();" disabled /></label>
+        <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; min-width: 34px;" disabled>RST</button>
+        <button title="Full Screen" id="btn_full_screen" onclick="full_screen();" style="background-color: transparent; min-width: 24px;"><p class="full_screen"></p></button>
+        <button title="Menu Location" id="btn_menu_location" onclick="change_menu_location();" style="background-color: transparent; min-width: 16px;">&#x2193</button>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
@@ -294,9 +339,6 @@
           <option value="" selected disabled>Export</option>
           <option title="APNG - Animated PNG" value="apng" onclick="export_animated_png();">APNG</option>
         </select>
-        <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; min-width: 34px;" disabled>RST</button>
-        <button title="Full Screen" id="btn_full_screen" onclick="full_screen();" style="background-color: transparent; min-width: 24px;"><p class="full_screen"></p></button>
-        <button title="Menu Location" id="btn_menu_location" onclick="change_menu_location();" style="background-color: transparent; min-width: 16px;">&#x2193</button>
       </div>
     </div>
     <div id="gui_position"></div>
@@ -304,7 +346,6 @@
       <progress id="progress" value="0" max="1"></progress>
     </div>
 
-    <div id="div_spinner" class="spinner"></div>
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">Loading</div>
     <div id="div_gif_rectangle" class="gif_rectangle"></div>
@@ -331,7 +372,7 @@
 
       function load_url_file() {
         let url = document.getElementById('url_entry').value.trim();
-        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+        if (url !== '') { selected_url_file = url; init(); }
       }
 
       function clear_url() { document.getElementById('url_entry').value = ''; }
@@ -414,15 +455,15 @@
     </script>
 
     <script>
-      var splat_loader, splat, splats, manager, texture_loader, rgbe_loader;
-      var THREE, controls, orb_controls, renderer, scene, camera, render_requested, tex;
-      var xr_controller, controller, controllerGrip1, controllerGrip2, vr_button;
+      var lst, lss, splats, manager, texture_loader, rgbe_loader, size_vector, center_vector;
+      var controls, renderer, scene, camera, render_requested, bgnd_texture, tex;
+      var controller, controllerGrip1, controllerGrip2, aces_mapping, equi_mapping;
       var first_run, fr_count, mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
-      var ww = window.innerWidth, wh = window.innerHeight, slider_height = 0;
+      var ww = window.innerWidth, wh = window.innerHeight;
       var bounding_box, filename, gif_export, bgnd_linear_gradient;
-      var selected_local_file, selected_url_file = '', count = 0;
-      var url_displayed = false, url_loading = false, menu_location_bottom = false;
+      var selected_url_file = '', slider_height = 0, count = 0;
+      var url_displayed = false, menu_location_bottom = false;
 
       function set_filename() {
         filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') );
@@ -559,7 +600,7 @@
           while( i-- ) { gradient.addColorStop( gradient_colors[ 0 ][ i ], gradient_colors[ 1 ][ i ] ); }
           context.fillStyle = gradient;
           context.fillRect( 0, 0, ww, wh );
-          let texture = new THREE.Texture( canvas );
+          let texture = new bgnd_texture( canvas );
           scene.background = texture;
           texture.needsUpdate = true;
 
@@ -637,7 +678,7 @@
 
       function gui_reset() {
         params.toneMapping = 'ACESFilmic';
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMapping = aces_mapping;
         renderer.toneMappingExposure = params.exposure = 0.7;
         params.blurriness = 0.3;
 
@@ -652,7 +693,7 @@
 
       function set_center() {
         bounding_box.setFromObject( splats );
-        let center = bounding_box.getCenter( new THREE.Vector3() );
+        let center = bounding_box.getCenter( center_vector );
         controls.target.set( center.x, center.y, center.z );
 
         mouse_wheel = true;
@@ -692,152 +733,35 @@
 
       function init() {
         if (scene) {
-          if (splats) {
-            scene.remove( splats );
-            splats = null;
-          }
-
+          scene.remove( splats );
           reset_all( true );
         }
 
         enable_disable( true );
 
         splats = null;
-        selected_local_file = null;
         mouse_down = false;
         mouse_wheel = true;
         bgnd_linear_gradient = false;
         render_requested = false;
         gif_export = false;
-        bounding_box = new THREE.Box3();
 
         console.time( 'Loading Time' );
         document.body.style.backgroundImage = 'none';
-        document.getElementById('div_spinner').style.display = 'none';
         document.getElementById('div_error').style.display = 'none';
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
-        if (url_loading === false) {
-          // Loaded splat file
-          var fi = document.getElementById('file_input');
-
-          if (!fi.files[ 0 ]) handle_error( 'No file found!' );
-
-          let fn_uc = fi.files[ 0 ].name.toUpperCase();
-          if (fn_uc.endsWith('.SPLAT')) selected_local_file = fi.files[ 0 ];
-
-          if (selected_local_file === null) {
-            handle_error( 'No valid SPLAT file selected!' );
-            return;
-          }
-
-          selected_url_file = '';
-        } else {
-          // Reset the file input
-          document.getElementById('file_input').value = '';
-          url_loading = false;
-        }
-
-        if (renderer === undefined) {
-          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
-          renderer.setPixelRatio( window.devicePixelRatio );
-          renderer.toneMapping = THREE.ACESFilmicToneMapping;
-          renderer.toneMappingExposure = 0.7;
-          renderer.setSize( ww, wh );
-          renderer.shadowMap.enabled = true;
-          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
-          renderer.autoClear = false;
-          renderer.xr.enabled = true;
-
-          document.body.appendChild( renderer.domElement );
-          document.body.appendChild( vr_button.createButton( renderer ) );
-        }
-
-        if (scene === undefined) scene = new THREE.Scene();
-
-        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
-
-        // The XRControllerModelFactory will automatically fetch controller models
-        // that match what the user is holding as closely as possible. The models
-        // should be attached to the object returned from getControllerGrip in
-        // order to match the orientation of the held device.
-
-        if (controller === undefined) {
-          controller = new xr_controller();
-
-          controllerGrip1 = renderer.xr.getControllerGrip( 0 );
-          controllerGrip1.add( controller.createControllerModel( controllerGrip1 ) );
-          scene.add( controllerGrip1 );
-
-          controllerGrip2 = renderer.xr.getControllerGrip( 1 );
-          controllerGrip2.add( controller.createControllerModel( controllerGrip2 ) );
-          scene.add( controllerGrip2 );
-        }
-
-        if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 5000 );
-          camera.position.set( 0, 0, 50 );
-          scene.add( camera );
-        }
-
-        if (controls === undefined) {
-          controls = new orb_controls( camera, renderer.domElement );
-          controls.zoomToCursor = true;
-          controls.zoomSpeed = 0.8;
-          controls.rotateSpeed = 0.8;
-          controls.keyPanSpeed = 0.8; 
-          controls.panSpeed = 0.8;
-          //controls.enableDamping = true;
-          //controls.dampingFactor = 0.3;
-          //controls.enableKeys = false;
-          //controls.enableZoom = true;
-          //controls.maxPolarAngle = 2.2;
-          //controls.minPolarAngle = 1.1;
-          //controls.rotateSpeed = 0.2;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
-        }
-
-        if (params === undefined) params = { setEnvMap: false, exposure: 0.7, toneMapping: 'ACESFilmic', blurriness: 0.3 };
-
-        if (toneMappingOptions === undefined) toneMappingOptions = {
-          None: THREE.NoToneMapping,
-          Linear: THREE.LinearToneMapping,
-          Reinhard: THREE.ReinhardToneMapping,
-          Cineon: THREE.CineonToneMapping,
-          ACESFilmic: THREE.ACESFilmicToneMapping
-        };
-
-        (selected_local_file !== null) ? loadFile() : loadURLFile();
+        loadURLFile();
 
         // Load equirectangular texture
         if (tex === undefined) {
           rgbe_loader.load( 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/venice_sunset_1k.hdr', function( texture ) {
-            texture.mapping = THREE.EquirectangularReflectionMapping;
+            texture.mapping = equi_mapping;
             tex = texture;
             texture.dispose();
           });
         }
-      }
-
-      function loadFile() {
-        new splat_loader( renderer ).load( URL.createObjectURL( selected_local_file ), function( loaded_splat ) {
-          URL.revokeObjectURL( selected_local_file );
-
-          splats = new splat( loaded_splat, camera );
-          scene.add( splats );
-
-          set_center();
-          resize();
-
-          finish_loading();
-        }, function( xhr ) { }, // onProgress
-        function( error ) { // onError
-          URL.revokeObjectURL( selected_local_file );
-          handle_error( error );
-        });
       }
 
       function loadURLFile() {
@@ -848,31 +772,30 @@
             selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          // No extension checking for URL so it has to point to Splat model
+          // No extension checking for URL so it has to point to Luma Splat model
 
-          new splat_loader( renderer ).load( selected_url_file, function( loaded_splat ) {
-            splats = new splat( loaded_splat, camera );
-            scene.add( splats );
+          splats = new lst( { source: selected_url_file, antialias: false, enableThreeShaderIntegration: true, loadingAnimationEnabled: false, } );
+          splats.material.transparent = false;
 
-            set_center();
-            resize();
+          splats.onLoad = () => {
+            console.timeEnd( 'Loading Time' );
+            document.getElementById('div_loading').style.display = 'none';
+            enable_disable( false );
+            render_requested = true;
+            mouse_wheel = true;
+            first_run = true;
+            fr_count = 0;
+            render();
+          }
 
-            finish_loading();
-          }, function( xhr ) { }, // onProgress
-          function( error ) { handle_error( error ); }); // onError
+          scene.add( splats );
+
+          set_center();
+          resize();
+
+          // filter splats to only show foreground layers
+          splats.semanticsMask = lss.FOREGROUND;
         }
-      }
-
-      function finish_loading() {
-        console.timeEnd( 'Loading Time' );
-        document.body.style.backgroundImage = 'none';
-        document.getElementById('div_loading').style.display = 'none';
-        enable_disable( false );
-        render_requested = true;
-        mouse_wheel = true;
-        first_run = true;
-        fr_count = 0;
-        render();
       }
 
       function handle_error( error ) {
@@ -951,7 +874,7 @@
 
         mouse_wheel = true;
 
-        (selected_local_file !== null) ? loadFile() : loadURLFile();
+        loadURLFile();
       }
 
       function reset_all( reset = false ) {
@@ -990,7 +913,7 @@
           // Page (re)loading
           if (scene) {
             if (splats) {
-              scene.remove( splats );
+              splats.dispose();
               splats = null;
             }
 
@@ -999,9 +922,7 @@
             }
           }
 
-          document.getElementById('file_input').value = '';
           document.getElementById('div_error').style.display = 'none';
-          document.getElementById('div_spinner').style.display = 'block';
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
           enable_disable( true );
