@@ -55,15 +55,19 @@ Number Type Converter
     - Local model files should be self-contained (embedded or binary)
 
 - Notes about SPLAT Viewer:
-  - It is using [Luma WebGL Library](https://lumalabs.ai/luma-web-library) which makes it Luma specific
-  - It is designed to be used on mobile devices as well
+  - It is using [@pmndrs/drei-vanilla](https://github.com/pmndrs/drei-vanilla#splat) splat loader built around [antimatter15/splat](https://github.com/antimatter15/splat)
+  - Supports both local blob and remote URL loading
+  - Designed to be used on mobile devices as well
   - It requires a good / fast graphics hardware
   - There is an untested VR button available
-  - Local blob loading is not supported
   - Only APNG exporter is available
-  - It is currently highly experimental and tested with Luma URL examples only
-  - For any other splat testing you could resort to using [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) and here is a URL that works in a browser and can show you a lego brick made of points and available in my repository:
-    - `https://antimatter15.com/splat/?url=https://raw.githubusercontent.com/GitHubDragonFly/GitHubDragonFly.github.io/main/viewers/examples/legobrick.splat`
+  - For converting your PLY files to splat you could use the original [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/)
+  - Here is a URL for the lego brick splat model, made of points and available in my repository, that you can use for testing:
+    - `https://raw.githubusercontent.com/GitHubDragonFly/GitHubDragonFly.github.io/main/viewers/examples/legobrick.splat`
+  - There is another splat viewer available in the repository:
+    - It is using [Luma WebGL Library](https://lumalabs.ai/luma-web-library) which makes it Luma specific
+    - It only supports Luma URLs
+    - You can access it [here](https://githubdragonfly.github.io/viewers/templates/Luma%20SPLAT%20Viewer.html)
 
 - Notes about GLTF viewers:
   - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component:
