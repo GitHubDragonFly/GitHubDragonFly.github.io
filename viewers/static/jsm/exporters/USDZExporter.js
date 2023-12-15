@@ -1,5 +1,5 @@
-import * as THREE from "three";
-import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/libs/fflate.module.js";
+import { strToU8, zipSync } from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/libs/fflate.module.js";
+import { decompress } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/utils/TextureUtils.js';
 
 class USDZExporter {
 
@@ -14,7 +14,9 @@ class USDZExporter {
 		}, options );
 
 		const files = {};
-		const modelFileName = 'model.usda'; // model file should be first in USDZ archive so we init it here
+		const modelFileName = 'model.usda';
+
+		// model file should be first in USDZ archive so we init it here
 
 		files[ modelFileName ] = null;
 		let output = buildHeader();
@@ -25,7 +27,7 @@ class USDZExporter {
 
 			if ( object.isMesh ) {
 
-				if ( object.material.isMeshStandardMaterial ) {
+				if ( object.material.isMeshStandardMaterial === true ) {
 
 					const geometry = object.geometry;
 					const material = object.material;
@@ -57,12 +59,19 @@ class USDZExporter {
 		} );
 
 		output += buildMaterials( materials, textures, options.quickLookCompatible );
-		files[ modelFileName ] = fflate.strToU8( output );
+		files[ modelFileName ] = strToU8( output );
 		output = null;
 
 		for ( const id in textures ) {
 
-			const texture = textures[ id ];
+			let texture = textures[ id ];
+
+			if ( texture.isCompressedTexture === true ) {
+
+				texture = decompress( texture );
+
+			}
+
 			const color = id.split( '_' )[ 1 ];
 			const isRGBA = texture.format === 1023;
 			const canvas = imageToCanvas( texture.image, color );
@@ -99,7 +108,7 @@ class USDZExporter {
 
 		}
 
-		return fflate.zipSync( files, {
+		return zipSync( files, {
 			level: 0
 		} );
 
@@ -149,8 +158,6 @@ function imageToCanvas( image, color ) {
 
 }
 
-//
-
 const PRECISION = 7;
 
 function buildHeader() {
@@ -173,10 +180,11 @@ function buildUSDFileAsString( dataToInsert ) {
 
 	let output = buildHeader();
 	output += dataToInsert;
-	return fflate.strToU8( output );
+	return strToU8( output );
 
-} // Xform
+}
 
+// Xform
 
 function buildXform( object, geometry, material ) {
 
@@ -214,8 +222,9 @@ function buildMatrixRow( array, offset ) {
 
 	return `(${array[ offset + 0 ]}, ${array[ offset + 1 ]}, ${array[ offset + 2 ]}, ${array[ offset + 3 ]})`;
 
-} // Mesh
+}
 
+// Mesh
 
 function buildMeshObject( geometry ) {
 
@@ -333,8 +342,9 @@ function buildVector2Array( attribute, count ) {
 
 	return array.join( ', ' );
 
-} // Materials
+}
 
+// Materials
 
 function buildMaterials( materials, textures, quickLookCompatible = false ) {
 
