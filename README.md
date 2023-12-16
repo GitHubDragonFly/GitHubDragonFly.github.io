@@ -57,8 +57,7 @@ Number Type Converter
 - Notes about SPLAT Viewer:
   - It is using [@pmndrs/drei-vanilla](https://github.com/pmndrs/drei-vanilla#splat) splat loader built around [antimatter15/splat](https://github.com/antimatter15/splat)
   - Supports both local blob and remote URL loading
-  - Designed to be used on mobile devices as well
-  - It requires a good / fast graphics hardware
+  - It requires a good and fast graphics hardware
   - There is an untested VR button available
   - Only APNG exporter is available
   - For converting your PLY files to splat you could use the original [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/)
