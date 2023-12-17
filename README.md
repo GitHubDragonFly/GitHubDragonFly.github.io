@@ -1,13 +1,13 @@
 # GitHubDragonFly.github.io
 GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 
-Designed to serve as a hub with links to repositories, Number Type Converter and FREE online browser based [three.js](https://threejs.org) `3D Model` and `Texture` viewers.
+Designed to serve as a hub with links to repositories, Number Type Converter and FREE online browser-based [three.js](https://threejs.org)-based `3D Model` and `Texture` viewers.
 
 Fit for a desktop but should be functional on mobile devices in spite of its tiny or bulky appearance.
 
 The `M` button will allow you to switch to a stripped down and simplified version of mobile friendly 3D viewers:
  - Almost all viewers are currently available
- - Mobile `Quick Viewer` and `GLTF Viewer` include export options and more features
+ - Mobile `Quick Viewer` and `GLTF Viewer` also include export options and more features
  - All mobile testing was done on an Android mobile phone and an iPad
  - Consider bookmarking the mobile main page for any continuous access to the viewers
 
@@ -29,7 +29,7 @@ Main Menu Page
 - Appears to be fully functional for binary, hex, octal, signed and unsigned 8 / 16 / 32 / 64 / 128-bit integers and 32 / 64-bit floating-point numbers
 - This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/Number_Type_Converter) so check its description
 - An open mind and some knowledge of number systems, hopefully binary, will help understand the displayed values
-- Not all numbers might be visible on mobile devices so use only if you have to
+- Not all numbers might be easily visible on mobile devices so use only when needed
 - Possibly of good use to those who deal with Programmable Logic Controllers (PLC) and students
 - Note about float parser: if it encounters an invalid character, as per standard number rules, then it will stop and complete parsing of the string as a valid number which was present up to that point (ex. if you would enter `-75-88.5` under Float32 then it will be parsed as `-75`)
 - Integer representation of the floating-point values might be inaccurate due to precision and / or rounding
