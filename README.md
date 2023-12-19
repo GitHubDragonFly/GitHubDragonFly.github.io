@@ -64,10 +64,9 @@ Number Type Converter
   - For converting your PLY files to splat you could use the original [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/)
   - Here is a URL for the lego brick splat model, made of points and available in my repository, that you can use for testing:
     - `https://raw.githubusercontent.com/GitHubDragonFly/GitHubDragonFly.github.io/main/viewers/examples/legobrick.splat`
-  - There is also a Luma Splat Viewer:
-    - It is using [Luma WebGL Library](https://lumalabs.ai/luma-web-library) which makes it Luma specific
-    - It only supports Luma URLs
-    - [Luma AI](https://lumalabs.ai/) website appears to have an iOS App available for capturing splats
+  - This viewer also supports loading of Luma Splats URLs:
+    - More info on [Luma WebGL Library](https://lumalabs.ai/luma-web-library)
+    - [Luma AI](https://lumalabs.ai/) website appears to have an iOS App available for capturing luma splats
 
 - Notes about GLTF viewers:
   - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component:
