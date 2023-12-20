@@ -61,7 +61,9 @@ Number Type Converter
   - It requires a good and fast graphics hardware
   - There is an untested VR button available
   - Only APNG exporter is available
-  - For converting your PLY files to splat you could use the original [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/)
+  - For converting your PLY files to splat you could use:
+    - the original [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/)
+    - [Super Splat](https://playcanvas.com/super-splat) editor
   - Here is a URL for the lego brick splat model, made of points and available in my repository, that you can use for testing:
     - `https://raw.githubusercontent.com/GitHubDragonFly/GitHubDragonFly.github.io/main/viewers/examples/legobrick.splat`
   - This viewer also supports loading of Luma Splats URLs, here is an example URL to use for testing:
