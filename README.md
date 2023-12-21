@@ -17,6 +17,8 @@ Repositories do contain projects in several different programming languages or a
 
 There is a lot of information and descriptions, some intended for Industrial Automation and some for general or personal use. All is good as an educational resource as well.
 
+For those who either deal with or are just learning about Programmable Logic Controllers (PLC), use whatever you can from my repositories and then make the [AdvancedHMI](https://www.advancedhmi.com/) website your next stop for highly functional FREE software.
+
 Intro video shows how to start using 3D viewers by loading model files from a hard drive. It was captured by using the free and open source [OBS Studio](https://github.com/obsproject/obs-studio) software.
 
 # Mozilla Firefox screenshot
