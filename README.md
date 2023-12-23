@@ -9,7 +9,7 @@ The `M` button will allow you to switch to a stripped down and simplified versio
  - Almost all viewers are currently available
  - Mobile `Quick Viewer` and `GLTF Viewer` also include export options and more features
  - All mobile testing was done on an Android mobile phone and an iPad
- - Consider bookmarking the mobile main page for any continuous access to the viewers
+ - Consider bookmarking the [mobile main page](https://githubdragonfly.github.io/viewers/templates/Mobile/index.html) for any continuous access to the viewers
 
 GitHub servers are providing correct access to all files, so cloning or downloading this repository and using it offline will have a reduced functionality if run locally without some server. These GitHub servers are setting `CacheControl` to last only for 10 minutes so you might need to refresh the current page as needed.
 
