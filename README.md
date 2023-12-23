@@ -3,9 +3,9 @@ GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 
 Designed to serve as a hub with links to repositories, Number Type Converter and FREE online browser-based [three.js](https://threejs.org)-based `3D Model` and `Texture` viewers.
 
-Fit for a desktop but should be functional on mobile devices in spite of its tiny or bulky appearance.
+Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations.
 
-The `M` button will allow you to switch to a stripped down and simplified version of mobile friendly 3D viewers:
+The `M3D` button will open a page to access stripped down and simplified version of mobile friendly 3D viewers:
  - Almost all viewers are currently available
  - Mobile `Quick Viewer` and `GLTF Viewer` also include export options and more features
  - All mobile testing was done on an Android mobile phone and an iPad
@@ -21,10 +21,15 @@ For those who either deal with or are just learning about Programmable Logic Con
 
 Intro video shows how to start using 3D viewers by loading model files from a hard drive. It was captured by using the free and open source [OBS Studio](https://github.com/obsproject/obs-studio) software.
 
-# Mozilla Firefox screenshot
+# Mozilla Firefox screenshots
 
-Main Menu Page
-![Start Page](images/screenshot.png?raw=true)
+Main Menu Page (desktop)
+
+![Desktop Start Page](images/screenshot.png?raw=true)
+
+Main Menu Page (mobile)
+
+![Mobile Start Page](images/screenshot_mobile.jpg?raw=true)
 
 # Notes about Number Type Converter
 
