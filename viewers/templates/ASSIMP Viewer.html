@@ -357,6 +357,10 @@
           <option title="JSON - Three.js Format" value="json" onclick="export_json();">JSON</option>
           <option title="USDZ - Universal Scene Description Format" value="usdz" onclick="export_usdz();">USDZ</option>
           <option title="APNG - Animated PNG" value="apng" onclick="export_animated_png();">APNG</option>
+          <option value="" disabled>-------</option>
+          <option title="OBJ - Wavefront Technologies 3D Format - alternative export" value="objx" onclick="export_obj( true );">OBJx</option>
+          <option title="DAE - Collada Format - alternative export" value="daex" onclick="export_dae( true );">DAEx</option>
+          <option title="USDZ - Universal Scene Description Format - alternative export" value="usdzx" onclick="export_usdz( true );">USDZx</option>
         </select>
         <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; width: 40px;" disabled>RST</button>
         <button title="Full Screen" id="btn_full_screen" onclick="full_screen();" style="background-color: transparent; min-width: 24px;"><p class="full_screen"></p></button>
@@ -743,7 +747,7 @@
         });
       }
 
-      async function export_obj() {
+      async function export_obj( alternative = false ) {
         if (gltf_obj) {
           start_export();
 
@@ -753,7 +757,9 @@
 
           let obj_exporter = new OBJExporter( manager );
 
-          await obj_exporter.parse( gltf_obj, filename, async function( exported ) {
+          let mesh_clone = alternative === true ? await create_meshes() : gltf_obj;
+
+          await obj_exporter.parse( mesh_clone, filename, async function( exported ) {
             zip.file( filename + '.obj', exported[ 'obj' ] );
 
             if (exported[ 'mtl' ]) {
@@ -862,7 +868,7 @@
         }
       }
 
-      async function export_dae() {
+      async function export_dae( alternative = false ) {
         if (gltf_obj) {
           start_export();
 
@@ -872,7 +878,9 @@
 
           let dae_exporter = new ColladaExporter( manager );
 
-          let result = dae_exporter.parse( gltf_obj );
+          let mesh_clone = alternative === true ? await create_meshes() : gltf_obj;
+
+          let result = dae_exporter.parse( mesh_clone );
 
           zip.file( filename + '.dae', result.data );
 
@@ -1044,7 +1052,7 @@
         }
       }
 
-      async function export_usdz() {
+      async function export_usdz( alternative = false ) {
         if (gltf_obj) {
           if (object_is_points === true) {
             document.getElementById('export_names').selectedIndex = 0;
@@ -1060,7 +1068,9 @@
 
           let usdz_exporter = new USDZExporter( manager );
 
-          let arraybuffer = await usdz_exporter.parse( gltf_obj );
+          let mesh_clone = alternative === true ? await create_meshes() : gltf_obj;
+
+          let arraybuffer = await usdz_exporter.parse( mesh_clone );
           let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
 
           zip.file( filename + '.usdz', blob );
@@ -3362,6 +3372,53 @@
             });
           }
         }
+      }
+
+      // Alternative exports: logic from three.js SceneUtils.js function createMeshesFromInstancedMesh( instancedMesh )
+      // It will also re-create and group regular meshes. The exported file might be large.
+      // Use if having issues with regular OBJ + MTL / DAE / USDZ exports.
+
+      async function create_meshes() {
+        let meshes = new THREE.Group();
+
+        let m_meshes = gltf_obj.clone();
+        m_meshes.updateMatrixWorld( true, true );
+
+        m_meshes.traverse( function( child ) {
+          if (child.isInstancedMesh) {
+            const material = new THREE.MeshStandardMaterial();
+
+            for ( let i = 0; i < child.count; i += 1 ) {
+              let child_clone = new THREE.Mesh( child.geometry, material );
+
+              child.getMatrixAt( i, child_clone.matrix );
+              child_clone.matrix.decompose( child_clone.position, child_clone.quaternion, child_clone.scale );
+
+              if (child.instanceColor) {
+                let colors = [];
+
+                for ( let k = 0; k < child_clone.geometry.attributes.position.array.length; k += 3 ) {
+                  colors.push( child.instanceColor.array[ 0 ], child.instanceColor.array[ 1 ], child.instanceColor.array[ 2 ] );
+                }
+
+                child_clone.geometry.setAttribute('color', new THREE.Float32BufferAttribute( colors, 3 ));
+              }
+
+              meshes.add( child_clone );
+              meshes.updateMatrixWorld( true, true );
+            }
+          } else if (child.isMesh) {
+            const material = new THREE.MeshStandardMaterial();
+            let child_clone = new THREE.Mesh( child.geometry, child.material || material );
+
+            child.matrix.decompose( child_clone.position, child_clone.quaternion, child_clone.scale );
+
+            meshes.add( child_clone );
+            meshes.updateMatrixWorld( true, true );
+          }
+        });
+
+        return meshes;
       }
 
       function finish_loading() {
