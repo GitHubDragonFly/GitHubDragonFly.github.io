@@ -73,8 +73,8 @@ Number Type Converter
     - [Super Splat](https://playcanvas.com/super-splat) editor
   - Here is a URL for the lego brick splat model, made of points and available in my repository, that you can use for testing:
     - `https://raw.githubusercontent.com/GitHubDragonFly/GitHubDragonFly.github.io/main/viewers/examples/legobrick.splat`
-  - This viewer also supports loading of Luma Splats URLs, here is an example URL to use for testing:
-    - `https://lumalabs.ai/capture/ca9ea966-ca24-4ec1-ab0f-af665cb546ff`
+  - This viewer also supports loading of Luma Splats URLs:
+    - An example URL to use for testing `https://lumalabs.ai/capture/ca9ea966-ca24-4ec1-ab0f-af665cb546ff`
     - More info on [Luma WebGL Library](https://lumalabs.ai/luma-web-library)
     - [Luma AI](https://lumalabs.ai/) website appears to have an iOS App available for capturing luma splats
 
@@ -83,11 +83,12 @@ Number Type Converter
     - Local loading currently only supports self-contained models, either embedded GLTF or binary GLB
     - It supports loading of multiple models, switchable with the viewer's `M` button
     - Error handling narrows down to showing the `ERROR!` message so check the console output for details 
-  - `GLTF Viewer` is for v2.0 glTF files and is currently using r159 of three.js:
+  - `GLTF Viewer` is for v2.0 glTF files and is currently using r160 of three.js:
     - doesn't support `pbrSpecularGlossiness`
+    - supports `KHR_animation_pointer`
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js:
     - supports `pbrSpecularGlossiness`
-    - doesn't support `Anisotropy`
+    - doesn't support `Anisotropy` and `KHR_animation_pointer`
   - `GLTF Legacy` viewer is for v1.0 glTF files and is purely experimental and rather limited (see notes further below)
 
 - Special notes about `ASSIMP Viewer` which is using [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and [ASSIMP](https://github.com/assimp/assimp) library:
@@ -236,11 +237,12 @@ Number Type Converter
   - `#` - grid
 - Light controls, where applicable:
   - `AL` - ambient light
+    - `ALi` - ambient light intensity
   - `DL` - directional light
+    - `DLi` - directional light intensity
   - `HL` - hemisphere light
   - `SL` - spotlight
-  - `DLi` - directional light intensity
-  - `SLi` - spotlight intensity
+    - `SLi` - spotlight intensity
 - Other controls, where applicable:
   - `C` - object or points color
   - `BG` - background color
@@ -251,8 +253,8 @@ Number Type Converter
   - JSON Legacy viewer is using r111 of three.js to support legacy THREE.Geometry:
     - It is using 4 loaders: ObjectLoader, BufferGeometryLoader, LegacyJSONLoader and AssimpJSONLoader
     - It could possibly open and export current three.js JSON format, with limitations of r111
-    - Some animations / skeletons might be off or missing
-- GLTF / FBX / DAE viewers will also export animations to JSON format
+    - Some animations and/or skeletons might be off or missing
+- GLTF / FBX / DAE viewers will also include animations to exported JSON format
 - 3DS viewer is using MeshPhysicalMaterial instead of MeshPhongMaterial
 - PLY+STL / PRWM / VTK viewers can also show a points version of the loaded model and export it as such (if the model is not rather large):
   - export this points model into PLY format and then drop it into [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) to get splat file
