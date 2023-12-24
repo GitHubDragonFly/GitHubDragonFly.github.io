@@ -3,7 +3,7 @@ GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 
 Designed to serve as a hub with links to repositories, Number Type Converter and FREE online browser-based [three.js](https://threejs.org)-based `3D Model` and `Texture` viewers.
 
-Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations.
+Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations, see screenshots below for different appearances of the main menu page.
 
 The `M3D` button will open a page to access stripped down and simplified version of mobile friendly 3D viewers:
  - Almost all viewers are currently available
