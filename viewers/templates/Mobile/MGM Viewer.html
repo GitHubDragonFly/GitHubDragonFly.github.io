@@ -2,18 +2,14 @@
 <html lang="en">
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
-    <meta name="description" content="GLTF / GLB Viewer using Google's model-viewer web component">
     <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="GLTF / GLB / USDZ Viewer using Google's model-viewer web component">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
-
-    <script type="module" src="https://cdn.jsdelivr.net/npm/@google/model-viewer@3.3.0/dist/model-viewer.min.js"></script>
 
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      self.ModelViewerElement = self.ModelViewerElement || {};
-      self.ModelViewerElement.meshoptDecoderLocation = 'https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_decoder.js';
-      self.ModelViewerElement.lottieLoaderLocation = 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/loaders/LottieLoader.js';
+      const isAppleDevice = /iPhone|iPad|iPod|CriOS/i.test( navigator.userAgent ) || (/iPad|iPhone|iPod/.test( navigator.platform )) || (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
     </script>
 
     <style>
@@ -77,6 +73,7 @@
         margin-left: -127px;
         padding: 10px;
         border: none;
+        z-index: 10;
       }
 
       .fm { color: navy; width: 99%; border: 1px solid navy; -webkit-border-radius: 2px; border-radius: 2px; padding: 4px; margin: 1px; }
@@ -85,7 +82,7 @@
         background-color: whitesmoke;
         display: inline-block;
         position: fixed;
-        z-index: 10;
+        z-index: 99;
         margin: 0px;
         padding: 1px;
         width: 100%;
@@ -108,6 +105,7 @@
         width: 99.7%;
         margin: 1px 1px 1px 1px;
         padding: 0;
+        z-index: 1;
       }
     </style>
 
@@ -115,12 +113,12 @@
 
     <title>GM Viewer</title>
   </head>
-  <body onload="reset_all();">
+  <body onload="reset_all(); document_ready();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
         <button title="Get models via URL" id="btn_url" onclick="show_url();" style="min-width: 38px;">URL</button>
         <label for="file_input" title="Browse Local Files"></label>
-        <input type="file" id="file_input" name="file" onchange="init();" accept=".glb, .gltf" multiple />
+        <input type="file" id="file_input" name="file" onchange="init();" accept=".glb, .gltf, .usdz" multiple />
         <label for="back_color" title="Background Color">B</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Neutral Lighting" id="btn_neutral_lighting" onclick="set_neutral_lighting();" disabled>N</button>
@@ -140,10 +138,6 @@
       </div><br />
 
     <div id="div_error" class="error_msg">E R R O R !</div>
-
-    <model-viewer class="model_viewer" id="mv" loading="eager" min-field-of-view="0deg" max-field-of-view="110deg" environment-image="legacy" camera-controls zoom-sensitivity="0.35" interpolation-decay="250" touch-action="none" autoplay ar ar-modes="webxr scene-viewer quick-look" xr-environment>
-      <button slot="ar-button" id="ar-button" style="min-width: 28px; margin: 50px 0 0 5px;">AR</button>
-    </model-viewer>
 
     <script>
       function show_url() {
@@ -169,7 +163,8 @@
     </script>
 
     <script>
-      var filename, filenames, selected_file, selected_url_file = '';
+      var gltf_filenames, usdz_filenames;
+      var selected_file, selected_url_file = '';
       var models, current_model = 0, neutral_lighting;
       var url_displayed = false, url_loading = false;
       var ww = window.innerWidth,	wh = window.innerHeight;
@@ -183,8 +178,8 @@
         neutral_lighting = false;
         animations = {};
         variants = {};
-        filename = null;
-        filenames = [];
+        gltf_filenames = {};
+        usdz_filenames = {};
         models = [];
 
         enable_disable( true );
@@ -203,22 +198,34 @@
               variants[ i ] = [];
 
               models.push( url );
-              filenames.push( fi.files[ i ].name.substring( 0, fi.files[ i ].name.lastIndexOf('.') ) );
-              if (filename === null) filename = filenames[ 0 ];
+              gltf_filenames[ url ] = fi.files[ i ].name;
               if (selected_file === null) selected_file = url;
 
               URL.revokeObjectURL( fi.files[ i ] );
-            }
+            } else if (fn_uc.endsWith('.USDZ')) {
+              let url = URL.createObjectURL( fi.files[ i ] );
+
+              models.push( url );
+              usdz_filenames[ url ] = fi.files[ i ].name;
+              if (selected_file === null) selected_file = url;
+
+              URL.revokeObjectURL( fi.files[ i ] );
+           }
           };
 
           if (models.length > 0) {
             if (models.length > 1) {
               document.getElementById('btn_current_model').style.backgroundColor = 'lightgreen';
               document.getElementById('btn_current_model').disabled = false;
+            } else {
+              document.getElementById('btn_current_model').disabled = true;
+              document.getElementById('btn_current_model').style.backgroundColor = 'transparent';
             }
+
+            disabled_changed();
           } else {
             document.getElementById('div_error').style.display = 'block';
-            console.log( 'No valid GLTF / GLB file selected!' );
+            console.log( 'No valid GLTF / GLB / USDZ file selected!' );
             return;
           }
 
@@ -229,18 +236,21 @@
           url_loading = false;
         }
 
+        document.getElementById('div_error').style.display = 'none';
+
         selected_file !== null ? loadFile() : loadURLFile();
       }
 
       function loadFile() {
-        document.getElementById('div_error').style.display = 'none';
-
         let mdl_viewer = document.getElementById('mv');
 
         document.getElementById('load_progress').style.display = 'block';
 
         mdl_viewer.onerror = function( event ) {
+          mdl_viewer.removeAttribute( 'src' );
           document.getElementById('load_progress').style.display = 'none';
+          document.getElementById('div_error').style.color = 'red';
+          document.getElementById('div_error').innerHTML = 'E R R O R !';
           document.getElementById('div_error').style.display = 'block';
           return;
         }
@@ -251,6 +261,7 @@
 
         mdl_viewer.onload = function() {
           document.getElementById('load_progress').style.display = 'none';
+          document.getElementById('div_error').style.display = 'none';
 
           if (mdl_viewer.availableAnimations.length > 0) {
             animation_running = true;
@@ -275,60 +286,79 @@
           enable_disable( false );
         }
 
-        mdl_viewer.setAttribute( 'src', selected_file );
+        if (gltf_filenames[ selected_file ]) {
+          mdl_viewer.setAttribute( 'src', selected_file );
+        } else if (usdz_filenames[ selected_file ]) {
+          if (isAppleDevice === true) {
+            mdl_viewer.setAttribute( 'ios-src', selected_file );
+          } else {
+            console.log( 'Could not detect USDZ support on this device!' )
+            mdl_viewer.setAttribute( 'src', '#' );
+          }
+        }
       }
 
       function loadURLFile() {
         if (selected_url_file !== '') {
-
-          document.getElementById('div_error').style.display = 'none';
-
-          let mdl_viewer = document.getElementById('mv');
-
-          // No extension checking so URLs have to point to GLTF or GLB models
-
           if (selected_url_file.indexOf( ',' ) > -1) {
             let urls = selected_url_file.split( ',' );
 
             for (let i = 0; i < urls.length; i++) {
               let url = urls[ i ].trim();
 
-              if (url.startsWith('https://www.dropbox.com') === true) {
-                url = url.replace('www.dropbox.com', 'dl.dropbox.com');
-              } else if (url.startsWith('https://github.com') === true) {
+              if (url.startsWith('https://github.com') === true) {
                 url = ( url.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
               }
 
-              animations[ i ] = [];
-              variants[ i ] = [];
+              let url_uc = url.toUpperCase();
 
-              models.push( url );
-              filenames.push( url.substring( url.lastIndexOf('/') + 1, url.lastIndexOf('.') ) );
-              if (filename === null) filename = filenames[ 0 ];
-              if (selected_file === null) selected_file = url;
+              if (url_uc.endsWith('.GLB') || url_uc.endsWith('.GLTF')) {
+                animations[ i ] = [];
+                variants[ i ] = [];
+
+                models.push( url );
+                gltf_filenames[ url ] = url.substring( url.lastIndexOf( '/' ) + 1 );
+                if (selected_file === null) selected_file = url;
+              } else if (fn_uc.endsWith('.USDZ')) {
+                models.push( url );
+                usdz_filenames[ url ] = url.substring( url.lastIndexOf( '/' ) + 1 );
+                if (selected_file === null) selected_file = url;
+              }
             }
           } else {
-            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-              selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
-            } else if (selected_url_file.startsWith('https://github.com') === true) {
+            if (selected_url_file.startsWith('https://github.com') === true) {
               selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
             }
 
-            animations[ 0 ] = [];
-            variants[ 0 ] = [];
+            let url_uc = selected_url_file.toUpperCase();
 
-            models.push( selected_url_file );
-            filenames.push( selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') ) );
-            if (filename === null) filename = filenames[ 0 ];
-            if (selected_file === null) selected_file = selected_url_file;
+            if (url_uc.endsWith('.GLB') || url_uc.endsWith('.GLTF')) {
+              animations[ 0 ] = [];
+              variants[ 0 ] = [];
+
+              models.push( selected_url_file );
+              gltf_filenames[ selected_url_file ] = selected_url_file.substring( selected_url_file.lastIndexOf( '/' ) + 1 );
+              if (selected_file === null) selected_file = selected_url_file;
+            } else if (url_uc.endsWith('.USDZ')) {
+              models.push( selected_url_file );
+              usdz_filenames[ selected_url_file ] = selected_url_file.substring( selected_url_file.lastIndexOf( '/' ) + 1 );
+              if (selected_file === null) selected_file = selected_url_file;
+            }
           }
 
           if (models.length > 0) {
             if (models.length > 1) {
               document.getElementById('btn_current_model').style.backgroundColor = 'lightgreen';
               document.getElementById('btn_current_model').disabled = false;
+            } else {
+              document.getElementById('btn_current_model').disabled = true;
+              document.getElementById('btn_current_model').style.backgroundColor = 'transparent';
             }
+
+            disabled_changed();
           } else {
+            document.getElementById('div_error').style.color = 'red';
+            document.getElementById('div_error').innerHTML = 'E R R O R !';
             document.getElementById('div_error').style.display = 'block';
             console.log( 'Unsupported URL file!' );
             return;
@@ -336,8 +366,13 @@
 
           document.getElementById('load_progress').style.display = 'block';
 
+          let mdl_viewer = document.getElementById('mv');
+
           mdl_viewer.onerror = function( event ) {
+            mdl_viewer.removeAttribute( 'src' );
             document.getElementById('load_progress').style.display = 'none';
+            document.getElementById('div_error').style.color = 'red';
+            document.getElementById('div_error').innerHTML = 'E R R O R !';
             document.getElementById('div_error').style.display = 'block';
             return;
           }
@@ -348,6 +383,7 @@
 
           mdl_viewer.onload = function() {
             document.getElementById('load_progress').style.display = 'none';
+            document.getElementById('div_error').style.display = 'none';
 
             if (mdl_viewer.availableAnimations.length > 0) {
               animation_running = true;
@@ -372,11 +408,24 @@
             enable_disable( false );
           }
 
-          mdl_viewer.setAttribute( 'src', selected_file );
+          if (gltf_filenames[ selected_file ]) {
+            mdl_viewer.setAttribute( 'src', selected_file );
+          } else if (usdz_filenames[ selected_file ]) {
+            if (isAppleDevice === true) {
+              mdl_viewer.setAttribute( 'ios-src', selected_file );
+            } else {
+              console.log( 'Could not detect USDZ support on this device!' )
+              mdl_viewer.setAttribute( 'src', '#' );
+            }
+          }
         }
       }
 
       function current_model_changed() {
+        document.getElementById('div_error').style.color = 'green';
+        document.getElementById('div_error').innerHTML = 'Loading ... please wait';
+        document.getElementById('div_error').style.display = 'block';
+
         current_model += 1;
 
         if (current_model === models.length) current_model = 0;
@@ -396,8 +445,18 @@
 
         disabled_changed();
 
+        mdl_viewer.onerror = function( event ) {
+          mdl_viewer.removeAttribute( 'src' );
+          document.getElementById('load_progress').style.display = 'none';
+          document.getElementById('div_error').style.color = 'red';
+          document.getElementById('div_error').innerHTML = 'E R R O R !';
+          document.getElementById('div_error').style.display = 'block';
+          return;
+        }
+
         mdl_viewer.onload = function() {
-          filename = filenames[ current_model ];
+          document.getElementById('load_progress').style.display = 'none';
+          document.getElementById('div_error').style.display = 'none';
 
           if (mdl_viewer.availableAnimations.length > 0) {
             if (animations[ current_model ].length === 0) animations[ current_model ] = mdl_viewer.availableAnimations;
@@ -427,7 +486,16 @@
           disabled_changed();
         }
 
-        mdl_viewer.setAttribute( 'src', models[ current_model ] );
+        if (gltf_filenames[ models[ current_model ] ]) {
+          mdl_viewer.setAttribute( 'src', models[ current_model ] );
+        } else if (usdz_filenames[ models[ current_model ] ]) {
+          if (isAppleDevice === true) {
+            mdl_viewer.setAttribute( 'ios-src', models[ current_model ] );
+          } else {
+            console.log( 'Could not detect USDZ support on this device!' )
+            mdl_viewer.setAttribute( 'src', '#' );
+          }
+        }
       }
 
       function animate_gltf() {
@@ -512,6 +580,50 @@
     </script>
 
     <script>
+      async function document_ready() {
+        if(navigator.userAgent.indexOf('Chrome') !== -1 || navigator.userAgent.indexOf('Safari') !== -1) {
+          $('#export_names').change( function() { $(this).children(':selected').click(); });
+        }
+
+        const { ModelViewerElement } = await import( "https://cdn.jsdelivr.net/npm/@google/model-viewer@3.3.0/dist/model-viewer.min.js" );
+
+        self.ModelViewerElement = ModelViewerElement || {};
+        self.ModelViewerElement.meshoptDecoderLocation = 'https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_decoder.js';
+        self.ModelViewerElement.lottieLoaderLocation = 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/LottieLoader.js';
+
+        const m_viewer = document.createElement('model-viewer');
+
+        m_viewer.setAttribute( 'id', 'mv' );
+        m_viewer.setAttribute( 'ar', 'true' );
+        m_viewer.setAttribute( 'autoplay', 'true' );
+        m_viewer.setAttribute( 'loading', 'eager' );
+        m_viewer.setAttribute( 'touch-action', 'none' );
+        //m_viewer.setAttribute( 'shadow-intensity', '1' );
+        m_viewer.setAttribute( 'class', 'model_viewer' );
+        m_viewer.setAttribute( 'xr-environment', 'true' );
+        m_viewer.setAttribute( 'camera-controls', 'true' );
+        m_viewer.setAttribute( 'zoom-sensitivity', '0.35' );
+        m_viewer.setAttribute( 'interpolation-decay', '250' );
+        m_viewer.setAttribute( 'min-field-of-view', '0deg' );
+        m_viewer.setAttribute( 'max-field-of-view', '110deg' );
+        m_viewer.setAttribute( 'environment-image', 'legacy' );
+        m_viewer.setAttribute( 'ar-modes', 'webxr scene-viewer quick-look');
+
+        const ar_button = document.createElement('button');
+
+        ar_button.setAttribute( 'class', 'hide' );
+        ar_button.setAttribute( 'id', 'ar-button' );
+        ar_button.setAttribute( 'innerHTML', 'AR' );
+        ar_button.setAttribute( 'slot', 'ar-button' );
+        ar_button.setAttribute( 'style', 'min-width: 28px; margin: 50px 0 0 5px;' );
+
+        m_viewer.appendChild( ar_button );
+
+        document.body.appendChild( m_viewer );
+
+        document.getElementById('mv').style.display = 'block';
+      }
+
       function disabled_changed() {
         $('button').each( function() {
           if (this.disabled === false) {
