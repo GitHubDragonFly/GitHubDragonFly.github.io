@@ -245,8 +245,8 @@ Number Type Converter
   - `SL` - spotlight
     - `SLi` - spotlight intensity
 - Other controls, where applicable:
+  - `B` or `BG` - background color
   - `C` - object or points color
-  - `BG` - background color
   - `Eq` - equirectangular background
     - `R` - reflectivity (envMap + metalness)
 - JSON viewers support three.js and assimp JS / JSON formats with limitations:
