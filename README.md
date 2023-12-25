@@ -81,7 +81,8 @@ Number Type Converter
 - Notes about GLTF viewers:
   - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component:
     - Local loading currently only supports self-contained models, either embedded GLTF or binary GLB
-    - It supports loading of multiple models, switchable with the viewer's `M` button
+    - Support for USDZ was also added but is untested
+    - The viewer supports loading of multiple models, switchable with the viewer's `M` button
     - Error handling narrows down to showing the `ERROR!` message so check the console output for details 
   - `GLTF Viewer` is for v2.0 glTF files and is currently using r160 of three.js:
     - doesn't support `pbrSpecularGlossiness`
@@ -103,7 +104,7 @@ Number Type Converter
     - Try using [JSON Viewer](https://githubdragonfly.github.io/viewers/templates/JSON%20Viewer.html) to see all models exported as `JSON`
     - Try using [JSON Legacy](https://githubdragonfly.github.io/viewers/templates/JSON%20Legacy.html) viewer to see all models exported as `ASSJSON`
     - Both `JSON` and `ASSJSON` exported files use the same `.json` extension
-  - GLTF / GLB v2.0 and DRC models will be handled by three.js, as originally intended, and there is no special URL formatting for `glTF + BIN + textures` required (just use the URL of the GLTF model)
+  - GLTF / GLB v2.0 and DRC models will be handled by three.js, as originally intended, and there is no special URL formatting required for `glTF + BIN + textures` (just use the URL of the GLTF model)
   - All other formats, including GLTF / GLB v1.0, will be initially handled by ASSIMP(JS), converted to `GLB2` and passed on to the three.js `GLTF Loader` for displaying
   - Supported formats: 3D, 3DS, 3MF, A3D, AC, AC3D, ACC, AMF, ASE, B3D, BLEND, BVH, COB, CSM, DAE, DRC, DXF, FBX, GLB, GLTF + BIN, HMP, IFC, IQM, IRR, IRRMESH, KMZ, LWO, LWS, LXO, M3D, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NDO, NFF, OBJ + MTL, OFF, OGEX, PK3, PLY, PMX, Q3O, Q3S, RAW, SIB, SMD, STL, TER, X, X3D, XGL, XML, ZAE, ZGL
   - Unsupported formats: BSP, JT, M3, WRL
