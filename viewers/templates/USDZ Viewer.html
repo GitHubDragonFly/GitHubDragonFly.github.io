@@ -8,8 +8,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
         }
       }
     </script>
@@ -31,26 +31,14 @@
       fflate = fflate_js;
 
       manager = new THREE.LoadingManager();
-
-      manager.onProgress = function ( item, loaded, total ) {
-        if ( loaded === total ) {
-          document.getElementById('div_loading').style.display = 'none';
-          console.timeEnd( 'Loading Time' );
-          enable_disable( false );
-          render_requested = true;
-          mouse_wheel = true;
-          first_run = true;
-          fr_count = 0;
-          render();
-        }
-      }
+      manager.onLoad = function() { mouse_wheel = true; }
 
       usdz_loader = new USDZLoader( manager );
 
-      rgbe_loader = new RGBELoader();
+      rgbe_loader = new RGBELoader( manager );
       rgbe_loader.setDataType( THREE.HalfFloatType );
 
-      texture_loader = new THREE.TextureLoader();
+      texture_loader = new THREE.TextureLoader( manager );
 
       gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
 
@@ -300,7 +288,7 @@
         <button title="Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
         <button title="Model Opacity - double click to enable/disable" id="btn_dc_opacity" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 2px; border-radius: 2px;" ondblclick="set_opacity();" onclick="show_hide_dropdown_opacity();">O
           <div id="dc_opacity" class="dropdown-content" style="display: none;" onfocusout="if (enable_opacity === true) hide_dropdown_opacity();">
-            <input type="range" orient="vertical" id="model_opacity" min="0" max="1" step="0.05" value="1" onkeydown="return_false();" oninput="set_model_opacity();" disabled />
+            <input type="range" orient="vertical" id="model_opacity" min="0" max="1" step="0.01" value="1" onkeydown="return_false();" oninput="set_model_opacity();" disabled />
             <span id="opacity_val">1</span>
           </div>
         </button>
@@ -1331,11 +1319,18 @@
               mouse_wheel = true;
             });
 
+            gui.add( params, 'intensity', 0, 2 )
+            .onChange( function ( value ) {
+              scene.backgroundIntensity = value;
+              mouse_wheel = true;
+            });
+
             updateGUI();
 
             gui.open();
 
             scene.backgroundBlurriness = params.blurriness;
+            scene.backgroundIntensity = params.intensity;
             gui_set = true;
           }
 
@@ -1371,8 +1366,9 @@
       function gui_reset() {
         params.toneMapping = 'ACESFilmic';
         renderer.toneMappingExposure = params.exposure = 0.7;
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
         params.blurriness = 0.3;
-        params.setEnvMap = false;
+        params.intensity = 1.0;
 
         mouse_wheel = true;
 
@@ -1625,10 +1621,11 @@
 
         if (zip === undefined) zip = new JSZip();
 
-        if (params === undefined) params = { exposure: 0.7, toneMapping: 'ACESFilmic', blurriness: 0.3 };
+        if (params === undefined) params = { exposure: 0.7, toneMapping: 'ACESFilmic', blurriness: 0.3, intensity: 1.0 };
 
         if (toneMappingOptions === undefined) toneMappingOptions = {
           None: THREE.NoToneMapping,
+          AgX: THREE.AgXToneMapping,
           Linear: THREE.LinearToneMapping,
           Reinhard: THREE.ReinhardToneMapping,
           Cineon: THREE.CineonToneMapping,
@@ -1755,22 +1752,6 @@
           //controls.maxDistance = 500;
         }
 
-        if (gizmo === undefined) {
-          gizmo = new orb_controls_gizmo( controls, {
-            size: 65,
-            padding: 4,
-            bubbleSizePrimary: 7,
-            bubbleSizeSecondary: 3,
-            lineWidth: 1,
-            fontSize: '8px',
-            fontColor: 'black',
-            fontWeight: 'bold'
-          });
-
-          document.getElementById('gizmo').addEventListener( 'click', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
-          document.getElementById('gizmo').appendChild( gizmo.domElement );
-        }
-
         if (tex === undefined) {
           rgbe_loader.load( 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/venice_sunset_1k.hdr', function( texture ) {
             texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -1822,7 +1803,6 @@
 
               child.material.forEach( mtl => {
                 set_texture_colorSpace( mtl );
-                mtl.format = THREE.RGBAFormat;
                 mtl.flatShading = false;
 
                 initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
@@ -1835,7 +1815,6 @@
               });
             } else {
               set_texture_colorSpace( child.material );
-              child.material.format = THREE.RGBAFormat;
               child.material.flatShading = false;
 
               initial_transparency[ child.name ] = child.material.transparent;
@@ -1855,7 +1834,9 @@
 
         set_initial_scale();
         resize();
-      }
+  
+        finish_loading();
+    }
 
       function loadURLFile() {
         if (selected_url_file !== '') {
@@ -1885,6 +1866,34 @@
         if (material.clearcoatRoughnessMap) material.clearcoatRoughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
         if (material.specularColorMap) material.specularColorMap.colorSpace = THREE.SRGBColorSpace;
         if (material.transmissionMap) material.transmissionMap.colorSpace = THREE.LinearSRGBColorSpace;
+      }
+
+      function finish_loading() {
+        document.getElementById('div_loading').style.display = 'none';
+        console.timeEnd( 'Loading Time' );
+        enable_disable( false );
+
+        if (gizmo === undefined) {
+          gizmo = new orb_controls_gizmo( controls, {
+            size: 65,
+            padding: 4,
+            bubbleSizePrimary: 7,
+            bubbleSizeSecondary: 3,
+            lineWidth: 1,
+            fontSize: '8px',
+            fontColor: 'black',
+            fontWeight: 'bold'
+          });
+
+          document.getElementById('gizmo').addEventListener( 'click', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
+          document.getElementById('gizmo').appendChild( gizmo.domElement );
+        }
+
+        render_requested = true;
+        mouse_wheel = true;
+        first_run = true;
+        fr_count = 0;
+        render();
       }
 
       function handle_error( error ) {
