@@ -211,12 +211,9 @@ class USDZLoader extends Loader {
 
 		if ( file === undefined ) {
 
-			console.warn( 'THREE.USDZLoader: No usda file found.' );
-
-			return new Group();
+			throw new Error( 'THREE.USDZLoader: No usda file found.' );
 
 		}
-
 
 		// Parse file
 
