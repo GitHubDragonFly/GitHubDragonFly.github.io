@@ -206,6 +206,9 @@ Number Type Converter
       - This bug might eventually get fixed
     - PLY exporter will include vertex colors and will convert material color to vertex color if the material has no texture
   - BIM and OFF exports are only available in Quick Viewer, as stated above
+  - ASSIMP / GLTF / GLTFS viewers also offer alternative exports marked as OBJx / DAEx / GLBx / GLTFx / USDZx:
+    - should be tried if their regular export counterparts don't produce good results
+    - GLBx export additionally has DRACO compression applied (which might not be good for some models)
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
