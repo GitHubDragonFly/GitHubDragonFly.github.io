@@ -162,6 +162,7 @@ class BIMLoader extends Loader {
 
 			let material = new MeshStandardMaterial( {
 
+				name: info[ 'Material' ] || 'Default Material',
 				side: DoubleSide,
 				flatShading: false,
 				transparent: true,
