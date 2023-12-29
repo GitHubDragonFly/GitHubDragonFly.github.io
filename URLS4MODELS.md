@@ -50,6 +50,9 @@ Else, copy any of the following links and then paste it within the `URL` option 
 - access to some XYZ example files, the pdf file includes a link to a repository on Page 4:
   - `https://orbi.uliege.be/bitstream/2268/254933/1/TDS_generate_3D_meshes_with_python.pdf`
   - `https://people.math.sc.edu/Burkardt/data/xyz/xyz.html`
+- access to some 3DM (Rhino3D) example files at [rview](https://github.com/mcneel/rview/tree/main/public/samples):
+  - `https://raw.githubusercontent.com/mcneel/rview/main/public/samples/Drill.3dm`
+  - `https://raw.githubusercontent.com/mcneel/rview/main/public/samples/Teapots.3dm`
 - access to some 3DS example files at [tutushubham](https://github.com/tutushubham/3D-Models---Military), mind the correct path after `master`:
   - `https://raw.githubusercontent.com/tutushubham/3D-Models---Military/master/SWIM/SWIM/SWIM_L.3DS`
   - `https://raw.githubusercontent.com/tutushubham/3D-Models---Military/master/M60/M60/M60_L.3DS`
