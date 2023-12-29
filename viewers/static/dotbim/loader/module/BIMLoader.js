@@ -77,6 +77,8 @@ class BIMLoader extends Loader {
 
 			const { schema_version, meshes, elements, info } = dotbim;
 
+			if ( info.Name && info.Name !== '' ) bim_meshes.name = info.Name;
+
 			if ( ! meshes || ! elements ) {
 
 				throw new Error( 'THREE.BIMLoader: No meshes or elements found!' );
@@ -124,7 +126,16 @@ class BIMLoader extends Loader {
 
 			dotbim_Elemments2Meshes( elements, geometries ).forEach( bim_mesh => {
 
-				bim_mesh[ 'name' ] = 'mesh_' + bim_mesh.id;
+				if ( bim_mesh.name ) {
+
+					if ( bim_mesh.name === '') bim_mesh[ 'name' ] = 'mesh_' + bim_mesh.id;
+
+				} else {
+
+					bim_mesh[ 'name' ] = 'mesh_' + bim_mesh.id;
+
+				}
+
 				bim_meshes.add( bim_mesh );
 
 			});
@@ -154,7 +165,7 @@ class BIMLoader extends Loader {
 				side: DoubleSide,
 				flatShading: false,
 				transparent: true,
-				metalness: 0.8,
+				metalness: 0.3,
 				roughness: 0.3,
 				color: 0xFFFFFF
 
@@ -252,6 +263,8 @@ class BIMLoader extends Loader {
 
 				mesh_id_key.current_instance++;
 			}
+
+			if ( info.Name && info.Name !== '' ) mesh.name = info.Name;
 
 			return mesh;
 
