@@ -76,6 +76,7 @@ function dotbim_Elemment2Mesh(element, geometrys) {
     geometry.computeVertexNormals();
 
     let material = new THREE.MeshStandardMaterial({
+        name: info[ 'Material' ] || 'Default Material',
         side: THREE.DoubleSide,
         flatShading: false,
         transparent: true,
