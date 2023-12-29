@@ -681,7 +681,8 @@
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
       var bounding_box, gif_export, bgnd_linear_gradient;
       var flat_shading_enabled, enable_opacity, zip;
-      var multi_mesh_model, iges, brep, bim, tex, count = 0;
+      var multi_mesh_model, iges, brep, bim, tex;
+      var first_run = false, fr_count = 0, count = 0;
       var initial_opacity, initial_opacity_array, edges, edges_visible;
       var initial_transparency, initial_transparency_array, outline_material;
       var selected_step_file, selected_url_file = '', filename, response, buffer, fileBuffer;
@@ -1901,6 +1902,11 @@
 
           if (gui) gui_reset();
 
+          if (gizmo) {
+            document.getElementById('gizmo').removeChild( gizmo.domElement );
+            gizmo = undefined;
+          }
+
           // Reset all values
           reset_all( true );
         }
@@ -2059,22 +2065,6 @@
           //controls.rotateSpeed = 0.2;
           //controls.minDistance = 2;
           //controls.maxDistance = 500;
-        }
-
-        if (gizmo === undefined) {
-          gizmo = new orb_controls_gizmo( controls, {
-            size: 65,
-            padding: 4,
-            bubbleSizePrimary: 7,
-            bubbleSizeSecondary: 3,
-            lineWidth: 1,
-            fontSize: '8px',
-            fontColor: 'black',
-            fontWeight: 'bold'
-          });
-
-          document.getElementById('gizmo').addEventListener( 'click', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
-          document.getElementById('gizmo').appendChild( gizmo.domElement );
         }
 
         if (tex === undefined) {
@@ -2286,32 +2276,7 @@
         set_initial_scale();
         resize();
 
-        render_requested = true;
-        mouse_wheel = true;
-        render();
-
-        console.timeEnd( 'Loading Time' );
-        document.getElementById('div_loading').style.display = 'none';
-
-        disabled_changed();
- 
-        // Edges creation for BIM models
-
-        if (bim === true) {
-          await create_meshes().then( meshes => {
-            meshes.traverse( ( child ) => {
-              if (child.isMesh) {
-                let innerGeometry = new THREE.BufferGeometry();
-                innerGeometry.setAttribute( 'position', child.geometry.attributes.position );
-                if (child.geometry.attributes.normal) innerGeometry.setAttribute( 'normal', child.geometry.attributes.normal );
-                let innerEdgesGeometry = new THREE.EdgesGeometry( innerGeometry, 30 );
-                let edge = new THREE.LineSegments( innerEdgesGeometry, outline_material );
-                edge.applyMatrix4( child.matrixWorld );
-                edges.add( edge );
-              }
-            });
-          });
-        }
+        finish_loading();
      }
 
       async function loadURLFile() {
@@ -2472,6 +2437,34 @@
 
           addFileInScene();
         });
+      }
+
+      function finish_loading() {
+        document.getElementById('div_loading').style.display = 'none';
+        console.timeEnd( 'Loading Time' );
+        enable_disable( false );
+
+        if (gizmo === undefined) {
+          gizmo = new orb_controls_gizmo( controls, {
+            size: 65,
+            padding: 4,
+            bubbleSizePrimary: 7,
+            bubbleSizeSecondary: 3,
+            lineWidth: 1,
+            fontSize: '8px',
+            fontColor: 'black',
+            fontWeight: 'bold'
+          });
+
+          document.getElementById('gizmo').addEventListener( 'click', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
+          document.getElementById('gizmo').appendChild( gizmo.domElement );
+        }
+
+        render_requested = true;
+        mouse_wheel = true;
+        first_run = true;
+        fr_count = 0;
+        render();
       }
 
       function handle_error( error ) {
@@ -2919,7 +2912,7 @@
         });
       }
 
-      function render() {
+      async function render() {
         if (document.getElementById('animation_progress').style.display === 'none') {
           if (render_requested === true) requestAnimationFrame( render );
         }
@@ -2947,12 +2940,41 @@
               }
             }
 
-            if (mouse_wheel === true) {
-              if (count > 3) {
-                mouse_wheel = false;
-                count = 0;
-              } else {
-                count += 1;
+            // If it might be slow to render initially
+            if (first_run === true) {
+              fr_count += 1;
+              if (fr_count > 5) {
+                document.getElementById('div_loading').style.display = 'none';
+                first_run = false;
+
+                // Edges creation for BIM models
+                // The model should be rendered and visible
+                // This process might still slow the browser depending on the model complexity
+
+                if (bim === true) {
+                  await create_meshes().then( meshes => {
+                    meshes.traverse( ( child ) => {
+                      if (child.isMesh) {
+                        let innerGeometry = new THREE.BufferGeometry();
+                        innerGeometry.setAttribute( 'position', child.geometry.attributes.position );
+                        if (child.geometry.attributes.normal) innerGeometry.setAttribute( 'normal', child.geometry.attributes.normal );
+                        let innerEdgesGeometry = new THREE.EdgesGeometry( innerGeometry, 30 );
+                        let edge = new THREE.LineSegments( innerEdgesGeometry, outline_material );
+                        edge.applyMatrix4( child.matrixWorld );
+                        edges.add( edge );
+                      }
+                    });
+                  });
+                }
+              }
+            } else {
+              if (mouse_wheel === true) {
+                if (count > 3) {
+                  mouse_wheel = false;
+                  count = 0;
+                } else {
+                  count += 1;
+                }
               }
             }
 
