@@ -27,30 +27,67 @@ class USDZExporter {
 
 			if ( object.isMesh ) {
 
-				if ( object.material.isMeshStandardMaterial === true ) {
+				if ( Array.isArray( object.material ) === true ) {
 
-					const geometry = object.geometry;
-					const material = object.material;
-					const geometryFileName = 'geometries/Geometry_' + geometry.id + '.usd';
+					object.material.forEach( mtl => {
 
-					if ( ! ( geometryFileName in files ) ) {
+						if ( mtl.isMeshStandardMaterial ) {
 
-						const meshObject = buildMeshObject( geometry );
-						files[ geometryFileName ] = buildUSDFileAsString( meshObject );
+							const geometry = object.geometry;
+							const material = mtl;
+							const geometryFileName = 'geometries/Geometry_' + geometry.id + '.usd';
 
-					}
+							if ( ! ( geometryFileName in files ) ) {
 
-					if ( ! ( material.uuid in materials ) ) {
+								const meshObject = buildMeshObject( geometry );
+								files[ geometryFileName ] = buildUSDFileAsString( meshObject );
 
-						materials[ material.uuid ] = material;
+							}
 
-					}
+							if ( ! ( material.uuid in materials ) ) {
 
-					output += buildXform( object, geometry, material );
+								materials[ material.uuid ] = material;
+
+							}
+
+							output += buildXform( object, geometry, material );
+
+						} else {
+
+							console.warn( 'THREE.USDZExporter: Unsupported material type (USDZ only supports MeshStandardMaterial)', object );
+
+						}
+
+					});
 
 				} else {
 
-					console.warn( 'THREE.USDZExporter: Unsupported material type (USDZ only supports MeshStandardMaterial)', object );
+					if ( object.material.isMeshStandardMaterial ) {
+
+						const geometry = object.geometry;
+						const material = object.material;
+						const geometryFileName = 'geometries/Geometry_' + geometry.id + '.usd';
+
+						if ( ! ( geometryFileName in files ) ) {
+
+							const meshObject = buildMeshObject( geometry );
+							files[ geometryFileName ] = buildUSDFileAsString( meshObject );
+
+						}
+
+						if ( ! ( material.uuid in materials ) ) {
+
+							materials[ material.uuid ] = material;
+
+						}
+
+						output += buildXform( object, geometry, material );
+
+					} else {
+
+						console.warn( 'THREE.USDZExporter: Unsupported material type (USDZ only supports MeshStandardMaterial)', object );
+
+					}
 
 				}
 
