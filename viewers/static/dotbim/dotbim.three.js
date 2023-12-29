@@ -79,7 +79,7 @@ function dotbim_Elemment2Mesh(element, geometrys) {
         side: THREE.DoubleSide,
         flatShading: false,
         transparent: true,
-        metalnes: 0.8,
+        metalnes: 0.3,
         roughness: 0.3,
         color: 0xFFFFFF
     });
@@ -105,7 +105,7 @@ function dotbim_Elemment2Mesh(element, geometrys) {
 
     // Force to use geometry color if exists ('colors')
     if (geometry.getAttribute('color')) {
-        material.color = undefined;
+        material.color.setRGB( 1, 1, 1 );
         material.opacity = 1.0;
         material.transparent = true;
         material.vertexColors = true;
