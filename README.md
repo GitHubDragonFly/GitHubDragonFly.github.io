@@ -208,6 +208,7 @@ Number Type Converter
   - BIM and OFF exports are only available in Quick Viewer, as stated above
   - ASSIMP / GLTF / GLTFS / OBJ + MTL viewers also offer alternative exports marked as OBJx / DAEx / GLBx / GLTFx / USDZx:
     - should be tried either out of curiosity or if their regular export counterparts don't produce good results
+    - support THREE.InstancedMesh as well
     - GLBx export additionally has DRACO compression applied by using [glTF Transform](https://gltf-transform.dev) (which seems to work fine but might not be good for some rare models)
 - Buttons, where applicable:
   - `A` - animations
