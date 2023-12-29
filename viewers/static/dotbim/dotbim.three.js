@@ -47,9 +47,15 @@ function dotbim_CreateMeshes(dotbim) {
     let geometrys = dotbim_Meshes2Geometrys(meshes);
 
     const bim_meshes = new THREE.Group();
+    if (info.Name && info.Name !== '') bim_meshes.name = info.Name;
 
     dotbim_Elemments2Meshes(elements, geometrys).forEach( bim_mesh => {
-        bim_mesh[ 'name' ] = 'mesh_' + bim_mesh.id;
+        if ( bim_mesh.name ) {
+            if ( bim_mesh.name === '') bim_mesh[ 'name' ] = 'mesh_' + bim_mesh.id;
+        } else {
+            bim_mesh[ 'name' ] = 'mesh_' + bim_mesh.id;
+        }
+
         bim_meshes.add( bim_mesh );
     });
 
@@ -73,7 +79,7 @@ function dotbim_Elemment2Mesh(element, geometrys) {
         side: THREE.DoubleSide,
         flatShading: false,
         transparent: true,
-        metalness: 0.5,
+        metalnes: 0.8,
         roughness: 0.3,
         color: 0xFFFFFF
     });
@@ -99,7 +105,7 @@ function dotbim_Elemment2Mesh(element, geometrys) {
 
     // Force to use geometry color if exists ('colors')
     if (geometry.getAttribute('color')) {
-        material.color.setRGB( 1, 1, 1 );
+        material.color = undefined;
         material.opacity = 1.0;
         material.transparent = true;
         material.vertexColors = true;
@@ -152,6 +158,8 @@ function dotbim_Elemment2Mesh(element, geometrys) {
 
         mesh_id_key.current_instance++;
     }
+
+    if (info.Name && info.Name !== '') mesh.name = info.Name;
 
     return mesh;
 }
