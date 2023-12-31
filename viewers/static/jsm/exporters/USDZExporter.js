@@ -1,5 +1,6 @@
-import { strToU8, zipSync } from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/libs/fflate.module.js";
-import { decompress } from 'https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/utils/TextureUtils.js';
+import { LinearSRGBColorSpace, MeshStandardMaterial } from "three";
+import { strToU8, zipSync } from "three/addons/libs/fflate.module.js";
+import { decompress } from 'three/addons/utils/TextureUtils.js';
 
 class USDZExporter {
 
@@ -11,6 +12,7 @@ class USDZExporter {
 				planeAnchoring: { alignment: 'horizontal' }
 			},
 			quickLookCompatible: false,
+			map_flip_required: false,
 		}, options );
 
 		const files = {};
@@ -23,71 +25,155 @@ class USDZExporter {
 		const materials = {};
 		const textures = {};
 
-		scene.traverseVisible( object => {
+		scene.traverseVisible( ( object ) => {
 
 			if ( object.isMesh ) {
 
+				let material;
+
 				if ( Array.isArray( object.material ) === true ) {
 
-					object.material.forEach( mtl => {
+					console.warn( 'THREE.USDZExporter: Material arrays are not supported. Texture and/or color loss may occur.', object );
 
-						if ( mtl.isMeshStandardMaterial ) {
+					material = object.material[ 0 ];
 
-							const geometry = object.geometry;
-							const material = mtl;
-							const geometryFileName = 'geometries/Geometry_' + geometry.id + '.usd';
+					// check for more colorful texture than white
 
-							if ( ! ( geometryFileName in files ) ) {
+					if ( material.color.r === 1 && material.color.g === 1 && material.color.b === 1 ) {
 
-								const meshObject = buildMeshObject( geometry );
-								files[ geometryFileName ] = buildUSDFileAsString( meshObject );
+						if ( object.material.length > 1 ) {
+
+							for ( let i = 1; i < object.material.length; i++ ) {
+
+								if ( material.color.r !== object.material[ i ].color.r
+									 || material.color.g !== object.material[ i ].color.g
+									  || material.color.b !== object.material[ i ].color.b ) {
+
+									material = object.material[ i ];
+									break;
+
+								}
 
 							}
 
-							if ( ! ( material.uuid in materials ) ) {
-
-								materials[ material.uuid ] = material;
-
-							}
-
-							output += buildXform( object, geometry, material );
-
-						} else {
-
-							console.warn( 'THREE.USDZExporter: Unsupported material type (USDZ only supports MeshStandardMaterial)', object );
-
 						}
 
-					});
+					}
 
-				} else {
+					if ( ! material.isMeshStandardMaterial ) {
 
-					if ( object.material.isMeshStandardMaterial ) {
+						let map = material.map ? material.map.clone() : null;
 
-						const geometry = object.geometry;
-						const material = object.material;
-						const geometryFileName = 'geometries/Geometry_' + geometry.id + '.usd';
+						material = new MeshStandardMaterial( {
 
-						if ( ! ( geometryFileName in files ) ) {
+							metalness: 0.05,
+							roughness: 0.6,
+							flatShading: false,
+							opacity: object.material.opacity || 1,
+							transparent: object.material.transparent || false
 
-							const meshObject = buildMeshObject( geometry );
-							files[ geometryFileName ] = buildUSDFileAsString( meshObject );
+						} );
+
+						if ( object.material.color ) material.color.setRGB( object.material.color.r, object.material.color.g, object.material.color.b, LinearSRGBColorSpace );
+
+						if ( map ) {
+
+							// FBX model exports appear to need this map flip
+
+							if ( options.map_flip_required === true ) map.repeat.y = - 1;
+
+							material.map = map;
 
 						}
-
-						if ( ! ( material.uuid in materials ) ) {
-
-							materials[ material.uuid ] = material;
-
-						}
-
-						output += buildXform( object, geometry, material );
 
 					} else {
 
-						console.warn( 'THREE.USDZExporter: Unsupported material type (USDZ only supports MeshStandardMaterial)', object );
+						material = object.material;
 
 					}
+
+					const geometry = object.geometry;
+					const geometryFileName = 'geometries/Geometry_' + geometry.id + '.usd';
+
+					if ( ! ( geometryFileName in files ) ) {
+
+						const meshObject = buildMeshObject( geometry );
+						files[ geometryFileName ] = buildUSDFileAsString( meshObject );
+
+					}
+
+					if ( ! ( material.uuid in materials ) ) {
+
+						materials[ material.uuid ] = material;
+
+					}
+
+					output += buildXform( object, geometry, material );
+
+				} else {
+
+					if ( ! object.material.isMeshStandardMaterial ) {
+
+						let map = object.material.map ? object.material.map.clone() : null;
+
+						if ( map ) {
+
+							// FBX model exports need this map flip
+
+							if ( options.map_flip_required === true ) map.repeat.y = - 1;
+
+							if ( map.isCompressedTexture ) map = decompress( map );
+
+							material = new MeshStandardMaterial( {
+
+								map: map,
+								metalness: 0.05,
+								roughness: 0.6,
+								flatShading: false,
+								opacity: object.material.opacity || 1,
+								transparent: object.material.transparent || false
+
+							} );
+
+						} else {
+
+							material = new MeshStandardMaterial( {
+
+								metalness: 0.05,
+								roughness: 0.6,
+								flatShading: false,
+								opacity: object.material.opacity || 1,
+								transparent: object.material.transparent || false
+
+							} );
+
+						}
+
+						if ( object.material.color ) material.color.setRGB( object.material.color.r, object.material.color.g, object.material.color.b, LinearSRGBColorSpace );
+
+					} else {
+
+						material = object.material;
+
+					}
+
+					const geometry = object.geometry;
+					const geometryFileName = 'geometries/Geometry_' + geometry.id + '.usd';
+
+					if ( ! ( geometryFileName in files ) ) {
+
+						const meshObject = buildMeshObject( geometry );
+						files[ geometryFileName ] = buildUSDFileAsString( meshObject );
+
+					}
+
+					if ( ! ( material.uuid in materials ) ) {
+
+						materials[ material.uuid ] = material;
+
+					}
+
+					output += buildXform( object, geometry, material );
 
 				}
 
@@ -155,7 +241,7 @@ class USDZExporter {
 
 function imageToCanvas( image, color ) {
 
-	if ( typeof HTMLImageElement !== 'undefined' && image instanceof HTMLImageElement || typeof HTMLCanvasElement !== 'undefined' && image instanceof HTMLCanvasElement || typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas || typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap ) {
+	if ( ( typeof HTMLImageElement !== 'undefined' && image instanceof HTMLImageElement ) || ( typeof HTMLCanvasElement !== 'undefined' && image instanceof HTMLCanvasElement ) || ( typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas ) || ( typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap ) ) {
 
 		const scale = 1024 / Math.max( image.width, image.height );
 		const canvas = document.createElement( 'canvas' );
@@ -406,7 +492,7 @@ ${array.join( '' )}
 function buildMaterial( material, textures, quickLookCompatible = false ) {
 
 	// https://graphics.pixar.com/usd/docs/UsdPreviewSurface-Proposal.html
-	const pad = '            ';
+	const pad = '		';
 	const inputs = [];
 	const samplers = [];
 
