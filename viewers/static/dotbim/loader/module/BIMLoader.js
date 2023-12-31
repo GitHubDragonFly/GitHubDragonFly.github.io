@@ -169,8 +169,8 @@ class BIMLoader extends Loader {
 				side: DoubleSide,
 				flatShading: false,
 				transparent: true,
-				metalness: 0.3,
-				roughness: 0.3,
+				metalness: 0.1,
+				roughness: 0.6,
 				color: 0xFFFFFF
 
 			} );
