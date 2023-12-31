@@ -63,6 +63,9 @@
 
 				const { schema_version, meshes, elements, info } = dotbim;
 
+				bim_meshes.userData[ 'schema_version' ] = schema_version || {};
+				bim_meshes.userData[ 'info' ] = info || {};
+
 				if ( info.Name && info.Name !== '' ) bim_meshes.name = info.Name;
 
 				if ( ! meshes || ! elements ) {
@@ -252,6 +255,10 @@
 
 					mesh_id_key.current_instance++;
 				}
+
+				mesh.userData[ 'guid' ] = guid || {};
+				mesh.userData[ 'type' ] = type || {};
+				mesh.userData[ 'info' ] = info || {};
 
 				if ( info.Name && info.Name !== '' ) mesh.name = info.Name;
 
