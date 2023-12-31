@@ -33,7 +33,7 @@ class USDZExporter {
 
 				if ( Array.isArray( object.material ) === true ) {
 
-					console.warn( 'THREE.USDZExporter: Material arrays are not supported. Texture and/or color loss may occur.', object );
+					console.warn( 'THREE.USDZExporter: Material arrays are not supported. Texture and/or color loss may occur.', object.material );
 
 					material = object.material[ 0 ];
 
@@ -62,7 +62,8 @@ class USDZExporter {
 
 					if ( ! material.isMeshStandardMaterial ) {
 
-						let map = material.map ? material.map.clone() : null;
+						let map = material.map ? material.map : null;
+						let color = material.color;
 
 						material = new MeshStandardMaterial( {
 
@@ -74,21 +75,17 @@ class USDZExporter {
 
 						} );
 
-						if ( object.material.color ) material.color.setRGB( object.material.color.r, object.material.color.g, object.material.color.b, LinearSRGBColorSpace );
+						if ( color ) material.color.setRGB( color.r, color.g, color.b, LinearSRGBColorSpace );
 
 						if ( map ) {
 
-							// FBX model exports appear to need this map flip
-
-							if ( options.map_flip_required === true ) map.repeat.y = - 1;
-
 							material.map = map;
 
+							// FBX model exports need this map flip
+
+							if ( options.map_flip_required === true ) material.map.repeat.y = - 1;
+
 						}
-
-					} else {
-
-						material = object.material;
 
 					}
 
@@ -118,10 +115,6 @@ class USDZExporter {
 
 						if ( map ) {
 
-							// FBX model exports need this map flip
-
-							if ( options.map_flip_required === true ) map.repeat.y = - 1;
-
 							if ( map.isCompressedTexture ) map = decompress( map );
 
 							material = new MeshStandardMaterial( {
@@ -134,6 +127,10 @@ class USDZExporter {
 								transparent: object.material.transparent || false
 
 							} );
+
+							// FBX model exports need this map flip
+
+							if ( options.map_flip_required === true ) material.map.repeat.y = - 1;
 
 						} else {
 
