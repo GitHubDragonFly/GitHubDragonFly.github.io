@@ -52,12 +52,6 @@ function dotbim_CreateMeshes(dotbim) {
     if (info.Name && info.Name !== '') bim_meshes.name = info.Name;
 
     dotbim_Elemments2Meshes(elements, geometrys).forEach( bim_mesh => {
-        if ( bim_mesh.name ) {
-            if ( bim_mesh.name === '') bim_mesh[ 'name' ] = 'mesh_' + bim_mesh.id;
-        } else {
-            bim_mesh[ 'name' ] = 'mesh_' + bim_mesh.id;
-        }
-
         bim_meshes.add( bim_mesh );
     });
 
