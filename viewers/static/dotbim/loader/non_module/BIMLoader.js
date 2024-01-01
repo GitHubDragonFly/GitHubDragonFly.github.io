@@ -115,16 +115,6 @@
 
 				dotbim_Elemments2Meshes( elements, geometries ).forEach( bim_mesh => {
 
-					if ( bim_mesh.name ) {
-
-						if ( bim_mesh.name === '') bim_mesh[ 'name' ] = 'mesh_' + bim_mesh.id;
-
-					} else {
-
-						bim_mesh[ 'name' ] = 'mesh_' + bim_mesh.id;
-
-					}
-
 					bim_meshes.add( bim_mesh );
 
 				});
