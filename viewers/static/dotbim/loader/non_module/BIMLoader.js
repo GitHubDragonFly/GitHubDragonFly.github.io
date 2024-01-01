@@ -146,6 +146,7 @@
 				let { mesh_id, vector, rotation, guid, type, color, face_colors, info } = element;
 
 				let geometry = geometries[ mesh_id ];
+				let name = info.Name || '';
 
 				geometry.computeVertexNormals();
 
@@ -227,6 +228,10 @@
 					mesh.setMatrixAt( mesh_id_key.current_instance, matrix );
 					mesh.instanceMatrix.needsUpdate = true;
 
+					if (name === '') name = 'mesh_' + mesh_id + '_' + mesh.id + '_' + mesh_id_key.current_instance;
+
+					mesh.userData[ mesh_id_key.current_instance ] = { name: name, guid: guid || {}, type: type || {}, info: info || {} };
+	
 					mesh_id_key.current_instance++;
 
 				} else { // expected existing 'color'
@@ -253,12 +258,12 @@
 					mesh.setColorAt( mesh_id_key.current_instance, material.color );
 					mesh.instanceColor.needsUpdate = true;
 
+					if (name === '') name = 'mesh_' + mesh_id + '_' + mesh.id + '_' + mesh_id_key.current_instance;
+
+					mesh.userData[ mesh_id_key.current_instance ] = { name: name, guid: guid || {}, type: type || {}, info: info || {} };
+
 					mesh_id_key.current_instance++;
 				}
-
-				mesh.userData[ 'guid' ] = guid || {};
-				mesh.userData[ 'type' ] = type || {};
-				mesh.userData[ 'info' ] = info || {};
 
 				if ( info.Name && info.Name !== '' ) mesh.name = info.Name;
 
