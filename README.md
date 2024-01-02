@@ -206,9 +206,10 @@ Number Type Converter
       - This bug might eventually get fixed
     - PLY exporter will include vertex colors and will convert material color to vertex color if the material has no texture
   - BIM and OFF exports are only available in Quick Viewer, as stated above
-  - GLB exports additionally can have either DRACO or MESHOPT compression applied by using [glTF Transform](https://gltf-transform.dev):
-    - Seems to work fine in general but might not be good for some rare models
-  - ASSIMP / GLTF / GLTFS / OBJ + MTL / STEP viewers also offer alternative exports marked as OBJx / DAEx / GLBx / GLTFx / USDZx:
+  - GLB exports, where applicable, can additionally have either DRACO or MESHOPT compression applied by using [glTF Transform](https://gltf-transform.dev):
+    - These exports are marked as either of: `GLB_d` `GLB_m` `GLBx_d` `GLBx_m`
+    - Seem to work fine in general but might not be good for some rare models
+  - ASSIMP / GLTF / GLTFS / OBJ + MTL / STEP viewers also offer alternative exports marked as `OBJx` `DAEx` `GLBx` `GLTFx` `USDZx`:
     - Should be tried either out of curiosity or if their regular export counterparts don't produce good results
     - If applicable, will support exporting THREE.InstancedMesh to OBJ + MTL / DAE / USDZ as well
     - If applicable, will support exporting morph animations but will not export other animations
