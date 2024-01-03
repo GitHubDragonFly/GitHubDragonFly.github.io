@@ -8,8 +8,12 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.159.0/build/three.module.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+          "ktx-parse": "https://cdn.jsdelivr.net/npm/ktx-parse/dist/ktx-parse.modern.js",
+          "property-graph": "https://cdn.jsdelivr.net/npm/property-graph/dist/property-graph.modern.js",
+          "@gltf-transform/core": "https://cdn.jsdelivr.net/npm/@gltf-transform/core/dist/core.modern.js",
+          "@gltf-transform/extensions": "https://cdn.jsdelivr.net/npm/@gltf-transform/extensions/dist/extensions.modern.js"
         }
       }
     </script>
@@ -67,6 +71,9 @@
     <script src="../static/js/upng/UPNG.min.js" defer></script>
     <script src="../static/js/omggif/omggif.min.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
+
+    <!-- For encoding GLB with meshopt compression -->
+    <script src="https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_encoder.js" defer></script>
 
     <style>
       body,html{
@@ -275,6 +282,7 @@
     </style>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- Using glTF Transform for MESHOPT compression: https://gltf-transform.dev -->
     <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/ThreeOrbitControlsGizmo -->
     <!-- Check the official info at https://ldraw.org/ -->
     <!-- Animated GIF export is based on the following example and library: -->
@@ -309,6 +317,8 @@
           <option title="Scale 0.01x" value="0.01x" onclick="set_model_scale( '0.01x' );">0.01x</option>
           <option title="Scale 0.02x" value="0.02x" onclick="set_model_scale( '0.02x' );">0.02x</option>
           <option title="Scale 0.1x" value="0.1x" onclick="set_model_scale( '0.1x' );">0.1x</option>
+          <option title="Scale 0.2x" value="0.2x" onclick="set_model_scale( '0.2x' );">0.2x</option>
+          <option title="Scale 5x" value="5x" onclick="set_model_scale( '5x' );">5x</option>
           <option title="Scale 10x" value="10x" onclick="set_model_scale( '10x' );">10x</option>
           <option title="Scale 50x" value="50x" onclick="set_model_scale( '50x' );">50x</option>
           <option title="Scale 100x" value="100x" onclick="set_model_scale( '100x' );">100x</option>
@@ -323,8 +333,9 @@
           <option title="FBX - Filmbox Format" value="fbx" onclick="export_assimp( 'fbx' );">FBX</option>
           <option title="X3D - Extensible 3D Graphics Format" value="x3d" onclick="export_assimp( 'x3d' );">X3D</option>
           <option title="JSON - Assimp JSON Format" value=assjson" onclick="export_assimp( 'assjson' );">ASSJSON</option>
-          <option title="GLB - GL Transmission Format binary" value="glb" onclick="export_gltf( true );">GLB</option>
-          <option title="GLTF - GL Transmission Format ascii" value="gltf" onclick="export_gltf( false );">GLTF</option>
+          <option title="GLB - GL Transmission Format binary regular export" value="glb" onclick="export_gltf( true, false );">GLB</option>
+          <option title="GLB - GL Transmission Format binary regular export with Meshopt compression" value="glbmeshopt" onclick="export_gltf( true, true );">GLB_m</option>
+          <option title="GLTF - GL Transmission Format ascii regular export" value="gltf" onclick="export_gltf( false, false );">GLTF</option>
           <option title="PLY - Polygon File Format ascii" value="ply" onclick="export_ply( false );">PLY_a</option>
           <option title="PLY - Polygon File Format binary" value="ply" onclick="export_ply( true );">PLY_b</option>
           <option title="JSON - Three.js Format" value="json" onclick="export_json();">JSON</option>
@@ -704,35 +715,24 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          const { PLYLoader } = await import( "three/addons/loaders/PLYLoader.js" );
-          const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.js" );
+          const { GLTFLoader } = await import( "three/addons/loaders/GLTFLoader.js" );
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
           const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.js" );
 
-          // Export to PLY format first, load exported model and then export to OBJ
-          new PLYExporter().parse( ldraw_obj, async function( json ) {
-            new PLYLoader().load( URL.createObjectURL( new Blob( [ json ], { type: 'application/octet-stream' } ) ), async function( json_geometry ) {
-              let material = new THREE.MeshPhongMaterial( {
-                side: THREE.DoubleSide,
-                vertexColors: true,
-                specular: 0xA0A0A0,
-                flatShading: true,
-                shininess: 50,
-                transparent: true,
-                opacity: 1,
-                fog: true
-              });
-
-              let ply_model = new THREE.Mesh( json_geometry, material );
-
+          // Export to GLB format first, load exported model and then export to OBJ
+          new GLTFExporter().parse( ldraw_obj, async function( json ) {
+            new GLTFLoader().load( URL.createObjectURL( new Blob( [ json ], { type: 'application/octet-stream' } ) ), async function( gltf ) {
               let obj_exporter = new OBJExporter( manager );
 
-              let exported = obj_exporter.parse( ply_model, filename );
+              let meshes = await create_meshes( gltf.scene );
 
-              zip.file( filename + '.obj', exported[ 'obj' ] );
-
-              await process_zip( '_OBJ' );
+              await obj_exporter.parse( meshes, filename, async ( exported ) => {
+                zip.file( filename + '.obj', exported[ 'obj' ] );
+                if (exported[ 'mtl' ]) zip.file( filename + '.mtl', exported[ 'mtl' ] );
+                await process_zip( '_OBJ' );
+              });
             });
-          }, { binary: true, littleEndian: true }, true);
+          }, function( error ) { console.log( error ); }, { binary: true });
         }
       }
 
@@ -815,7 +815,7 @@
         }
       }
 
-      async function export_gltf( binary = false ) {
+      async function export_gltf( binary = false, meshopt = false ) {
         if (ldraw_obj) {
           start_export();
 
@@ -825,25 +825,23 @@
 
           let gltf_exporter = new GLTFExporter( manager );
 
-          const options = { binary: binary, maxTextureSize: 4096 || Infinity };
+          let options = {	binary: binary, maxTextureSize: 1024 || Infinity };
 
           gltf_exporter.parse( ldraw_obj, async json => {
             let blob;
 
             if (binary === true) {
-              blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+              blob = new Blob( [ meshopt === true ? await meshopt_compress( new Uint8Array( json ) ) : json ], { type: 'application/octet-stream' } );
+
+              zip.file( filename + '.glb', blob );
+              await process_zip( '_GLB' + ( meshopt === true ? '_MESHOPT' : '' ) );
             } else {
               let string = JSON.stringify( json, null, 2 );
               blob = new Blob( [ string ], { type: 'text/plain' } );
+
+              zip.file( filename + '.gltf', blob );
+              await process_zip( '_GLTF' );
             }
-
-            let ext = (binary === true) ? '.glb' : '.gltf';
-
-            zip.file( filename + ext, blob );
-
-            ext = (binary === true) ? '_GLB' : '_GLTF';
-
-            await process_zip( ext );
           }, function( error ) { console.log( error ); }, options);
         }
       }
@@ -854,7 +852,7 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          // Try to convert the scene to glb and then to fbx
+          // Try to convert the scene to glb and then to fbx / x3d / assjson
 
           const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
 
@@ -1952,6 +1950,70 @@
             handle_error( 'Unsupported URL file!' );
           }
         }
+      }
+
+      async function create_meshes( gltf_obj ) {
+        let meshes = new THREE.Group();
+
+        let m_meshes = gltf_obj.clone();
+        m_meshes.updateMatrixWorld( true, true );
+
+        m_meshes.traverse( async function( child ) {
+          if (child.isMesh) {
+            const material = new THREE.MeshStandardMaterial( { name: 'Default', side: THREE.DoubleSide, opacity: 1, metalness: 0.1, roughness: 0.6 } );
+            let child_clone = new THREE.Mesh( child.geometry, child.material || material );
+
+            if (child.name && child.name !== '') child_clone.name = child.name;
+
+            child_clone.applyMatrix4( child.matrixWorld );
+
+            meshes.add( child_clone );
+            meshes.updateMatrixWorld( true, true );
+          } else if (child.isLineSegments) {
+            const material = new THREE.LineBasicMaterial();
+            let child_clone = new THREE.LineSegments( child.geometry, child.material || material );
+
+            if (child.name && child.name !== '') child_clone.name = child.name;
+
+            child_clone.applyMatrix4( child.matrixWorld );
+
+            meshes.add( child_clone );
+            meshes.updateMatrixWorld( true, true );
+          }
+        });
+
+        return meshes;
+      }
+
+      /* Encode GLB with meshopt compression - geometry, morphs, animations */
+
+      async function meshopt_compress( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
+
+        await MeshoptEncoder.ready;
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+        io.registerDependencies({
+          'meshopt.encoder': MeshoptEncoder,
+        });
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        doc.createExtension( EXTMeshoptCompression )
+        .setRequired( true )
+        .setEncoderOptions({
+          method: EXTMeshoptCompression.EncoderMethod.QUANTIZE,  // or EXTMeshoptCompression.EncoderMethod.FILTER
+        });
+
+        io.registerExtensions( [ EXTMeshoptCompression ] );
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        return compressedArrayBuffer;
       }
 
       function handle_error( error ) {
