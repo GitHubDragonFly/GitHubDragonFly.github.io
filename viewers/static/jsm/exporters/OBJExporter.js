@@ -4,7 +4,7 @@ import {
 	Vector2,
 	Vector3
 } from 'three';
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.158.0/examples/jsm/utils/TextureUtils.js";
+import { decompress } from "three/addons/utils/TextureUtils.js";
 
 class OBJExporter {
 
@@ -19,7 +19,6 @@ class OBJExporter {
 		let points_count = 0;
 		let materials = {};
 		let material_names = [];
-		let material_colors = {};
 		let vertexTangents = false;
 		const vertex = new Vector3();
 		const color = new Color();
@@ -83,33 +82,33 @@ class OBJExporter {
 
 				let temp_name = mesh.material.name;
 
-				if ( material_names.includes( temp_name ) === false || material_colors[ temp_name ] !== mesh.material.color ) {
+				if ( material_names.includes( temp_name ) === false ) {
 
-					if ( material_colors[ temp_name ] !== mesh.material.color ) mesh.material.name = temp_name;
-
-					material_colors[ temp_name ] = mesh.material.color;
-
-				}
-
-				if ( ! materials[ temp_name ] || ( materials[ temp_name ] && materials[ temp_name ] !== mesh.material ) ) {
-
-					if ( materials[ temp_name ] && materials[ temp_name ] !== mesh.material ) {
-
-						temp_name = mesh.material.name + '_' + mesh_count;
-						mesh.material.name = temp_name;
-						output += 'usemtl ' + temp_name + '\n';
-						materials[ temp_name ] = mesh.material;
-
-					} else {
-
-						output += 'usemtl ' + mesh.material.name + '\n';
-						materials[ mesh.material.name ] = mesh.material;
-
-					}
+					material_names.push( temp_name );
+					materials[ temp_name ] = mesh.material;
 
 				}
 
-				material_names.push( temp_name );
+				if ( ! materials[ temp_name ] ) {
+
+					materials[ temp_name ] = mesh.material;
+					output += 'usemtl ' + temp_name + '\n';
+
+				} else if ( materials[ temp_name ] !== mesh.material ) {
+
+					temp_name = mesh.material.name + '_' + mesh_count;
+					mesh.material.name = temp_name;
+
+					output += 'usemtl ' + temp_name + '\n';
+
+					materials[ temp_name ] = mesh.material;
+					material_names.push( temp_name );
+
+				} else {
+
+					output += 'usemtl ' + temp_name + '\n';
+
+				}
 
 			} else if ( mesh.material && Array.isArray( mesh.material ) ) {
 
@@ -1736,7 +1735,7 @@ class OBJExporter {
 			canvas.width = image.width;
 			canvas.height = image.height;
 
-			// this seems to work fine for exporting TGA images as PNG
+			// this seems to also work fine for exporting TGA images as PNG
 			if ( image.data && image.data.constructor === Uint8Array ) {
 
 				let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
