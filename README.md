@@ -167,6 +167,9 @@ Number Type Converter
 - Export formats, where applicable:
   - 3DM, DAE, APNG, FBX, M3D, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, PRWM, USDZ
     - Try not to change file names when saving files during initial export
+    - Exporting some models might be easier / better done with multiple viewers, examples:
+      - MMD -> OBJ and then OBJ -> JSON might be better than straight MMD -> JSON export
+      - IFC -> GLB and then GLB -> GLB_m (with MESHOPT compression) and then GLB_m -> GLB_d (with DRACO compression) might be easier than straight IFC -> GLB_d export which for some models can run out of memory and crash the browser
     - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, USDZ exporters are [three.js](https://github.com/mrdoob/three.js) based
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
@@ -282,7 +285,6 @@ Number Type Converter
     - apply `Vertex Colors` and `Random Vertex Colors`
     - change `ambient light` to white
     - change `background color` to white
-  - exporting some models might be better with multiple viewers, ex. MMD -> OBJ and then OBJ -> JSON might be better than straight MMD -> JSON export
   - experiment with all exporters available by exporting the original model as well as its exported versions
   - large resolution textures should be scaled down before loading, as an example download [`Bedroom`](https://casual-effects.com/data/index.html) with 8k images and try it as is and then scale them down to 1k or 2k (which will speed up loading in browsers)
   - you could also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) and [Online 3D Viewer](https://3dviewer.net) exporters / converters
