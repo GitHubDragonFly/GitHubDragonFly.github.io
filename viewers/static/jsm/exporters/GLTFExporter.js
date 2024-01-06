@@ -25,7 +25,7 @@ import {
 	Vector3,
 	Quaternion,
 } from "three";
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.159.0/examples/jsm/utils/TextureUtils.js";
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/utils/TextureUtils.js";
 
 /**
  * The KHR_mesh_quantization extension allows these extra attribute component types

@@ -1,6 +1,6 @@
 import { LinearSRGBColorSpace, MeshStandardMaterial } from "three";
-import { strToU8, zipSync } from "three/addons/libs/fflate.module.js";
-import { decompress } from 'three/addons/utils/TextureUtils.js';
+import { strToU8, zipSync } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/fflate.module.js";
+import { decompress } from 'https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/utils/TextureUtils.js';
 
 class USDZExporter {
 
