@@ -14,7 +14,7 @@ import {
 	Object3D,
 	Vector2,
 } from "three";
-import * as fflate from "three/addons/libs/fflate.module.js";
+import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/fflate.module.js";
 
 class USDAParser {
 
@@ -466,7 +466,7 @@ class USDZLoader extends Loader {
 
 		function buildMaterial( data ) {
 
-			const material = new MeshPhysicalMaterial();
+			const material = new MeshPhysicalMaterial( { name: Loader.DEFAULT_MATERIAL_NAME } );
 
 			if ( data !== undefined ) {
 
