@@ -13,6 +13,7 @@ class USDZExporter {
 			},
 			quickLookCompatible: false,
 			map_flip_required: false,
+			maxTextureSize: 1024,
 		}, options );
 
 		const files = {};
@@ -194,7 +195,7 @@ class USDZExporter {
 
 			const color = id.split( '_' )[ 1 ];
 			const isRGBA = texture.format === 1023;
-			const canvas = imageToCanvas( texture.image, color );
+			const canvas = imageToCanvas( texture.image, color, options.maxTextureSize );
 			const blob = await new Promise( resolve => canvas.toBlob( resolve, isRGBA ? 'image/png' : 'image/jpeg', 1 ) );
 			files[ `textures/Texture_${id}.${isRGBA ? 'png' : 'jpg'}` ] = new Uint8Array( await blob.arrayBuffer() );
 
@@ -236,11 +237,11 @@ class USDZExporter {
 
 }
 
-function imageToCanvas( image, color ) {
+function imageToCanvas( image, color, maxTextureSize ) {
 
 	if ( ( typeof HTMLImageElement !== 'undefined' && image instanceof HTMLImageElement ) || ( typeof HTMLCanvasElement !== 'undefined' && image instanceof HTMLCanvasElement ) || ( typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas ) || ( typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap ) ) {
 
-		const scale = 1024 / Math.max( image.width, image.height );
+		const scale = maxTextureSize / Math.max( image.width, image.height );
 		const canvas = document.createElement( 'canvas' );
 		canvas.width = image.width * Math.min( 1, scale );
 		canvas.height = image.height * Math.min( 1, scale );
