@@ -1354,7 +1354,7 @@ class GLTFAnimationPointerExtension {
 
 		// Override interpolation with custom factory method.
 
-		if ( interpolation === 'CUBICSPLINE' ) {
+		if ( sampler.interpolation === 'CUBICSPLINE' ) {
 
 			this.parser.createCubicSplineTrackInterpolant( track );
 
@@ -5262,7 +5262,8 @@ class GLTFParser {
 			);
 
 			// Override interpolation with custom factory method.
-			if ( interpolation === 'CUBICSPLINE' ) {
+
+			if ( sampler.interpolation === 'CUBICSPLINE' ) {
 
 				this.createCubicSplineTrackInterpolant( track );
 
