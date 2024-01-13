@@ -340,9 +340,18 @@ class Rhino3dmExporter {
 
 					}
 
-				} else if ( ( object.type === 'Group' || object.type === 'Object3D' ) && object.children ) {
+				} else if ( object.type === 'Group' || object.type === 'Object3D' ) {
 
-					parse_objects( object.children );
+					if ( object.children ) {
+
+						parse_objects( object.children );
+
+					} else {
+
+						// Object3D might be a camera or a light
+						continue;
+
+					}
 
 				} else {
 
