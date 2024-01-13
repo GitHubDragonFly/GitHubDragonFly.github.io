@@ -174,11 +174,13 @@ Number Type Converter
 - Export formats, where applicable:
   - 3DM, DAE, APNG, FBX, M3D, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, PRWM, USDZ
     - Try not to change file names when saving files during initial export
+    - Exporting some models might crash the browser when running out of memory 
     - Exporting some models might be easier / better done with multiple viewers, examples:
       - MMD -> OBJ and then OBJ -> JSON might be better than straight MMD -> JSON export
-      - IFC -> GLB and then GLB -> GLB_m (with MESHOPT compression) and then GLB_m -> GLB_d (with DRACO compression) might be easier than straight IFC -> GLB_d export which for some models can run out of memory and crash the browser
+      - IFC -> GLB and then GLB -> GLB_m (with MESHOPT compression) and then GLB_m -> GLB_d (with DRACO compression) might be easier than straight IFC -> GLB_d export
     - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, USDZ exporters are [three.js](https://github.com/mrdoob/three.js) based
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
+      - Currently limited to exporting meshes without textures and points only
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
     - ASSJSON / FBX / M3D / X3D / X exports are powered by [ASSIMPJS](https://github.com/kovacsv/assimpjs) / [ASSIMP](https://github.com/assimp/assimp)
     - Animated GIF export is based on mrdoob's [example](https://github.com/mrdoob/omggif-example) using [omggif](https://github.com/deanm/omggif) library:
