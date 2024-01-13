@@ -20,7 +20,6 @@
 
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_decoder.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.0.0/rhino3dm.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
     <!-- For encoding GLB with draco compression -->
@@ -1033,198 +1032,17 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let uuid_array = [], uuid_array_points = [];
+          const { Rhino3dmExporter } = await import( "../static/jsm/exporters/3DMExporter.js" );
 
-          gltf_obj.traverse( ( child ) => {
-            if (child.isMesh) {
-              if (Array.isArray( child.material)) {
-                child.material.forEach( mtl => {
-                  uuid_array.push( { mesh_geometry_uuid: child.geometry.uuid, material_uuid: mtl.uuid } );
-                });
-              } else {
-                uuid_array.push( { mesh_geometry_uuid: child.geometry.uuid, material_uuid: child.material.uuid } );
-              }
-            } else if (child.isPoints) {
-              if (Array.isArray( child.material)) {
-                child.material.forEach( mtl => {
-                  uuid_array_points.push( { points_geometry_uuid: child.geometry.uuid, material_uuid: mtl.uuid } );
-                });
-              } else {
-                uuid_array_points.push( { points_geometry_uuid: child.geometry.uuid, material_uuid: child.material.uuid } );
-              }
-            }
-          });
+          let rhino_exporter = new Rhino3dmExporter( manager );
 
-          let json = JSON.stringify( gltf_obj.toJSON() );
-          let result = JSON.parse( json );
-
-          let rhino_count = 0;
-
-          rhino3dm().then( async Module => {
-            let rhino_file = new Module.File3dm();
-            let dataAsUint8Array = [];
-            let rhino_mesh;
-
-            result.geometries.forEach( child_geo => {
-              let rhino_material;
-              let child_geo_position_array = [ 0, 0, 0 ];
-              let child_geo_color_array = [ 0, 0, 0 ];
-              let rhino_attributes = new Module.ObjectAttributes();
-
-              if (uuid_array.some( e => e.mesh_geometry_uuid === child_geo.uuid)) {
-                rhino_mesh = new Module.Mesh.createFromThreejsJSON( child_geo );
-
-                // Add Vertex Colors as red / green / blue Uint8 values 0 - 255
-                if (child_geo.data && child_geo.data.attributes.color) {
-                  if (child_geo.data.attributes.color.isInterleavedBufferAttribute) {
-                    if (child_geo.data.attributes.color.data && child_geo.data.interleavedBuffers) {
-                      if (child_geo.data.interleavedBuffers[ child_geo.data.attributes.color.data ]) {
-                        child_geo_color_array = deinterleave_attribute( child_geo, 'color' ).array;
-                        dataAsUint8Array = new Uint8Array( child_geo_color_array.length );
-                      }
-                    }
-                  } else if (child_geo.data.attributes.color.array) {
-                    child_geo_color_array = child_geo.data.attributes.color.array;
-                    dataAsUint8Array = new Uint8Array( child_geo.data.attributes.color.array.length );
-                  }
-
-                  for ( let i = 0; i < dataAsUint8Array.length; i ++ ) {
-                    let tmp = Math.max( -1, Math.min( 1, child_geo_color_array[ i ] ) );
-                    tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
-                    dataAsUint8Array[ i ] = ( tmp / 256 ) + 48;
-                  }
-
-                  for ( let j = 0; j < dataAsUint8Array.length; j += child_geo.data.attributes.color.itemSize || 4 ) {
-                    rhino_mesh.vertexColors().add( dataAsUint8Array[ j ], dataAsUint8Array[ j + 1 ], dataAsUint8Array[ j + 2 ] );
-                  }
-                }
-
-                result.materials.forEach( child_mtl => {
-                  uuid_array.forEach( key_value_pair => {
-                    if (key_value_pair.mesh_geometry_uuid === child_geo.uuid && key_value_pair.material_uuid === child_mtl.uuid) {
-                      rhino_material = new Module.Material();
-                      rhino_material.default();
-
-                      (child_mtl.name && child_mtl.name !== '') ? rhino_material.name = child_mtl.name : rhino_material.name = 'material_' + rhino_count;
-
-                      if (child_mtl.color) {
-                        let d_c = '#' + child_mtl.color.toString( 16 ).toUpperCase().padStart( 6, '0' );
-                        rhino_material.diffuseColor = { r: parseInt( d_c.substring( 1, 3 ), 16 ), g: parseInt( d_c.substring( 3, 5 ), 16 ), b: parseInt( d_c.substring( 5 ), 16 ), a: 255 };
-                      }
-
-                      if (child_mtl.emissive) {
-                        let e_c = '#' + child_mtl.emissive.toString( 16 ).toUpperCase().padStart( 6, '0' );
-                        rhino_material.emissionColor = { r: parseInt( e_c.substring( 1, 3 ), 16 ), g: parseInt( e_c.substring( 3, 5 ), 16 ), b: parseInt( e_c.substring( 5 ), 16 ), a: 255 };
-                      }
-
-                      if (child_mtl.specular) {
-                        let s_c = '#' + child_mtl.specular.toString( 16 ).toUpperCase().padStart( 6, '0' );
-                        rhino_material.specularColor = { r: parseInt( s_c.substring( 1, 3 ), 16 ), g: parseInt( s_c.substring( 3, 5 ), 16 ), b: parseInt( s_c.substring( 5 ), 16 ), a: 255 };
-                      }
-
-                      if (child_mtl.reflectivity) rhino_material.reflectivity = child_mtl.reflectivity;
-                      if (child_mtl.shininess) rhino_material.shine = child_mtl.shininess;
-                      if (child_mtl.opacity) rhino_material.transparency = 1.0 - child_mtl.opacity;
-
-                      rhino_file.materials().add( rhino_material );
-
-                      rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
-                      rhino_attributes.materialIndex = rhino_count;
-
-                      rhino_count ++;
-                    }
-                  });
-                });
-              } else if (uuid_array_points.some( e => e.points_geometry_uuid === child_geo.uuid)) {
-                let points_count = 0;
-
-                rhino_mesh = new Module.PointCloud();
-
-                // Add Vertex Colors as red / green / blue Uint8 values 0 - 255
-                if (child_geo.data.attributes && child_geo.data.attributes.color && (child_geo.data.attributes.color.isInterleavedBufferAttribute || (child_geo.data.attributes.color.array && child_geo.data.attributes.color.array.length > 0))) {
-                  if (child_geo.data.attributes.color.isInterleavedBufferAttribute) {
-                    if (child_geo.data.attributes.color.data && child_geo.data.interleavedBuffers) {
-                      if (child_geo.data.interleavedBuffers[ child_geo.data.attributes.color.data ]) {
-                        child_geo_color_array = deinterleave_attribute( child_geo, 'color' ).array;
-                        dataAsUint8Array = new Uint8Array( child_geo_color_array.length );
-                      }
-                    }
-                  } else {
-                    child_geo_color_array = child_geo.data.attributes.color.array;
-                    dataAsUint8Array = new Uint8Array( child_geo.data.attributes.color.array.length );
-                  }
-
-                  for ( let i = 0; i < dataAsUint8Array.length; i ++ ) {
-                    let tmp = Math.max( -1, Math.min( 1, child_geo_color_array[ i ] ) );
-                    tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
-                    dataAsUint8Array[ i ] = ( tmp / 256 ) + 48;
-                  }
-
-                  if (child_geo.data.attributes.position && child_geo.data.attributes.position.array) {
-                    child_geo_position_array = child_geo.data.attributes.position.array;
-                  } else if (child_geo.data.attributes.position && child_geo.data.attributes.position.isInterleavedBufferAttribute) {
-                    if (child_geo.data.attributes.position.data && child_geo.data.interleavedBuffers) {
-                      if (child_geo.data.interleavedBuffers[ child_geo.data.attributes.position.data ]) {
-                        child_geo_position_array = deinterleave_attribute( child_geo, 'position' ).array;
-                      }
-                    }
-                  }
-
-                  for ( let j = 0; j < dataAsUint8Array.length; j += child_geo.data.attributes.color.itemSize || 4 ) {
-                    let location = [ child_geo_position_array[ j ], child_geo_position_array[ j + 1 ], child_geo_position_array[ j + 2 ] ]
-                    let point_color = { r: dataAsUint8Array[ j ], g: dataAsUint8Array[ j + 1 ], b: dataAsUint8Array[ j + 2 ], a: 255 };
-                    let point_cloud_item = rhino_mesh.insertNew( points_count );
-                    point_cloud_item.location = location;
-                    point_cloud_item.color = point_color;
-                    points_count ++;
-                  }
-                } else {
-                  result.materials.forEach( child_mtl => {
-                    uuid_array_points.forEach( key_value_pair => {
-                      if (key_value_pair.points_geometry_uuid === child_geo.uuid && key_value_pair.material_uuid === child_mtl.uuid) {
-                        rhino_material = new Module.Material();
-                        rhino_material.default();
-
-                        (child_mtl.name && child_mtl.name !== '') ? rhino_material.name = child_mtl.name : rhino_material.name = 'material_' + rhino_count;
-
-                        if (child_mtl.color) {
-                          let d_c = '#' + child_mtl.color.toString( 16 ).toUpperCase().padStart( 6, '0' );
-                          let point_color = { r: parseInt( d_c.substring( 1, 3 ), 16 ), g: parseInt( d_c.substring( 3, 5 ), 16 ), b: parseInt( d_c.substring( 5 ), 16 ), a: 255 };
-
-                          for ( let j = 0; j < child_geo.data.attributes.position.array.length; j += child_geo.data.attributes.position.itemSize ) {
-                            let location = [ child_geo.data.attributes.position.array[ j ], child_geo.data.attributes.position.array[ j + 1 ], child_geo.data.attributes.position.array[ j + 2 ] ]
-                            let point_cloud_item = rhino_mesh.insertNew( points_count );
-                            point_cloud_item.location = location;
-                            point_cloud_item.color = point_color;
-                            points_count ++;
-                          }
-
-                          rhino_material.diffuseColor = point_color;
-                        }
-
-                        (child_mtl.opacity) ? (rhino_material.transparency = 1.0 - child_mtl.opacity) : rhino_material.transparency = 0.0;
-
-                        rhino_file.materials().add( rhino_material );
-
-                        rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
-                        rhino_attributes.materialIndex = rhino_count;
-
-                        rhino_count ++;
-                      }
-                    });
-                  });
-                }
-              }
-
-              rhino_file.objects().add( rhino_mesh, rhino_attributes );
-            });
-
-            let blob = new Blob( [ rhino_file.toByteArray() ], { type: 'application/octet-stream' } );
+          rhino_exporter.parse( gltf_obj, async function( arrayBuffer ) {
+            let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
 
             zip.file( filename + '.3dm', blob );
 
             await process_zip( '_3DM' );
-          });
+          }, function( error ) { console.log( error ); }, { vertexColorsCorrection: 48 });
         }
       }
 
