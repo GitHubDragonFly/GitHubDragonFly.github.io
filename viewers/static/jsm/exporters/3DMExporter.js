@@ -267,6 +267,48 @@ class Rhino3dmExporter {
 
 							}
 
+							if ( geo.data.attributes.normal && geo.data.attributes.normal.isInterleavedBufferAttribute ) {
+
+								if ( geo.data.attributes.normal.data && geo.data.interleavedBuffers ) {
+
+									if ( geo.data.interleavedBuffers[ geo.data.attributes.normal.data ] ) {
+
+										let geometry_normal_array = scope.deinterleave( geo, 'normal' ).array;
+
+										geo.data.attributes[ 'normal' ] = {
+											array: geometry_normal_array,
+											itemSize: geo.data.attributes.normal.itemSize,
+											normalized: false,
+											type: 'Float32Array'
+										}
+
+									}
+
+								}
+
+							}
+
+							if ( geo.data.attributes.color && geo.data.attributes.color.isInterleavedBufferAttribute ) {
+
+								if ( geo.data.attributes.color.data && geo.data.interleavedBuffers ) {
+
+									if ( geo.data.interleavedBuffers[ geo.data.attributes.color.data ] ) {
+
+										let geometry_color_array = scope.deinterleave( geo, 'color' ).array;
+
+										geo.data.attributes[ 'color' ] = {
+											array: geometry_color_array,
+											itemSize: geo.data.attributes.color.itemSize,
+											normalized: false,
+											type: 'Float32Array'
+										}
+
+									}
+
+								}
+
+							}
+
 							geometry = geo;
 							rhino_object = new Module.Mesh.createFromThreejsJSON( geometry );
 							process_object( object, geometry );
@@ -307,6 +349,48 @@ class Rhino3dmExporter {
 										geo.data.attributes[ 'position' ] = {
 											array: geometry_position_array,
 											itemSize: geo.data.attributes.position.itemSize,
+											normalized: false,
+											type: 'Float32Array'
+										}
+
+									}
+
+								}
+
+							}
+
+							if ( geo.data.attributes.normal && geo.data.attributes.normal.isInterleavedBufferAttribute ) {
+
+								if ( geo.data.attributes.normal.data && geo.data.interleavedBuffers ) {
+
+									if ( geo.data.interleavedBuffers[ geo.data.attributes.normal.data ] ) {
+
+										let geometry_normal_array = scope.deinterleave( geo, 'normal' ).array;
+
+										geo.data.attributes[ 'normal' ] = {
+											array: geometry_normal_array,
+											itemSize: geo.data.attributes.normal.itemSize,
+											normalized: false,
+											type: 'Float32Array'
+										}
+
+									}
+
+								}
+
+							}
+
+							if ( geo.data.attributes.color && geo.data.attributes.color.isInterleavedBufferAttribute ) {
+
+								if ( geo.data.attributes.color.data && geo.data.interleavedBuffers ) {
+
+									if ( geo.data.interleavedBuffers[ geo.data.attributes.color.data ] ) {
+
+										let geometry_color_array = scope.deinterleave( geo, 'color' ).array;
+
+										geo.data.attributes[ 'color' ] = {
+											array: geometry_color_array,
+											itemSize: geo.data.attributes.color.itemSize,
 											normalized: false,
 											type: 'Float32Array'
 										}
