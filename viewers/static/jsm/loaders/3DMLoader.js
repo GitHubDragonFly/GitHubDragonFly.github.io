@@ -188,9 +188,9 @@ class Rhino3dmLoader extends Loader {
 		const mat = {};
 		mat.name = material.name;
 		mat.color = {};
-		mat.color.r = material.color.r;
-		mat.color.g = material.color.g;
-		mat.color.b = material.color.b;
+		mat.color.r = material.color.r / ( material.color.r > 1 ? 255.0 : 1.0 );
+		mat.color.g = material.color.g / ( material.color.g > 1 ? 255.0 : 1.0 );
+		mat.color.b = material.color.b / ( material.color.b > 1 ? 255.0 : 1.0 );
 		mat.type = material.type;
 
 		const json = JSON.stringify( mat );
@@ -201,9 +201,9 @@ class Rhino3dmLoader extends Loader {
 			const _mat = {};
 			_mat.name = m.name;
 			_mat.color = {};
-			_mat.color.r = m.color.r;
-			_mat.color.g = m.color.g;
-			_mat.color.b = m.color.b;
+			_mat.color.r = m.color.r / ( m.color.r > 1 ? 255.0 : 1.0 );
+			_mat.color.g = m.color.g / ( m.color.g > 1 ? 255.0 : 1.0 );
+			_mat.color.b = m.color.b / ( m.color.b > 1 ? 255.0 : 1.0 );
 			_mat.type = m.type;
 
 			if ( JSON.stringify( _mat ) === json ) {
@@ -227,7 +227,7 @@ class Rhino3dmLoader extends Loader {
 			return new MeshStandardMaterial( {
 				color: new Color( 1, 1, 1 ),
 				metalness: 0.1,
-				roughness: 0.5,
+				roughness: 0.6,
 				name: Loader.DEFAULT_MATERIAL_NAME,
 				side: DoubleSide
 			} );
@@ -245,7 +245,7 @@ class Rhino3dmLoader extends Loader {
 			emissive: new Color(
 				material.emissionColor.r / ( material.emissionColor.r > 1 ? 255.0 : 1.0 ),
 				material.emissionColor.g / ( material.emissionColor.g > 1 ? 255.0 : 1.0 ),
-				material.emissionColor.b / ( material.emissionColor.r > 1 ? 255.0 : 1.0 )),
+				material.emissionColor.b / ( material.emissionColor.b > 1 ? 255.0 : 1.0 )),
 			flatShading: material.disableLighting,
 			ior: material.indexOfRefraction,
 			name: material.name,
