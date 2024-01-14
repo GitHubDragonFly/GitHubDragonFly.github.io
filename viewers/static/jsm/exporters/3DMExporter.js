@@ -451,39 +451,22 @@ class Rhino3dmExporter {
 
 			rhino_attributes = new Module.ObjectAttributes();
 
-			let child_geo_position_array = [ 0, 0, 0 ];
-			let child_geo_color_array = [ 0, 0, 0 ];
+			let geometry_position_array = [ 0, 0, 0 ];
+			let geometry_color_array = [ 0, 0, 0 ];
 			let dataAsUint8Array = [];
 
 			if ( uuid_array_mesh_geometries[ object.geometry ] ) { // process mesh
 
 				// Add Vertex Colors as red / green / blue Uint8 values 0 - 255
 
-				if ( geometry.data && geometry.data.attributes.color ) {
+				if ( geometry.data && geometry.data.attributes && geometry.data.attributes.color ) {
 
-					if ( geometry.data.attributes.color.isInterleavedBufferAttribute ) {
-
-						if ( geometry.data.attributes.color.data && geometry.data.interleavedBuffers ) {
-
-							if ( geometry.data.interleavedBuffers[ geometry.data.attributes.color.data ] ) {
-
-								child_geo_color_array = scope.deinterleave( geometry, 'color' ).array;
-								dataAsUint8Array = new Uint8Array( child_geo_color_array.length );
-
-							}
-
-						}
-
-					} else if ( geometry.data.attributes.color.array ) {
-
-						child_geo_color_array = geometry.data.attributes.color.array;
-						dataAsUint8Array = new Uint8Array( geometry.data.attributes.color.array.length );
-
-					}
+					geometry_color_array = geometry.data.attributes.color.array;
+					dataAsUint8Array = new Uint8Array( geometry.data.attributes.color.array.length );
 
 					for ( let i = 0; i < dataAsUint8Array.length; i ++ ) {
 
-						let tmp = Math.max( -1, Math.min( 1, child_geo_color_array[ i ] ) );
+						let tmp = Math.max( -1, Math.min( 1, geometry_color_array[ i ] ) );
 						tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
 						tmp = tmp / 256;
 						dataAsUint8Array[ i ] = tmp + colorCorrect;
@@ -575,10 +558,10 @@ class Rhino3dmExporter {
 								let base_color = material.color.toString( 16 ).toUpperCase().padStart( 6, '0' );
 
 								rhino_material.physicallyBased().baseColor = {
-									r: parseInt( base_color.substring( 0, 2 ), 16 ) / 255.0,
-									g: parseInt( base_color.substring( 2, 4 ), 16 ) / 255.0,
-									b: parseInt( base_color.substring( 4 ), 16 ) / 255.0,
-									a: 1
+									r: parseInt( base_color.substring( 0, 2 ), 16 ),
+									g: parseInt( base_color.substring( 2, 4 ), 16 ),
+									b: parseInt( base_color.substring( 4 ), 16 ),
+									a: 255
 								};
 
 							}
@@ -588,10 +571,10 @@ class Rhino3dmExporter {
 								let specular_color = material.specularColor.toString( 16 ).toUpperCase().padStart( 6, '0' );
 
 								rhino_material.specularColor = {
-									r: parseInt( specular_color.substring( 0, 2 ), 16 ) / 255.0,
-									g: parseInt( specular_color.substring( 2, 4 ), 16 ) / 255.0,
-									b: parseInt( specular_color.substring( 4 ), 16 ) / 255.0,
-									a: 1
+									r: parseInt( specular_color.substring( 0, 2 ), 16 ),
+									g: parseInt( specular_color.substring( 2, 4 ), 16 ),
+									b: parseInt( specular_color.substring( 4 ), 16 ),
+									a: 255
 								};
 
 							}
@@ -633,58 +616,25 @@ class Rhino3dmExporter {
 
 				// Add Vertex Colors as red / green / blue Uint8 values 0 - 255
 
-				if ( geometry.data.attributes && geometry.data.attributes.color && ( geometry.data.attributes.color.isInterleavedBufferAttribute || ( geometry.data.attributes.color.array && geometry.data.attributes.color.array.length > 0 ) ) ) {
+				if ( geometry.data && geometry.data.attributes && geometry.data.attributes.color ) {
 
-					if ( geometry.data.attributes.color.isInterleavedBufferAttribute ) {
-
-						if ( geometry.data.attributes.color.data && geometry.data.interleavedBuffers ) {
-
-							if ( geometry.data.interleavedBuffers[ geometry.data.attributes.color.data ] ) {
-
-								child_geo_color_array = scope.deinterleave( geometry, 'color' ).array;
-								dataAsUint8Array = new Uint8Array( child_geo_color_array.length );
-
-							}
-
-						}
-
-					} else {
-
-						child_geo_color_array = geometry.data.attributes.color.array;
-						dataAsUint8Array = new Uint8Array( geometry.data.attributes.color.array.length );
-
-					}
+					geometry_color_array = geometry.data.attributes.color.array;
+					dataAsUint8Array = new Uint8Array( geometry.data.attributes.color.array.length );
 
 					for ( let i = 0; i < dataAsUint8Array.length; i ++ ) {
 
-						let tmp = Math.max( -1, Math.min( 1, child_geo_color_array[ i ] ) );
+						let tmp = Math.max( -1, Math.min( 1, geometry_color_array[ i ] ) );
 						tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
 						tmp = tmp / 256;
 						dataAsUint8Array[ i ] = tmp + colorCorrect;
 
 					}
 
-					if ( geometry.data.attributes.position && geometry.data.attributes.position.array ) {
-
-						child_geo_position_array = geometry.data.attributes.position.array;
-
-					} else if ( geometry.data.attributes.position && geometry.data.attributes.position.isInterleavedBufferAttribute ) {
-
-						if ( geometry.data.attributes.position.data && geometry.data.interleavedBuffers ) {
-
-							if ( geometry.data.interleavedBuffers[ geometry.data.attributes.position.data ] ) {
-
-								child_geo_position_array = scope.deinterleave( geometry, 'position' ).array;
-
-							}
-
-						}
-
-					}
+					geometry_position_array = geometry.data.attributes.position.array;
 
 					for ( let j = 0; j < dataAsUint8Array.length; j += geometry.data.attributes.color.itemSize ) {
 
-						let location = [ child_geo_position_array[ j ], child_geo_position_array[ j + 1 ], child_geo_position_array[ j + 2 ] ];
+						let location = [ geometry_position_array[ j ], geometry_position_array[ j + 1 ], geometry_position_array[ j + 2 ] ];
 			
 						let point_color = {
 							r: dataAsUint8Array[ j ],
@@ -726,10 +676,10 @@ class Rhino3dmExporter {
 								let diffuse_color = material.color.toString( 16 ).toUpperCase().padStart( 6, '0' );
 
 								let point_color = {
-									r: parseInt( diffuse_color.substring( 0, 2 ), 16 ) / 255.0,
-									g: parseInt( diffuse_color.substring( 2, 4 ), 16 ) / 255.0,
-									b: parseInt( diffuse_color.substring( 4 ), 16 ) / 255.0,
-									a: 1
+									r: parseInt( diffuse_color.substring( 0, 2 ), 16 ),
+									g: parseInt( diffuse_color.substring( 2, 4 ), 16 ),
+									b: parseInt( diffuse_color.substring( 4 ), 16 ),
+									a: 255
 								};
 
 								for ( let j = 0; j < geometry.data.attributes.position.array.length; j += geometry.data.attributes.position.itemSize ) {
@@ -842,12 +792,11 @@ class Rhino3dmExporter {
 
 			let attr_items = deinterleaveAttribute( iBA );
 
-			let is_color = color_or_position === 'color';
 			let temp_array = [];
 
 			for ( let i = 0, l = attr_items.array.length; i < l; i ++ ) {
 
-				temp_array[ i ] = is_color ? attr_items.array[ i ] : attr_items.array[ i ] / 255.0;
+				temp_array[ i ] = attr_items.array[ i ];
 
 			}
 
