@@ -188,9 +188,17 @@ class Rhino3dmLoader extends Loader {
 		const mat = {};
 		mat.name = material.name;
 		mat.color = {};
-		mat.color.r = material.color.r / ( material.color.r > 1 ? 255.0 : 1.0 );
-		mat.color.g = material.color.g / ( material.color.g > 1 ? 255.0 : 1.0 );
-		mat.color.b = material.color.b / ( material.color.b > 1 ? 255.0 : 1.0 );
+
+		if ( material.color.r > 1 || material.color.g > 1 || material.color.b > 1 ) {
+			mat.color.r = material.color.r / 255.0;
+			mat.color.g = material.color.g / 255.0;
+			mat.color.b = material.color.b / 255.0;
+		} else {
+			mat.color.r = material.color.r;
+			mat.color.g = material.color.g;
+			mat.color.b = material.color.b;
+		}
+
 		mat.type = material.type;
 
 		const json = JSON.stringify( mat );
@@ -201,9 +209,17 @@ class Rhino3dmLoader extends Loader {
 			const _mat = {};
 			_mat.name = m.name;
 			_mat.color = {};
-			_mat.color.r = m.color.r / ( m.color.r > 1 ? 255.0 : 1.0 );
-			_mat.color.g = m.color.g / ( m.color.g > 1 ? 255.0 : 1.0 );
-			_mat.color.b = m.color.b / ( m.color.b > 1 ? 255.0 : 1.0 );
+
+			if ( m.color.r > 1 || m.color.g > 1 || m.color.b > 1 ) {
+				_mat.color.r = m.color.r / 255.0;
+				_mat.color.g = m.color.g / 255.0;
+				_mat.color.b = m.color.b / 255.0;
+			} else {
+				_mat.color.r = m.color.r;
+				_mat.color.g = m.color.g;
+				_mat.color.b = m.color.b;
+			}
+
 			_mat.type = m.type;
 
 			if ( JSON.stringify( _mat ) === json ) {
@@ -457,8 +473,16 @@ class Rhino3dmLoader extends Loader {
 
 				}
 
+				if ( texture.flipY ) map.flipY = texture.flipY;
+
 				map.wrapS = texture.wrapU === 0 ? RepeatWrapping : ClampToEdgeWrapping;
 				map.wrapT = texture.wrapV === 0 ? RepeatWrapping : ClampToEdgeWrapping;
+
+				if ( texture.offset ) {
+
+					map.offset.set( texture.offset[ 0 ], texture.offset[ 1 ] );
+
+				}
 
 				if ( texture.repeat ) {
 
