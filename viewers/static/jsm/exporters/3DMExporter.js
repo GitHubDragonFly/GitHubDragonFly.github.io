@@ -43,8 +43,8 @@ class Rhino3dmExporter {
 		const rhino_file = new Module.File3dm();
 
 		// Colors in some formats, when exported, might look washed out
-		// Optional vertexColorsCorrection can improve the look of vertex colors
-		// with the acceptable value from range [ 0, 128 ]
+		// Optional vertexColorsCorrection can improve the look of vertex
+		// colors with the acceptable value from range [ 0, 128 ]
 
 		const defaultOptions = {
 			vertexColorsCorrection: 64
@@ -439,7 +439,7 @@ class Rhino3dmExporter {
 
 				} else {
 
-					console.warn( 'THREE.3DMExporter: This model includes ' + object.type + '. Only meshes and points are currently supported. The exported model will probably be malformed.' );
+					console.warn( 'THREE.3DMExporter: This model includes unsupported ' + object.type + '. The exported model might be malformed.' );
 
 				}
 
@@ -549,9 +549,14 @@ class Rhino3dmExporter {
 							if ( material.metalness ) rhino_material.physicallyBased().metallic = material.metalness;
 							if ( material.roughness ) rhino_material.physicallyBased().roughness = material.roughness;
 
-							if ( material.sheen && material.sheen > 0 ) rhino_material.physicallyBased().sheen = material.sheen;
-							if ( material.thickness && material.thickness > 0 ) rhino_material.physicallyBased().subsurface = material.thickness;
-							if ( material.transmission && material.transmission > 0 ) rhino_material.physicallyBased().opacity = 1 - material.transmission;
+							if ( material.sheen && material.sheen > 0 )
+								rhino_material.physicallyBased().sheen = material.sheen;
+
+							if ( material.thickness && material.thickness > 0 )
+								rhino_material.physicallyBased().subsurface = material.thickness;
+
+							if ( material.transmission && material.transmission > 0 )
+								rhino_material.physicallyBased().opacity = 1 - material.transmission;
 
 							if ( material.color ) {
 
@@ -579,21 +584,26 @@ class Rhino3dmExporter {
 
 							}
 
-							if ( material.specularIntensity && material.specularIntensity > 0 ) rhino_material.physicallyBased().specular = material.specularIntensity;
+							if ( material.specularIntensity && material.specularIntensity > 0 )
+								rhino_material.physicallyBased().specular = material.specularIntensity;
 
 							if ( material.ior ) rhino_material.indexOfRefraction = material.ior;
 
 							if ( material.anisotropy && material.anisotropy > 0 ) {
 
 								rhino_material.physicallyBased().anisotropic = material.anisotropy;
-								if ( material.anisotropyRotation && material.anisotropyRotation > 0 ) rhino_material.physicallyBased().anisotropicRotation = material.anisotropyRotation;
+
+								if ( material.anisotropyRotation && material.anisotropyRotation > 0 )
+									rhino_material.physicallyBased().anisotropicRotation = material.anisotropyRotation;
 
 							}
 
 							if ( material.clearcoat && material.clearcoat > 0 ) {
 
 								rhino_material.physicallyBased().clearcoat = material.clearcoat;
-								if ( material.clearcoatRoughness && material.clearcoatRoughness > 0 ) rhino_material.physicallyBased().clearcoatRoughness = material.clearcoatRoughness;
+
+								if ( material.clearcoatRoughness && material.clearcoatRoughness > 0 )
+									rhino_material.physicallyBased().clearcoatRoughness = material.clearcoatRoughness;
 
 							}
 
@@ -682,9 +692,11 @@ class Rhino3dmExporter {
 									a: 255
 								};
 
-								for ( let j = 0; j < geometry.data.attributes.position.array.length; j += geometry.data.attributes.position.itemSize ) {
+								geometry_position_array = geometry.data.attributes.position.array;
 
-									let location = [ geometry.data.attributes.position.array[ j ], geometry.data.attributes.position.array[ j + 1 ], geometry.data.attributes.position.array[ j + 2 ] ];
+								for ( let j = 0; j < geometry_position_array.length; j += geometry_position_array.itemSize ) {
+
+									let location = [ geometry_position_array[ j ], geometry_position_array[ j + 1 ], geometry_position_array[ j + 2 ] ];
 
 									let point_cloud_item = rhino_object.insertNew( points_count );
 
@@ -768,18 +780,19 @@ class Rhino3dmExporter {
 
 		if ( geometry.data.arrayBuffers && geometry.data.arrayBuffers[ iB_buffer ] ) {
 
+			const arr = geometry.data.arrayBuffers[ iB_buffer ];
 			let iB;
 
 			switch ( type ) {
 
 				case 'Int16Array':
 
-					iB = new InterleavedBuffer( new Int16Array( new Int32Array( geometry.data.arrayBuffers[ iB_buffer ] ).buffer ), stride );
+					iB = new InterleavedBuffer( new Int16Array( new Int32Array( arr ).buffer ), stride );
 					break;
 
 				case 'Float32Array':
 
-					iB = new InterleavedBuffer( new Float32Array( new Int32Array( geometry.data.arrayBuffers[ iB_buffer ] ).buffer ), stride );
+					iB = new InterleavedBuffer( new Float32Array( new Int32Array( arr ).buffer ), stride );
 					break;
 
 				default:
