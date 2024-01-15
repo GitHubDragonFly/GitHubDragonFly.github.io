@@ -234,28 +234,46 @@ class Rhino3dmLoader extends Loader {
 
 		}
 
-		//console.log(material)
+		let diffuse_color, emissive_color, specular_color;
+
+		if ( material.diffuseColor.r > 1 || material.diffuseColor.g > 1 || material.diffuseColor.b > 1 ) {
+			diffuse_color = new Color(
+				material.diffuseColor.r / 255.0,
+				material.diffuseColor.g / 255.0,
+				material.diffuseColor.b / 255.0);
+		} else {
+			diffuse_color = new Color( material.diffuseColor.r, material.diffuseColor.g, material.diffuseColor.b);
+		}
+
+		if ( material.emissionColor.r > 1 || material.emissionColor.g > 1 || material.emissionColor.b > 1 ) {
+			emissive_color = new Color(
+				material.emissionColor.r / 255.0,
+				material.emissionColor.g / 255.0,
+				material.emissionColor.b / 255.0);
+		} else {
+			emissive_color = new Color( material.emissionColor.r, material.emissionColor.g, material.emissionColor.b);
+		}
+
+		if ( material.specularColor.r > 1 || material.specularColor.g > 1 || material.specularColor.b > 1 ) {
+			specular_color = new Color(
+				material.specularColor.r / 255.0,
+				material.specularColor.g / 255.0,
+				material.specularColor.b / 255.0);
+		} else {
+			specular_color = new Color( material.specularColor.r, material.specularColor.g, material.specularColor.b);
+		}
 
 		const mat = new MeshPhysicalMaterial( {
 
-			color: new Color(
-				material.diffuseColor.r / ( material.diffuseColor.r > 1 ? 255.0 : 1.0 ),
-				material.diffuseColor.g / ( material.diffuseColor.g > 1 ? 255.0 : 1.0 ),
-				material.diffuseColor.b / ( material.diffuseColor.b > 1 ? 255.0 : 1.0 )),
-			emissive: new Color(
-				material.emissionColor.r / ( material.emissionColor.r > 1 ? 255.0 : 1.0 ),
-				material.emissionColor.g / ( material.emissionColor.g > 1 ? 255.0 : 1.0 ),
-				material.emissionColor.b / ( material.emissionColor.b > 1 ? 255.0 : 1.0 )),
+			color: diffuse_color,
+			emissive: emissive_color,
 			flatShading: material.disableLighting,
 			ior: material.indexOfRefraction,
 			name: material.name,
 			reflectivity: material.reflectivity,
 			opacity: 1.0 - material.transparency,
 			side: DoubleSide,
-			specularColor: new Color(
-				material.specularColor.r / ( material.specularColor.r > 1 ? 255.0 : 1.0 ),
-				material.specularColor.g / ( material.specularColor.g > 1 ? 255.0 : 1.0 ),
-				material.specularColor.b / ( material.specularColor.b > 1 ? 255.0 : 1.0 )),
+			specularColor: specular_color,
 			transparent: material.transparency > 0 ? true : false
 
 		} );
@@ -268,10 +286,16 @@ class Rhino3dmLoader extends Loader {
 
 			mat.anisotropy = pbr.anisotropy;
 			mat.anisotropyRotation = pbr.anisotropicRotation;
-			mat.color = new Color(
-				pbr.baseColor.r / ( pbr.baseColor.r > 1 ? 255.0 : 1.0 ),
-				pbr.baseColor.g / ( pbr.baseColor.g > 1 ? 255.0 : 1.0 ),
-				pbr.baseColor.b / ( pbr.baseColor.b > 1 ? 255.0 : 1.0 ));
+
+			if ( pbr.baseColor.r > 1 || pbr.baseColor.g > 1 || pbr.baseColor.b > 1 ) {
+				mat.color = new Color(
+					pbr.baseColor.r / 255.0,
+					pbr.baseColor.g / 255.0,
+					pbr.baseColor.b / 255.0);
+			} else {
+				mat.color = new Color( pbr.baseColor.r, pbr.baseColor.g, pbr.baseColor.b);
+			}
+
 			mat.clearcoat = pbr.clearcoat;
 			mat.clearcoatRoughness = pbr.clearcoatRoughness;
 			mat.metalness = pbr.metallic;
