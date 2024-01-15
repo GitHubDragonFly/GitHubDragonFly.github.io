@@ -537,25 +537,26 @@ class Rhino3dmExporter {
 
 						}
 
-						if ( material.reflectivity ) rhino_material.reflectivity = material.reflectivity;
-						if ( material.refractionFactor ) rhino_material.indexOfRefraction = material.refractionFactor;
-						if ( material.shininess ) rhino_material.shine = material.shininess;
-						if ( material.opacity ) rhino_material.transparency = 1.0 - material.opacity;
+						if ( material.shininess !== undefined ) rhino_material.shine = material.shininess;
+						if ( material.opacity !== undefined ) rhino_material.transparency = 1.0 - material.opacity;
+						if ( material.reflectivity !== undefined ) rhino_material.reflectivity = material.reflectivity;
+						if ( material.flatShading !== undefined ) rhino_material.disableLighting = material.flatShading;
+						if ( material.refractionFactor !== undefined ) rhino_material.indexOfRefraction = material.refractionFactor;
 
 						if ( material.type === 'MeshStandardMaterial' || material.type === 'MeshPhysicalMaterial' ) {
 
 							rhino_material.toPhysicallyBased();
 
-							if ( material.metalness ) rhino_material.physicallyBased().metallic = material.metalness;
-							if ( material.roughness ) rhino_material.physicallyBased().roughness = material.roughness;
+							if ( material.metalness !== undefined ) rhino_material.physicallyBased().metallic = material.metalness;
+							if ( material.roughness !== undefined ) rhino_material.physicallyBased().roughness = material.roughness;
 
-							if ( material.sheen && material.sheen > 0 )
+							if ( material.sheen !== undefined && material.sheen > 0 )
 								rhino_material.physicallyBased().sheen = material.sheen;
 
-							if ( material.thickness && material.thickness > 0 )
+							if ( material.thickness !== undefined && material.thickness > 0 )
 								rhino_material.physicallyBased().subsurface = material.thickness;
 
-							if ( material.transmission && material.transmission > 0 )
+							if ( material.transmission !== undefined && material.transmission > 0 )
 								rhino_material.physicallyBased().opacity = 1 - material.transmission;
 
 							if ( material.color ) {
@@ -584,25 +585,25 @@ class Rhino3dmExporter {
 
 							}
 
-							if ( material.specularIntensity && material.specularIntensity > 0 )
+							if ( material.specularIntensity !== undefined && material.specularIntensity > 0 )
 								rhino_material.physicallyBased().specular = material.specularIntensity;
 
-							if ( material.ior ) rhino_material.indexOfRefraction = material.ior;
+							if ( material.ior !== undefined ) rhino_material.indexOfRefraction = material.ior;
 
-							if ( material.anisotropy && material.anisotropy > 0 ) {
+							if ( material.anisotropy !== undefined && material.anisotropy > 0 ) {
 
 								rhino_material.physicallyBased().anisotropic = material.anisotropy;
 
-								if ( material.anisotropyRotation && material.anisotropyRotation > 0 )
+								if ( material.anisotropyRotation !== undefined && material.anisotropyRotation > 0 )
 									rhino_material.physicallyBased().anisotropicRotation = material.anisotropyRotation;
 
 							}
 
-							if ( material.clearcoat && material.clearcoat > 0 ) {
+							if ( material.clearcoat !== undefined && material.clearcoat > 0 ) {
 
 								rhino_material.physicallyBased().clearcoat = material.clearcoat;
 
-								if ( material.clearcoatRoughness && material.clearcoatRoughness > 0 )
+								if ( material.clearcoatRoughness !== undefined && material.clearcoatRoughness > 0 )
 									rhino_material.physicallyBased().clearcoatRoughness = material.clearcoatRoughness;
 
 							}
