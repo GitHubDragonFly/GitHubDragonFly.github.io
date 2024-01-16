@@ -221,8 +221,9 @@ Number Type Converter
   - GLB exports, where applicable, can additionally have either DRACO or DRACO+WEBP or MESHOPT or MESHOPT+WEBP compression applied by using [glTF Transform](https://gltf-transform.dev):
     - These exports are marked as either of: `GLB_d` `GLB_dw` `GLB_m` `GLB_mw` (for regular exports) `GLBx_d` `GLBx_dw` `GLBx_m` `GLBx_mw` (for alternative exports)
     - Seem to work fine in general but might not be good for some rare models
-  - ASSIMP / FBX / GLTF / GLTFS / OBJ + MTL / STEP viewers also offer alternative exports marked as `OBJx` `DAEx` `GLTFx` `USDZx`:
+  - Some viewers also offer alternative exports marked as `OBJx` `DAEx` `GLTFx` `USDZx`:
     - Should be tried either out of curiosity or if their regular export counterparts don't produce good results
+    - Might even produce smaller exported file size than regular export
     - If applicable, will support exporting THREE.InstancedMesh to OBJ + MTL / DAE / USDZ as well
     - If applicable, will support exporting morph animations but will not export other animations
   - GLTFS Viewer seems to do OK job in exporting models with `pbrSpecularGlossiness`
@@ -247,7 +248,7 @@ Number Type Converter
   - `C0` - camera index, with 0 being default (GLTF viewer) (`CAM` + Index in GLTF Legacy viewer)
   - `CS` - construction step (LDRAW viewer)
   - `Ls` - and / or `labels` button (available in PDB viewers only)
-  - `MP` - material - Phong (MP), Standard (MS), Lambert (ML)
+  - `MP` - material switching - Phong (MP), Standard (MS), Lambert (ML)
   - `OL` - outline effect (MMD Viewer)
   - `OS` - material side - Original (OS), Front (FS), Back (BS), Double (DS)
   - `PM` - show model as points (PLY+STL / PRWM / VTK viewers)
