@@ -6,7 +6,25 @@
     <meta name="description" content="GLTF / GLB / USDZ Viewer using Google's model-viewer web component">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.8.2/dist/es-module-shims.js"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "@gltf-transform/core": "https://esm.sh/@gltf-transform/core",
+          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions",
+          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions"
+        }
+      }
+    </script>
+
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
+
+    <!-- For encoding GLB export with draco compression -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/draco_encoder.js" defer></script>
+
+    <!-- For encoding GLB export with meshopt compression -->
+    <script src="https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_encoder.js" defer></script>
 
     <script>
       const isAppleDevice = /iPhone|iPad|iPod|CriOS/i.test( navigator.userAgent ) || (/iPad|iPhone|iPod/.test( navigator.platform )) || (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
@@ -150,8 +168,17 @@
         <label title="Auto Rotate"><input type="checkbox" id="rotate" onchange="set_rotation();" disabled />R</label>
         <select id="export_names" title="Export" style=" margin-left: 3px;" disabled>
           <option value="" selected disabled>Export</option>
-          <option value="glb" onclick="export_glb()">GLB</option>
+          <option title="GLB - GL Transmission Format binary regular export" value="glb" onclick="export_glb()">GLB</option>
+          <option title="GLB - GL Transmission Format binary regular export with DRACO compression" value="glbdraco" onclick="export_glb( true, false, false )">GLB_d</option>
+          <option title="GLB - GL Transmission Format binary regular export with DRACO and WEBP texture compression" value="glbdracowebp" onclick="export_glb( true, false, true );">GLB_dw</option>
+          <option title="GLB - GL Transmission Format binary regular export with Meshopt compression" value="glbmeshopt" onclick="export_glb( false, true, false )">GLB_m</option>
+          <option title="GLB - GL Transmission Format binary regular export with Meshopt and WEBP texture compression" value="glbmeshoptwebp" onclick="export_glb( false, true, true );">GLB_mw</option>
           <option value="gltf" onclick="export_gltf()">GLTF</option>
+        </select>
+        <select title="Exported Texture Resolution for GLTF / GLB" id="export_tex_res" disabled>
+          <option title="1k (1024x1024)" value="1k" onclick="tex_res = 1024;" selected>1k</option>
+          <option title="2k (2048x2048)" value="2k" onclick="tex_res = 2048;">2k</option>
+          <option title="4k (4096x4096)" value="4k" onclick="tex_res = 4096;">4k</option>
         </select>
         <button id="btn_full_screen" title="Full Screen" onclick="full_screen()" style="float: inline-end; min-width: 24px;"><p class="full_screen"></p></button>
       </div>
@@ -215,8 +242,8 @@
 
     <script>
       var gltf_filenames, usdz_filenames, models, current_model = 0;
-      var filename, selected_file, selected_url_file = '';
-      var url_displayed = false, url_loading = false;
+      var filename, old_name, selected_file, selected_url_file = '';
+      var url_displayed = false, url_loading = false, tex_res;
       var ww = window.innerWidth,	wh = window.innerHeight;
       var variants, current_variant = 0, variants_available = false;
       var animations, current_animation = 0, animation_running = false;
@@ -228,8 +255,10 @@
       async function export_gltf() {
         document.getElementById("export_names").selectedIndex = 0;
 
+        filename = old_name;
+
         let modelViewer = document.getElementById("mv");
-        let options = {	binary: false, maxTextureSize: 1024 || Infinity };
+        let options = {	binary: false, maxTextureSize: tex_res || Infinity };
 
         let glTF = await modelViewer.exportScene( options );
 
@@ -240,19 +269,112 @@
         link.click();
       }
 
-      async function export_glb() {
+      async function export_glb( draco = false, meshopt = false, webp = false ) {
         document.getElementById("export_names").selectedIndex = 0;
 
+        filename = old_name;
+
         let modelViewer = document.getElementById("mv");
-        let options = {	binary: true, maxTextureSize: 1024 || Infinity };
+        let options = {	binary: true, maxTextureSize: tex_res || Infinity };
 
         let glTF = await modelViewer.exportScene( options );
 
-        let file = new File( [glTF], filename + ".glb" );
+        if ( draco === true || meshopt === true ) {
+          glTF = await glTF.arrayBuffer();
+          filename +=  ( draco === true ? ' DRACO' : (meshopt === true) ? ' MESHOPT' : '' ) + ( webp === true ? ' WEBP' : '' );
+        }
+
+        let file = new File( [ draco === true ? (webp === true ? await draco_compress( new Uint8Array( glTF ), true ) : await draco_compress( new Uint8Array( glTF ) ) ) : (meshopt === true ? (webp === true ? await meshopt_compress( new Uint8Array( glTF ), true ) : await meshopt_compress( new Uint8Array( glTF ) ) ) : glTF ) ], filename + ".glb" );
+
         link.download = file.name;
         link.href = URL.createObjectURL( file );
         URL.revokeObjectURL( file );
         link.click();
+      }
+
+      /* Encode with draco compression - geometry */
+
+      async function draco_compress( arrayBuffer, webp = false ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { compressTexture } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+        io.registerDependencies({
+          'draco3d.encoder': DracoEncoderModule(),
+        });
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        if (webp === true) {
+          const textures = doc.getRoot().listTextures();
+
+          for (const texture of textures) {
+            await compressTexture( texture, {
+              targetFormat: 'webp',
+              resize: [tex_res, tex_res]
+            });
+          }
+        }
+
+        doc.createExtension( KHRDracoMeshCompression )
+        .setRequired( true )
+        .setEncoderOptions({
+          method: KHRDracoMeshCompression.EncoderMethod.EDGEBREAKER,
+          encodeSpeed: 5,
+        });
+
+        const compressedArrayBuffer = io.writeBinary( doc );
+
+        return compressedArrayBuffer;
+      }
+
+      /* Encode with meshopt compression - geometry, morphs, animations */
+
+      async function meshopt_compress( arrayBuffer, webp = false ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { meshopt, compressTexture } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
+
+        await MeshoptEncoder.ready;
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+        io.registerDependencies({
+          'meshopt.encoder': MeshoptEncoder,
+        });
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform( meshopt( { encoder: MeshoptEncoder, level: 'high' } ) );
+
+        if (webp === true) {
+          const textures = doc.getRoot().listTextures();
+
+          for (const texture of textures) {
+            await compressTexture( texture, {
+              targetFormat: 'webp',
+              resize: [tex_res, tex_res]
+            });
+          }
+        }
+
+        doc.createExtension( EXTMeshoptCompression )
+        .setRequired( true )
+        .setEncoderOptions({
+          method: EXTMeshoptCompression.EncoderMethod.QUANTIZE,  // or EXTMeshoptCompression.EncoderMethod.FILTER
+        });
+
+        io.registerExtensions( [ EXTMeshoptCompression ] );
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        return compressedArrayBuffer;
       }
 
       async function init() {
@@ -262,9 +384,11 @@
         animations = {};
         variants = {};
         filename = null;
+        old_name = null;
         gltf_filenames = {};
         usdz_filenames = {};
         models = [];
+        tex_res = 1024;
 
         enable_disable( true );
 
@@ -282,8 +406,14 @@
               variants[ i ] = [];
 
               models.push( url );
+
               gltf_filenames[ url ] = fi.files[ i ].name;
-              if (filename === null) filename = gltf_filenames[ url ].substring( 0, gltf_filenames[ url ].lastIndexOf('.') );
+
+              if (filename === null) {
+                filename = gltf_filenames[ url ].substring( 0, gltf_filenames[ url ].lastIndexOf('.') );
+                old_name = filename;
+              }
+
               if (selected_file === null) selected_file = url;
 
               URL.revokeObjectURL( fi.files[ i ] );
@@ -291,8 +421,14 @@
               let url = URL.createObjectURL( fi.files[ i ] );
 
               models.push( url );
+
               usdz_filenames[ url ] = fi.files[ i ].name;
-              if (filename === null) filename = usdz_filenames[ url ].substring( 0, usdz_filenames[ url ].lastIndexOf('.') );
+
+              if (filename === null) {
+                filename = usdz_filenames[ url ].substring( 0, usdz_filenames[ url ].lastIndexOf('.') );
+                old_name = filename;
+              }
+
               if (selected_file === null) selected_file = url;
 
               URL.revokeObjectURL( fi.files[ i ] );
@@ -548,8 +684,10 @@
 
           if (gltf_filenames[ models[ current_model ] ]) {
             filename = gltf_filenames[ models[ current_model ] ].substring( 0, gltf_filenames[ models[ current_model ] ].lastIndexOf('.') );
+            old_name = filename;
           } else {
             filename = usdz_filenames[ models[ current_model ] ].substring( 0, usdz_filenames[ models[ current_model ] ].lastIndexOf('.') );
+            old_name = filename;
           }
 
           if (mdl_viewer.availableAnimations.length > 0) {
@@ -702,6 +840,7 @@
         document.getElementById('equi').disabled = disable;
         document.getElementById('rotate').disabled = disable;
         document.getElementById('export_names').disabled = disable;
+        document.getElementById('export_tex_res').disabled = disable;
 
         if (document.getElementById('equi').checked === false) {
           document.getElementById('neutral').disabled = disable;
@@ -715,6 +854,7 @@
     <script>
       async function document_ready() {
         if(navigator.userAgent.indexOf('Chrome') !== -1 || navigator.userAgent.indexOf('Safari') !== -1) {
+          $('#export_tex_res').change( function() { $(this).children(':selected').click(); });
           $('#export_names').change( function() { $(this).children(':selected').click(); });
         }
 
