@@ -85,11 +85,11 @@ Number Type Converter
     - The viewer supports loading of multiple models, switchable with the viewer's `M` button
     - Error handling narrows down to showing the `ERROR!` message so check the console output for details 
   - `GLTF Viewer` is for v2.0 glTF files and is currently using r160 of three.js:
-    - doesn't support `pbrSpecularGlossiness`
-    - supports `KHR_animation_pointer`
+    - doesn't support obsolete `pbrSpecularGlossiness`
+    - supports currently arbitrary `KHR_animation_pointer`
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js:
-    - supports `pbrSpecularGlossiness`
-    - doesn't support `Anisotropy` and `KHR_animation_pointer`
+    - supports obsolete `pbrSpecularGlossiness`
+    - doesn't support either `Anisotropy` or currently arbitrary `KHR_animation_pointer`
   - `GLTF Legacy` viewer is for v1.0 glTF files and is purely experimental and rather limited (see notes further below)
 
 - Special notes about `ASSIMP Viewer` which is using [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and [ASSIMP](https://github.com/assimp/assimp) library:
@@ -119,9 +119,8 @@ Number Type Converter
       - `https://raw.githubusercontent.com/SaschaWillems/VulkanSponza/master/data/sponza.dae, https://raw.githubusercontent.com/SaschaWillems/VulkanSponza/master/data/sponza/`
       - `https://raw.githubusercontent.com/oecax2208/PyMikuMikuDance/master/example/vdproject_peach_v1/小桃初代女仆v1.pmx, https://raw.githubusercontent.com/oecax2208/PyMikuMikuDance/master/example/vdproject_peach_v1/Texture/`
 
-- Special notes about `Quick Viewer` which is using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
+- Special notes about mobile `Quick Viewer` which is using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
   - It is purely online based and can be used as standalone HTML file (just delete `favicon.ico` import)
-  - Seems to have a rather good fit on mobile devices due to its simple GUI
   - It can currently export to BIM, PLY, STL, OBJ, OFF, GLB and GLTF formats even on a mobile phone (as tested on an Android device)
   - Supported import formats: 3DS, 3DM, 3MF, AMF, BIM, BREP, BRP, DAE, FBX, GLB, GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
   - Unsupported import format: FCSTD (requires accessing a remote worker)
@@ -170,7 +169,7 @@ Number Type Converter
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
   - OCCT supported formats: STEP, STP, IGES, IGS, BREP, BRP, BIM
-    - STEP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js) and modified version of [dotbim.three.js](https://github.com/ricaun/dotbim.three.js)
+    - STEP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js) and a modified version of [dotbim.three.js](https://github.com/ricaun/dotbim.three.js)
 - Export formats, where applicable:
   - 3DM, DAE, APNG, FBX, M3D, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, PRWM, USDZ
     - Try not to change file names when saving files during initial export
