@@ -6,7 +6,7 @@ Designed to serve as a hub with links to repositories, Number Type Converter and
 Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations, see screenshots below for different appearances of the main menu page.
 
 The `M3D` button will open a page to access stripped down and simplified version of mobile friendly 3D viewers:
- - Almost all viewers are currently available
+ - Almost all viewers are currently available and should work fine on desktop devices as well
  - Mobile `Quick Viewer` and `GLTF Viewer` also include export options and more features
  - All mobile testing was done on an Android mobile phone and an iPad
  - Consider bookmarking the [mobile main page](https://githubdragonfly.github.io/viewers/templates/Mobile/index.html) for any continuous access to the viewers
@@ -140,8 +140,8 @@ Number Type Converter
 - Special notes about `GLTF Legacy` viewer which is using modified version of mrdoob's [model-tag](https://github.com/mrdoob/model-tag):
   - Set in 500 x 500 viewport and seems to have a good fit on mobile devices
   - It is relatively simple and might have bugs and limitations
-  - Supported formats: GLTF v1.0 + BIN
-  - Unsupported formats: GLB
+  - Supported import formats: GLTF v1.0 + BIN + Textures
+  - Unsupported import formats: GLB
   - It can export to GLTF / GLB v2.0 and OBJ formats (animations are not currently supported)
   - Use ASSIMP Viewer instead since it has less limitations and more export options
   - Most of the following notes do not apply to GLTF Legacy viewer in general
@@ -150,7 +150,7 @@ Number Type Converter
 - Almost all viewers include the interactive [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
 - Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers
   - do note that mobile Safari browser might be finicky about certain features
-- See `URLS4MODELS.md` file for examples
+- See `URLS4MODELS.md` file for URL examples
 - Some loading instructions also available in [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) and [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repositories
 - ZIP files and drag-and-drop are currently not supported
 - Import files locally from a file browser dialog:
