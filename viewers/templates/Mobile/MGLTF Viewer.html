@@ -6,11 +6,16 @@
     <meta name="description" content="GLTF v2.0 (GL Transmission Format) Viewer - supported formats: GLTF + BIN, GLB, DRC">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.8.2/dist/es-module-shims.js"></script>
+
     <script type="importmap">
       {
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/",
+          "@gltf-transform/core": "https://esm.sh/@gltf-transform/core",
+          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions",
+          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions"
         }
       }
     </script>
@@ -18,6 +23,12 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_decoder.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+
+    <!-- For encoding GLB export with draco compression -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/draco_encoder.js" defer></script>
+
+    <!-- For encoding GLB export with meshopt compression -->
+    <script src="https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_encoder.js" defer></script>
 
     <script type="module">
       import * as three_js from "three";
@@ -44,7 +55,7 @@
       ktx2_loader = new KTX2Loader( manager );
       ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/basis/" );
 
-      manager.addHandler( /\.basis$/i, ktx2_loader );
+      manager.addHandler( /\.ktx2$/i, ktx2_loader );
 
       draco_loader = new DRACOLoader( manager );
       draco_loader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/draco/" );
@@ -107,7 +118,7 @@
       input[type=file] {
         vertical-align: middle;
         margin: 2px 0 2px 0;
-        max-width: 165px;
+        max-width: 160px;
       }
 
       input[type=range] {
@@ -202,7 +213,7 @@
     </style>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
-    <!-- GLTF Examples from: https://github.com/mrdoob/three.js -->
+    <!-- Using glTF Transform for DRACO / MESHOPT / WEBP compression: https://gltf-transform.dev -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
@@ -213,10 +224,17 @@
       <div class="fm">
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".gltf, .glb, .drc, .bin, .dds, .ktx2, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
-        <select title="Export" id="export_names" disabled>
+        <select title="Export" id="export_names" style="min-width: 90px;" disabled>
           <option value="" selected disabled>Export</option>
-          <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
+          <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
           <option title="DAE - Collada Format" value="dae" onclick="export_dae();">DAE</option>
+          <option title="GLB - GL Transmission Format binary" value="glb" onclick="export_gltf( true )">GLB</option>
+          <option title="GLB - GL Transmission Format binary with DRACO compression" value="glbdraco" onclick="export_gltf( true, true, false, false )">GLB_d</option>
+          <option title="GLB - GL Transmission Format binary with DRACO and WEBP texture compression" value="glbdracowebp" onclick="export_gltf( true, true, false, true );">GLB_dw</option>
+          <option title="GLB - GL Transmission Format binary with Meshopt compression" value="glbmeshopt" onclick="export_gltf( true, false, true, false )">GLB_m</option>
+          <option title="GLB - GL Transmission Format binary with Meshopt and WEBP texture compression" value="glbmeshoptwebp" onclick="export_gltf( true, false, true, true );">GLB_mw</option>
+          <option title="GLTF - GL Transmission Format ascii" value="gltf" onclick="export_gltf()">GLTF</option>
+          <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
           <option title="PLY - Polygon File Format ascii" value="ply" onclick="export_ply( false );">PLY_a</option>
           <option title="PLY - Polygon File Format binary" value="ply" onclick="export_ply( true );">PLY_b</option>
           <option title="JSON - Three.js Format" value="json" onclick="export_json();">JSON</option>
@@ -522,6 +540,43 @@
         }
       }
 
+      async function export_gltf( binary = false, draco = false, meshopt = false, webp = false ) {
+        if (gltf_obj) {
+          start_export();
+
+          await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+          const { GLTFExporter } = await import( "../../static/jsm/exporters/GLTFExporter.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
+
+          let options;
+
+          if (animations.length > 0) {
+            options = {	binary: binary, maxTextureSize: 1024 || Infinity, animations: animations };
+          } else {
+            options = {	binary: binary, maxTextureSize: 1024 || Infinity };
+          }
+
+          gltf_exporter.parse( gltf_obj, async json => {
+            let blob;
+
+            if (binary === true) {
+              blob = new Blob( [ draco === true ? (webp === true ? await draco_compress( new Uint8Array( json ), true ) : await draco_compress( new Uint8Array( json ) ) ) : (meshopt === true ? (webp === true ? await meshopt_compress( new Uint8Array( json ), true ) : await meshopt_compress( new Uint8Array( json ) ) ) : json ) ], { type: 'application/octet-stream' } );
+
+              zip.file( filename + '.glb', blob );
+              await process_zip( '_GLB' + ( draco === true ? '_DRACO' : (meshopt === true) ? '_MESHOPT' : '' ) + ( webp === true ? '_WEBP' : '' ) );
+            } else {
+              let string = JSON.stringify( json, null, 2 );
+              blob = new Blob( [ string ], { type: 'text/plain' } );
+
+              zip.file( filename + '.gltf', blob );
+              await process_zip( '_GLTF' );
+            }
+          }, function( error ) { console.log( error ); }, options);
+        }
+      }
+
       async function export_json() {
         if (gltf_obj) {
           start_export();
@@ -555,6 +610,26 @@
           zip.file( filename + '.usdz', blob );
 
           await process_zip( '_USDZ' );
+        }
+      }
+
+      async function export_3dm() {
+        if (gltf_obj) {
+          start_export();
+
+          await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+          const { Rhino3dmExporter } = await import( "../../static/jsm/exporters/3DMExporter.js" );
+
+          let rhino_exporter = new Rhino3dmExporter( manager );
+
+          rhino_exporter.parse( gltf_obj, async function( arrayBuffer ) {
+            let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
+
+            zip.file( filename + '.3dm', blob );
+
+            await process_zip( '_3DM' );
+          }, function( error ) { console.log( error ); }, { vertexColorsCorrection: 48 });
         }
       }
 
@@ -1524,6 +1599,91 @@
         if (material.specularIntensityMap) material.specularIntensityMap.colorSpace = THREE.LinearSRGBColorSpace;
         if (material.thicknessMap) material.thicknessMap.colorSpace = THREE.LinearSRGBColorSpace;
         if (material.transmissionMap) material.transmissionMap.colorSpace = THREE.LinearSRGBColorSpace;
+      }
+
+      /* Encode with draco compression - geometry */
+
+      async function draco_compress( arrayBuffer, webp = false ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { compressTexture } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+        io.registerDependencies({
+          'draco3d.encoder': DracoEncoderModule(),
+        });
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        if (webp === true) {
+          const textures = doc.getRoot().listTextures();
+
+          for (const texture of textures) {
+            await compressTexture( texture, {
+              targetFormat: 'webp',
+              resize: [tex_res, tex_res]
+            });
+          }
+        }
+
+        doc.createExtension( KHRDracoMeshCompression )
+        .setRequired( true )
+        .setEncoderOptions({
+          method: KHRDracoMeshCompression.EncoderMethod.EDGEBREAKER,
+          encodeSpeed: 5,
+        });
+
+        const compressedArrayBuffer = io.writeBinary( doc );
+
+        return compressedArrayBuffer;
+      }
+
+      /* Encode with meshopt compression - geometry, morphs, animations */
+
+      async function meshopt_compress( arrayBuffer, webp = false ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { meshopt, compressTexture } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
+
+        await MeshoptEncoder.ready;
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+        io.registerDependencies({
+          'meshopt.encoder': MeshoptEncoder,
+        });
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform( meshopt( { encoder: MeshoptEncoder, level: 'high' } ) );
+
+        if (webp === true) {
+          const textures = doc.getRoot().listTextures();
+
+          for (const texture of textures) {
+            await compressTexture( texture, {
+              targetFormat: 'webp',
+              resize: [tex_res, tex_res]
+            });
+          }
+        }
+
+        doc.createExtension( EXTMeshoptCompression )
+        .setRequired( true )
+        .setEncoderOptions({
+          method: EXTMeshoptCompression.EncoderMethod.QUANTIZE,  // or EXTMeshoptCompression.EncoderMethod.FILTER
+        });
+
+        io.registerExtensions( [ EXTMeshoptCompression ] );
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        return compressedArrayBuffer;
       }
 
       function finish_loading() {
