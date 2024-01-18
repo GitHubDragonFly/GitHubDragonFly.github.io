@@ -373,6 +373,82 @@ class Rhino3dmExporter {
 
 						}
 
+						// this textures array does get created and stores images
+						// but will not be included in the final output file due
+						// to current rhino library limitations
+
+						rhino_material.textures = [];
+
+						const texture_names = {};
+
+						function add_texture( map, map_type ) {
+
+							for ( const texture of result.textures ) {
+
+								if ( texture.uuid === map && ! texture_names[ texture.name ] ) {
+
+									texture_names[ texture.name ] = texture.name;
+
+									let tex = texture;
+
+									tex.type = map_type;
+
+									if ( texture.wrap !== undefined ) {
+
+										tex.wrapU = texture.wrap[ 0 ] === 1000 ? 0 : 1;
+										tex.wrapV = texture.wrap[ 1 ] === 1000 ? 0 : 1;
+
+									}
+
+									if ( texture.image ) {
+
+										for ( const image of result.images ) {
+
+											if ( image.uuid === texture.image ) {
+
+												tex.image = image.url;
+
+											}
+
+										}
+
+									}
+
+									rhino_material.textures.push( tex );
+
+								}
+
+							}
+
+						}
+
+						if ( material.type === 'MeshStandardMaterial' || material.type === 'MeshPhysicalMaterial' ) {
+
+							if ( material.map ) add_texture( material.map, 'PBR_BaseColor' );
+							if ( material.aoMap ) add_texture( material.aoMap, 'PBR_AmbientOcclusion' );
+							if ( material.alphaMap ) add_texture( material.alphaMap, 'PBR_Alpha' );
+							if ( material.emissiveMap ) add_texture( material.emissiveMap, 'PBR_Emission' );
+							if ( material.anisotropyMap ) add_texture( material.anisotropyMap, 'PBR_Anisotropic' );
+							if ( material.clearcoatMap ) add_texture( material.clearcoatMap, 'PBR_Clearcoat' );
+							if ( material.clearcoatNormalMap ) add_texture( material.clearcoatNormalMap, 'PBR_ClearcoatBump' );
+							if ( material.clearcoatRoughnessMap ) add_texture( material.clearcoatRoughnessMap, 'PBR_ClearcoatRoughness' );
+							if ( material.displacementMap ) add_texture( material.displacementMap, 'PBR_Displacement' );
+							if ( material.metalnessMap ) add_texture( material.metalnessMap, 'PBR_Metallic' );
+							if ( material.roughnessMap ) add_texture( material.roughnessMap, 'PBR_Roughness' );
+							if ( material.sheenColorMap ) add_texture( material.sheenColorMap, 'PBR_Sheen' );
+							if ( material.specularColorMap ) add_texture( material.specularColorMap, 'PBR_Specular' );
+							if ( material.transmissionMap ) add_texture( material.transmissionMap, 'Opacity' );
+							if ( material.thicknessMap ) add_texture( material.thicknessMap, 'PBR_Subsurface' );
+
+						} else {
+
+							if ( material.map ) add_texture( material.map, 'Diffuse' );
+							if ( material.alphaMap ) add_texture( material.alphaMap, 'Transparency' );
+							if ( material.bumpMap ) add_texture( material.bumpMap, 'Bump' );
+							if ( material.envMap ) add_texture( material.envMap, 'Emap' );
+
+						}
+
 						if ( material.color ) {
 
 							let diffuse_color = material.color.toString( 16 ).toUpperCase().padStart( 6, '0' );
@@ -381,8 +457,10 @@ class Rhino3dmExporter {
 								r: parseInt( diffuse_color.substring( 0, 2 ), 16 ),
 								g: parseInt( diffuse_color.substring( 2, 4 ), 16 ),
 								b: parseInt( diffuse_color.substring( 4 ), 16 ),
-								a: 1
+								a: 255
 							};
+
+							rhino_attributes.drawColor = rhino_material.diffuseColor;
 
 						}
 
@@ -394,7 +472,7 @@ class Rhino3dmExporter {
 								r: parseInt( emission_color.substring( 0, 2 ), 16 ),
 								g: parseInt( emission_color.substring( 2, 4 ), 16 ),
 								b: parseInt( emission_color.substring( 4 ), 16 ),
-								a: 1
+								a: 255
 							};
 
 						}
@@ -407,7 +485,7 @@ class Rhino3dmExporter {
 								r: parseInt( specular_color.substring( 0, 2 ), 16 ),
 								g: parseInt( specular_color.substring( 2, 4 ), 16 ),
 								b: parseInt( specular_color.substring( 4 ), 16 ),
-								a: 1
+								a: 255
 							};
 
 						}
@@ -488,6 +566,8 @@ class Rhino3dmExporter {
 						rhino_file.materials().add( rhino_material );
 
 						rhino_attributes.materialSource = Module.ObjectMaterialSource.MaterialFromObject;
+						rhino_attributes.castShadows = material.castShadows;
+						rhino_attributes.receiveShadows = material.receiveShadows;
 						rhino_attributes.materialIndex = rhino_count;
 
 						rhino_count ++;
