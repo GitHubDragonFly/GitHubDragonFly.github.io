@@ -1,4 +1,5 @@
 import {
+	BufferAttribute,
 	BufferGeometryLoader,
 	FileLoader,
 	Loader,
@@ -737,6 +738,17 @@ class Rhino3dmLoader extends Loader {
 				geometry = loader.parse( obj.geometry );
 
 				if ( geometry.attributes.hasOwnProperty( 'color' ) ) {
+					let colors = geometry.getAttribute( 'color' );
+					let tempColor = new Color();
+					let converted_colors = [];
+
+					for ( let i = 0, l = colors.count; i < l; i ++ ) {
+					  tempColor.fromBufferAttribute( colors, i ).convertSRGBToLinear();
+					  converted_colors.push( tempColor.r, tempColor.g, tempColor.b );
+					}
+
+					geometry.deleteAttribute( 'color' );
+					geometry.setAttribute( 'color', new BufferAttribute( new Float32Array( converted_colors ), 3, false ) );
 
 					mat.vertexColors = true;
 
