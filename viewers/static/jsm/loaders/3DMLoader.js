@@ -704,6 +704,20 @@ class Rhino3dmLoader extends Loader {
 
 				if ( geometry.attributes.hasOwnProperty( 'color' ) ) {
 
+					let colors = geometry.getAttribute( 'color' );
+					let tempColor = new Color();
+					let converted_colors = [];
+
+					for ( let i = 0, l = colors.count; i < l; i ++ ) {
+
+						tempColor.fromBufferAttribute( colors, i ).convertSRGBToLinear();
+						converted_colors.push( tempColor.r, tempColor.g, tempColor.b );
+
+					}
+
+					geometry.deleteAttribute( 'color' );
+					geometry.setAttribute( 'color', new BufferAttribute( new Float32Array( converted_colors ), 3, false ) );
+
 					material = new PointsMaterial( { vertexColors: true, sizeAttenuation: false, size: 2 } );
 
 				} else {
@@ -738,13 +752,16 @@ class Rhino3dmLoader extends Loader {
 				geometry = loader.parse( obj.geometry );
 
 				if ( geometry.attributes.hasOwnProperty( 'color' ) ) {
+
 					let colors = geometry.getAttribute( 'color' );
 					let tempColor = new Color();
 					let converted_colors = [];
 
 					for ( let i = 0, l = colors.count; i < l; i ++ ) {
-					  tempColor.fromBufferAttribute( colors, i ).convertSRGBToLinear();
-					  converted_colors.push( tempColor.r, tempColor.g, tempColor.b );
+
+						tempColor.fromBufferAttribute( colors, i ).convertSRGBToLinear();
+						converted_colors.push( tempColor.r, tempColor.g, tempColor.b );
+
 					}
 
 					geometry.deleteAttribute( 'color' );
