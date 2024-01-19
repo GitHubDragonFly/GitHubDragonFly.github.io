@@ -180,6 +180,7 @@ Number Type Converter
     - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, USDZ exporters are [three.js](https://github.com/mrdoob/three.js) based
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm)
       - Currently limited to exporting meshes without textures and points only
+      - GLTFS Viewer might produce richer colors in exported 3DM models than GLTF Viewer
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
     - ASSJSON / FBX / M3D / X3D / X exports are powered by [ASSIMPJS](https://github.com/kovacsv/assimpjs) / [ASSIMP](https://github.com/assimp/assimp)
     - Animated GIF export is based on mrdoob's [example](https://github.com/mrdoob/omggif-example) using [omggif](https://github.com/deanm/omggif) library:
