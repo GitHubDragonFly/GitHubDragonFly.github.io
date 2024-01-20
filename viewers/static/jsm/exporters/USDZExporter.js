@@ -82,7 +82,7 @@ class USDZExporter {
 
 							material.map = map;
 
-							// FBX model exports need this map flip
+							// DAE and FBX model exports need this map flip
 
 							if ( options.map_flip_required === true ) material.map.repeat.y = - 1;
 
@@ -578,15 +578,24 @@ function buildMaterial( material, textures, quickLookCompatible = false ) {
 
 	}
 
-	if ( material.opacity ) {
+	if ( material.opacity !== undefined ) {
 
-		if ( material.transmission && material.transmission > 0.0 ) {
+		if ( material.transmission !== undefined && material.transmission > 0.0 ) {
 
-			// workaround - use '0.0002' to let USDZ Loader set transmission
+			// workaround to let USDZ Loader set transmission
 			// this will approximate the models appearance
 
-			inputs.push( `${pad}float inputs:opacity = ${material.transmission}` );
-			inputs.push( `${pad}float inputs:opacityThreshold = 0.0002` );
+			if ( material.thickness !== undefined && material.thickness > 0.0 ) {
+
+				inputs.push( `${pad}float inputs:opacity = 0.25` );
+				inputs.push( `${pad}float inputs:opacityThreshold = 0.0059` );
+
+			} else {
+
+				inputs.push( `${pad}float inputs:opacity = 0.95` );
+				inputs.push( `${pad}float inputs:opacityThreshold = 0.0058` );
+
+			}
 
 			if ( material.transmissionMap ) {
 
@@ -598,12 +607,12 @@ function buildMaterial( material, textures, quickLookCompatible = false ) {
 		} else if ( material.transparent === true || material.opacity < 1.0 ) {
 
 			inputs.push( `${pad}float inputs:opacity = ${material.opacity}` );
-			inputs.push( `${pad}float inputs:opacityThreshold = 0.0001` );
+			inputs.push( `${pad}float inputs:opacityThreshold = 0.0057` );
 
 		} else if ( material.alphaMap ) {
 
 			inputs.push( `${pad}float inputs:opacity = ${material.opacity}` );
-			inputs.push( `${pad}float inputs:opacityThreshold = 0.0001` );
+			inputs.push( `${pad}float inputs:opacityThreshold = 0.0057` );
 
 			inputs.push( `${pad}float inputs:opacity.connect = </Materials/Material_${material.id}/Texture_${material.alphaMap.id}_opacity.outputs:r>` );
 			samplers.push( buildTexture( material.alphaMap, 'opacity' ) );
@@ -652,7 +661,7 @@ function buildMaterial( material, textures, quickLookCompatible = false ) {
 
 	}
 
-	if ( material.roughness && material.roughness > 0.0 ) {
+	if ( material.roughness !== undefined ) {
 
 		inputs.push( `${pad}float inputs:roughness = ${material.roughness}` );
 
@@ -665,7 +674,7 @@ function buildMaterial( material, textures, quickLookCompatible = false ) {
 
 	}
 
-	if ( material.metalness && material.metalness > 0.0 ) {
+	if ( material.metalness !== undefined ) {
 
 		inputs.push( `${pad}float inputs:metallic = ${material.metalness}` );
 
@@ -693,7 +702,7 @@ function buildMaterial( material, textures, quickLookCompatible = false ) {
 
 		}
 
-		if ( material.clearcoat && material.clearcoat > 0.0 ) {
+		if ( material.clearcoat !== undefined && material.clearcoat > 0.0 ) {
 
 			inputs.push( `${pad}float inputs:clearcoat = ${material.clearcoat}` );
 
@@ -706,7 +715,7 @@ function buildMaterial( material, textures, quickLookCompatible = false ) {
 
 		}
 
-		if ( material.clearcoatRoughness && material.clearcoatRoughness > 0.0 ) {
+		if ( material.clearcoatRoughness !== undefined && material.clearcoatRoughness > 0.0 ) {
 
 			inputs.push( `${pad}float inputs:clearcoatRoughness = ${material.clearcoatRoughness}` );
 
@@ -719,7 +728,7 @@ function buildMaterial( material, textures, quickLookCompatible = false ) {
 
 		}
 
-		if ( material.ior && material.ior >= 1.0 ) inputs.push( `${pad}float inputs:ior = ${material.ior}` );
+		if ( material.ior !== undefined && material.ior >= 1.0 ) inputs.push( `${pad}float inputs:ior = ${material.ior}` );
 
 	}
 
