@@ -14,6 +14,7 @@ import {
 	Object3D,
 	Vector2,
 } from "three";
+
 import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/fflate.module.js";
 
 class USDAParser {
@@ -490,7 +491,7 @@ class USDZLoader extends Loader {
 								// set arbitrary opacity and transparency
 
 								material.transparent = true;
-								material.opacity = 0.95;
+								material.opacity = 0.25;
 
 								// set transmissionMap
 
