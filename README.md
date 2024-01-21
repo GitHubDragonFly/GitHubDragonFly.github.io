@@ -80,10 +80,11 @@ Number Type Converter
 
 - Notes about GLTF viewers:
   - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component:
-    - Local loading currently only supports self-contained models, either embedded GLTF or binary GLB
-    - Support for USDZ was also added but is untested
+    - Supports both local (blob) and remote URL loading
+    - Local loading only supports self-contained models (embedded GLTF or binary GLB)
     - The viewer supports loading of multiple models, switchable with the viewer's `M` button
     - Error handling narrows down to showing the `ERROR!` message so check the console output for details 
+    - Support for USDZ was also added but is untested
   - `GLTF Viewer` is for v2.0 glTF files and is currently using r160 of three.js:
     - doesn't support obsolete `pbrSpecularGlossiness`
     - supports currently arbitrary `KHR_animation_pointer`
