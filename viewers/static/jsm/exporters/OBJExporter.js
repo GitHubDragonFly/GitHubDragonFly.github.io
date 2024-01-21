@@ -4,6 +4,7 @@ import {
 	Vector2,
 	Vector3
 } from 'three';
+
 import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/utils/TextureUtils.js";
 
 class OBJExporter {
@@ -1749,7 +1750,7 @@ class OBJExporter {
 			}
 
 			// Get the base64 encoded data
-			const base64data = canvas.toDataURL( `image/${ext}`, 1 ).replace( /^data:image\/(png|jpg);base64,/, '' );
+			const base64data = canvas.toDataURL( `image/${ext}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
 
 			// Convert to a uint8 array
 			return base64ToBuffer( base64data );
