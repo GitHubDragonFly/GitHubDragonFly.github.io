@@ -587,11 +587,11 @@ class OBJExporter {
 							mtlOutput += 'Pcn ' + mat.clearcoatNormalScale.x + ' ' + ( vertexTangents === true ? mat.clearcoatNormalScale.y *= -1 : mat.clearcoatNormalScale.y ) + '\n';
 						}
 					}
-					if ( mat.lightMapIntensity && mat.lightMapIntensity !== 1 ) mtlOutput += 'Pli ' + mat.lightMapIntensity + '\n';
-					if ( mat.emissiveIntensity && mat.emissiveIntensity !== 1 ) mtlOutput += 'Pe ' + mat.emissiveIntensity + '\n';
-					if ( mat.anisotropy ) {
+					if ( mat.lightMapIntensity !== undefined && mat.lightMapIntensity !== 1 ) mtlOutput += 'Pli ' + mat.lightMapIntensity + '\n';
+					if ( mat.emissiveIntensity !== undefined && mat.emissiveIntensity !== 1 ) mtlOutput += 'Pe ' + mat.emissiveIntensity + '\n';
+					if ( mat.anisotropy && mat.anisotropy > 0 ) {
 						mtlOutput += 'Pa ' + mat.anisotropy + '\n';
-						if ( mat.anisotropyRotation && mat.anisotropyRotation !== 0 ) mtlOutput += 'Par ' + mat.anisotropyRotation + '\n';
+						if ( mat.anisotropyRotation !== undefined ) mtlOutput += 'Par ' + mat.anisotropyRotation + '\n';
 					}
 					if ( mat.attenuationDistance && mat.attenuationDistance !== Infinity ) {
 						mtlOutput += 'Pac ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
@@ -599,7 +599,7 @@ class OBJExporter {
 					}
 					if ( mat.iridescence && mat.iridescence > 0 ) {
 						mtlOutput += 'Pi ' + mat.iridescence + '\n';
-						if ( mat.iridescenceIOR && mat.iridescenceIOR >= 1 ) mtlOutput += 'Pii ' + Math.min( 2.333, mat.iridescenceIOR ) + '\n';
+						if ( mat.iridescenceIOR && mat.iridescenceIOR >= 1 ) mtlOutput += 'Pii ' + mat.iridescenceIOR + '\n';
 						if ( mat.iridescenceThicknessRange ) {
 							mtlOutput += 'Pitx ' + mat.iridescenceThicknessRange[ 0 ] + '\n';
 							mtlOutput += 'Pity ' + mat.iridescenceThicknessRange[ 1 ] + '\n';
@@ -608,11 +608,11 @@ class OBJExporter {
 					if ( mat.sheen && mat.sheen > 0 ) {
 						mtlOutput += 'Pbr_ps ' + mat.sheen + '\n';
 						if ( mat.sheenColor ) mtlOutput += 'Ps ' + mat.sheenColor.r + ' ' + mat.sheenColor.g + ' ' + mat.sheenColor.b + '\n';
-						if ( mat.sheenRoughness ) mtlOutput += 'Psr ' + mat.sheenRoughness + '\n';
+						if ( mat.sheenRoughness !== undefined ) mtlOutput += 'Psr ' + mat.sheenRoughness + '\n';
 					}
 					if ( mat.specularColor || mat.specularIntensity || mat.specularColorMap || mat.specularIntensityMap ) {
 						if ( mat.specularColor ) mtlOutput += 'Psp ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
-						if ( mat.specularIntensity ) mtlOutput += 'Psi ' + mat.specularIntensity + '\n';
+						if ( mat.specularIntensity !== undefined ) mtlOutput += 'Psi ' + mat.specularIntensity + '\n';
 					}
 					if ( mat.thickness && mat.thickness > 0 ) mtlOutput += 'Pth ' + mat.thickness + '\n';
 					if ( mat.transmission && mat.transmission > 0 ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
