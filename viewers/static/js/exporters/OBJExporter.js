@@ -4,7 +4,7 @@
 
 	class OBJExporter {
 
-		parse( object, filename = 'model' ) {
+		parse( object, filename = 'model', onDone ) {
 
 			let output = '';
 			let indexVertex = 0;
@@ -15,7 +15,6 @@
 			let points_count = 0;
 			let materials = {};
 			let material_names = [];
-			let material_colors = {};
 			let vertexTangents = false;
 			const vertex = new THREE.Vector3();
 			const color = new THREE.Color();
@@ -34,18 +33,18 @@
 
 				if ( geometry.isBufferGeometry !== true ) {
 
-					throw new Error( 'THREE.OBJExporter: Geometry is not of type THREE.BufferGeometry.' );
+					throw new Error( 'THREE.OBJExporter: Geometry is not THREE.BufferGeometry.' );
 
 				}
 
 				// shortcuts
 				vertexTangents = geometry.attributes.tangent !== undefined;
+				const groups = geometry.groups;
 				const vertex_colors = geometry.getAttribute( 'color' );
 				const vertices = geometry.getAttribute( 'position' );
 				const normals = geometry.getAttribute( 'normal' );
 				const uvs = geometry.getAttribute( 'uv' );
 				const indices = geometry.getIndex();
-				const groups = geometry.groups;
 
 				// name of the mesh object
 				if ( mesh.name === '' ) {
@@ -79,33 +78,33 @@
 
 					let temp_name = mesh.material.name;
 
-					if ( material_names.includes( temp_name ) === false || material_colors[ temp_name ] !== mesh.material.color ) {
+					if ( material_names.includes( temp_name ) === false ) {
 
-						if ( material_colors[ temp_name ] !== mesh.material.color ) mesh.material.name = temp_name;
-
-						material_colors[ temp_name ] = mesh.material.color;
-
-					}
-
-					if ( ! materials[ temp_name ] || ( materials[ temp_name ] && materials[ temp_name ] !== mesh.material ) ) {
-
-						if ( materials[ temp_name ] && materials[ temp_name ] !== mesh.material ) {
-
-							temp_name = mesh.material.name + '_' + mesh_count;
-							mesh.material.name = temp_name;
-							output += 'usemtl ' + temp_name + '\n';
-							materials[ temp_name ] = mesh.material;
-
-						} else {
-
-							output += 'usemtl ' + mesh.material.name + '\n';
-							materials[ mesh.material.name ] = mesh.material;
-
-						}
+						material_names.push( temp_name );
+						materials[ temp_name ] = mesh.material;
 
 					}
 
-					material_names.push( temp_name );
+					if ( ! materials[ temp_name ] ) {
+
+						materials[ temp_name ] = mesh.material;
+						output += 'usemtl ' + temp_name + '\n';
+
+					} else if ( materials[ temp_name ] !== mesh.material ) {
+
+						temp_name = mesh.material.name + '_' + mesh_count;
+						mesh.material.name = temp_name;
+
+						output += 'usemtl ' + temp_name + '\n';
+
+						materials[ temp_name ] = mesh.material;
+						material_names.push( temp_name );
+
+					} else {
+
+						output += 'usemtl ' + temp_name + '\n';
+
+					}
 
 				} else if ( mesh.material && Array.isArray( mesh.material ) ) {
 
@@ -301,38 +300,12 @@
 				// shortcuts
 				const vertices = geometry.getAttribute( 'position' );
 
+				// name of the line object
 				output += 'o ' + line.name + '\n';
 
 				if ( line.material ) {
 
-					if ( Array.isArray( line.material ) ) {
-
-						line.material.forEach( mtl => {
-
-							if ( mtl.name ) {
-
-								if ( mtl.name === '' ) {
-
-									mtl.name = 'line_material_' + line_count;
-
-								} else {
-
-									mtl.name = mtl.name.replaceAll( '#', '' );
-									mtl.name = mtl.name.replaceAll( ' ', '_' );
-
-								}
-
-							} else {
-
-								mtl[ 'name' ] = 'line_material_' + line_count;
-
-							}
-
-							output += 'usemtl ' + mtl.name + '\n';
-
-						});
-
-					} else {
+					if ( line.material ) {
 
 						if ( line.material.name ) {
 
@@ -354,6 +327,9 @@
 						}
 
 						output += 'usemtl ' + line.material.name + '\n';
+						materials[ line.material.name ] = line.material;
+
+						line_count += 1;
 
 					}
 
@@ -536,7 +512,6 @@
 				let count = 1;
 
 				const ext = 'png';
-
 				const image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJP', '.PJPEG', '.BMP', '.GIF', '.SVG', '.WEBP' ];
 
 				Object.keys( materials ).forEach( ( key ) => {
@@ -1717,11 +1692,31 @@
 
 				}
 
-				return { obj: output, mtl: mtlOutput, tex: textures };
+				Promise.all( textures ).then( () => {
+
+					if ( typeof onDone === 'function' ) {
+
+						onDone( { obj: output, mtl: mtlOutput, tex: textures } );
+
+					} else {
+
+						return { obj: output, mtl: mtlOutput, tex: textures };
+
+					}
+
+				});
 
 			} else {
 
-				return { obj: output };
+				if ( typeof onDone === 'function' ) {
+
+					onDone( { obj: output } );
+
+				} else {
+
+					return { obj: output };
+
+				}
 
 			}
 
@@ -1736,7 +1731,7 @@
 				canvas.width = image.width;
 				canvas.height = image.height;
 
-				// this seems to work fine for exporting TGA images as PNG
+				// this seems to also work fine for exporting TGA images as PNG
 				if ( image.data && image.data.constructor === Uint8Array ) {
 
 					let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
