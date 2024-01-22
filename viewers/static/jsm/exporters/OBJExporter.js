@@ -4,7 +4,6 @@ import {
 	Vector2,
 	Vector3
 } from 'three';
-
 import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/utils/TextureUtils.js";
 
 class OBJExporter {
@@ -639,6 +638,9 @@ class OBJExporter {
 							const yo = mat.map.offset.y;
 							const ws = mat.map.wrapS;
 							const wt = mat.map.wrapT;
+							const xc = mat.map.center.x;
+							const yc = mat.map.center.y;
+							const rot = mat.map.rotation;
 
 							if ( map_uuids.includes( mat.map.uuid ) === false ) {
 
@@ -651,11 +653,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Kd -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Kd -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Kd -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.map.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Kd -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.map.uuid ] + '.png' + '\n';
 
 							}
 
@@ -681,6 +683,9 @@ class OBJExporter {
 							const yo = mat.specularMap.offset.y;
 							const ws = mat.specularMap.wrapS;
 							const wt = mat.specularMap.wrapT;
+							const xc = mat.specularMap.center.x;
+							const yc = mat.specularMap.center.y;
+							const rot = mat.specularMap.rotation;
 
 							if ( map_uuids.includes( mat.specularMap.uuid ) === false ) {
 
@@ -695,11 +700,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Ks -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Ks -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Ks -s ' + xs + ' ' + ys  + ' 1'+ ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.specularMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Ks -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys  + ' 1'+ ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.specularMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -725,6 +730,9 @@ class OBJExporter {
 							const yo = mat.emissiveMap.offset.y;
 							const ws = mat.emissiveMap.wrapS;
 							const wt = mat.emissiveMap.wrapT;
+							const xc = mat.emissiveMap.center.x;
+							const yc = mat.emissiveMap.center.y;
+							const rot = mat.emissiveMap.rotation;
 
 							if ( map_uuids.includes( mat.emissiveMap.uuid ) === false ) {
 
@@ -739,11 +747,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Ke -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Ke -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Ke -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.emissiveMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Ke -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.emissiveMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -769,6 +777,9 @@ class OBJExporter {
 							const yo = mat.bumpMap.offset.y;
 							const ws = mat.bumpMap.wrapS;
 							const wt = mat.bumpMap.wrapT;
+							const xc = mat.bumpMap.center.x;
+							const yc = mat.bumpMap.center.y;
+							const rot = mat.bumpMap.rotation;
 
 							if ( map_uuids.includes( mat.bumpMap.uuid ) === false ) {
 
@@ -785,11 +796,11 @@ class OBJExporter {
 
 								if ( mat.bumpScale === 1 ) {
 
-									mtlOutput += 'map_bump -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_bump -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								}
 
@@ -797,11 +808,11 @@ class OBJExporter {
 
 								if ( mat.bumpScale === 1 ) {
 
-									mtlOutput += 'map_bump -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_bump -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -829,6 +840,9 @@ class OBJExporter {
 							const yo = mat.lightMap.offset.y;
 							const ws = mat.lightMap.wrapS;
 							const wt = mat.lightMap.wrapT;
+							const xc = mat.lightMap.center.x;
+							const yc = mat.lightMap.center.y;
+							const rot = mat.lightMap.rotation;
 
 							if ( map_uuids.includes( mat.lightMap.uuid ) === false ) {
 
@@ -843,11 +857,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'Pbr_pl_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'Pbr_pl_map -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'Pbr_pl_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.lightMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'Pbr_pl_map -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.lightMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -875,6 +889,9 @@ class OBJExporter {
 								const yo = mat.metalnessMap.offset.y;
 								const ws = mat.metalnessMap.wrapS;
 								const wt = mat.metalnessMap.wrapT;
+								const xc = mat.metalnessMap.center.x;
+								const yc = mat.metalnessMap.center.y;
+								const rot = mat.metalnessMap.rotation;
 
 								if ( map_uuids.includes( mat.metalnessMap.uuid ) === false ) {
 
@@ -891,12 +908,12 @@ class OBJExporter {
 
 									if ( mat.roughnessMap && mat.roughnessMap === mat.metalnessMap ) {
 
-										mtlOutput += 'map_Px -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+										mtlOutput += 'map_Px -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 										map_Px_set = true;
 
 									} else {
 
-										mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+										mtlOutput += 'map_Pm -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 									}
 
@@ -904,12 +921,12 @@ class OBJExporter {
 
 									if ( mat.roughnessMap && mat.roughnessMap === mat.metalnessMap ) {
 
-										mtlOutput += 'map_Px -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
+										mtlOutput += 'map_Px -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
 										map_Px_set = true;
 
 									} else {
 
-										mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
+										mtlOutput += 'map_Pm -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
 
 									}
 
@@ -941,6 +958,9 @@ class OBJExporter {
 								const yo = mat.roughnessMap.offset.y;
 								const ws = mat.roughnessMap.wrapS;
 								const wt = mat.roughnessMap.wrapT;
+								const xc = mat.roughnessMap.center.x;
+								const yc = mat.roughnessMap.center.y;
+								const rot = mat.roughnessMap.rotation;
 
 								if ( map_uuids.includes( mat.roughnessMap.uuid ) === false ) {
 
@@ -957,12 +977,12 @@ class OBJExporter {
 
 									if ( mat.metalnessMap && mat.metalnessMap === mat.roughnessMap ) {
 
-										mtlOutput += 'map_Px -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+										mtlOutput += 'map_Px -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 										map_Px_set = true;
 
 									} else {
 
-										mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+										mtlOutput += 'map_Pr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 									}
 
@@ -970,12 +990,12 @@ class OBJExporter {
 
 									if ( mat.metalnessMap && mat.metalnessMap === mat.roughnessMap ) {
 
-										mtlOutput += 'map_Px -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
+										mtlOutput += 'map_Px -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
 										map_Px_set = true;
 
 									} else {
 
-										mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
+										mtlOutput += 'map_Pr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
 
 									}
 
@@ -1005,6 +1025,9 @@ class OBJExporter {
 							const yo = mat.displacementMap.offset.y;
 							const ws = mat.displacementMap.wrapS;
 							const wt = mat.displacementMap.wrapT;
+							const xc = mat.displacementMap.center.x;
+							const yc = mat.displacementMap.center.y;
+							const rot = mat.displacementMap.rotation;
 
 							if ( map_uuids.includes( mat.displacementMap.uuid ) === false ) {
 
@@ -1019,11 +1042,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'disp -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'disp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'disp -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'disp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1049,6 +1072,9 @@ class OBJExporter {
 							const yo = mat.normalMap.offset.y;
 							const ws = mat.normalMap.wrapS;
 							const wt = mat.normalMap.wrapT;
+							const xc = mat.normalMap.center.x;
+							const yc = mat.normalMap.center.y;
+							const rot = mat.normalMap.rotation;
 
 							if ( map_uuids.includes( mat.normalMap.uuid ) === false ) {
 
@@ -1063,11 +1089,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'norm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'norm -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'norm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.normalMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'norm -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.normalMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1093,6 +1119,9 @@ class OBJExporter {
 							const yo = mat.alphaMap.offset.y;
 							const ws = mat.alphaMap.wrapS;
 							const wt = mat.alphaMap.wrapT;
+							const xc = mat.alphaMap.center.x;
+							const yc = mat.alphaMap.center.y;
+							const rot = mat.alphaMap.rotation;
 
 							if ( map_uuids.includes( mat.alphaMap.uuid ) === false ) {
 
@@ -1107,11 +1136,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_d -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_d -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_d -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.alphaMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_d -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.alphaMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1137,6 +1166,9 @@ class OBJExporter {
 							const yo = mat.aoMap.offset.y;
 							const ws = mat.aoMap.wrapS;
 							const wt = mat.aoMap.wrapT;
+							const xc = mat.aoMap.center.x;
+							const yc = mat.aoMap.center.y;
+							const rot = mat.aoMap.rotation;
 
 							if ( map_uuids.includes( mat.aoMap.uuid ) === false ) {
 
@@ -1151,11 +1183,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Ka -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Ka -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Ka -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.aoMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Ka -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.aoMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1181,6 +1213,9 @@ class OBJExporter {
 							const yo = mat.anisotropyMap.offset.y;
 							const ws = mat.anisotropyMap.wrapS;
 							const wt = mat.anisotropyMap.wrapT;
+							const xc = mat.anisotropyMap.center.x;
+							const yc = mat.anisotropyMap.center.y;
+							const rot = mat.anisotropyMap.rotation;
 
 							if ( map_uuids.includes( mat.anisotropyMap.uuid ) === false ) {
 
@@ -1195,11 +1230,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Pa -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Pa -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Pa -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.anisotropyMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Pa -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.anisotropyMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1225,6 +1260,9 @@ class OBJExporter {
 							const yo = mat.clearcoatMap.offset.y;
 							const ws = mat.clearcoatMap.wrapS;
 							const wt = mat.clearcoatMap.wrapT;
+							const xc = mat.clearcoatMap.center.x;
+							const yc = mat.clearcoatMap.center.y;
+							const rot = mat.clearcoatMap.rotation;
 
 							if ( map_uuids.includes( mat.clearcoatMap.uuid ) === false ) {
 
@@ -1239,11 +1277,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Pcc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Pcc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Pcc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Pcc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1269,6 +1307,9 @@ class OBJExporter {
 							const yo = mat.clearcoatNormalMap.offset.y;
 							const ws = mat.clearcoatNormalMap.wrapS;
 							const wt = mat.clearcoatNormalMap.wrapT;
+							const xc = mat.clearcoatNormalMap.center.x;
+							const yc = mat.clearcoatNormalMap.center.y;
+							const rot = mat.clearcoatNormalMap.rotation;
 
 							if ( map_uuids.includes( mat.clearcoatNormalMap.uuid ) === false ) {
 
@@ -1283,11 +1324,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Pcn -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Pcn -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Pcn -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Pcn -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1313,6 +1354,9 @@ class OBJExporter {
 							const yo = mat.clearcoatRoughnessMap.offset.y;
 							const ws = mat.clearcoatRoughnessMap.wrapS;
 							const wt = mat.clearcoatRoughnessMap.wrapT;
+							const xc = mat.clearcoatRoughnessMap.center.x;
+							const yc = mat.clearcoatRoughnessMap.center.y;
+							const rot = mat.clearcoatRoughnessMap.rotation;
 
 							if ( map_uuids.includes( mat.clearcoatRoughnessMap.uuid ) === false ) {
 
@@ -1327,11 +1371,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Pcr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Pcr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Pcr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Pcr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1357,6 +1401,9 @@ class OBJExporter {
 							const yo = mat.iridescenceMap.offset.y;
 							const ws = mat.iridescenceMap.wrapS;
 							const wt = mat.iridescenceMap.wrapT;
+							const xc = mat.iridescenceMap.center.x;
+							const yc = mat.iridescenceMap.center.y;
+							const rot = mat.iridescenceMap.rotation;
 
 							if ( map_uuids.includes( mat.iridescenceMap.uuid ) === false ) {
 
@@ -1371,11 +1418,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Pi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Pi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Pi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.iridescenceMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Pi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.iridescenceMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1401,6 +1448,9 @@ class OBJExporter {
 							const yo = mat.iridescenceThicknessMap.offset.y;
 							const ws = mat.iridescenceThicknessMap.wrapS;
 							const wt = mat.iridescenceThicknessMap.wrapT;
+							const xc = mat.iridescenceThicknessMap.center.x;
+							const yc = mat.iridescenceThicknessMap.center.y;
+							const rot = mat.iridescenceThicknessMap.rotation;
 
 							if ( map_uuids.includes( mat.iridescenceThicknessMap.uuid ) === false ) {
 
@@ -1415,11 +1465,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Pit -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Pit -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Pit -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.iridescenceThicknessMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Pit -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.iridescenceThicknessMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1445,6 +1495,9 @@ class OBJExporter {
 							const yo = mat.sheenColorMap.offset.y;
 							const ws = mat.sheenColorMap.wrapS;
 							const wt = mat.sheenColorMap.wrapT;
+							const xc = mat.sheenColorMap.center.x;
+							const yc = mat.sheenColorMap.center.y;
+							const rot = mat.sheenColorMap.rotation;
 
 							if ( map_uuids.includes( mat.sheenColorMap.uuid ) === false ) {
 
@@ -1459,11 +1512,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Psc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Psc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Psc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.sheenColorMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Psc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.sheenColorMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1489,6 +1542,9 @@ class OBJExporter {
 							const yo = mat.sheenRoughnessMap.offset.y;
 							const ws = mat.sheenRoughnessMap.wrapS;
 							const wt = mat.sheenRoughnessMap.wrapT;
+							const xc = mat.sheenRoughnessMap.center.x;
+							const yc = mat.sheenRoughnessMap.center.y;
+							const rot = mat.sheenRoughnessMap.rotation;
 
 							if ( map_uuids.includes( mat.sheenRoughnessMap.uuid ) === false ) {
 
@@ -1503,11 +1559,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Psr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Psr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Psr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.sheenRoughnessMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Psr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.sheenRoughnessMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1533,6 +1589,9 @@ class OBJExporter {
 							const yo = mat.specularIntensityMap.offset.y;
 							const ws = mat.specularIntensityMap.wrapS;
 							const wt = mat.specularIntensityMap.wrapT;
+							const xc = mat.specularIntensityMap.center.x;
+							const yc = mat.specularIntensityMap.center.y;
+							const rot = mat.specularIntensityMap.rotation;
 
 							if ( map_uuids.includes( mat.specularIntensityMap.uuid ) === false ) {
 
@@ -1547,11 +1606,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Psi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Psi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Psi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Psi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1577,6 +1636,9 @@ class OBJExporter {
 							const yo = mat.specularColorMap.offset.y;
 							const ws = mat.specularColorMap.wrapS;
 							const wt = mat.specularColorMap.wrapT;
+							const xc = mat.specularColorMap.center.x;
+							const yc = mat.specularColorMap.center.y;
+							const rot = mat.specularColorMap.rotation;
 
 							if ( map_uuids.includes( mat.specularColorMap.uuid ) === false ) {
 
@@ -1591,11 +1653,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Psp -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Psp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Psp -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Psp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1621,6 +1683,9 @@ class OBJExporter {
 							const yo = mat.thicknessMap.offset.y;
 							const ws = mat.thicknessMap.wrapS;
 							const wt = mat.thicknessMap.wrapT;
+							const xc = mat.thicknessMap.center.x;
+							const yc = mat.thicknessMap.center.y;
+							const rot = mat.thicknessMap.rotation;
 
 							if ( map_uuids.includes( mat.thicknessMap.uuid ) === false ) {
 
@@ -1635,11 +1700,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Pth -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Pth -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Pth -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Pth -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
 
 							}
 
@@ -1665,6 +1730,9 @@ class OBJExporter {
 							const yo = mat.transmissionMap.offset.y;
 							const ws = mat.transmissionMap.wrapS;
 							const wt = mat.transmissionMap.wrapT;
+							const xc = mat.transmissionMap.center.x;
+							const yc = mat.transmissionMap.center.y;
+							const rot = mat.transmissionMap.rotation;
 
 							if ( map_uuids.includes( mat.transmissionMap.uuid ) === false ) {
 
@@ -1679,11 +1747,11 @@ class OBJExporter {
 									data: imageToData( map_to_process.image, ext )
 								});
 
-								mtlOutput += 'map_Ptr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'map_Ptr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
-								mtlOutput += 'map_Ptr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'map_Ptr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
 
 							}
 
