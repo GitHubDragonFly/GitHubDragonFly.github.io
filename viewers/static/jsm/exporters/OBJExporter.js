@@ -613,7 +613,8 @@ class OBJExporter {
 						if ( mat.specularColor ) mtlOutput += 'Psp ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
 						if ( mat.specularIntensity !== undefined ) mtlOutput += 'Psi ' + mat.specularIntensity + '\n';
 					}
-					if ( mat.thickness && mat.thickness > 0 ) mtlOutput += 'Pth ' + mat.thickness + '\n';
+					// thickness value currently appears to need a certain correction, not sure why
+					if ( mat.thickness && mat.thickness > 0 ) mtlOutput += 'Pth ' + ( mat.thickness * 200 ) + '\n';
 					if ( mat.transmission && mat.transmission > 0 ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
 
 					if ( mat.reflectivity !== undefined && mat.reflectivity > 0 ) mtlOutput += 'Prf ' + mat.reflectivity + '\n';
