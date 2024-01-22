@@ -8,7 +8,7 @@ import {
 	MeshPhongMaterial,
 	MeshPhysicalMaterial,
 	RepeatWrapping,
-	SRGBColorSpace,
+	NoColorSpace,
 	TextureLoader,
 	Vector2
 } from "three";
@@ -361,15 +361,14 @@ class MaterialCreator {
 
 			map.repeat.copy( texParams.scale );
 			map.offset.copy( texParams.offset );
+			map.center.copy( texParams.center );
+
+			map.rotation = texParams.rotation;
 
 			map.wrapS = texParams.wrapS; // map.wrapS = scope.wrap;
 			map.wrapT = texParams.wrapT; // map.wrapT = scope.wrap;
 
-			if ( mapType === 'map' || mapType === 'emissiveMap' ) {
-
-				map.colorSpace = SRGBColorSpace;
-
-			}
+			map.colorSpace = NoColorSpace;
 
 			params[ mapType ] = map;
 
@@ -834,8 +833,10 @@ class MaterialCreator {
 
 			scale: new Vector2( 1, 1 ),
 			offset: new Vector2( 0, 0 ),
+			center: new Vector2( 0, 0 ),
 			wrapS: RepeatWrapping,
-			wrapT: RepeatWrapping
+			wrapT: RepeatWrapping,
+			rotation: 0
 
 		 };
 
@@ -848,6 +849,24 @@ class MaterialCreator {
 
 			texParams.bumpScale = parseFloat( items[ pos + 1 ] );
 			items.splice( pos, 2 );
+
+		}
+
+		pos = items.indexOf( '-r' );
+
+		if ( pos >= 0 ) {
+
+			texParams.rotation = parseFloat( items[ pos + 1 ] );
+			items.splice( pos, 2 ); // we expect 2 parameters here!
+
+		}
+
+		pos = items.indexOf( '-c' );
+
+		if ( pos >= 0 ) {
+
+			texParams.center.set( parseFloat( items[ pos + 1 ] ), parseFloat( items[ pos + 2 ] ) );
+			items.splice( pos, 3 ); // we expect 3 parameters here!
 
 		}
 
