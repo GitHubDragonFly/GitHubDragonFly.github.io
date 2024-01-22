@@ -1,7 +1,7 @@
 # GitHubDragonFly.github.io
 GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 
-Designed to serve as a hub with links to repositories, Number Type Converter and FREE online browser-based [three.js](https://threejs.org)-based `3D Model` and `Texture` viewers.
+Designed to serve as a hub with links to repositories, Number Type Converter and FREE online in-browser [three.js](https://threejs.org) based `3D Model` and `Texture` viewers.
 
 Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations, see screenshots below for different appearances of the main menu page.
 
@@ -33,7 +33,7 @@ Main Menu Page (mobile)
 
 # Notes about Number Type Converter
 
-- Appears to be fully functional for binary, hex, octal, signed and unsigned 8 / 16 / 32 / 64 / 128-bit integers and 32 / 64-bit floating-point numbers
+- Appears to be fully functional for conversion between binary, hex, octal, signed and unsigned 8 / 16 / 32 / 64 / 128-bit integers and 32 / 64-bit floating-point numbers
 - This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/Number_Type_Converter) so check its description
 - An open mind and some knowledge of number systems, hopefully binary, will help understand the displayed values
 - Not all numbers might be easily visible on mobile devices so use only when needed
