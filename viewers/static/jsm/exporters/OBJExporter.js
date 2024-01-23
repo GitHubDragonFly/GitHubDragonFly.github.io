@@ -613,8 +613,24 @@ class OBJExporter {
 						if ( mat.specularColor ) mtlOutput += 'Psp ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
 						if ( mat.specularIntensity !== undefined ) mtlOutput += 'Psi ' + mat.specularIntensity + '\n';
 					}
-					// thickness value currently appears to need a certain correction, not sure why
-					if ( mat.thickness && mat.thickness > 0 ) mtlOutput += 'Pth ' + ( mat.thickness * 200 ) + '\n';
+					// thickness value currently appears to need a certain correction depending on the transmission and its own value
+					// this workaround just brings the look of all Khronos examples with thickness rather close to GLTF Viewer's
+					// not sure why this would be required in the first place
+					if ( mat.thickness && mat.thickness > 0 ) {
+						if ( mat.transmission && mat.transmission > 0 ) {
+							if ( mat.thickness < 1 ) {
+								mtlOutput += 'Pth ' + ( mat.thickness * 140 ) + '\n';
+							} else {
+								mtlOutput += 'Pth ' + ( mat.thickness * 11 ) + '\n';
+							}
+						} else {
+							if ( mat.thickness < 1 ) {
+								mtlOutput += 'Pth ' + ( mat.thickness * 210 ) + '\n';
+							} else {
+								mtlOutput += 'Pth ' + ( mat.thickness * 17 ) + '\n';
+							}
+						}
+					}
 					if ( mat.transmission && mat.transmission > 0 ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
 
 					if ( mat.reflectivity !== undefined && mat.reflectivity > 0 ) mtlOutput += 'Prf ' + mat.reflectivity + '\n';
