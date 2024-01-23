@@ -26,6 +26,7 @@ import {
 	LinearFilter,
 	LinearMipmapLinearFilter,
 	LinearMipmapNearestFilter,
+	LinearSRGBColorSpace,
 	Loader,
 	LoaderUtils,
 	Material,
@@ -63,6 +64,7 @@ import {
 	VectorKeyframeTrack,
 	SRGBColorSpace
 } from "three";
+
 import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/DDSLoader.js";
 import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/TGALoader.js";
 import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/EXRLoader.js";
@@ -556,9 +558,7 @@ class GLTFLightsExtension {
 
 			const nodeDef = nodeDefs[ nodeIndex ];
 
-			if ( nodeDef.extensions
-					&& nodeDef.extensions[ this.name ]
-					&& nodeDef.extensions[ this.name ].light !== undefined ) {
+			if ( nodeDef.extensions && nodeDef.extensions[ this.name ] && nodeDef.extensions[ this.name ].light !== undefined ) {
 
 				parser._addNodeRef( this.cache, nodeDef.extensions[ this.name ].light );
 
@@ -584,9 +584,11 @@ class GLTFLightsExtension {
 
 		const color = new Color( 0xffffff );
 
-		if ( lightDef.color !== undefined ) color.fromArray( lightDef.color );
+		if ( lightDef.color !== undefined ) color.setRGB( lightDef.color[ 0 ], lightDef.color[ 1 ], lightDef.color[ 2 ], LinearSRGBColorSpace );
 
 		const range = lightDef.range !== undefined ? lightDef.range : 0;
+
+		console.log('lightDef ', lightDef);
 
 		switch ( lightDef.type ) {
 
@@ -705,10 +707,10 @@ class GLTFMaterialsUnlitExtension {
 
 			if ( Array.isArray( metallicRoughness.baseColorFactor ) ) {
 
-				const array = metallicRoughness.baseColorFactor;
+				const baseColorFactor_array = metallicRoughness.baseColorFactor;
 
-				materialParams.color.fromArray( array );
-				materialParams.opacity = array[ 3 ];
+				materialParams.color.setRGB( baseColorFactor_array[ 0 ], baseColorFactor_array[ 1 ], baseColorFactor_array[ 2 ], LinearSRGBColorSpace );
+				materialParams.opacity = baseColorFactor_array[ 3 ];
 
 			}
 
@@ -815,7 +817,7 @@ class GLTFMaterialsClearcoatExtension {
 
 		if ( extension.clearcoatTexture !== undefined ) {
 
-			pending.push( parser.assignTexture( materialParams, 'clearcoatMap', extension.clearcoatTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'clearcoatMap', extension.clearcoatTexture, LinearSRGBColorSpace ) );
 
 		}
 
@@ -827,13 +829,13 @@ class GLTFMaterialsClearcoatExtension {
 
 		if ( extension.clearcoatRoughnessTexture !== undefined ) {
 
-			pending.push( parser.assignTexture( materialParams, 'clearcoatRoughnessMap', extension.clearcoatRoughnessTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'clearcoatRoughnessMap', extension.clearcoatRoughnessTexture, LinearSRGBColorSpace ) );
 
 		}
 
 		if ( extension.clearcoatNormalTexture !== undefined ) {
 
-			pending.push( parser.assignTexture( materialParams, 'clearcoatNormalMap', extension.clearcoatNormalTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'clearcoatNormalMap', extension.clearcoatNormalTexture, LinearSRGBColorSpace ) );
 
 			if ( extension.clearcoatNormalTexture.scale !== undefined ) {
 
@@ -1479,7 +1481,7 @@ class GLTFMaterialsIridescenceExtension {
 
 		if ( extension.iridescenceTexture !== undefined ) {
 
-			pending.push( parser.assignTexture( materialParams, 'iridescenceMap', extension.iridescenceTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'iridescenceMap', extension.iridescenceTexture, LinearSRGBColorSpace ) );
 
 		}
 
@@ -1509,7 +1511,7 @@ class GLTFMaterialsIridescenceExtension {
 
 		if ( extension.iridescenceThicknessTexture !== undefined ) {
 
-			pending.push( parser.assignTexture( materialParams, 'iridescenceThicknessMap', extension.iridescenceThicknessTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'iridescenceThicknessMap', extension.iridescenceThicknessTexture, LinearSRGBColorSpace ) );
 
 		}
 
@@ -1566,7 +1568,8 @@ class GLTFMaterialsSheenExtension {
 
 		if ( extension.sheenColorFactor !== undefined ) {
 
-			materialParams.sheenColor.fromArray( extension.sheenColorFactor );
+			const colorFactor = extension.sheenColorFactor;
+			materialParams.sheenColor.setRGB( colorFactor[ 0 ], colorFactor[ 1 ], colorFactor[ 2 ], LinearSRGBColorSpace );
 
 		}
 
@@ -1584,7 +1587,7 @@ class GLTFMaterialsSheenExtension {
 
 		if ( extension.sheenRoughnessTexture !== undefined ) {
 
-			pending.push( parser.assignTexture( materialParams, 'sheenRoughnessMap', extension.sheenRoughnessTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'sheenRoughnessMap', extension.sheenRoughnessTexture, LinearSRGBColorSpace ) );
 
 		}
 
@@ -1644,7 +1647,7 @@ class GLTFMaterialsTransmissionExtension {
 
 		if ( extension.transmissionTexture !== undefined ) {
 
-			pending.push( parser.assignTexture( materialParams, 'transmissionMap', extension.transmissionTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'transmissionMap', extension.transmissionTexture, LinearSRGBColorSpace ) );
 
 		}
 
@@ -1699,14 +1702,14 @@ class GLTFMaterialsVolumeExtension {
 
 		if ( extension.thicknessTexture !== undefined ) {
 
-			pending.push( parser.assignTexture( materialParams, 'thicknessMap', extension.thicknessTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'thicknessMap', extension.thicknessTexture, LinearSRGBColorSpace ) );
 
 		}
 
 		materialParams.attenuationDistance = extension.attenuationDistance || Infinity;
 
 		const colorArray = extension.attenuationColor || [ 1, 1, 1 ];
-		materialParams.attenuationColor = new Color( colorArray[ 0 ], colorArray[ 1 ], colorArray[ 2 ] );
+		materialParams.attenuationColor = new Color( colorArray[ 0 ], colorArray[ 1 ], colorArray[ 2 ], LinearSRGBColorSpace );
 
 		return Promise.all( pending );
 
@@ -1806,12 +1809,12 @@ class GLTFMaterialsSpecularExtension {
 
 		if ( extension.specularTexture !== undefined ) {
 
-			pending.push( parser.assignTexture( materialParams, 'specularIntensityMap', extension.specularTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'specularIntensityMap', extension.specularTexture, LinearSRGBColorSpace ) );
 
 		}
 
 		const colorArray = extension.specularColorFactor || [ 1, 1, 1 ];
-		materialParams.specularColor = new Color( colorArray[ 0 ], colorArray[ 1 ], colorArray[ 2 ] );
+		materialParams.specularColor = new Color( colorArray[ 0 ], colorArray[ 1 ], colorArray[ 2 ], LinearSRGBColorSpace );
 
 		if ( extension.specularColorTexture !== undefined ) {
 
@@ -1870,7 +1873,7 @@ class GLTFMaterialsBumpExtension {
 
 		if ( extension.bumpTexture !== undefined ) {
 
-			pending.push( parser.assignTexture( materialParams, 'bumpMap', extension.bumpTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'bumpMap', extension.bumpTexture, SRGBColorSpace ) );
 
 		}
 
@@ -1935,7 +1938,7 @@ class GLTFMaterialsAnisotropyExtension {
 
 		if ( extension.anisotropyTexture !== undefined ) {
 
-			pending.push( parser.assignTexture( materialParams, 'anisotropyMap', extension.anisotropyTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'anisotropyMap', extension.anisotropyTexture, LinearSRGBColorSpace ) );
 
 		}
 
@@ -4293,10 +4296,10 @@ class GLTFParser {
 
 			if ( Array.isArray( metallicRoughness.baseColorFactor ) ) {
 
-				const array = metallicRoughness.baseColorFactor;
+				const baseColorFactor_array = metallicRoughness.baseColorFactor;
 
-				materialParams.color.fromArray( array );
-				materialParams.opacity = array[ 3 ];
+				materialParams.color = new Color().setRGB( baseColorFactor_array[ 0 ], baseColorFactor_array[ 1 ], baseColorFactor_array[ 2 ], LinearSRGBColorSpace );
+				materialParams.opacity = baseColorFactor_array[ 3 ];
 
 			}
 
@@ -4311,8 +4314,8 @@ class GLTFParser {
 
 			if ( metallicRoughness.metallicRoughnessTexture !== undefined ) {
 
-				pending.push( parser.assignTexture( materialParams, 'metalnessMap', metallicRoughness.metallicRoughnessTexture ) );
-				pending.push( parser.assignTexture( materialParams, 'roughnessMap', metallicRoughness.metallicRoughnessTexture ) );
+				pending.push( parser.assignTexture( materialParams, 'metalnessMap', metallicRoughness.metallicRoughnessTexture, LinearSRGBColorSpace ) );
+				pending.push( parser.assignTexture( materialParams, 'roughnessMap', metallicRoughness.metallicRoughnessTexture, LinearSRGBColorSpace ) );
 
 			}
 
@@ -4359,7 +4362,7 @@ class GLTFParser {
 
 		if ( materialDef.normalTexture !== undefined && materialType !== MeshBasicMaterial ) {
 
-			pending.push( parser.assignTexture( materialParams, 'normalMap', materialDef.normalTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'normalMap', materialDef.normalTexture, LinearSRGBColorSpace ) );
 
 			materialParams.normalScale = new Vector2( 1, 1 );
 
@@ -4375,7 +4378,7 @@ class GLTFParser {
 
 		if ( materialDef.occlusionTexture !== undefined && materialType !== MeshBasicMaterial ) {
 
-			pending.push( parser.assignTexture( materialParams, 'aoMap', materialDef.occlusionTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'aoMap', materialDef.occlusionTexture, LinearSRGBColorSpace ) );
 
 			if ( materialDef.occlusionTexture.strength !== undefined ) {
 
@@ -4387,7 +4390,9 @@ class GLTFParser {
 
 		if ( materialDef.emissiveFactor !== undefined && materialType !== MeshBasicMaterial ) {
 
-			materialParams.emissive = new Color().fromArray( materialDef.emissiveFactor );
+			const emissiveFactor_array = materialDef.emissiveFactor;
+
+			materialParams.emissive = new Color().setRGB( emissiveFactor_array[ 0 ], emissiveFactor_array[ 1 ], emissiveFactor_array[ 2 ], LinearSRGBColorSpace );
 
 		}
 
