@@ -100,6 +100,7 @@ Number Type Converter
     - `https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF-Embedded/BarramundiFish.gltf`
     - `https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish.gltf, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish.bin, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0001.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0002.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0003.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0004.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish0FS.glsl, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish0VS.glsl`
   - Might have bugs and interface / library related limitations and slow to load some models
+  - Loading ASSIMP models will have `flatShading` turned ON so hit the `F` button to turn it OFF if required
   - It tries to take advantage of the `THREE.MeshPhysicalMaterial` to bring a GLTF alike functionality for OBJ + MTL models
   - Has multiple export options available, with special notes about JSON formats:
     - Try using [JSON Viewer](https://githubdragonfly.github.io/viewers/templates/JSON%20Viewer.html) to see all models exported as `JSON`
@@ -222,6 +223,7 @@ Number Type Converter
   - BIM and OFF exports are only available in Quick Viewer, as stated above
   - GLB exports, where applicable, can additionally have either DRACO or DRACO+WEBP or MESHOPT or MESHOPT+WEBP compression applied by using [glTF Transform](https://gltf-transform.dev):
     - These exports are marked as either of: `GLB_d` `GLB_dw` `GLB_m` `GLB_mw` (for regular exports) `GLBx_d` `GLBx_dw` `GLBx_m` `GLBx_mw` (for alternative exports)
+    - WEBP exported texture resolution is fixed at 1k in mobile GLTF Viewer but is selectable in desktop viewers (1k, 2k, 4k)
     - Seem to work fine in general but might not be good for some rare models
   - Some viewers also offer alternative exports marked as `OBJx` `DAEx` `GLTFx` `USDZx`:
     - Should be tried either out of curiosity or if their regular export counterparts don't produce good results
