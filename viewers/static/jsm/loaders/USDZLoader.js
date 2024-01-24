@@ -26,73 +26,85 @@ class USDAParser {
 
 		const lines = text.split( '\n' );
 
+		let group, meta;
 		let string = null;
 		let target = data;
+		let lhs, rhs, assignment;
 
 		const stack = [ data ];
 
-		for ( const line of lines ) {
+		function parse_lines() {
 
-			if ( line.includes( '=' ) ) {
+			for ( const line of lines ) {
 
-				const assignment = line.split( '=' );
+				if ( line.trim() === '' ) continue;
 
-				const lhs = assignment[ 0 ].trim();
-				const rhs = assignment[ 1 ].trim();
+				if ( line.includes( '=' ) ) {
 
-				if ( rhs.endsWith( '{' ) ) {
+					assignment = line.split( '=' );
 
-					const group = {};
+					lhs = assignment[ 0 ].trim();
+					rhs = assignment[ 1 ].trim();
+
+					if ( rhs.endsWith( '{' ) ) {
+
+						group = {};
+						stack.push( group );
+
+						target[ lhs ] = group;
+						target = group;
+
+					} else {
+
+						target[ lhs ] = rhs;
+
+					}
+
+				} else if ( line.endsWith( '{' ) ) {
+
+					group = target[ string ] || {};
 					stack.push( group );
 
-					target[ lhs ] = group;
+					target[ string ] = group;
 					target = group;
+
+				} else if ( line.endsWith( '}' ) ) {
+
+					stack.pop();
+
+					if ( stack.length === 0 ) continue;
+
+					target = stack[ stack.length - 1 ];
+
+				} else if ( line.endsWith( '(' ) ) {
+
+					meta = {};
+					stack.push( meta );
+
+					string = line.split( '(' )[ 0 ].trim() || string;
+
+					target[ string ] = meta;
+					target = meta;
+
+				} else if ( line.endsWith( ')' ) ) {
+
+					stack.pop();
+
+					if ( stack.length === 0 ) continue;
+
+					target = stack[ stack.length - 1 ];
 
 				} else {
 
-					target[ lhs ] = rhs;
+					string = line.trim();
 
 				}
-
-			} else if ( line.endsWith( '{' ) ) {
-
-				const group = target[ string ] || {};
-				stack.push( group );
-
-				target[ string ] = group;
-				target = group;
-
-			} else if ( line.endsWith( '}' ) ) {
-
-				stack.pop();
-
-				if ( stack.length === 0 ) continue;
-
-				target = stack[ stack.length - 1 ];
-
-			} else if ( line.endsWith( '(' ) ) {
-
-				const meta = {};
-				stack.push( meta );
-
-				string = line.split( '(' )[ 0 ].trim() || string;
-
-				target[ string ] = meta;
-				target = meta;
-
-			} else if ( line.endsWith( ')' ) ) {
-
-				stack.pop();
-
-				target = stack[ stack.length - 1 ];
-
-			} else {
-
-				string = line.trim();
 
 			}
 
 		}
+
+		parse_lines();
 
 		return data;
 
