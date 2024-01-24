@@ -4,16 +4,18 @@ import {
 	ClampToEdgeWrapping,
 	FileLoader,
 	Group,
+	NoColorSpace,
 	Loader,
 	Mesh,
 	MeshPhysicalMaterial,
 	MirroredRepeatWrapping,
-	NoColorSpace,
 	RepeatWrapping,
+	SRGBColorSpace,
 	TextureLoader,
 	Object3D,
-	Vector2,
-} from "three";
+	Vector2
+} from 'three';
+
 import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/fflate.module.js";
 
 class USDAParser {
@@ -24,85 +26,73 @@ class USDAParser {
 
 		const lines = text.split( '\n' );
 
-		let group, meta;
 		let string = null;
 		let target = data;
-		let lhs, rhs, assignment;
 
 		const stack = [ data ];
 
-		function parse_lines() {
+		for ( const line of lines ) {
 
-			for ( const line of lines ) {
+			if ( line.includes( '=' ) ) {
 
-				if ( line.trim() === '' ) continue;
+				const assignment = line.split( '=' );
 
-				if ( line.includes( '=' ) ) {
+				const lhs = assignment[ 0 ].trim();
+				const rhs = assignment[ 1 ].trim();
 
-					assignment = line.split( '=' );
+				if ( rhs.endsWith( '{' ) ) {
 
-					lhs = assignment[ 0 ].trim();
-					rhs = assignment[ 1 ].trim();
-
-					if ( rhs.endsWith( '{' ) ) {
-
-						group = {};
-						stack.push( group );
-
-						target[ lhs ] = group;
-						target = group;
-
-					} else {
-
-						target[ lhs ] = rhs;
-
-					}
-
-				} else if ( line.endsWith( '{' ) ) {
-
-					group = target[ string ] || {};
+					const group = {};
 					stack.push( group );
 
-					target[ string ] = group;
+					target[ lhs ] = group;
 					target = group;
-
-				} else if ( line.endsWith( '}' ) ) {
-
-					stack.pop();
-
-					if ( stack.length === 0 ) continue;
-
-					target = stack[ stack.length - 1 ];
-
-				} else if ( line.endsWith( '(' ) ) {
-
-					meta = {};
-					stack.push( meta );
-
-					string = line.split( '(' )[ 0 ].trim() || string;
-
-					target[ string ] = meta;
-					target = meta;
-
-				} else if ( line.endsWith( ')' ) ) {
-
-					stack.pop();
-
-					if ( stack.length === 0 ) continue;
-
-					target = stack[ stack.length - 1 ];
 
 				} else {
 
-					string = line.trim();
+					target[ lhs ] = rhs;
 
 				}
+
+			} else if ( line.endsWith( '{' ) ) {
+
+				const group = target[ string ] || {};
+				stack.push( group );
+
+				target[ string ] = group;
+				target = group;
+
+			} else if ( line.endsWith( '}' ) ) {
+
+				stack.pop();
+
+				if ( stack.length === 0 ) continue;
+
+				target = stack[ stack.length - 1 ];
+
+			} else if ( line.endsWith( '(' ) ) {
+
+				const meta = {};
+				stack.push( meta );
+
+				string = line.split( '(' )[ 0 ].trim() || string;
+
+				target[ string ] = meta;
+				target = meta;
+
+			} else if ( line.endsWith( ')' ) ) {
+
+				stack.pop();
+
+				target = stack[ stack.length - 1 ];
+
+			} else {
+
+				string = line.trim();
 
 			}
 
 		}
-
-		parse_lines();
 
 		return data;
 
@@ -174,6 +164,13 @@ class USDZLoader extends Loader {
 
 				if ( filename.endsWith( 'usd' ) || filename.endsWith( 'usda' ) ) {
 
+					if ( isCrateFile( zip[ filename ] ) ) {
+
+						console.warn( 'THREE.USDZLoader: Crate files (.usdc or binary .usd) are not supported.' );
+						continue;
+
+					}
+
 					const text = fflate.strFromU8( zip[ filename ] );
 					data[ filename ] = parser.parse( text );
 
@@ -185,21 +182,55 @@ class USDZLoader extends Loader {
 
 		}
 
+		function isCrateFile( buffer ) {
+
+			// Check if this a crate file. First 7 bytes of a crate file are "PXR-USDC".
+			const fileHeader = buffer.slice( 0, 7 );
+			const crateHeader = new Uint8Array( [ 0x50, 0x58, 0x52, 0x2D, 0x55, 0x53, 0x44, 0x43 ] );
+
+			// If this is not a crate file, we assume it is a plain USDA file.
+			return fileHeader.every( ( value, index ) => value === crateHeader[ index ] );
+
+		}
+
 		function findUSD( zip ) {
 
-			for ( const filename in zip ) {
+			if ( zip.length < 1 ) return undefined;
 
-				if ( filename.endsWith( 'usda' ) ) {
+			const firstFileName = Object.keys( zip )[ 0 ];
+			let isCrate = false;
 
-					return zip[ filename ];
+			// As per the USD specification, the first entry in the zip archive is used as the main file ("UsdStage").
+			// ASCII files can end in either .usda or .usd.
+			// See https://openusd.org/release/spec_usdz.html#layout
+			if ( firstFileName.endsWith( 'usda' ) ) return zip[ firstFileName ];
 
-				} else if ( filename.endsWith( 'usdc' ) ) {
+			if ( firstFileName.endsWith( 'usdc' ) ) {
 
-					console.warn( 'THREE.USDZLoader: Found crate file (.usdc) which is not supported.' );
+				isCrate = true;
+
+			} else if ( firstFileName.endsWith( 'usd' ) ) {
+
+				// If this is not a crate file, we assume it is a plain USDA file.
+				if ( ! isCrateFile( zip[ firstFileName ] ) ) {
+
+					return zip[ firstFileName ];
+
+				} else {
+
+					isCrate = true;
 
 				}
 
 			}
+
+			if ( isCrate ) {
+
+				console.warn( 'THREE.USDZLoader: Crate files (.usdc or binary .usd) are not supported.' );
+
+			}
+
+			return undefined;
 
 		}
 
@@ -241,7 +272,7 @@ class USDZLoader extends Loader {
 
 		}
 
-		function findGeometry( data, id ) {
+		function findGeometry( data, id = undefined ) {
 
 			if ( ! data ) return undefined;
 
@@ -272,12 +303,6 @@ class USDZLoader extends Loader {
 					}
 
 					// Move st to Mesh
-
-					if ( 'float2[] primvars:st' in data ) {
-
-						object[ 'float2[] primvars:st' ] = data[ 'float2[] primvars:st' ];
-
-					}
 
 					if ( 'texCoord2f[] primvars:st' in data ) {
 
@@ -466,7 +491,7 @@ class USDZLoader extends Loader {
 
 		function buildMaterial( data ) {
 
-			const material = new MeshPhysicalMaterial( { name: Loader.DEFAULT_MATERIAL_NAME } );
+			const material = new MeshPhysicalMaterial();
 
 			if ( data !== undefined ) {
 
@@ -474,81 +499,13 @@ class USDZLoader extends Loader {
 
 					const surface = data[ 'def Shader "PreviewSurface"' ];
 
-					if ( 'float inputs:opacity' in surface ) {
-
-						material.opacity = parseFloat( surface[ 'float inputs:opacity' ] );
-
-						if ( 'float inputs:opacityThreshold' in surface ) {
-
-							let opacity_threshold = parseFloat( surface[ 'float inputs:opacityThreshold' ] );
-
-							// workaround to set transmission values
-							// this will approximate the models appearance
-
-							if ( opacity_threshold === 0.0059 || opacity_threshold === 0.0058 ) {
-
-								material.transmission = 1;
-
-								// set transmissionMap
-
-								if ( 'float inputs:opacity.connect' in surface ) {
-
-									const path = surface[ 'float inputs:opacity.connect' ];
-									const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
-
-									material.transmissionMap = buildTexture( sampler );
-									material.transmissionMap.colorSpace = NoColorSpace;
-
-									if ( 'def Shader "Transform2d_opacity"' in data ) {
-
-										setTextureParams( material.transmissionMap, data[ 'def Shader "Transform2d_opacity"' ] );
-
-									}
-
-								}
-
-							} else { // opacity_threshold is 0.0057
-
-								material.transparent = true;
-
-								// set alphaMap
-
-								if ( 'float inputs:opacity.connect' in surface ) {
-
-									const path = surface[ 'float inputs:opacity.connect' ];
-									const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
-
-									material.alphaMap = buildTexture( sampler );
-									material.alphaMap.colorSpace = NoColorSpace;
-
-									if ( 'def Shader "Transform2d_opacity"' in data ) {
-
-										setTextureParams( material.alphaMap, data[ 'def Shader "Transform2d_opacity"' ] );
-
-									}
-
-								}
-
-							}
-
-						}
-
-					}
-
-					if ( 'color3f inputs:diffuseColor' in surface ) {
-
-						const color = surface[ 'color3f inputs:diffuseColor' ].replace( /[()]*/g, '' );
-						material.color.fromArray( JSON.parse( '[' + color + ']' ) );
-
-					}
-
 					if ( 'color3f inputs:diffuseColor.connect' in surface ) {
 
 						const path = surface[ 'color3f inputs:diffuseColor.connect' ];
 						const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
 
 						material.map = buildTexture( sampler );
-						material.map.colorSpace = NoColorSpace;
+						material.map.colorSpace = SRGBColorSpace;
 
 						if ( 'def Shader "Transform2d_diffuse"' in data ) {
 
@@ -556,64 +513,32 @@ class USDZLoader extends Loader {
 
 						}
 
+					} else if ( 'color3f inputs:diffuseColor' in surface ) {
+
+						const color = surface[ 'color3f inputs:diffuseColor' ].replace( /[()]*/g, '' );
+						material.color.fromArray( JSON.parse( '[' + color + ']' ) );
+
 					}
 
-					if ( 'color3f inputs:emissiveColor' in surface ) {
+					if ( 'color3f inputs:emissiveColor.connect' in surface ) {
+
+						const path = surface[ 'color3f inputs:emissiveColor.connect' ];
+						const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
+
+						material.emissiveMap = buildTexture( sampler );
+						material.emissiveMap.colorSpace = SRGBColorSpace;
+						material.emissive.set( 0xffffff );
+
+						if ( 'def Shader "Transform2d_emissive"' in data ) {
+
+							setTextureParams( material.emissiveMap, data[ 'def Shader "Transform2d_emissive"' ] );
+
+						}
+
+					} else if ( 'color3f inputs:emissiveColor' in surface ) {
 
 						const color = surface[ 'color3f inputs:emissiveColor' ].replace( /[()]*/g, '' );
-
 						material.emissive.fromArray( JSON.parse( '[' + color + ']' ) );
-
-						if ( material.emissive.getHex() > 0 ) {
-
-							if ( 'color3f inputs:emissiveColor.connect' in surface ) {
-
-								const path = surface[ 'color3f inputs:emissiveColor.connect' ];
-								const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
-
-								material.emissiveMap = buildTexture( sampler );
-								material.emissiveMap.colorSpace = NoColorSpace;
-
-								if ( 'def Shader "Transform2d_emissive"' in data ) {
-
-									setTextureParams( material.emissiveMap, data[ 'def Shader "Transform2d_emissive"' ] );
-
-								}
-
-							}
-
-						} else {
-
-							material.emissive.fromArray( [ 1, 1, 1 ] );
-
-						}
-
-					}
-
-					if ( 'color3f inputs:specularColor' in surface ) {
-
-						const color = surface[ 'color3f inputs:specularColor' ].replace( /[()]*/g, '' );
-						material.specularColor.fromArray( JSON.parse( '[' + color + ']' ) );
-
-						if ( material.specularColor.getHex() > 0 ) {
-
-							if ( 'color3f inputs:specularColor.connect' in surface ) {
-
-								const path = surface[ 'color3f inputs:specularColor.connect' ];
-								const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
-
-								material.specularColorMap = buildTexture( sampler );
-								material.specularColorMap.colorSpace = NoColorSpace;
-
-								if ( 'def Shader "Transform2d_specularColor"' in data ) {
-
-									setTextureParams( material.specularColorMap, data[ 'def Shader "Transform2d_specularColor"' ] );
-
-								}
-
-							}
-
-						}
 
 					}
 
@@ -633,104 +558,87 @@ class USDZLoader extends Loader {
 
 					}
 
-					if ( 'float inputs:roughness' in surface ) {
+					if ( 'float inputs:roughness.connect' in surface ) {
 
-						material.roughness = parseFloat( surface[ 'float inputs:roughness' ] );
-						if ( material.transmission > 0 && material.roughness === 1 ) material.roughness = 0.95;
+						const path = surface[ 'float inputs:roughness.connect' ];
+						const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
 
-						if ( 'float inputs:roughness.connect' in surface ) {
+						material.roughness = 1.0;
+						material.roughnessMap = buildTexture( sampler );
+						material.roughnessMap.colorSpace = NoColorSpace;
 
-							const path = surface[ 'float inputs:roughness.connect' ];
-							const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
+						if ( 'def Shader "Transform2d_roughness"' in data ) {
 
-							if ( ! material.roughness || material.roughness === 0 ) material.roughness = 1.0;
-
-							material.roughnessMap = buildTexture( sampler );
-							material.roughnessMap.colorSpace = NoColorSpace;
-
-							if ( 'def Shader "Transform2d_roughness"' in data ) {
-
-								setTextureParams( material.roughnessMap, data[ 'def Shader "Transform2d_roughness"' ] );
-
-							}
+							setTextureParams( material.roughnessMap, data[ 'def Shader "Transform2d_roughness"' ] );
 
 						}
 
+					} else if ( 'float inputs:roughness' in surface ) {
+
+						material.roughness = parseFloat( surface[ 'float inputs:roughness' ] );
+
 					}
 
-					if ( 'float inputs:metallic' in surface ) {
+					if ( 'float inputs:metallic.connect' in surface ) {
+
+						const path = surface[ 'float inputs:metallic.connect' ];
+						const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
+
+						material.metalness = 1.0;
+						material.metalnessMap = buildTexture( sampler );
+						material.metalnessMap.colorSpace = NoColorSpace;
+
+						if ( 'def Shader "Transform2d_metallic"' in data ) {
+
+							setTextureParams( material.metalnessMap, data[ 'def Shader "Transform2d_metallic"' ] );
+
+						}
+
+					} else if ( 'float inputs:metallic' in surface ) {
 
 						material.metalness = parseFloat( surface[ 'float inputs:metallic' ] );
 
-						if ( 'float inputs:metallic.connect' in surface ) {
+					}
 
-							const path = surface[ 'float inputs:metallic.connect' ];
-							const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
+					if ( 'float inputs:clearcoat.connect' in surface ) {
 
-							if ( ! material.metalness || material.metalness === 0 ) material.metalness = 1.0;
+						const path = surface[ 'float inputs:clearcoat.connect' ];
+						const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
 
-							material.metalnessMap = buildTexture( sampler );
-							material.metalnessMap.colorSpace = NoColorSpace;
+						material.clearcoat = 1.0;
+						material.clearcoatMap = buildTexture( sampler );
+						material.clearcoatMap.colorSpace = NoColorSpace;
 
-							if ( 'def Shader "Transform2d_metallic"' in data ) {
+						if ( 'def Shader "Transform2d_clearcoat"' in data ) {
 
-								setTextureParams( material.metalnessMap, data[ 'def Shader "Transform2d_metallic"' ] );
-
-							}
+							setTextureParams( material.clearcoatMap, data[ 'def Shader "Transform2d_clearcoat"' ] );
 
 						}
 
-					}
-
-					if ( 'float inputs:clearcoat' in surface ) {
+					} else if ( 'float inputs:clearcoat' in surface ) {
 
 						material.clearcoat = parseFloat( surface[ 'float inputs:clearcoat' ] );
 
-						if ( material.clearcoat > 0 ) {
-
-							if ( 'float inputs:clearcoat.connect' in surface ) {
-
-								const path = surface[ 'float inputs:clearcoat.connect' ];
-								const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
-
-								material.clearcoatMap = buildTexture( sampler );
-								material.clearcoatMap.colorSpace = NoColorSpace;
-
-								if ( 'def Shader "Transform2d_clearcoat"' in data ) {
-
-									setTextureParams( material.clearcoatMap, data[ 'def Shader "Transform2d_clearcoat"' ] );
-
-								}
-
-							}
-
-						}
-
 					}
 
-					if ( 'float inputs:clearcoatRoughness' in surface ) {
+					if ( 'float inputs:clearcoatRoughness.connect' in surface ) {
 
-						material.clearcoatRoughness = parseFloat( surface[ 'float inputs:clearcoatRoughness' ] );
+						const path = surface[ 'float inputs:clearcoatRoughness.connect' ];
+						const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
 
-						if ( material.clearcoatRoughness > 0 ) {
+						material.clearcoatRoughness = 1.0;
+						material.clearcoatRoughnessMap = buildTexture( sampler );
+						material.clearcoatRoughnessMap.colorSpace = NoColorSpace;
 
-							if ( 'float inputs:clearcoatRoughness.connect' in surface ) {
+						if ( 'def Shader "Transform2d_clearcoatRoughness"' in data ) {
 
-								const path = surface[ 'float inputs:clearcoatRoughness.connect' ];
-								const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
-
-								material.clearcoatRoughnessMap = buildTexture( sampler );
-								material.clearcoatRoughnessMap.colorSpace = NoColorSpace;
-
-								if ( 'def Shader "Transform2d_clearcoatRoughness"' in data ) {
-
-									setTextureParams( material.clearcoatRoughnessMap, data[ 'def Shader "Transform2d_clearcoatRoughness"' ] );
-
-								}
-
-							}
+							setTextureParams( material.clearcoatRoughnessMap, data[ 'def Shader "Transform2d_clearcoatRoughness"' ] );
 
 						}
+
+					} else if ( 'float inputs:clearcoatRoughness' in surface ) {
+
+						material.clearcoatRoughness = parseFloat( surface[ 'float inputs:clearcoatRoughness' ] );
 
 					}
 
@@ -756,6 +664,115 @@ class USDZLoader extends Loader {
 
 					}
 
+					if ( 'float inputs:opacity' in surface ) {
+
+						material.opacity = parseFloat( surface[ 'float inputs:opacity' ] );
+
+						if ( 'float inputs:opacityThreshold' in surface ) {
+
+							let opacity_threshold = parseFloat( surface[ 'float inputs:opacityThreshold' ] );
+
+							// workaround to set transmission values
+							// this will approximate the models appearance
+
+							if ( opacity_threshold === 0.0059 || opacity_threshold === 0.0058 ) {
+
+								material.transmission = 1;
+
+								// set arbitrary thickness
+
+								if ( opacity_threshold === 0.0059 ) material.thickness = 0.01;
+
+								// set transmissionMap
+
+								if ( 'float inputs:opacity.connect' in surface ) {
+
+									const path = surface[ 'float inputs:opacity.connect' ];
+									const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
+
+									material.transmissionMap = buildTexture( sampler );
+									material.transmissionMap.colorSpace = NoColorSpace;
+
+									if ( 'def Shader "Transform2d_opacity"' in data ) {
+
+										setTextureParams( material.transmissionMap, data[ 'def Shader "Transform2d_opacity"' ] );
+
+									}
+
+								}
+
+							} else if ( opacity_threshold === 0.0057 ) {
+
+								material.transparent = true;
+
+								// set map
+
+								if ( 'float inputs:opacity.connect' in surface ) {
+
+									const path = surface[ 'float inputs:opacity.connect' ];
+									const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
+
+									material.map = buildTexture( sampler );
+									material.map.colorSpace = NoColorSpace;
+
+									if ( 'def Shader "Transform2d_opacity"' in data ) {
+
+										setTextureParams( material.map, data[ 'def Shader "Transform2d_opacity"' ] );
+
+									}
+
+								}
+
+							} else if ( opacity_threshold === 0.0056 ) {
+
+								material.transparent = true;
+
+								// set alphaMap
+
+								if ( 'float inputs:opacity.connect' in surface ) {
+
+									const path = surface[ 'float inputs:opacity.connect' ];
+									const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
+
+									material.alphaMap = buildTexture( sampler );
+									material.alphaMap.colorSpace = NoColorSpace;
+
+									if ( 'def Shader "Transform2d_opacity"' in data ) {
+
+										setTextureParams( material.alphaMap, data[ 'def Shader "Transform2d_opacity"' ] );
+
+									}
+
+								}
+
+							} else {
+
+								material.alphaTest = opacity_threshold;
+
+								// set map
+
+								if ( 'float inputs:opacity.connect' in surface ) {
+
+									const path = surface[ 'float inputs:opacity.connect' ];
+									const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
+
+									material.map = buildTexture( sampler );
+									material.map.colorSpace = NoColorSpace;
+
+									if ( 'def Shader "Transform2d_opacity"' in data ) {
+
+										setTextureParams( material.map, data[ 'def Shader "Transform2d_opacity"' ] );
+
+									}
+
+								}
+
+							}
+
+						}
+
+					}
+
 				}
 
 				if ( 'def Shader "diffuseColor_texture"' in data ) {
@@ -763,7 +780,7 @@ class USDZLoader extends Loader {
 					const sampler = data[ 'def Shader "diffuseColor_texture"' ];
 
 					material.map = buildTexture( sampler );
-					material.map.colorSpace = NoColorSpace;
+					material.map.colorSpace = SRGBColorSpace;
 
 				}
 
