@@ -373,9 +373,10 @@ class Rhino3dmExporter {
 
 						}
 
-						// this textures array does get created and stores images
+						// this is for some possible future use
+						// the textures array does get created and stores images
 						// but will not be included in the final output file due
-						// to current rhino library limitations
+						// to the current rhino library limitations
 
 						rhino_material.textures = [];
 
@@ -723,13 +724,16 @@ class Rhino3dmExporter {
 
 	}
 
-	deinterleave( geometry, color_or_position = 'color' ) {
+	deinterleave( geometry, attribute = 'color' ) {
 
-		const attr = geometry.data.attributes[ color_or_position ];
+		const attr = geometry.data.attributes[ attribute ];
 		const itemSize = attr.itemSize;
 		const offset = attr.offset;
 
-		const data = geometry.data.interleavedBuffers[ geometry.data.attributes[ color_or_position ].data ];
+		const data = geometry.data.interleavedBuffers[ geometry.data.attributes[ attribute ].data ];
+
+		if ( data === undefined ) return [];
+
 		const type = data.type;
 		const stride = data.stride;
 		const iB_buffer = data.buffer;
@@ -756,6 +760,8 @@ class Rhino3dmExporter {
 					break;
 
 			}
+
+			if ( iB === undefined ) return [];
 
 			let iBA = new InterleavedBufferAttribute( iB, itemSize, offset );
 
@@ -809,6 +815,48 @@ class Rhino3dmExporter {
 					geo.data.attributes[ 'normal' ] = {
 						array: geometry_normal_array,
 						itemSize: geo.data.attributes.normal.itemSize,
+						normalized: false,
+						type: 'Float32Array'
+					}
+
+				}
+
+			}
+
+		}
+
+		if ( geo.data.attributes.tangent && geo.data.attributes.tangent.isInterleavedBufferAttribute ) {
+
+			if ( geo.data.attributes.tangent.data && geo.data.interleavedBuffers ) {
+
+				if ( geo.data.interleavedBuffers[ geo.data.attributes.tangent.data ] ) {
+
+					let geometry_tangent_array = this.deinterleave( geo, 'tangent' ).array;
+
+					geo.data.attributes[ 'tangent' ] = {
+						array: geometry_tangent_array,
+						itemSize: geo.data.attributes.tangent.itemSize,
+						normalized: false,
+						type: 'Float32Array'
+					}
+
+				}
+
+			}
+
+		}
+
+		if ( geo.data.attributes.uv && geo.data.attributes.uv.isInterleavedBufferAttribute ) {
+
+			if ( geo.data.attributes.uv.data && geo.data.interleavedBuffers ) {
+
+				if ( geo.data.interleavedBuffers[ geo.data.attributes.uv.data ] ) {
+
+					let geometry_uv_array = this.deinterleave( geo, 'uv' ).array;
+
+					geo.data.attributes[ 'uv' ] = {
+						array: geometry_uv_array,
+						itemSize: geo.data.attributes.uv.itemSize,
 						normalized: false,
 						type: 'Float32Array'
 					}
