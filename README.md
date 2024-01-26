@@ -48,6 +48,7 @@ Number Type Converter
 
 - They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
 - Several different three.js revisions are being used and there is lots of customized code
+- Error handling narrows down to showing the `ERROR!` message so check the console output for details 
 - If you wish to modify or customize your 3D model then use either the official [three.js editor](https://threejs.org/editor/) or try its [customized version](https://github.com/GitHubDragonFly/Localized_3js)
 - These would be the mouse controls:
   - Rotation = left-click + hold + drag
@@ -83,7 +84,6 @@ Number Type Converter
     - Supports both local (blob) and remote URL loading
     - Local loading only supports self-contained models (embedded GLTF or binary GLB)
     - The viewer supports loading of multiple models, switchable with the viewer's `M` button
-    - Error handling narrows down to showing the `ERROR!` message so check the console output for details 
     - Support for USDZ was also added but is untested
   - `GLTF Viewer` is for v2.0 glTF files and is currently using r160 of three.js:
     - doesn't support obsolete `pbrSpecularGlossiness`
