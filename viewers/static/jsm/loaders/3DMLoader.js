@@ -301,7 +301,7 @@ class Rhino3dmLoader extends Loader {
 
 			const pbr = material.pbr;
 
-			mat.anisotropy = pbr.anisotropy;
+			mat.anisotropy = pbr.anisotropic;
 			mat.anisotropyRotation = pbr.anisotropicRotation;
 
 			if ( pbr.baseColor.r > 1 || pbr.baseColor.g > 1 || pbr.baseColor.b > 1 ) {
@@ -475,6 +475,7 @@ class Rhino3dmLoader extends Loader {
 				}
 
 				if ( texture.flipY ) map.flipY = texture.flipY;
+				if ( texture.rotation ) map.rotation = texture.rotation;
 
 				map.wrapS = texture.wrapU === 0 ? RepeatWrapping : ClampToEdgeWrapping;
 				map.wrapT = texture.wrapV === 0 ? RepeatWrapping : ClampToEdgeWrapping;
