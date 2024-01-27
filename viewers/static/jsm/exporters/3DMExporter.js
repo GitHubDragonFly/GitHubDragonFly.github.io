@@ -409,11 +409,19 @@ class Rhino3dmExporter {
 
 								if ( texture.uuid === map && ! texture_names[ texture.name ] ) {
 
+									if ( texture.name === '' ) texture.name = map_type;
+
 									texture_names[ texture.name ] = texture.name;
 
-									let tex = texture;
-
+									let tex = {};
+									tex.name = texture.name;
 									tex.type = map_type;
+									tex.flipY = texture.flipY;
+									tex.center = texture.center;
+									tex.offset = texture.offset;
+									tex.repeat = texture.repeat;
+									tex.rotation = texture.rotation;
+									tex.uuid = MathUtils.generateUUID();
 
 									if ( texture.wrap !== undefined ) {
 
@@ -427,6 +435,8 @@ class Rhino3dmExporter {
 										for ( const image of result.images ) {
 
 											if ( image.uuid === texture.image ) {
+
+												// image.url is a base64 string
 
 												tex.image = image.url;
 
