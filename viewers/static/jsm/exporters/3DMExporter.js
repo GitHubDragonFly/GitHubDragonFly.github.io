@@ -2,7 +2,11 @@ import {
 	BufferAttribute,
 	DefaultLoadingManager,
 	InterleavedBuffer,
-	InterleavedBufferAttribute
+	InterleavedBufferAttribute,
+	MathUtils,
+	Matrix4,
+	Quaternion,
+	Vector3
 } from "three";
 
 import { deinterleaveAttribute } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/utils/BufferGeometryUtils.js";
@@ -240,45 +244,62 @@ class Rhino3dmExporter {
 
 				let geometry;
 
-				if ( object.type === 'Mesh' && uuid_array_mesh_geometries[ object.geometry ] ) {
+				let position = new Vector3();
+				let quaternion = new Quaternion();
+				let scale = new Vector3();
+
+				let m4 = new Matrix4().fromArray( object.matrix );
+				m4.decompose( position, quaternion, scale );
+
+				if ( ( object.type === 'Mesh' && uuid_array_mesh_geometries[ object.geometry ] )
+					|| ( object.type === 'Points' && uuid_array_point_geometries[ object.geometry ] ) ) {
 
 					for ( const geo of result.geometries ) {
 
 						if ( geo.uuid === object.geometry ) {
 
 							geometry = scope.interleaved_buffer_attribute_check( geo );
-							rhino_object = new Module.Mesh.createFromThreejsJSON( geometry );
-							process_object( object, geometry );
 
-						}
+							if ( object.type === 'Mesh' ) {
 
-					}
+								const new_geometry = {};
+								new_geometry.type = geometry.type;
+								new_geometry.data = {};
+								new_geometry.data.attributes = {};
+								new_geometry.data.index = geometry.data.index;
+								new_geometry.data.boundingSphere = geometry.data.boundingSphere;
+								new_geometry.data.attributes.uv = geometry.data.attributes.uv;
+								new_geometry.data.attributes.color = geometry.data.attributes.color;
+								new_geometry.data.attributes.normal = geometry.data.attributes.normal;
+								new_geometry.data.attributes.tangent = geometry.data.attributes.tangent;
+								new_geometry.uuid = MathUtils.generateUUID();
 
-					if ( geometry === undefined ) {
+								const array = Array( geometry.data.attributes.position.array.length );
 
-						if ( typeof onError === 'function' ) {
+								for ( let i = 0; i < array.length; i += 3 ) {
 
-							onError( 'THREE.3DMExporter: No match found for parsed geometry ' + object.geometry );
-							return null;
+									array[ i ] = geometry.data.attributes.position.array[ i ] + position.x;
+									array[ i + 1 ] = geometry.data.attributes.position.array[ i + 1 ] + position.y;
+									array[ i + 2 ] = geometry.data.attributes.position.array[ i + 2 ] + position.z;
 
-						} else {
+								}
 
-							throw new Error( 'THREE.3DMExporter: No match found for parsed geometry ' + object.geometry );
+								new_geometry.data.attributes.position = {
+									array: array,
+									itemSize: geometry.data.attributes.position.itemSize,
+									normalized: false,
+									type: 'Float32Array'
+								}
 
-						}
+								rhino_object = new Module.Mesh.createFromThreejsJSON( new_geometry );
+								process_object( object, new_geometry );
 
-					}
+							} else {
 
-				} else if ( object.type === 'Points' && uuid_array_point_geometries[ object.geometry ] ) {
+								rhino_object = new Module.PointCloud();
+								process_object( object, geometry );
 
-					for ( const geo of result.geometries ) {
-
-						if ( geo.uuid === object.geometry ) {
-
-
-							geometry = scope.interleaved_buffer_attribute_check( geo );
-							rhino_object = new Module.PointCloud();
-							process_object( object, geometry );
+							}
 
 						}
 
@@ -783,103 +804,25 @@ class Rhino3dmExporter {
 
 	interleaved_buffer_attribute_check( geo ) {
 
-		if ( geo.data.attributes.position && geo.data.attributes.position.isInterleavedBufferAttribute ) {
+		const attribute_array = [ 'position', 'normal', 'color', 'tangent', 'uv' ];
 
-			if ( geo.data.attributes.position.data && geo.data.interleavedBuffers ) {
+		for (const attribute of attribute_array) {
 
-				if ( geo.data.interleavedBuffers[ geo.data.attributes.position.data ] ) {
+			if ( geo.data.attributes[ attribute ] && geo.data.attributes[ attribute ].isInterleavedBufferAttribute ) {
 
-					let geometry_position_array = this.deinterleave( geo, 'position' ).array;
+				if ( geo.data.attributes[ attribute ].data && geo.data.interleavedBuffers ) {
 
-					geo.data.attributes[ 'position' ] = {
-						array: geometry_position_array,
-						itemSize: geo.data.attributes.position.itemSize,
-						normalized: false,
-						type: 'Float32Array'
-					}
+					if ( geo.data.interleavedBuffers[ geo.data.attributes[ attribute ].data ] ) {
 
-				}
+						let geometry_attribute_array = this.deinterleave( geo, attribute ).array;
 
-			}
+						geo.data.attributes[ attribute ] = {
+							array: geometry_attribute_array,
+							itemSize: geo.data.attributes[ attribute ].itemSize,
+							normalized: false,
+							type: 'Float32Array'
+						}
 
-		}
-
-		if ( geo.data.attributes.normal && geo.data.attributes.normal.isInterleavedBufferAttribute ) {
-
-			if ( geo.data.attributes.normal.data && geo.data.interleavedBuffers ) {
-
-				if ( geo.data.interleavedBuffers[ geo.data.attributes.normal.data ] ) {
-
-					let geometry_normal_array = this.deinterleave( geo, 'normal' ).array;
-
-					geo.data.attributes[ 'normal' ] = {
-						array: geometry_normal_array,
-						itemSize: geo.data.attributes.normal.itemSize,
-						normalized: false,
-						type: 'Float32Array'
-					}
-
-				}
-
-			}
-
-		}
-
-		if ( geo.data.attributes.tangent && geo.data.attributes.tangent.isInterleavedBufferAttribute ) {
-
-			if ( geo.data.attributes.tangent.data && geo.data.interleavedBuffers ) {
-
-				if ( geo.data.interleavedBuffers[ geo.data.attributes.tangent.data ] ) {
-
-					let geometry_tangent_array = this.deinterleave( geo, 'tangent' ).array;
-
-					geo.data.attributes[ 'tangent' ] = {
-						array: geometry_tangent_array,
-						itemSize: geo.data.attributes.tangent.itemSize,
-						normalized: false,
-						type: 'Float32Array'
-					}
-
-				}
-
-			}
-
-		}
-
-		if ( geo.data.attributes.uv && geo.data.attributes.uv.isInterleavedBufferAttribute ) {
-
-			if ( geo.data.attributes.uv.data && geo.data.interleavedBuffers ) {
-
-				if ( geo.data.interleavedBuffers[ geo.data.attributes.uv.data ] ) {
-
-					let geometry_uv_array = this.deinterleave( geo, 'uv' ).array;
-
-					geo.data.attributes[ 'uv' ] = {
-						array: geometry_uv_array,
-						itemSize: geo.data.attributes.uv.itemSize,
-						normalized: false,
-						type: 'Float32Array'
-					}
-
-				}
-
-			}
-
-		}
-
-		if ( geo.data.attributes.color && geo.data.attributes.color.isInterleavedBufferAttribute ) {
-
-			if ( geo.data.attributes.color.data && geo.data.interleavedBuffers ) {
-
-				if ( geo.data.interleavedBuffers[ geo.data.attributes.color.data ] ) {
-
-					let geometry_color_array = this.deinterleave( geo, 'color' ).array;
-
-					geo.data.attributes[ 'color' ] = {
-						array: geometry_color_array,
-						itemSize: geo.data.attributes.color.itemSize,
-						normalized: false,
-						type: 'Float32Array'
 					}
 
 				}
