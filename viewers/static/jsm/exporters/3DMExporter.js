@@ -268,27 +268,60 @@ class Rhino3dmExporter {
 								new_geometry.data.attributes = {};
 								new_geometry.data.index = geometry.data.index;
 								new_geometry.data.boundingSphere = geometry.data.boundingSphere;
-								new_geometry.data.attributes.uv = geometry.data.attributes.uv;
-								new_geometry.data.attributes.color = geometry.data.attributes.color;
-								new_geometry.data.attributes.normal = geometry.data.attributes.normal;
-								new_geometry.data.attributes.tangent = geometry.data.attributes.tangent;
+								if ( geometry.data.attributes.uv ) new_geometry.data.attributes.uv = geometry.data.attributes.uv;
+								if ( geometry.data.attributes.color ) new_geometry.data.attributes.color = geometry.data.attributes.color;
+								if ( geometry.data.attributes.tangent ) new_geometry.data.attributes.tangent = geometry.data.attributes.tangent;
+
 								new_geometry.uuid = MathUtils.generateUUID();
 
-								const array = Array( geometry.data.attributes.position.array.length );
+								const array_position = Array( geometry.data.attributes.position.array.length );
 
-								for ( let i = 0; i < array.length; i += 3 ) {
+								for ( let i = 0; i < array_position.length; i += 3 ) {
 
-									array[ i ] = geometry.data.attributes.position.array[ i ] + position.x;
-									array[ i + 1 ] = geometry.data.attributes.position.array[ i + 1 ] + position.y;
-									array[ i + 2 ] = geometry.data.attributes.position.array[ i + 2 ] + position.z;
+									let new_position = new Vector3(
+										geometry.data.attributes.position.array[ i ],
+										geometry.data.attributes.position.array[ i + 1 ],
+										geometry.data.attributes.position.array[ i + 2 ]
+									).applyQuaternion( quaternion ).multiply( scale );
+
+									array_position[ i ] = new_position.x + position.x;
+									array_position[ i + 1 ] = new_position.y + position.y;
+									array_position[ i + 2 ] = new_position.z + position.z;
 
 								}
 
 								new_geometry.data.attributes.position = {
-									array: array,
+									array: array_position,
 									itemSize: geometry.data.attributes.position.itemSize,
 									normalized: false,
 									type: 'Float32Array'
+								}
+
+								if ( geometry.data.attributes.normal ) {
+
+									const array_normal = Array( geometry.data.attributes.normal.array.length );
+
+									for ( let i = 0; i < array_normal.length; i += 3 ) {
+
+										let new_normal = new Vector3(
+											geometry.data.attributes.normal.array[ i ],
+											geometry.data.attributes.normal.array[ i + 1 ],
+											geometry.data.attributes.normal.array[ i + 2 ]
+										).applyQuaternion( quaternion ).multiply( scale );
+
+										array_normal[ i ] = new_normal.x;
+										array_normal[ i + 1 ] = new_normal.y;
+										array_normal[ i + 2 ] = new_normal.z;
+
+									}
+
+									new_geometry.data.attributes.normal = {
+										array: array_normal,
+										itemSize: geometry.data.attributes.normal.itemSize,
+										normalized: false,
+										type: 'Float32Array'
+									}
+
 								}
 
 								rhino_object = new Module.Mesh.createFromThreejsJSON( new_geometry );
