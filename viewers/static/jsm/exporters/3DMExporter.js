@@ -266,8 +266,8 @@ class Rhino3dmExporter {
 								new_geometry.type = geometry.type;
 								new_geometry.data = {};
 								new_geometry.data.attributes = {};
-								new_geometry.data.index = geometry.data.index;
 								new_geometry.data.boundingSphere = geometry.data.boundingSphere;
+								if ( geometry.data.index ) new_geometry.data.index = geometry.data.index;
 								if ( geometry.data.attributes.uv ) new_geometry.data.attributes.uv = geometry.data.attributes.uv;
 								if ( geometry.data.attributes.color ) new_geometry.data.attributes.color = geometry.data.attributes.color;
 								if ( geometry.data.attributes.tangent ) new_geometry.data.attributes.tangent = geometry.data.attributes.tangent;
