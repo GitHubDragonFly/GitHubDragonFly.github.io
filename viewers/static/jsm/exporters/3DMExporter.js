@@ -427,6 +427,8 @@ class Rhino3dmExporter {
 
 						}
 
+						/*
+
 						// this is for some possible future use
 						// the textures array does get created and stores images
 						// but will not be included in the final output file due
@@ -513,6 +515,8 @@ class Rhino3dmExporter {
 							if ( material.envMap ) add_texture( material.envMap, 'Emap' );
 
 						}
+
+						*/
 
 						if ( material.color ) {
 
