@@ -67,7 +67,6 @@ import {
 	SRGBColorSpace,
 	InstancedBufferAttribute
 } from "three";
-
 import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/DDSLoader.js";
 import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/TGALoader.js";
 import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/EXRLoader.js";
@@ -663,10 +662,10 @@ class GLTFMaterialsUnlitExtension {
 
 			if ( Array.isArray( metallicRoughness.baseColorFactor ) ) {
 
-				const baseColorFactor_array = metallicRoughness.baseColorFactor;
+				const array = metallicRoughness.baseColorFactor;
 
-				materialParams.color.setRGB( baseColorFactor_array[ 0 ], baseColorFactor_array[ 1 ], baseColorFactor_array[ 2 ], LinearSRGBColorSpace );
-				materialParams.opacity = baseColorFactor_array[ 3 ];
+				materialParams.color.setRGB( array[ 0 ], array[ 1 ], array[ 2 ], LinearSRGBColorSpace );
+				materialParams.opacity = array[ 3 ];
 
 			}
 
@@ -2203,10 +2202,9 @@ class GLTFMaterialsPbrSpecularGlossinessExtension {
 
 		if ( Array.isArray( pbrSpecularGlossiness.diffuseFactor ) ) {
 
-			const diffuseFactor_array = pbrSpecularGlossiness.diffuseFactor;
-
-			materialParams.color = new Color().setRGB( diffuseFactor_array[ 0 ], diffuseFactor_array[ 1 ], diffuseFactor_array[ 2 ], LinearSRGBColorSpace );
-			materialParams.opacity = diffuseFactor_array[ 3 ];
+			const array = pbrSpecularGlossiness.diffuseFactor;
+			materialParams.color.fromArray( array );
+			materialParams.opacity = array[ 3 ];
 
 		}
 
@@ -2222,9 +2220,7 @@ class GLTFMaterialsPbrSpecularGlossinessExtension {
 
 		if ( Array.isArray( pbrSpecularGlossiness.specularFactor ) ) {
 
-			const specularFactor_array = pbrSpecularGlossiness.specularFactor;
-
-			materialParams.specular = new Color().setRGB( specularFactor_array[ 0 ], specularFactor_array[ 1 ], specularFactor_array[ 2 ] );
+			materialParams.specular.fromArray( pbrSpecularGlossiness.specularFactor );
 
 		}
 
@@ -2276,7 +2272,9 @@ class GLTFMaterialsPbrSpecularGlossinessExtension {
 }
 
 /*********************************/
+
 /********** INTERPOLATION ********/
+
 /*********************************/
 
 // Spline Interpolation
@@ -3433,6 +3431,8 @@ class GLTFParser {
 
 			} else if ( source.uri ) {
 
+				if ( source.uri.indexOf( '%20' ) > -1 ) source.uri = source.uri.replaceAll( '%20', ' ' );
+
 				let su_uc = source.uri.toUpperCase();
 				let b_uc = blobs[ i ].toUpperCase();
 
@@ -3449,6 +3449,8 @@ class GLTFParser {
 				}
 
 			} else if ( source.name ) {
+
+				if ( source.name.indexOf( '%20' ) > -1 ) source.name = source.name.replaceAll( '%20', ' ' );
 
 				let sn_uc = ( source.name && source.name !== '' ) ? source.name.toUpperCase() : '';
 				let b_uc = blobs[ i ].toUpperCase();
@@ -3830,10 +3832,9 @@ class GLTFParser {
 
 			if ( Array.isArray( metallicRoughness.baseColorFactor ) ) {
 
-				const baseColorFactor_array = metallicRoughness.baseColorFactor;
-
-				materialParams.color = new Color().setRGB( baseColorFactor_array[ 0 ], baseColorFactor_array[ 1 ], baseColorFactor_array[ 2 ], LinearSRGBColorSpace );
-				materialParams.opacity = baseColorFactor_array[ 3 ];
+				const array = metallicRoughness.baseColorFactor;
+				materialParams.color.fromArray( array );
+				materialParams.opacity = array[ 3 ];
 
 			}
 
@@ -3927,6 +3928,7 @@ class GLTFParser {
 			const emissiveFactor = materialDef.emissiveFactor;
 			materialParams.emissive = new Color().setRGB( emissiveFactor[ 0 ], emissiveFactor[ 1 ], emissiveFactor[ 2 ], LinearSRGBColorSpace );
 
+
 		}
 
 		if ( materialDef.emissiveTexture !== undefined && materialType !== MeshBasicMaterial ) {
@@ -3955,7 +3957,6 @@ class GLTFParser {
 
 			if ( material.map ) material.map.colorSpace = SRGBColorSpace;
 			if ( material.emissiveMap ) material.emissiveMap.colorSpace = SRGBColorSpace;
-
 			assignExtrasToUserData( material, materialDef );
 
 			parser.associations.set( material, {
