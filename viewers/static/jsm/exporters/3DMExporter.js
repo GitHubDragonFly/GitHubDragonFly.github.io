@@ -564,12 +564,12 @@ class Rhino3dmExporter {
 
 							let diffuse_color = material.color.toString( 16 ).toUpperCase().padStart( 6, '0' );
 
-							rhino_material.diffuseColor = {
-								r: parseInt( diffuse_color.substring( 0, 2 ), 16 ),
-								g: parseInt( diffuse_color.substring( 2, 4 ), 16 ),
-								b: parseInt( diffuse_color.substring( 4 ), 16 ),
-								a: 255
-							};
+							let diffuse_r = parseInt( diffuse_color.substring( 0, 2 ), 16 );
+							let diffuse_g = parseInt( diffuse_color.substring( 2, 4 ), 16 );
+							let diffuse_b = parseInt( diffuse_color.substring( 4 ), 16 );
+							let diffuse_a = ( diffuse_r > 1 || diffuse_g > 1 || diffuse_b > 1 ) ? 255 : 1;
+
+							rhino_material.diffuseColor = { r: diffuse_r, g: diffuse_g, b: diffuse_b, a: diffuse_a };
 
 							rhino_attributes.drawColor = rhino_material.diffuseColor;
 
@@ -579,12 +579,12 @@ class Rhino3dmExporter {
 
 							let emission_color = material.emissive.toString( 16 ).toUpperCase().padStart( 6, '0' );
 
-							rhino_material.emissionColor = {
-								r: parseInt( emission_color.substring( 0, 2 ), 16 ),
-								g: parseInt( emission_color.substring( 2, 4 ), 16 ),
-								b: parseInt( emission_color.substring( 4 ), 16 ),
-								a: 255
-							};
+							let emission_r = parseInt( emission_color.substring( 0, 2 ), 16 );
+							let emission_g = parseInt( emission_color.substring( 2, 4 ), 16 );
+							let emission_b = parseInt( emission_color.substring( 4 ), 16 );
+							let emission_a = ( emission_r > 1 || emission_g > 1 || emission_b > 1 ) ? 255 : 1;
+
+							rhino_material.emissionColor = { r: emission_r, g: emission_g, b: emission_b, a: emission_a };
 
 						}
 
@@ -592,12 +592,12 @@ class Rhino3dmExporter {
 
 							let specular_color = material.specular.toString( 16 ).toUpperCase().padStart( 6, '0' );
 
-							rhino_material.specularColor = {
-								r: parseInt( specular_color.substring( 0, 2 ), 16 ),
-								g: parseInt( specular_color.substring( 2, 4 ), 16 ),
-								b: parseInt( specular_color.substring( 4 ), 16 ),
-								a: 255
-							};
+							let specular_r = parseInt( specular_color.substring( 0, 2 ), 16 );
+							let specular_g = parseInt( specular_color.substring( 2, 4 ), 16 );
+							let specular_b = parseInt( specular_color.substring( 4 ), 16 );
+							let specular_a = ( specular_r > 1 || specular_g > 1 || specular_b > 1 ) ? 255 : 1;
+
+							rhino_material.specularColor = { r: specular_r, g: specular_g, b: specular_b, a: specular_a };
 
 						}
 
@@ -627,12 +627,12 @@ class Rhino3dmExporter {
 
 								let base_color = material.color.toString( 16 ).toUpperCase().padStart( 6, '0' );
 
-								rhino_material.physicallyBased().baseColor = {
-									r: parseInt( base_color.substring( 0, 2 ), 16 ),
-									g: parseInt( base_color.substring( 2, 4 ), 16 ),
-									b: parseInt( base_color.substring( 4 ), 16 ),
-									a: 255
-								};
+								let base_r = parseInt( base_color.substring( 0, 2 ), 16 );
+								let base_g = parseInt( base_color.substring( 2, 4 ), 16 );
+								let base_b = parseInt( base_color.substring( 4 ), 16 );
+								let base_a = ( base_r > 1 || base_g > 1 || base_b > 1 ) ? 255 : 1;
+
+								rhino_material.physicallyBased().baseColor = { r: base_r, g: base_g, b: base_b, a: base_a };
 
 							}
 
@@ -640,13 +640,13 @@ class Rhino3dmExporter {
 
 								let specular_color = material.specularColor.toString( 16 ).toUpperCase().padStart( 6, '0' );
 
-								rhino_material.specularColor = {
-									r: parseInt( specular_color.substring( 0, 2 ), 16 ),
-									g: parseInt( specular_color.substring( 2, 4 ), 16 ),
-									b: parseInt( specular_color.substring( 4 ), 16 ),
-									a: 255
-								};
-
+								let specular_r = parseInt( specular_color.substring( 0, 2 ), 16 );
+								let specular_g = parseInt( specular_color.substring( 2, 4 ), 16 );
+								let specular_b = parseInt( specular_color.substring( 4 ), 16 );
+								let specular_a = ( specular_r > 1 || specular_g > 1 || specular_b > 1 ) ? 255 : 1;
+	
+								rhino_material.specularColor = { r: specular_r, g: specular_g, b: specular_b, a: specular_a };
+	
 							}
 
 							if ( material.specularIntensity !== undefined && material.specularIntensity > 0 )
@@ -752,12 +752,12 @@ class Rhino3dmExporter {
 
 								let diffuse_color = material.color.toString( 16 ).toUpperCase().padStart( 6, '0' );
 
-								let point_color = {
-									r: parseInt( diffuse_color.substring( 0, 2 ), 16 ),
-									g: parseInt( diffuse_color.substring( 2, 4 ), 16 ),
-									b: parseInt( diffuse_color.substring( 4 ), 16 ),
-									a: 255
-								};
+								let diffuse_r = parseInt( diffuse_color.substring( 0, 2 ), 16 );
+								let diffuse_g = parseInt( diffuse_color.substring( 2, 4 ), 16 );
+								let diffuse_b = parseInt( diffuse_color.substring( 4 ), 16 );
+								let diffuse_a = ( diffuse_r > 1 || diffuse_g > 1 || diffuse_b > 1 ) ? 255 : 1;
+
+								let point_color = { r: diffuse_r, g: diffuse_g, b: diffuse_b, a: diffuse_a };
 
 								geometry_position_array = geometry.data.attributes.position.array;
 
