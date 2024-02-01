@@ -926,21 +926,6 @@ class Rhino3dmExporter {
 
 	}
 
-	base64ToBuffer( str ) {
-
-		const b = atob( str );
-		const buf = new Uint8Array( b.length );
-
-		for ( let i = 0, l = buf.length; i < l; i ++ ) {
-
-			buf[ i ] = b.charCodeAt( i );
-
-		}
-
-		return buf;
-
-	}
-
 }
 
 export { Rhino3dmExporter };
