@@ -16,6 +16,7 @@ import * as rhino3dm from "https://cdn.jsdelivr.net/npm/rhino3dm@8.0.1/rhino3dm.
 /** !!! Work in progress !!!
 *
 *  - supports exporting meshes and points only
+*  - object geometry has to be of the THREE.BufferGeometry type
 *  - exporting mesh textures is not supported currently
 *
 *  Usage:
@@ -238,18 +239,23 @@ class Rhino3dmExporter {
 
 		let rhino_count = 0;
 
-		function parse_objects( objects ) {
+		let position, quaternion, scale, m4, group_m4;
+
+		async function parse_objects( objects ) {
 
 			for ( const object of objects ) {
 
-				let geometry;
+				position = new Vector3();
+				quaternion = new Quaternion();
+				scale = new Vector3();
 
-				let position = new Vector3();
-				let quaternion = new Quaternion();
-				let scale = new Vector3();
+				m4 = new Matrix4().fromArray( object.matrix );
 
-				let m4 = new Matrix4().fromArray( object.matrix );
+				if ( group_m4 !== undefined ) m4.premultiply( group_m4 );
+
 				m4.decompose( position, quaternion, scale );
+
+				let geometry;
 
 				if ( ( object.type === 'Mesh' && uuid_array_mesh_geometries[ object.geometry ] )
 					|| ( object.type === 'Points' && uuid_array_point_geometries[ object.geometry ] ) ) {
@@ -258,79 +264,109 @@ class Rhino3dmExporter {
 
 						if ( geo.uuid === object.geometry ) {
 
-							geometry = scope.interleaved_buffer_attribute_check( geo );
+							if ( ! geo.data ) continue;
 
-							if ( object.type === 'Mesh' ) {
+							if ( geo.type === 'BufferGeometry' ) {
 
-								const new_geometry = {};
-								new_geometry.type = geometry.type;
-								new_geometry.data = {};
-								new_geometry.data.attributes = {};
-								new_geometry.data.boundingSphere = geometry.data.boundingSphere;
-								if ( geometry.data.index ) new_geometry.data.index = geometry.data.index;
-								if ( geometry.data.attributes.uv ) new_geometry.data.attributes.uv = geometry.data.attributes.uv;
-								if ( geometry.data.attributes.color ) new_geometry.data.attributes.color = geometry.data.attributes.color;
-								if ( geometry.data.attributes.tangent ) new_geometry.data.attributes.tangent = geometry.data.attributes.tangent;
+								geometry = scope.interleaved_buffer_attribute_check( geo );
 
-								new_geometry.uuid = MathUtils.generateUUID();
+								if ( object.type === 'Mesh' ) {
 
-								const array_position = Array( geometry.data.attributes.position.array.length );
+									const new_geometry = {};
+									new_geometry.type = geometry.type;
+									new_geometry.data = {};
+									new_geometry.data.attributes = {};
+									new_geometry.data.boundingSphere = geometry.data.boundingSphere;
+									if ( geometry.data.index ) new_geometry.data.index = geometry.data.index;
+									if ( geometry.data.attributes.uv ) new_geometry.data.attributes.uv = geometry.data.attributes.uv;
+									if ( geometry.data.attributes.color ) new_geometry.data.attributes.color = geometry.data.attributes.color;
+									if ( geometry.data.attributes.tangent ) new_geometry.data.attributes.tangent = geometry.data.attributes.tangent;
 
-								for ( let i = 0; i < array_position.length; i += 3 ) {
+									new_geometry.uuid = MathUtils.generateUUID();
 
-									let new_position = new Vector3(
-										geometry.data.attributes.position.array[ i ],
-										geometry.data.attributes.position.array[ i + 1 ],
-										geometry.data.attributes.position.array[ i + 2 ]
-									).applyQuaternion( quaternion ).multiply( scale );
+									const array_position = Array( geometry.data.attributes.position.array.length );
 
-									array_position[ i ] = new_position.x + position.x;
-									array_position[ i + 1 ] = new_position.y + position.y;
-									array_position[ i + 2 ] = new_position.z + position.z;
+									for ( let i = 0; i < array_position.length; i += 3 ) {
 
-								}
+										let new_position = new Vector3(
+											geometry.data.attributes.position.array[ i ],
+											geometry.data.attributes.position.array[ i + 1 ],
+											geometry.data.attributes.position.array[ i + 2 ]
+										)
+										.applyQuaternion( quaternion )
+										.multiply( scale );
 
-								new_geometry.data.attributes.position = {
-									array: array_position,
-									itemSize: geometry.data.attributes.position.itemSize,
-									normalized: false,
-									type: 'Float32Array'
-								}
-
-								if ( geometry.data.attributes.normal ) {
-
-									const array_normal = Array( geometry.data.attributes.normal.array.length );
-
-									for ( let i = 0; i < array_normal.length; i += 3 ) {
-
-										let new_normal = new Vector3(
-											geometry.data.attributes.normal.array[ i ],
-											geometry.data.attributes.normal.array[ i + 1 ],
-											geometry.data.attributes.normal.array[ i + 2 ]
-										).applyQuaternion( quaternion ).multiply( scale );
-
-										array_normal[ i ] = new_normal.x;
-										array_normal[ i + 1 ] = new_normal.y;
-										array_normal[ i + 2 ] = new_normal.z;
+										array_position[ i ] = new_position.x + position.x;
+										array_position[ i + 1 ] = new_position.y + position.y;
+										array_position[ i + 2 ] = new_position.z + position.z;
 
 									}
 
-									new_geometry.data.attributes.normal = {
-										array: array_normal,
-										itemSize: geometry.data.attributes.normal.itemSize,
+									new_geometry.data.attributes.position = {
+										array: array_position,
+										itemSize: geometry.data.attributes.position.itemSize,
 										normalized: false,
 										type: 'Float32Array'
 									}
 
+									if ( geometry.data.attributes.normal ) {
+
+										const array_normal = Array( geometry.data.attributes.normal.array.length );
+
+										for ( let i = 0; i < array_normal.length; i += 3 ) {
+
+											let new_normal = new Vector3(
+												geometry.data.attributes.normal.array[ i ],
+												geometry.data.attributes.normal.array[ i + 1 ],
+												geometry.data.attributes.normal.array[ i + 2 ]
+											)
+											.applyQuaternion( quaternion )
+											.multiply( scale );
+
+											array_normal[ i ] = new_normal.x;
+											array_normal[ i + 1 ] = new_normal.y;
+											array_normal[ i + 2 ] = new_normal.z;
+
+										}
+
+										new_geometry.data.attributes.normal = {
+											array: array_normal,
+											itemSize: geometry.data.attributes.normal.itemSize,
+											normalized: false,
+											type: 'Float32Array'
+										}
+
+									}
+
+									rhino_object = new Module.Mesh.createFromThreejsJSON( new_geometry );
+									process_object( object, new_geometry );
+
+								} else {
+
+									rhino_object = new Module.PointCloud();
+									process_object( object, geometry );
+
 								}
 
-								rhino_object = new Module.Mesh.createFromThreejsJSON( new_geometry );
-								process_object( object, new_geometry );
+							} else if ( geo.type === 'BoxGeometry' ) {
 
-							} else {
+								console.log('BoxGeometry - not supported');
+								geometry = geo;
 
-								rhino_object = new Module.PointCloud();
-								process_object( object, geometry );
+							} else if ( geo.type === 'SphereGeometry' ) {
+
+								console.log('SphereGeometry - not supported');
+								geometry = geo;
+
+							} else if ( geo.type === 'ConeGeometry' ) {
+
+								console.log('ConeGeometry - not supported');
+								geometry = geo;
+
+							} else if ( geo.type === 'CylinderGeometry' ) {
+
+								console.log('CylinderGeometry - not supported');
+								geometry = geo;
 
 							}
 
@@ -355,7 +391,9 @@ class Rhino3dmExporter {
 
 				} else if ( object.type === 'Group' || object.type === 'Object3D' ) {
 
-					if ( object.children ) {
+					if ( object.children && object.children.length > 0 ) {
+
+						group_m4 = new Matrix4().fromArray( object.matrix );
 
 						parse_objects( object.children );
 
@@ -365,6 +403,10 @@ class Rhino3dmExporter {
 						continue;
 
 					}
+
+				} else if ( object.type === 'DirectionalLight' || object.type === 'AmbientLight' || object.type === 'HemisphereLight' || object.type === 'SpotLight' ) {
+
+					continue;
 
 				} else {
 
@@ -399,7 +441,7 @@ class Rhino3dmExporter {
 						tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
 						tmp = tmp / 256;
 						dataAsUint8Array[ i ] = tmp + colorCorrect;
-	
+
 					}
 
 					for ( let j = 0; j < dataAsUint8Array.length; j += geometry.data.attributes.color.itemSize ) {
@@ -449,8 +491,8 @@ class Rhino3dmExporter {
 									texture_names[ texture.name ] = texture.name;
 
 									let tex = {};
-									tex.name = texture.name;
 									tex.type = map_type;
+									tex.name = texture.name;
 									tex.flipY = texture.flipY;
 									tex.center = texture.center;
 									tex.offset = texture.offset;
@@ -670,7 +712,7 @@ class Rhino3dmExporter {
 					for ( let j = 0; j < dataAsUint8Array.length; j += geometry.data.attributes.color.itemSize ) {
 
 						let location = [ geometry_position_array[ j ], geometry_position_array[ j + 1 ], geometry_position_array[ j + 2 ] ];
-			
+
 						let point_color = {
 							r: dataAsUint8Array[ j ],
 							g: dataAsUint8Array[ j + 1 ],
@@ -758,6 +800,8 @@ class Rhino3dmExporter {
 		}
 
 		if ( result.object.children && result.object.children.length > 0 ) {
+
+			group_m4 = new Matrix4().fromArray( result.object.matrix );
 
 			parse_objects( result.object.children );
 
@@ -879,6 +923,21 @@ class Rhino3dmExporter {
 		}
 
 		return geo;
+
+	}
+
+	base64ToBuffer( str ) {
+
+		const b = atob( str );
+		const buf = new Uint8Array( b.length );
+
+		for ( let i = 0, l = buf.length; i < l; i ++ ) {
+
+			buf[ i ] = b.charCodeAt( i );
+
+		}
+
+		return buf;
 
 	}
 
