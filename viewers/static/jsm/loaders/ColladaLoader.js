@@ -13,6 +13,7 @@ import {
 	FrontSide,
 	Group,
 	Line,
+	LinearSRGBColorSpace,
 	LineBasicMaterial,
 	LineSegments,
 	Loader,
@@ -35,14 +36,15 @@ import {
 	Skeleton,
 	SkinnedMesh,
 	SpotLight,
+	SRGBColorSpace,
 	TextureLoader,
 	Vector2,
 	Vector3,
-	VectorKeyframeTrack,
-	SRGBColorSpace
+	VectorKeyframeTrack
 } from "three";
-import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/TGALoader.js";
-import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/DDSLoader.js";
+
+import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/loaders/TGALoader.js";
+import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/loaders/DDSLoader.js";
 
 class ColladaLoader extends Loader {
 
@@ -1552,11 +1554,11 @@ class ColladaLoader extends Loader {
 						break;
 
 					case 'bump':
-						if ( parameter.texture ) material.normalMap = getTexture( parameter.texture );
+						if ( parameter.texture ) material.normalMap = getTexture( parameter.texture, LinearSRGBColorSpace );
 						break;
 
 					case 'ambient':
-						if ( parameter.texture ) material.lightMap = getTexture( parameter.texture, SRGBColorSpace );
+						if ( parameter.texture ) material.lightMap = getTexture( parameter.texture, LinearSRGBColorSpace );
 						break;
 
 					case 'shininess':
@@ -2171,7 +2173,7 @@ class ColladaLoader extends Loader {
 				array: [],
 				stride: 0
 			};
-			const uv2 = {
+			const uv1 = {
 				array: [],
 				stride: 0
 			};
@@ -2309,8 +2311,8 @@ class ColladaLoader extends Loader {
 										break;
 
 									case 'TEXCOORD1':
-										buildGeometryData( primitive, sources[ id ], input.offset, uv2.array );
-										uv.stride = sources[ id ].stride;
+										buildGeometryData( primitive, sources[ id ], input.offset, uv1.array );
+										uv1.stride = sources[ id ].stride;
 										break;
 
 									default:
@@ -2338,8 +2340,8 @@ class ColladaLoader extends Loader {
 							break;
 
 						case 'TEXCOORD1':
-							buildGeometryData( primitive, sources[ input.id ], input.offset, uv2.array );
-							uv2.stride = sources[ input.id ].stride;
+							buildGeometryData( primitive, sources[ input.id ], input.offset, uv1.array );
+							uv1.stride = sources[ input.id ].stride;
 							break;
 
 					}
@@ -2353,7 +2355,7 @@ class ColladaLoader extends Loader {
 			if ( normal.array.length > 0 ) geometry.setAttribute( 'normal', new Float32BufferAttribute( normal.array, normal.stride ) );
 			if ( color.array.length > 0 ) geometry.setAttribute( 'color', new Float32BufferAttribute( color.array, color.stride ) );
 			if ( uv.array.length > 0 ) geometry.setAttribute( 'uv', new Float32BufferAttribute( uv.array, uv.stride ) );
-			if ( uv2.array.length > 0 ) geometry.setAttribute( 'uv2', new Float32BufferAttribute( uv2.array, uv2.stride ) );
+			if ( uv1.array.length > 0 ) geometry.setAttribute( 'uv1', new Float32BufferAttribute( uv1.array, uv1.stride ) );
 			if ( skinIndex.array.length > 0 ) geometry.setAttribute( 'skinIndex', new Float32BufferAttribute( skinIndex.array, skinIndex.stride ) );
 			if ( skinWeight.array.length > 0 ) geometry.setAttribute( 'skinWeight', new Float32BufferAttribute( skinWeight.array, skinWeight.stride ) );
 			build.data = geometry;
