@@ -288,10 +288,10 @@ class ColladaExporter {
 				} // serialize lightmap uvs
 
 
-				if ( 'uv2' in bufferGeometry.attributes ) {
+				if ( 'uv1' in bufferGeometry.attributes ) {
 
 					const uvName = `${meshid}-texcoord2`;
-					gnode += getAttribute( bufferGeometry.attributes.uv2, uvName, [ 'S', 'T' ], 'float' );
+					gnode += getAttribute( bufferGeometry.attributes.uv1, uvName, [ 'S', 'T' ], 'float' );
 					triangleInputs += `<input semantic="TEXCOORD" source="#${uvName}" offset="0" set="1" />`;
 
 				} // serialize colors
@@ -460,7 +460,7 @@ class ColladaExporter {
 			let node = `<node name="${o.name}">`;
 			node += getTransform( o );
 
-			if ( (o.isMesh === true || o.isPoints === true) && o.geometry !== null ) {
+			if ( ( o.isMesh === true || o.isPoints === true ) && o.geometry !== null ) {
 
 				// function returns the id associated with the mesh and a "BufferGeometry" version
 				// of the geometry in case it's not a geometry.
