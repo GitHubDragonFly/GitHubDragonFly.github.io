@@ -568,15 +568,6 @@ class Rhino3dmExporter {
 
 												tex.image = image.url;
 
-												//const base64data = image.url.replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
-												//const ext = '.' + texture.userData.mimeType.substring( texture.userData.mimeType.lastIndexOf( '/' ) + 1 );
-												//const image_file = new File( [ scope.base64ToBuffer( base64data ) ], texture.name + ext, { type: texture.userData.mimeType } );
-
-												//rhino_file.embeddedFiles().add( new Module.EmbeddedFile( image_file ) );
-
-												//rhino_file.embeddedFiles().get( rhino_file.embeddedFiles().count ).fileName = texture.name;
-												//rhino_file.embeddedFiles().get( rhino_file.embeddedFiles().count ).write( image.url );
-
 											}
 
 										}
@@ -987,21 +978,6 @@ class Rhino3dmExporter {
 		}
 
 		return geo;
-
-	}
-
-	base64ToBuffer( str ) {
-
-		const b = atob( str );
-		const buf = new Uint8Array( b.length );
-
-		for ( let i = 0, l = buf.length; i < l; i ++ ) {
-
-			buf[ i ] = b.charCodeAt( i );
-
-		}
-
-		return buf;
 
 	}
 
