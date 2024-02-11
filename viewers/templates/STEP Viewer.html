@@ -1030,73 +1030,75 @@
 
           let uuid_array = [];
 
-          let mesh_clone;
+          if (bim === true) {
+            // Export BIM to PLY format first, PRWM format second and then export to 3DM
 
-          // Export to PLY format first, PRWM format second and then export to 3DM
+            const { PLYLoader } = await import( "three/addons/loaders/PLYLoader.js" );
+            const { PRWMLoader } = await import( "../static/jsm/loaders/PRWMLoader.js" );
+            const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.js" );
 
-          const { PLYLoader } = await import( "three/addons/loaders/PLYLoader.js" );
-          const { PRWMLoader } = await import( "../static/jsm/loaders/PRWMLoader.js" );
-          const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.js" );
+            let bigEndian = false;
+            let arrayBuffer;
 
-          let bigEndian = false;
-          let arrayBuffer;
+            let mesh_clone = await create_meshes();
 
-          mesh_clone = await create_meshes();
+            new PLYExporter().parse( mesh_clone, async function( json ) {
+              let blob1 = new Blob( [ json ], { type: 'application/octet-stream' } );
 
-          new PLYExporter().parse( mesh_clone, async function( json ) {
-            let blob1 = new Blob( [ json ], { type: 'application/octet-stream' } );
+              new PLYLoader().load( URL.createObjectURL( blob1 ), async function( json_geometry ) {
+                URL.revokeObjectURL( blob1 );
 
-            new PLYLoader().load( URL.createObjectURL( blob1 ), async function( json_geometry ) {
-              URL.revokeObjectURL( blob1 );
+                arrayBuffer = threeBuffergeometryToPrwm( json_geometry, bigEndian);
 
-              arrayBuffer = threeBuffergeometryToPrwm( json_geometry, bigEndian);
+                let blob2 = new Blob( [ arrayBuffer ], { type: 'application/binary' } );
 
-              let blob2 = new Blob( [ arrayBuffer ], { type: 'application/binary' } );
+                new PRWMLoader().load( URL.createObjectURL( blob2 ), async function( object ) {
+                  URL.revokeObjectURL( blob2 );
 
-              new PRWMLoader().load( URL.createObjectURL( blob2 ), async function( object ) {
-                URL.revokeObjectURL( blob2 );
+                  let material = new THREE.MeshStandardMaterial( {
+                    side: THREE.DoubleSide,
+                    envMapIntensity: 1.0,
+                    vertexColors: true,
+                    flatShading: bim === true,
+                    metalness: 0.5,
+                    roughness: 0.5,
+                    opacity: 1,
+                    fog: true
+                  });
 
-                let material = new THREE.MeshStandardMaterial( {
-                  side: THREE.DoubleSide,
-                  envMapIntensity: 1.0,
-                  vertexColors: true,
-                  flatShading: bim === true ? true : false,
-                  metalness: 0.6,
-                  roughness: 0.5,
-                  opacity: 1,
-                  fog: true
+                  let smooth = object;
+
+                  let uvs = smooth.getAttribute( 'uv' );
+
+                  if (uvs && uvs.array.length > 0) {
+                    if (uvs.array.some( e => e.toString() === 'NaN' || e === null )) smooth.deleteAttribute( 'uv' );
+                  }
+
+                  smooth.computeVertexNormals();
+                  smooth.normalizeNormals();
+                  smooth.center();
+
+                  mesh_clone = new THREE.Mesh( smooth, material );
+                  await export_rhino3dm( mesh_clone );
                 });
-
-                let smooth = object;
-
-                let uvs = smooth.getAttribute( 'uv' );
-
-                if (uvs && uvs.array.length > 0) {
-                  if (uvs.array.some( e => e.toString() === 'NaN' || e === null )) smooth.deleteAttribute( 'uv' );
-                }
-
-                smooth.computeVertexNormals();
-                smooth.normalizeNormals();
-                smooth.center();
-
-                mesh_clone = new THREE.Mesh( smooth, material );
-                await export_rhino3dm( mesh_clone );
               });
-            });
-          }, { binary: true, littleEndian: true });
+            }, { binary: true, littleEndian: true });
+          } else {
+            await export_rhino3dm( mesh );
+          }
 
-          async function export_rhino3dm( mesh_clone ) {
+          async function export_rhino3dm( mesh_to_process ) {
             const { Rhino3dmExporter } = await import( "../static/jsm/exporters/3DMExporter.js" );
 
             let rhino_exporter = new Rhino3dmExporter( manager );
 
-            rhino_exporter.parse( mesh_clone, async function( arrayBuffer ) {
+            rhino_exporter.parse( mesh_to_process, async function( arrayBuffer ) {
               let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
 
               zip.file( filename + '.3dm', blob );
 
               await process_zip( '_3DM' );
-            }, function( error ) { console.log( error ); }, { vertexColorsCorrection: 48 });
+            }, function( error ) { console.log( error ); }, { vertexColorsCorrection: 0 });
           }
         }
       }
@@ -2056,9 +2058,9 @@
 
                 if (resultMesh.color) {
                   let color = new THREE.Color( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
-                  defaultMaterial = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.1, roughness: 0.6, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: color } );
+                  defaultMaterial = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: color } );
                 } else {
-                  defaultMaterial = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.1, roughness: 0.6, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: 0xFFFFFF } );
+                  defaultMaterial = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: 0xFFFFFF } );
                 }
 
                 let materials = defaultMaterial;
@@ -2068,7 +2070,7 @@
 
                   for (let faceColor of resultMesh.brep_faces) {
                     let color = faceColor.color ? new THREE.Color( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] ) : defaultMaterial.color;
-                    materials.push( new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.1, roughness: 0.6, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: color } ) );
+                    materials.push( new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: color } ) );
                   }
 
                   let triangleCount = resultMesh.index.array.length / 3;
@@ -2251,9 +2253,9 @@
 
                   if (resultMesh.color) {
                     let color = new THREE.Color( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
-                    defaultMaterial = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.1, roughness: 0.6, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: color } );
+                    defaultMaterial = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: color } );
                   } else {
-                    defaultMaterial = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.1, roughness: 0.6, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: 0xFFFFFF } );
+                    defaultMaterial = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: 0xFFFFFF } );
                   }
 
                   let materials = defaultMaterial;
@@ -2263,7 +2265,7 @@
 
                     for (let faceColor of resultMesh.brep_faces) {
                       let color = faceColor.color ? new THREE.Color( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] ) : defaultMaterial.color;
-                      materials.push( new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.1, roughness: 0.6, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: color } ) );
+                      materials.push( new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: color } ) );
                     }
 
                     let triangleCount = resultMesh.index.array.length / 3;
@@ -2444,7 +2446,7 @@
 
         m_meshes.traverse( function( child ) {
           if (child.isInstancedMesh) {
-            const material = new THREE.MeshStandardMaterial( { name: 'Default', side: THREE.DoubleSide, opacity: 1, metalness: 0.1, roughness: 0.6, envMapIntensity: 1.0 } );
+            const material = new THREE.MeshStandardMaterial( { name: 'Default', side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0 } );
 
             // Alternative GLB export will apply DRACO compression on indexed geometries only
             if (alternative === true && !child.geometry.index) {
@@ -2481,7 +2483,7 @@
               meshes.updateMatrixWorld( true, true );
             }
           } else if (child.isMesh) {
-            const material = new THREE.MeshStandardMaterial( { name: 'Default', side: THREE.DoubleSide, opacity: 1, metalness: 0.1, roughness: 0.6, envMapIntensity: 1.0 } );
+            const material = new THREE.MeshStandardMaterial( { name: 'Default', side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0 } );
             let child_clone;
 
             if (!child.geometry.index) {
@@ -2726,8 +2728,8 @@
                 let mtrl = new THREE.MeshStandardMaterial( {
                   side: THREE.DoubleSide,
                   envMapIntensity: 1.0,
-                  metalness: 0.1,
-                  roughness: 0.6,
+                  metalness: 0.5,
+                  roughness: 0.5,
                   flatShading: flat_shading_enabled,
                   envMap: (gui && params.setEnvMap) ? scene.environment : null
                 });
