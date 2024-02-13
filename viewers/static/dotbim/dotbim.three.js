@@ -67,7 +67,24 @@ function dotbim_Elemments2Meshes(elements, geometrys) {
 function dotbim_Elemment2Mesh(element, geometrys) {
     let { mesh_id, vector, rotation, guid, type, color, face_colors, info } = element;
 
-    let geometry = geometrys[mesh_id].clone();
+    let geometry;
+
+    if (geometrys[mesh_id]) {
+        geometry = geometrys[mesh_id].clone();
+    } else {
+        for (const geo of geometrys) {
+            if (geo.userData.mesh_id === mesh_id) {
+                geometry = geo.clone();
+                break;
+            }
+        }
+
+        if (!geometry) {
+            console.log('Geometry not found!');
+            return null;
+        }
+    }
+
     let name = info.Name || '';
 
     geometry.computeVertexNormals();
@@ -187,6 +204,8 @@ function dotbim_Mesh2GeometryColor(mesh) {
     }
 
     geometry.computeVertexNormals();
+
+    geometry.userData[ 'mesh_id' ] = mesh_id;
 
     return geometry;
 }
