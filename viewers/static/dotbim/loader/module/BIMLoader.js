@@ -149,7 +149,33 @@ class BIMLoader extends Loader {
 
 			let { mesh_id, vector, rotation, guid, type, color, face_colors, info } = element;
 
-			let geometry = geometries[ mesh_id ];
+			let geometry;
+
+			if ( geometries[ mesh_id ] ) {
+
+				geometry = geometries[ mesh_id ].clone();
+
+			} else {
+
+				for ( const geo of geometries ) {
+
+					if ( geo.userData.mesh_id === mesh_id ) {
+
+						geometry = geo.clone();
+						break;
+
+					}
+
+				}
+
+				if ( ! geometry ) {
+
+					throw new Error( 'THREE.BIMLoader: Geometry not found!' );
+
+				}
+
+			}
+
 			let name = info.Name || '';
 
 			geometry.computeVertexNormals();
@@ -296,6 +322,8 @@ class BIMLoader extends Loader {
 			}
 
 			geometry.computeVertexNormals();
+
+			geometry.userData[ 'mesh_id' ] = mesh_id;
 
 			return geometry;
 
