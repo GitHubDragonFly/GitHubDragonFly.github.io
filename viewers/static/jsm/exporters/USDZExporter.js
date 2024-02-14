@@ -501,8 +501,8 @@ function buildVector2Array( attribute ) {
 
 	for ( let i = 0; i < attribute.count; i ++ ) {
 
-		const x = attribute.getX( i );
-		const y = attribute.getY( i );
+		const x = attribute.getX( i ) || 0; // avoid NaN values
+		const y = attribute.getY( i ) || 0; // avoid NaN values
 
 		array.push( `(${ x.toPrecision( PRECISION ) }, ${ 1 - y.toPrecision( PRECISION ) })` );
 
