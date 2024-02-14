@@ -182,8 +182,8 @@ class OBJExporter {
 
 				for ( let i = 0, l = uvs.count; i < l; i ++, nbVertexUvs ++ ) {
 
-					uv.x = uvs.getX( i );
-					uv.y = uvs.getY( i );
+					uv.x = uvs.getX( i ) || 0; // avoid NaN values
+					uv.y = uvs.getY( i ) || 0; // avoid NaN values
 
 					// transform the uv to export format
 					output += 'vt ' + uv.x + ' ' + uv.y + '\n';
