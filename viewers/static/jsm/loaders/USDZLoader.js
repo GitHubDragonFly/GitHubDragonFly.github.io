@@ -14,9 +14,9 @@ import {
 	TextureLoader,
 	Object3D,
 	Vector2
-} from 'three';
+} from "three";
 
-import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/fflate.module.js";
+import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/libs/fflate.module.js";
 
 class USDAParser {
 
@@ -513,6 +513,17 @@ class USDZLoader extends Loader {
 
 					if ( 'color3f inputs:diffuseColor.connect' in surface ) {
 
+						if ( 'color3f inputs:diffuseColor' in surface ) {
+
+							const color = surface[ 'color3f inputs:diffuseColor' ].replace( /[()]*/g, '' );
+							material.color.fromArray( JSON.parse( '[' + color + ']' ) );
+
+						} else {
+
+							material.color.set( 0xFFFFFF );
+
+						}
+
 						const path = surface[ 'color3f inputs:diffuseColor.connect' ];
 						const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
 
@@ -534,12 +545,22 @@ class USDZLoader extends Loader {
 
 					if ( 'color3f inputs:emissiveColor.connect' in surface ) {
 
+						if ( 'color3f inputs:emissiveColor' in surface ) {
+
+							const color = surface[ 'color3f inputs:emissiveColor' ].replace( /[()]*/g, '' );
+							material.emissive.fromArray( JSON.parse( '[' + color + ']' ) );
+
+						} else {
+
+							material.emissive.set( 0xFFFFFF );
+
+						}
+
 						const path = surface[ 'color3f inputs:emissiveColor.connect' ];
 						const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
 
 						material.emissiveMap = buildTexture( sampler );
 						material.emissiveMap.colorSpace = SRGBColorSpace;
-						material.emissive.set( 0xffffff );
 
 						if ( 'def Shader "Transform2d_emissive"' in data ) {
 
@@ -572,10 +593,19 @@ class USDZLoader extends Loader {
 
 					if ( 'float inputs:roughness.connect' in surface ) {
 
+						if ( 'float inputs:roughness' in surface ) {
+
+							material.roughness = parseFloat( surface[ 'float inputs:roughness' ] );
+
+						} else {
+
+							material.roughness = 1.0;
+
+						}
+
 						const path = surface[ 'float inputs:roughness.connect' ];
 						const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
 
-						material.roughness = 1.0;
 						material.roughnessMap = buildTexture( sampler );
 						material.roughnessMap.colorSpace = NoColorSpace;
 
@@ -593,10 +623,19 @@ class USDZLoader extends Loader {
 
 					if ( 'float inputs:metallic.connect' in surface ) {
 
+						if ( 'float inputs:metallic' in surface ) {
+
+							material.metalness = parseFloat( surface[ 'float inputs:metallic' ] );
+
+						} else {
+
+							material.metalness = 1.0;
+
+						}
+
 						const path = surface[ 'float inputs:metallic.connect' ];
 						const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
 
-						material.metalness = 1.0;
 						material.metalnessMap = buildTexture( sampler );
 						material.metalnessMap.colorSpace = NoColorSpace;
 
@@ -614,10 +653,19 @@ class USDZLoader extends Loader {
 
 					if ( 'float inputs:clearcoat.connect' in surface ) {
 
+						if ( 'float inputs:clearcoat' in surface ) {
+
+							material.clearcoat = parseFloat( surface[ 'float inputs:clearcoat' ] );
+
+						} else {
+
+							material.clearcoat = 1.0;
+
+						}
+
 						const path = surface[ 'float inputs:clearcoat.connect' ];
 						const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
 
-						material.clearcoat = 1.0;
 						material.clearcoatMap = buildTexture( sampler );
 						material.clearcoatMap.colorSpace = NoColorSpace;
 
@@ -635,10 +683,19 @@ class USDZLoader extends Loader {
 
 					if ( 'float inputs:clearcoatRoughness.connect' in surface ) {
 
+						if ( 'float inputs:clearcoatRoughness' in surface ) {
+
+							material.clearcoatRoughness = parseFloat( surface[ 'float inputs:clearcoatRoughness' ] );
+
+						} else {
+
+							material.clearcoatRoughness = 1.0;
+
+						}
+
 						const path = surface[ 'float inputs:clearcoatRoughness.connect' ];
 						const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
 
-						material.clearcoatRoughness = 1.0;
 						material.clearcoatRoughnessMap = buildTexture( sampler );
 						material.clearcoatRoughnessMap.colorSpace = NoColorSpace;
 
@@ -679,6 +736,7 @@ class USDZLoader extends Loader {
 					if ( 'float inputs:opacity' in surface ) {
 
 						material.opacity = parseFloat( surface[ 'float inputs:opacity' ] );
+						material.transparent = material.opacity < 1;
 
 						if ( 'float inputs:opacityThreshold' in surface ) {
 
@@ -689,7 +747,9 @@ class USDZLoader extends Loader {
 
 							if ( opacity_threshold === 0.0059 || opacity_threshold === 0.0058 ) {
 
+								material.transparent = false;
 								material.transmission = 1;
+								material.opacity = 1;
 
 								// set arbitrary thickness
 
@@ -715,7 +775,7 @@ class USDZLoader extends Loader {
 
 							} else if ( opacity_threshold === 0.0057 ) {
 
-								material.transparent = true;
+								material.depthWrite = false;
 
 								// set map
 
@@ -737,7 +797,7 @@ class USDZLoader extends Loader {
 
 							} else if ( opacity_threshold === 0.0056 ) {
 
-								material.transparent = true;
+								material.depthWrite = false;
 
 								// set alphaMap
 
