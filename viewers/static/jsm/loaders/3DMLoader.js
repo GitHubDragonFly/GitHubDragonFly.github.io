@@ -1,30 +1,30 @@
 import {
 	BufferAttribute,
 	BufferGeometryLoader,
-	FileLoader,
-	Loader,
-	Object3D,
-	MeshStandardMaterial,
-	MeshPhysicalMaterial,
-	Mesh,
+	CanvasTexture,
+	ClampToEdgeWrapping,
 	Color,
-	Points,
-	PointsMaterial,
+	DirectionalLight,
+	DoubleSide,
+	FileLoader,
+	LinearFilter,
 	Line,
 	LineBasicMaterial,
+	Loader,
 	Matrix4,
-	DirectionalLight,
+	Mesh,
+	MeshPhysicalMaterial,
+	MeshStandardMaterial,
+	Object3D,
 	PointLight,
-	SpotLight,
+	Points,
+	PointsMaterial,
 	RectAreaLight,
+	RepeatWrapping,
+	SpotLight,
 	Sprite,
 	SpriteMaterial,
-	CanvasTexture,
-	LinearFilter,
-	ClampToEdgeWrapping,
-	RepeatWrapping,
-	TextureLoader,
-	DoubleSide
+	TextureLoader
 } from "three";
 
 import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/EXRLoader.js";
@@ -243,8 +243,8 @@ class Rhino3dmLoader extends Loader {
 
 			return new MeshStandardMaterial( {
 				color: new Color( 1, 1, 1 ),
-				metalness: 0.1,
-				roughness: 0.6,
+				metalness: 0.5,
+				roughness: 0.5,
 				name: Loader.DEFAULT_MATERIAL_NAME,
 				side: DoubleSide
 			} );
@@ -257,27 +257,27 @@ class Rhino3dmLoader extends Loader {
 			diffuse_color = new Color(
 				material.diffuseColor.r / 255.0,
 				material.diffuseColor.g / 255.0,
-				material.diffuseColor.b / 255.0);
+				material.diffuseColor.b / 255.0).convertSRGBToLinear();
 		} else {
-			diffuse_color = new Color( material.diffuseColor.r, material.diffuseColor.g, material.diffuseColor.b);
+			diffuse_color = new Color( material.diffuseColor.r, material.diffuseColor.g, material.diffuseColor.b).convertSRGBToLinear();
 		}
 
 		if ( material.emissionColor.r > 1 || material.emissionColor.g > 1 || material.emissionColor.b > 1 ) {
 			emissive_color = new Color(
 				material.emissionColor.r / 255.0,
 				material.emissionColor.g / 255.0,
-				material.emissionColor.b / 255.0);
+				material.emissionColor.b / 255.0).convertSRGBToLinear();
 		} else {
-			emissive_color = new Color( material.emissionColor.r, material.emissionColor.g, material.emissionColor.b);
+			emissive_color = new Color( material.emissionColor.r, material.emissionColor.g, material.emissionColor.b).convertSRGBToLinear();
 		}
 
 		if ( material.specularColor.r > 1 || material.specularColor.g > 1 || material.specularColor.b > 1 ) {
 			specular_color = new Color(
 				material.specularColor.r / 255.0,
 				material.specularColor.g / 255.0,
-				material.specularColor.b / 255.0);
+				material.specularColor.b / 255.0).convertSRGBToLinear();
 		} else {
-			specular_color = new Color( material.specularColor.r, material.specularColor.g, material.specularColor.b);
+			specular_color = new Color( material.specularColor.r, material.specularColor.g, material.specularColor.b).convertSRGBToLinear();
 		}
 
 		const mat = new MeshPhysicalMaterial( {
@@ -308,9 +308,9 @@ class Rhino3dmLoader extends Loader {
 				mat.color = new Color(
 					pbr.baseColor.r / 255.0,
 					pbr.baseColor.g / 255.0,
-					pbr.baseColor.b / 255.0);
+					pbr.baseColor.b / 255.0).convertSRGBToLinear();
 			} else {
-				mat.color = new Color( pbr.baseColor.r, pbr.baseColor.g, pbr.baseColor.b);
+				mat.color = new Color( pbr.baseColor.r, pbr.baseColor.g, pbr.baseColor.b).convertSRGBToLinear();
 			}
 
 			mat.clearcoat = pbr.clearcoat;
@@ -705,27 +705,23 @@ class Rhino3dmLoader extends Loader {
 
 				if ( geometry.attributes.hasOwnProperty( 'color' ) ) {
 
-					let colors = geometry.getAttribute( 'color' );
-					let tempColor = new Color();
-					let converted_colors = [];
-
-					for ( let i = 0, l = colors.count; i < l; i ++ ) {
-
-						tempColor.fromBufferAttribute( colors, i ).convertSRGBToLinear();
-						converted_colors.push( tempColor.r, tempColor.g, tempColor.b );
-
-					}
-
-					geometry.deleteAttribute( 'color' );
-					geometry.setAttribute( 'color', new BufferAttribute( new Float32Array( converted_colors ), 3, false ) );
-
+					geometry = this._processVertexColors( geometry );
 					material = new PointsMaterial( { vertexColors: true, sizeAttenuation: false, size: 2 } );
 
 				} else {
 
 					_color = attributes.drawColor;
-					color = new Color( _color.r / 255.0, _color.g / 255.0, _color.b / 255.0 );
-					material = new PointsMaterial( { color: color, sizeAttenuation: false, size: 2 } );
+
+					if ( _color.r > 1 || _color.g > 1 || _color.b > 1 ) {
+						color = new Color(
+							_color.r / 255.0,
+							_color.g / 255.0,
+							_color.b / 255.0 ).convertSRGBToLinear();
+					} else {
+						color = new Color( _color.r, _color.g, _color.b ).convertSRGBToLinear();
+					}
+
+					material = new PointsMaterial( { vertexColors: false, color: color, sizeAttenuation: false, size: 2 } );
 
 				}
 
@@ -754,21 +750,12 @@ class Rhino3dmLoader extends Loader {
 
 				if ( geometry.attributes.hasOwnProperty( 'color' ) ) {
 
-					let colors = geometry.getAttribute( 'color' );
-					let tempColor = new Color();
-					let converted_colors = [];
-
-					for ( let i = 0, l = colors.count; i < l; i ++ ) {
-
-						tempColor.fromBufferAttribute( colors, i ).convertSRGBToLinear();
-						converted_colors.push( tempColor.r, tempColor.g, tempColor.b );
-
-					}
-
-					geometry.deleteAttribute( 'color' );
-					geometry.setAttribute( 'color', new BufferAttribute( new Float32Array( converted_colors ), 3, false ) );
-
+					geometry = this._processVertexColors( geometry );
 					mat.vertexColors = true;
+
+				} else {
+
+					mat.vertexColors = false;
 
 				}
 
@@ -798,7 +785,15 @@ class Rhino3dmLoader extends Loader {
 				geometry = loader.parse( obj.geometry );
 
 				_color = attributes.drawColor;
-				color = new Color( _color.r / 255.0, _color.g / 255.0, _color.b / 255.0 );
+
+				if ( _color.r > 1 || _color.g > 1 || _color.b > 1 ) {
+					color = new Color(
+						_color.r / 255.0,
+						_color.g / 255.0,
+						_color.b / 255.0 ).convertSRGBToLinear();
+				} else {
+					color = new Color( _color.r, _color.g, _color.b ).convertSRGBToLinear();
+				}
 
 				material = new LineBasicMaterial( { color: color } );
 				material = this._compareMaterials( material );
@@ -926,7 +921,7 @@ class Rhino3dmLoader extends Loader {
 
 					light.intensity = geometry.intensity;
 					_color = geometry.diffuse;
-					color = new Color( _color.r / 255.0, _color.g / 255.0, _color.b / 255.0 );
+					color = new Color( _color.r / 255.0, _color.g / 255.0, _color.b / 255.0 ).convertSRGBToLinear();
 					light.color = color;
 					light.userData[ 'attributes' ] = attributes;
 					light.userData[ 'objectType' ] = obj.objectType;
@@ -936,6 +931,26 @@ class Rhino3dmLoader extends Loader {
 				return light;
 
 		}
+
+	}
+
+	_processVertexColors( geometry ) {
+
+		let colors = geometry.getAttribute( 'color' );
+		let tempColor = new Color();
+		let converted_colors = [];
+
+		for ( let i = 0, l = colors.count; i < l; i ++ ) {
+
+			tempColor.fromBufferAttribute( colors, i ).convertSRGBToLinear();
+			converted_colors.push( tempColor.r, tempColor.g, tempColor.b );
+
+		}
+
+		geometry.deleteAttribute( 'color' );
+		geometry.setAttribute( 'color', new BufferAttribute( new Float32Array( converted_colors ), 3, false ) );
+
+		return geometry;
 
 	}
 
