@@ -775,6 +775,7 @@ class USDZLoader extends Loader {
 
 							} else if ( opacity_threshold === 0.0057 ) {
 
+								material.transparent = true;
 								material.depthWrite = false;
 
 								// set map
@@ -797,6 +798,7 @@ class USDZLoader extends Loader {
 
 							} else if ( opacity_threshold === 0.0056 ) {
 
+								material.transparent = true;
 								material.depthWrite = false;
 
 								// set alphaMap
