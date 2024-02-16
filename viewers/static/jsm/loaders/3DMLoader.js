@@ -244,7 +244,7 @@ class Rhino3dmLoader extends Loader {
 			return new MeshStandardMaterial( {
 				color: new Color( 1, 1, 1 ),
 				metalness: 0.5,
-				roughness: 0.5,
+				roughness: 0.6,
 				name: Loader.DEFAULT_MATERIAL_NAME,
 				side: DoubleSide
 			} );
@@ -257,27 +257,27 @@ class Rhino3dmLoader extends Loader {
 			diffuse_color = new Color(
 				material.diffuseColor.r / 255.0,
 				material.diffuseColor.g / 255.0,
-				material.diffuseColor.b / 255.0).convertSRGBToLinear();
+				material.diffuseColor.b / 255.0 ).convertSRGBToLinear();
 		} else {
-			diffuse_color = new Color( material.diffuseColor.r, material.diffuseColor.g, material.diffuseColor.b).convertSRGBToLinear();
+			diffuse_color = new Color( material.diffuseColor.r, material.diffuseColor.g, material.diffuseColor.b ).convertSRGBToLinear();
 		}
 
 		if ( material.emissionColor.r > 1 || material.emissionColor.g > 1 || material.emissionColor.b > 1 ) {
 			emissive_color = new Color(
 				material.emissionColor.r / 255.0,
 				material.emissionColor.g / 255.0,
-				material.emissionColor.b / 255.0).convertSRGBToLinear();
+				material.emissionColor.b / 255.0 ).convertSRGBToLinear();
 		} else {
-			emissive_color = new Color( material.emissionColor.r, material.emissionColor.g, material.emissionColor.b).convertSRGBToLinear();
+			emissive_color = new Color( material.emissionColor.r, material.emissionColor.g, material.emissionColor.b ).convertSRGBToLinear();
 		}
 
 		if ( material.specularColor.r > 1 || material.specularColor.g > 1 || material.specularColor.b > 1 ) {
 			specular_color = new Color(
 				material.specularColor.r / 255.0,
 				material.specularColor.g / 255.0,
-				material.specularColor.b / 255.0).convertSRGBToLinear();
+				material.specularColor.b / 255.0 ).convertSRGBToLinear();
 		} else {
-			specular_color = new Color( material.specularColor.r, material.specularColor.g, material.specularColor.b).convertSRGBToLinear();
+			specular_color = new Color( material.specularColor.r, material.specularColor.g, material.specularColor.b ).convertSRGBToLinear();
 		}
 
 		const mat = new MeshPhysicalMaterial( {
@@ -308,9 +308,9 @@ class Rhino3dmLoader extends Loader {
 				mat.color = new Color(
 					pbr.baseColor.r / 255.0,
 					pbr.baseColor.g / 255.0,
-					pbr.baseColor.b / 255.0).convertSRGBToLinear();
+					pbr.baseColor.b / 255.0 ).convertSRGBToLinear();
 			} else {
-				mat.color = new Color( pbr.baseColor.r, pbr.baseColor.g, pbr.baseColor.b).convertSRGBToLinear();
+				mat.color = new Color( pbr.baseColor.r, pbr.baseColor.g, pbr.baseColor.b ).convertSRGBToLinear();
 			}
 
 			mat.clearcoat = pbr.clearcoat;
@@ -921,7 +921,16 @@ class Rhino3dmLoader extends Loader {
 
 					light.intensity = geometry.intensity;
 					_color = geometry.diffuse;
-					color = new Color( _color.r / 255.0, _color.g / 255.0, _color.b / 255.0 ).convertSRGBToLinear();
+
+					if ( _color.r > 1 || _color.g > 1 || _color.b > 1 ) {
+						color = new Color(
+							_color.r / 255.0,
+							_color.g / 255.0,
+							_color.b / 255.0 ).convertSRGBToLinear();
+					} else {
+						color = new Color( _color.r, _color.g, _color.b ).convertSRGBToLinear();
+					}
+
 					light.color = color;
 					light.userData[ 'attributes' ] = attributes;
 					light.userData[ 'objectType' ] = obj.objectType;
