@@ -32,7 +32,6 @@
     <script type="module">
       import * as three_js from "three";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
       import { Rhino3dmLoader } from "../static/jsm/loaders/3DMLoader.js";
       import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
       import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
@@ -46,9 +45,6 @@
       rhino_loader.setLibraryPath( 'https://cdn.jsdelivr.net/npm/rhino3dm@8.0.1/' );
 
       manager.addHandler(/\.3dm$/i, rhino_loader);
-
-      rgbe_loader = new RGBELoader( manager );
-      rgbe_loader.setDataType( THREE.HalfFloatType );
 
       texture_loader = new THREE.TextureLoader( manager );
 
@@ -93,7 +89,7 @@
         border-radius: 2px;
         vertical-align: middle;
         margin: 2px 2px 2px 0;
-        min-width: 22px;
+        min-width: 20px;
         height: 22px;
         padding: 1px;
       }
@@ -654,11 +650,11 @@
       const isMobile = /Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent ) || (/iPad|iPhone|iPod/.test( navigator.platform )) || (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
       const image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF', '.SVG', '.WEBP' ];
 
-      var THREE, manager, texture_loader, rgbe_loader, rhino_loader, obj_is_mesh;
+      var THREE, manager, texture_loader, rhino_loader, obj_is_mesh, link;
       var renderer, scene, camera, rhino_obj, render_requested, edges, edges_visible;
       var lil_gui, gui, gui_set = false, gui_multi_layers, params, toneMappingOptions;
       var guiExposure = null, guiToneMapping, guiBlurriness, guiIntensity;
-      var mouse_down, mouse_wheel, reset_rotation, events_initialized, link;
+      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var controls, orb_controls, gizmo, orb_controls_gizmo, tex_res;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
@@ -1340,8 +1336,8 @@
         params.toneMapping = 'None';
         renderer.toneMapping = THREE.NoToneMapping;
         renderer.toneMappingExposure = params.exposure = 0.75;
-        params.blurriness = 1.0;
-        params.intensity = 0.5;
+        params.blurriness = 0.25;
+        params.intensity = 0.25;
 
         mouse_wheel = true;
 
@@ -1479,7 +1475,7 @@
         // Set the initial scale of the object so it comes to view
 
         bounding_box.setFromObject( rhino_obj );
-        let size = bounding_box.getSize(new THREE.Vector3());
+        let size = bounding_box.getSize( new THREE.Vector3() );
 
         if ( size.y > 1 ) {
           rhino_obj.scale.multiplyScalar( 50 / size.y );
@@ -1492,7 +1488,7 @@
         }
 
         bounding_box.setFromObject( rhino_obj );
-        let center = bounding_box.getCenter(new THREE.Vector3());
+        let center = bounding_box.getCenter( new THREE.Vector3() );
 
         controls.target.set( center.x, center.y, center.z );
 
@@ -1507,10 +1503,28 @@
 
         rhino_obj.scale.multiplyScalar( parseFloat( scale.slice( 0, -1 ) ) );
 
-        set_polar_grid_y();
-        set_grid_y();
+        set_center();
 
         mouse_wheel = true;
+      }
+
+      function set_center() {
+        bounding_box.setFromObject( rhino_obj );
+        let center = bounding_box.getCenter( new THREE.Vector3() );
+
+        if (center.x !== 0 || center.y !== 0 || center.z !== 0) {
+          if (center.x !== 0) rhino_obj.translateX( center.x * ( - 1 ) );
+          if (center.y !== 0) rhino_obj.translateY( center.y * ( - 1 ) );
+          if (center.z !== 0) rhino_obj.translateZ( center.z * ( - 1 ) );
+
+          bounding_box.setFromObject( rhino_obj );
+          center = bounding_box.getCenter( new THREE.Vector3() );
+        }
+
+        controls.target.set( center.x, center.y, center.z );
+
+        set_polar_grid_y();
+        set_grid_y();
       }
 
       function radio_changed() {
@@ -1582,32 +1596,36 @@
       function quick_x_rotation( angle ) {
         rhino_obj.rotateX( Math.PI * parseFloat( angle ) );
 
+        set_center();
+
         mouse_wheel = true;
       }
 
       function init() {
-        if (scene) {
+        if (scene && controls) {
           if (polar_grid_visible === true) show_polar_grid();
           if (grid_visible === true) show_grid();
 
-          rhino_obj.traverse( ( child ) => {
-            if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
-              if (child.material) {
-                if (Array.isArray( child.material )) {
-                  child.material.forEach( mtl => {
-                    mtl.dispose();
-                  });
-                } else {
-                  child.material.dispose();
+          if (rhino_obj) {
+            rhino_obj.traverse( ( child ) => {
+              if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints) {
+                if (child.material) {
+                  if (Array.isArray( child.material )) {
+                    child.material.forEach( mtl => {
+                      mtl.dispose();
+                    });
+                  } else {
+                    child.material.dispose();
+                  }
                 }
+
+                child.geometry.dispose();
               }
+            });
 
-              child.geometry.dispose();
-            }
-          });
-
-          scene.remove( rhino_obj );
-
+            scene.remove( rhino_obj );
+          }
+ 
           if (gui) {
             gui_multi_layers = false;
             gui_reset();
@@ -1627,7 +1645,7 @@
 
         if (gui === undefined) gui = new lil_gui( { autoPlace: false, container: document.getElementById('gui_position') } );
 
-        if (params === undefined) params = { exposure: 0.75, toneMapping: 'None', blurriness: 1.0, intensity: 0.5 };
+        if (params === undefined) params = { exposure: 0.75, toneMapping: 'None', blurriness: 0.25, intensity: 0.25 };
 
         if (toneMappingOptions === undefined) toneMappingOptions = {
           None: THREE.NoToneMapping,
@@ -1774,7 +1792,7 @@
         }
 
         if (tex === undefined) {
-          rgbe_loader.load( 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/venice_sunset_1k.hdr', function( texture ) {
+          texture_loader.load( 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/envmap.png', function( texture ) {
             texture.mapping = THREE.EquirectangularReflectionMapping;
             tex = texture;
             texture.dispose();
