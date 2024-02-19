@@ -289,6 +289,7 @@ Number Type Converter
     - Some animations and/or skeletons might be off or missing
 - GLTF / FBX / DAE viewers will also include animations to exported JSON format
 - 3DS viewer is using MeshPhysicalMaterial instead of MeshPhongMaterial
+- 3DM Viewer will try mapping any valid background image as equirectangular when checked
 - PLY+STL / PRWM / VTK viewers can also show a points version of the loaded model and export it as such (if the model is not rather large):
   - export this points model into PLY format and then drop it into [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) to get splat file
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
