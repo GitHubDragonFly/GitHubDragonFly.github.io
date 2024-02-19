@@ -3,15 +3,23 @@ GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 
 Designed to serve as a hub with links to repositories, Number Type Converter and FREE online in-browser [three.js](https://threejs.org) based `3D Model` and `Texture` viewers.
 
-Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations, see screenshots below for different appearances of the main menu page.
+Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations:
+  - see screenshots below for different appearances of the main menu page
+  - as per the [PageSpeed Insights](https://pagespeed.web.dev/) basic tests, almost all the pages / code:
+    - are highly performant
+    - follow Best Practices
+    - are AODA and SEO optimized
 
-The `M3D` button will open a page to access stripped down and simplified version of mobile friendly 3D viewers:
+The `M3D` button, which stands for `Mobile 3D`, will open a page to access stripped down and simplified version of mobile friendly 3D viewers:
  - Almost all viewers are currently available and should work fine on desktop devices as well
- - Mobile `Quick Viewer` and `GLTF Viewer` also include export options and more features
+ - Mobile `Quick Viewer` and `GLTF Viewer` also include some export options and more features
  - All mobile testing was done on an Android mobile phone and an iPad
- - Consider bookmarking the [mobile main page](https://githubdragonfly.github.io/viewers/templates/Mobile/index.html) for any continuous access to the viewers
+ - Consider bookmarking the [mobile main page](https://githubdragonfly.github.io/viewers/templates/Mobile/index.html) for continuous access to all viewers
+ - Consider bookmarking any single viewer's link for continuous access to that particular viewer
 
-GitHub servers are providing correct access to all files, so cloning or downloading this repository and using it offline will have a reduced functionality if run locally without some server. These GitHub servers are setting `CacheControl` to last only for 10 minutes so you might need to refresh the current page as needed.
+GitHub servers are providing correct access to all files:
+  - cloning or downloading this repository and using it offline will have a somewhat reduced functionality if run locally without some server
+  - these GitHub servers are also setting `CacheControl` to last only for 10 minutes so you might need to refresh the current page as needed.
 
 Repositories do contain projects in several different programming languages or a mix of: `Java` `VB.Net` `C#` `python` `JavaScript` `jQuery` `HTML/CSS` `shell`.
 
@@ -295,8 +303,8 @@ Number Type Converter
     - [2294472375_24a3b8ef46_o.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/2294472375_24a3b8ef46_o.jpg)
     - [equirectangular.png](https://github.com/mrdoob/three.js/blob/dev/examples/textures/equirectangular.png)
     - [kandao3.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/kandao3.jpg)
-- PLY+STL / PRWM / VTK viewers can also show a points version of the loaded model and export it as such (if the model is not rather large):
-  - export this points model into PLY format and then drop it into [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) to get splat file
+- PLY+STL, PRWM and VTK viewers can also show a points version of the loaded model and export it as such (if the model is not rather large):
+  - Tip: export this points model into PLY format and then drop it into [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) to get SPLAT file
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
     - currently available only in `FBX` `OBJ` `PLY+STL` `PRWM` viewers and should be tried on simple models
     - see the Animated GIF of a cube using Animated GIF as a texture in the `images` folder
@@ -308,8 +316,9 @@ Number Type Converter
     - apply `Vertex Colors` and `Random Vertex Colors`
     - change `ambient light` to white
     - change `background color` to white
+    - try anything else not mentioned above
   - experiment with all exporters available by exporting the original model as well as its exported versions
-  - large resolution textures should be scaled down before loading, as an example download [`Bedroom`](https://casual-effects.com/data/index.html) with 8k images and try it as is and then scale them down to 1k or 2k (which will speed up loading in browsers)
+  - large resolution textures should be scaled down before loading, as an example download [`Bedroom`](https://casual-effects.com/data/index.html) with 8k images and try it AS IS, then scale them down to 1k or 2k (which will speed up loading in browsers)
   - you could also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) and [Online 3D Viewer](https://3dviewer.net) exporters / converters
 
 PLY+STL Viewer
