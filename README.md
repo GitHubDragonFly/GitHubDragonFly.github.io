@@ -132,7 +132,7 @@ Number Type Converter
 
 - Special notes about mobile `Quick Viewer` which is using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
   - It is purely online based and can be used as standalone HTML file (just delete `favicon.ico` import)
-  - It can currently export to BIM, PLY, STL, OBJ, OFF, GLB and GLTF formats even on a mobile phone (as tested on an Android device)
+  - It can currently export to BIM, PLY, STL, OBJ, OFF, GLB and GLTF v2.0 formats even on a mobile phone (as tested on an Android device)
   - Supported import formats: 3DS, 3DM, 3MF, AMF, BIM, BREP, BRP, DAE, FBX, GLB, GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
   - Unsupported import format: FCSTD (requires accessing a remote worker)
   - Loading via URL currently requires all model files URLs and comma separated (no files will be fetched automatically), here is an example for Khronos [CesiumMilkTruck](https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/CesiumMilkTruck):
@@ -182,13 +182,14 @@ Number Type Converter
   - OCCT supported formats: STEP, STP, IGES, IGS, BREP, BRP, BIM
     - STEP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js) and a modified version of [dotbim.three.js](https://github.com/ricaun/dotbim.three.js)
 - Export formats, where applicable:
-  - 3DM, DAE, APNG, FBX, M3D, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, PRWM, USDZ
+  - 3DM, BIM, DAE, APNG, FBX, M3D, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, OFF, PLY, STL, PRWM, USDZ
+    - BIM and OFF exports are only available in Quick Viewer, as stated above
     - Try not to change file names when saving files during initial export
     - Exporting some models might crash the browser when running out of memory 
     - Exporting some models might be easier / better done with multiple viewers, examples:
       - MMD -> OBJ and then OBJ -> JSON might be better than straight MMD -> JSON export
       - IFC -> GLB and then GLB -> GLB_m (with MESHOPT compression) and then GLB_m -> GLB_d (with DRACO compression) might be easier than straight IFC -> GLB_d export
-    - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, USDZ exporters are [three.js](https://github.com/mrdoob/three.js) based
+    - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, USDZ modified exporters are [three.js](https://github.com/mrdoob/three.js) based
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm), with the following notes:
       - Currently limited to exporting meshes without textures and points only:
         - Mesh geometry could be either of: Buffer, Sphere, Box, Cylinder, Cone, Icosahedron
@@ -230,7 +231,6 @@ Number Type Converter
       - Delete all other copies of that same texture
       - This bug might eventually get fixed
     - PLY exporter will include vertex colors and will convert material color to vertex color if the material has no texture
-  - BIM and OFF exports are only available in Quick Viewer, as stated above
   - GLB exports, where applicable, can additionally have either DRACO or DRACO+WEBP or MESHOPT or MESHOPT+WEBP compression applied by using [glTF Transform](https://gltf-transform.dev):
     - These exports are marked as either of: `GLB_d` `GLB_dw` `GLB_m` `GLB_mw` (for regular exports) `GLBx_d` `GLBx_dw` `GLBx_m` `GLBx_mw` (for alternative exports)
     - WEBP exported texture resolution is fixed at 1k in mobile GLTF Viewer but is selectable in desktop viewers (1k, 2k, 4k)
