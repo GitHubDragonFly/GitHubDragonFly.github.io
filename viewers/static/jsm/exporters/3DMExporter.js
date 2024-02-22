@@ -11,7 +11,7 @@ import {
 
 import { deinterleaveAttribute } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/utils/BufferGeometryUtils.js";
 
-import * as rhino3dm from "https://cdn.jsdelivr.net/npm/rhino3dm@8.0.1/rhino3dm.module.min.js";
+import * as rhino3dm from "https://cdn.jsdelivr.net/npm/rhino3dm@8.4.0/rhino3dm.module.min.js";
 
 /** !!! Work in progress !!!
 *
@@ -65,7 +65,7 @@ class Rhino3dmExporter {
 		// colors with the acceptable value from range [ 0, 128 ]
 
 		const defaultOptions = {
-			vertexColorsCorrection: 64
+			vertexColorsCorrection: 0
 		};
 
 		options = Object.assign( defaultOptions, options );
