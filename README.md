@@ -8,7 +8,7 @@ Originally designed for a desktop but has been adapted to also show properly on 
   - as per the [PageSpeed Insights](https://pagespeed.web.dev/) basic tests, almost all the pages / code:
     - are highly performant
     - follow Best Practices
-    - are AODA and SEO optimized
+    - are Accessibility (AODA in Ontario) and SEO optimized
 
 The `M3D` button, which stands for `Mobile 3D`, will open a page to access stripped down and simplified version of mobile friendly 3D viewers:
  - Almost all viewers are currently available and should work fine on desktop devices as well
