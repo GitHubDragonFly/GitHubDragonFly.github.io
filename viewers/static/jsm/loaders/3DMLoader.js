@@ -216,6 +216,7 @@ class Rhino3dmLoader extends Loader {
 		}
 
 		mat.type = material.type;
+		mat.vertexColors = material.vertexColors;
 
 		const json = JSON.stringify( mat );
 
@@ -237,6 +238,7 @@ class Rhino3dmLoader extends Loader {
 			}
 
 			_mat.type = m.type;
+			_mat.vertexColors = m.vertexColors;
 
 			if ( JSON.stringify( _mat ) === json ) {
 
@@ -952,7 +954,7 @@ class Rhino3dmLoader extends Loader {
 
 				default:
 
-					let matId;
+					let matId = null;
 
 					switch ( attributes.materialSource.name ) {
 
@@ -964,10 +966,6 @@ class Rhino3dmLoader extends Loader {
 
 								matId = data.layers[ attributes.layerIndex ].renderMaterialIndex;
 
-							} else {
-
-								matId = null;
-
 							}
 
 							break;
@@ -978,30 +976,21 @@ class Rhino3dmLoader extends Loader {
 
 								matId = attributes.materialIndex;
 
-							} else {
-
-								matId = null;
-
 							}
 
 							break;
 
 					}
 
-					let material;
+					let material = null;
 
 					if ( matId >= 0 ) {
 
 						const rMaterial = materials[ matId ];
 						material = this._createMaterial( rMaterial, data.renderEnvironment, attributes, images );
 
-					} else {
-
-						material = this._createMaterial();
-
 					}
 
-					material = this._compareMaterials( material );
 					const _object = this._createObject( obj, material );
 
 					if ( _object === undefined ) {
@@ -1151,7 +1140,6 @@ class Rhino3dmLoader extends Loader {
 				if ( mat === null ) {
 
 					mat = this._createMaterial();
-					mat = this._compareMaterials( mat );
 
 				}
 
@@ -1162,11 +1150,9 @@ class Rhino3dmLoader extends Loader {
 					geometry = this._processVertexColors( geometry );
 					mat.vertexColors = true;
 
-				} else {
-
-					mat.vertexColors = false;
-
 				}
+
+				mat = this._compareMaterials( mat );
 
 				const mesh = new Mesh( geometry, mat );
 
@@ -2080,7 +2066,7 @@ function Rhino3dmWorker() {
 
 				// TODO: precalculate resulting vertices and faces and warn on excessive results
 				_geometry.subdivide( 3 );
-				mesh = rhino.Mesh.createFromSubDControlNet( _geometry );
+				mesh = rhino.Mesh.createFromSubDControlNet( _geometry, false );
 				if ( mesh ) {
 
 					geometry = mesh.toThreejsJSON();
