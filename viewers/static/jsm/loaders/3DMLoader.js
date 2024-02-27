@@ -24,10 +24,11 @@ import {
 	SpotLight,
 	Sprite,
 	SpriteMaterial,
-	TextureLoader
+	TextureLoader,
+	Vector2
 } from "three";
 
-import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/loaders/EXRLoader.js";
+import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/loaders/EXRLoader.js";
 
 const _taskCache = new WeakMap();
 
@@ -100,7 +101,19 @@ class Rhino3dmLoader extends Loader {
 					onLoad( result );
 
 				 } )
-				.catch( e => onError( e ) );
+				.catch( e => {
+
+					if ( onError ) {
+
+						onError( e );
+
+					} else {
+
+						throw new Error( 'THREE.Rhino3dmLoader: Error decoding objects!\n' + e );
+
+					}
+
+				} );
 
 		}, onProgress, onError );
 
@@ -145,6 +158,7 @@ class Rhino3dmLoader extends Loader {
 
 		// Remove task from the task list.
 		// Note: replaced '.finally()' with '.catch().then()' block - iOS 11 support (#19416)
+
 		objectPending
 			.catch( () => true )
 			.then( () => {
@@ -160,6 +174,7 @@ class Rhino3dmLoader extends Loader {
 			} );
 
 		// Cache the task result.
+
 		_taskCache.set( buffer, {
 
 			url: url,
@@ -237,9 +252,9 @@ class Rhino3dmLoader extends Loader {
 
 	}
 
-	_createMaterial( material, renderEnvironment ) {
+	_createMaterial( material, renderEnvironment, attributes, images ) {
 
-		if ( material === undefined ) {
+		if ( ! material ) {
 
 			return new MeshStandardMaterial( {
 				color: new Color( 1, 1, 1 ),
@@ -289,7 +304,6 @@ class Rhino3dmLoader extends Loader {
 			name: material.name,
 			reflectivity: material.reflectivity,
 			opacity: 1.0 - material.transparency,
-			side: DoubleSide,
 			specularColor: specular_color,
 			transparent: material.transparency > 0 ? true : false
 
@@ -322,173 +336,542 @@ class Rhino3dmLoader extends Loader {
 			mat.specularIntensity = pbr.specular;
 			mat.thickness = pbr.subsurface;
 
+			// thickness value currently appears to need a certain correction depending on the transmission and its own value
+			// this workaround just brings the look of all Khronos examples with thickness rather close to GLTF Viewer's
+			// not sure why this would be required in the first place
+
+			if ( mat.thickness && mat.thickness > 0 ) {
+
+				if ( mat.transmission && mat.transmission > 0 ) {
+
+					if ( mat.thickness < 1 ) {
+
+						mat.thickness *= 140;
+
+					} else {
+
+						mat.thickness *= 11;
+
+					}
+
+				} else {
+
+					if ( mat.thickness < 1 ) {
+
+						mat.thickness *= 210;
+
+					} else {
+
+						mat.thickness *= 17;
+
+					}
+
+				}
+
+			}
+
 		}
 
 		if ( material.pbrSupported && material.pbr.opacity === 0 && material.transparency === 1 ) {
 
-			//some compromises
+			// some compromises
 
 			mat.opacity = 0.2;
 			mat.transmission = 1.00;
 
 		}
 
+		// workaround - set additional material params and textures passed via user strings
+
+		if ( attributes.userStrings && attributes.userStrings.some( item => item[ 0 ] === 'params_' + material.id ) ) {
+
+			for ( const item of attributes.userStrings ) {
+
+				if ( item[ 0 ] === 'params_' + material.id ) {
+
+					let params = JSON.parse( item[ 1 ] );
+
+					mat.side = params.side;
+					if ( params.alphaTest !== undefined ) mat.alphaTest = params.alphaTest;
+					if ( params.bumpScale !== undefined ) mat.bumpScale = params.bumpScale;
+					if ( params.normalMapType !== undefined ) mat.normalMapType = params.normalMapType;
+					if ( params.emissiveIntensity !== undefined ) mat.emissiveIntensity = params.emissiveIntensity;
+
+					if ( params.normalScaleX !== undefined ) mat.normalScale.x = params.normalScaleX;
+					if ( params.normalScaleY !== undefined ) mat.normalScale.y = params.normalScaleY;
+
+					if ( params.clearcoatNormalScaleX !== undefined ) mat.clearcoatNormalScale.x = params.clearcoatNormalScaleX;
+					if ( params.clearcoatNormalScaleY !== undefined ) mat.clearcoatNormalScale.y = params.clearcoatNormalScaleY;
+
+					if ( params.iridescence !== undefined ) mat.iridescence = params.iridescence;
+					if ( params.iridescenceIOR !== undefined ) mat.iridescenceIOR = params.iridescenceIOR;
+					if ( params.iridescenceThicknessRangeX !== undefined ) mat.iridescenceThicknessRange[ 0 ] = params.iridescenceThicknessRangeX;
+					if ( params.iridescenceThicknessRangeY !== undefined ) mat.iridescenceThicknessRange[ 1 ] = params.iridescenceThicknessRangeY;
+
+					if ( params.sheenRoughness !== undefined ) mat.sheenRoughness = params.sheenRoughness;
+
+					if ( params.sheenColorR !== undefined && params.sheenColorG !== undefined && params.sheenColorB !== undefined ) {
+
+						if ( params.sheenColorR > 1 || params.sheenColorG > 1 || params.sheenColorB > 1 ) {
+
+							mat.sheenColor = new Color(
+								params.sheenColorR / 255.0,
+								params.sheenColorG / 255.0,
+								params.sheenColorB / 255.0
+							).convertSRGBToLinear();
+
+						} else {
+
+							mat.sheenColor = new Color( params.sheenColorR, params.sheenColorG, params.sheenColorB ).convertSRGBToLinear();
+
+						}
+
+					}
+
+					if ( params.attenuationDistance !== undefined )
+						mat.attenuationDistance = params.attenuationDistance;
+
+					if ( params.attenuationColorR !== undefined && params.attenuationColorG !== undefined && params.attenuationColorB !== undefined ) {
+
+						if ( params.attenuationColorR > 1 || params.attenuationColorG > 1 || params.attenuationColorB > 1 ) {
+
+							mat.attenuationColor = new Color(
+								params.attenuationColorR / 255.0,
+								params.attenuationColorG / 255.0,
+								params.attenuationColorB / 255.0
+							).convertSRGBToLinear();
+
+						} else {
+
+							mat.attenuationColor = new Color(
+								params.attenuationColorR,
+								params.attenuationColorG,
+								params.attenuationColorB
+							).convertSRGBToLinear();
+
+						}
+
+					}
+
+				}
+
+			}
+
+		}
+
 		const textureLoader = new TextureLoader();
 
-		for ( let i = 0; i < material.textures.length; i ++ ) {
+		if ( attributes.userStrings && attributes.userStrings.some( item => item[ 0 ].startsWith( material.id ) ) ) {
 
-			const texture = material.textures[ i ];
+			for ( const item1 of attributes.userStrings ) {
 
-			if ( texture.image !== null ) {
+				let texture, img;
 
-				const map = textureLoader.load( texture.image );
+				if ( item1[ 0 ].startsWith( material.id ) ) {
 
-				//console.log(texture.type )
+					texture = JSON.parse( item1[ 1 ] );
+					if ( images && images[ texture.uuid ] ) img = images[ texture.uuid ];
 
-				switch ( texture.type ) {
+				} else {
 
-					case 'Bump':
-
-						mat.bumpMap = map;
-
-						break;
-
-					case 'Diffuse':
-
-						mat.map = map;
-
-						break;
-
-					case 'Emap':
-
-						mat.envMap = map;
-
-						break;
-
-					case 'Opacity':
-
-						mat.transmissionMap = map;
-
-						break;
-
-					case 'Transparency':
-
-						mat.alphaMap = map;
-						mat.transparent = true;
-
-						break;
-
-					case 'PBR_Alpha':
-
-						mat.alphaMap = map;
-						mat.transparent = true;
-
-						break;
-
-					case 'PBR_AmbientOcclusion':
-
-						mat.aoMap = map;
-
-						break;
-
-					case 'PBR_Anisotropic':
-
-						mat.anisotropyMap = map;
-
-						break;
-
-					case 'PBR_BaseColor':
-
-						mat.map = map;
-
-						break;
-
-					case 'PBR_Clearcoat':
-
-						mat.clearcoatMap = map;
-
-						break;
-
-					case 'PBR_ClearcoatBump':
-
-						mat.clearcoatNormalMap = map;
-
-						break;
-
-					case 'PBR_ClearcoatRoughness':
-
-						mat.clearcoatRoughnessMap = map;
-
-						break;
-
-					case 'PBR_Displacement':
-
-						mat.displacementMap = map;
-
-						break;
-
-					case 'PBR_Emission':
-
-						mat.emissiveMap = map;
-
-						break;
-
-					case 'PBR_Metallic':
-
-						mat.metalnessMap = map;
-
-						break;
-
-					case 'PBR_Roughness':
-
-						mat.roughnessMap = map;
-
-						break;
-
-					case 'PBR_Sheen':
-
-						mat.sheenColorMap = map;
-
-						break;
-
-					case 'PBR_Specular':
-
-						mat.specularColorMap = map;
-
-						break;
-
-					case 'PBR_Subsurface':
-
-						mat.thicknessMap = map;
-
-						break;
-
-					default:
-
-						this.warnings.push( {
-							message: `THREE.3DMLoader: No conversion exists for 3dm ${texture.type}.`,
-							type: 'no conversion'
-						} );
-
-						break;
+					continue;
 
 				}
 
-				if ( texture.flipY ) map.flipY = texture.flipY;
-				if ( texture.rotation ) map.rotation = texture.rotation;
+				if ( img !== undefined ) {
 
-				map.wrapS = texture.wrapU === 0 ? RepeatWrapping : ClampToEdgeWrapping;
-				map.wrapT = texture.wrapV === 0 ? RepeatWrapping : ClampToEdgeWrapping;
+					const map = textureLoader.load( img );
+					map.name = texture.type;
 
-				if ( texture.offset ) {
+					switch ( texture.type ) {
 
-					map.offset.set( texture.offset[ 0 ], texture.offset[ 1 ] );
+						case 'Bump':
+
+							mat.bumpMap = map;
+
+							break;
+
+						case 'Diffuse':
+
+							mat.map = map;
+
+							break;
+
+						case 'Emap':
+
+							mat.envMap = map;
+
+							break;
+
+						case 'Opacity':
+
+							mat.transmissionMap = map;
+
+							break;
+
+						case 'Transparency':
+
+							mat.alphaMap = map;
+							mat.transparent = true;
+
+							break;
+
+						case 'PBR_Alpha':
+
+							mat.alphaMap = map;
+							mat.transparent = true;
+
+							break;
+
+						case 'PBR_AmbientOcclusion':
+
+							mat.aoMap = map;
+
+							break;
+
+						case 'PBR_Anisotropic':
+
+							mat.anisotropyMap = map;
+
+							break;
+
+						case 'PBR_BaseColor':
+
+							mat.map = map;
+
+							break;
+
+						case 'PBR_Clearcoat':
+
+							mat.clearcoatMap = map;
+
+							break;
+
+						case 'PBR_ClearcoatBump':
+
+							mat.clearcoatNormalMap = map;
+
+							break;
+
+						case 'PBR_ClearcoatRoughness':
+
+							mat.clearcoatRoughnessMap = map;
+
+							break;
+
+						case 'PBR_Displacement':
+
+							mat.displacementMap = map;
+
+							break;
+
+						case 'PBR_Emission':
+
+							mat.emissiveMap = map;
+
+							break;
+
+						case 'PBR_Metallic':
+
+							mat.metalnessMap = map;
+
+							break;
+
+						case 'PBR_Roughness':
+
+							mat.roughnessMap = map;
+
+							break;
+
+						case 'PBR_Sheen':
+
+							mat.sheenColorMap = map;
+
+							break;
+
+						case 'PBR_Specular':
+
+							mat.specularColorMap = map;
+
+							break;
+
+						case 'PBR_Subsurface':
+
+							mat.thicknessMap = map;
+
+							break;
+
+						case 'PBR_Other_Anisotropy':
+
+							mat.anisotropyMap = map;
+
+							break;
+
+						case 'PBR_Other_Iridescence':
+
+							mat.iridescenceMap = map;
+
+							break;
+
+						case 'PBR_Other_IridescenceThickness':
+
+							mat.iridescenceThicknessMap = map;
+
+							break;
+
+						case 'PBR_Other_Normal':
+
+							mat.normalMap = map;
+
+							break;
+
+						case 'PBR_Other_SheenColor':
+
+							mat.sheenColorMap = map;
+
+							break;
+
+						case 'PBR_Other_SheenRoughness':
+
+							mat.sheenRoughnessMap = map;
+
+							break;
+
+						case 'PBR_Other_SpecularIntensity':
+
+							mat.specularIntensityMap = map;
+
+							break;
+
+						default:
+
+							this.warnings.push( {
+								message: `THREE.3DMLoader: No conversion exists for 3dm ${texture.type}.`,
+								type: 'no conversion'
+							} );
+
+							break;
+
+					}
+
+					if ( texture.flipY !== undefined ) map.flipY = texture.flipY;
+					if ( texture.mapping !== undefined ) map.mapping = texture.mapping;
+					if ( texture.minFilter !== undefined ) map.minFilter = texture.minFilter;
+					if ( texture.magFilter !== undefined ) map.magFilter = texture.magFilter;
+					if ( texture.rotation !== undefined ) map.rotation = texture.rotation;
+
+					if ( texture.wrapU !== undefined ) map.wrapS = texture.wrapU === 0 ? RepeatWrapping : ClampToEdgeWrapping;
+					if ( texture.wrapV !== undefined ) map.wrapT = texture.wrapV === 0 ? RepeatWrapping : ClampToEdgeWrapping;
+
+					if ( texture.offset !== undefined ) {
+
+						map.offset = new Vector2( texture.offset.x, texture.offset.y );
+
+					}
+
+					if ( texture.repeat !== undefined ) {
+
+						map.repeat = new Vector2( texture.repeat.x, texture.repeat.y );
+
+					}
 
 				}
 
-				if ( texture.repeat ) {
+			}
 
-					map.repeat.set( texture.repeat[ 0 ], texture.repeat[ 1 ] );
+			// check material settings to allow for correct transmission effect
+
+			if ( mat.transmission && mat.transmission > 0 ) {
+
+				if ( mat.metalnessMap !== undefined && mat.metalness === undefined ) {
+
+					mat.metalness = 0.01;
+
+				}
+
+				if ( mat.roughnessMap !== undefined && mat.roughness === undefined ) {
+
+					mat.roughness = 0.01;
+
+				}
+
+				if ( mat.roughnessMap !== undefined && mat.roughness === 1 ) {
+
+					mat.roughness = 0.95;
+
+				}
+
+				if ( mat.metalnessMap === undefined && mat.roughnessMap === undefined ) {
+
+					if ( mat.metalness === undefined && ( mat.roughness === undefined || mat.roughness === 1.0 ) ) {
+
+						mat.roughness = 0.01;
+
+					}
+
+				}
+
+			}
+
+		} else {
+
+			for ( let i = 0; i < material.textures.length; i ++ ) {
+
+				const texture = material.textures[ i ];
+
+				if ( texture.image !== null ) {
+
+					const map = textureLoader.load( texture.image );
+
+					switch ( texture.type ) {
+
+						case 'Bump':
+
+							mat.bumpMap = map;
+
+							break;
+
+						case 'Diffuse':
+
+							mat.map = map;
+
+							break;
+
+						case 'Emap':
+
+							mat.envMap = map;
+
+							break;
+
+						case 'Opacity':
+
+							mat.transmissionMap = map;
+
+							break;
+
+						case 'Transparency':
+
+							mat.alphaMap = map;
+							mat.transparent = true;
+
+							break;
+
+						case 'PBR_Alpha':
+
+							mat.alphaMap = map;
+							mat.transparent = true;
+
+							break;
+
+						case 'PBR_AmbientOcclusion':
+
+							mat.aoMap = map;
+
+							break;
+
+						case 'PBR_Anisotropic':
+
+							mat.anisotropyMap = map;
+
+							break;
+
+						case 'PBR_BaseColor':
+
+							mat.map = map;
+
+							break;
+
+						case 'PBR_Clearcoat':
+
+							mat.clearcoatMap = map;
+
+							break;
+
+						case 'PBR_ClearcoatBump':
+
+							mat.clearcoatNormalMap = map;
+
+							break;
+
+						case 'PBR_ClearcoatRoughness':
+
+							mat.clearcoatRoughnessMap = map;
+
+							break;
+
+						case 'PBR_Displacement':
+
+							mat.displacementMap = map;
+
+							break;
+
+						case 'PBR_Emission':
+
+							mat.emissiveMap = map;
+
+							break;
+
+						case 'PBR_Metallic':
+
+							mat.metalnessMap = map;
+
+							break;
+
+						case 'PBR_Roughness':
+
+							mat.roughnessMap = map;
+
+							break;
+
+						case 'PBR_Sheen':
+
+							mat.sheenColorMap = map;
+
+							break;
+
+						case 'PBR_Specular':
+
+							mat.specularColorMap = map;
+
+							break;
+
+						case 'PBR_Subsurface':
+
+							mat.thicknessMap = map;
+
+							break;
+
+						default:
+
+							this.warnings.push( {
+								message: `THREE.3DMLoader: No conversion exists for 3dm ${texture.type}.`,
+								type: 'no conversion'
+							} );
+
+							break;
+
+					}
+
+					if ( texture.flipY !== undefined ) map.flipY = texture.flipY;
+					if ( texture.mapping !== undefined ) map.mapping = texture.mapping;
+					if ( texture.minFilter !== undefined ) map.minFilter = texture.minFilter;
+					if ( texture.magFilter !== undefined ) map.magFilter = texture.magFilter;
+					if ( texture.rotation !== undefined ) map.rotation = texture.rotation;
+
+					if ( texture.wrapU !== undefined ) map.wrapS = texture.wrapU === 0 ? RepeatWrapping : ClampToEdgeWrapping;
+					if ( texture.wrapV !== undefined ) map.wrapT = texture.wrapV === 0 ? RepeatWrapping : ClampToEdgeWrapping;
+
+					if ( texture.offset !== undefined ) {
+
+						map.offset.set( texture.offset.x, texture.offset.y );
+
+					}
+
+					if ( texture.repeat !== undefined ) {
+
+						map.repeat.set( texture.repeat.x, texture.repeat.y );
+
+					}
 
 				}
 
@@ -518,6 +901,7 @@ class Rhino3dmLoader extends Loader {
 		const instanceDefinitions = [];
 		const instanceReferences = [];
 
+		object.userData[ 'strings' ] = data.strings;
 		object.userData[ 'layers' ] = data.layers;
 		object.userData[ 'groups' ] = data.groups;
 		object.userData[ 'settings' ] = data.settings;
@@ -528,6 +912,23 @@ class Rhino3dmLoader extends Loader {
 		object.name = this.url;
 
 		let objects = data.objects;
+
+		// workaround - material params and textures passed via user strings
+
+		const strings = data.strings;
+
+		const images = {};
+
+		if ( strings && strings.length > 0 ) {
+
+			for ( const str of strings ) {
+
+				images[ str[ 0 ] ] = str[ 1 ];
+
+			}
+
+		}
+
 		const materials = data.materials;
 
 		for ( let i = 0; i < objects.length; i ++ ) {
@@ -556,7 +957,9 @@ class Rhino3dmLoader extends Loader {
 					switch ( attributes.materialSource.name ) {
 
 						case 'ObjectMaterialSource_MaterialFromLayer':
+
 							//check layer index
+
 							if ( attributes.layerIndex >= 0 ) {
 
 								matId = data.layers[ attributes.layerIndex ].renderMaterialIndex;
@@ -590,8 +993,7 @@ class Rhino3dmLoader extends Loader {
 					if ( matId >= 0 ) {
 
 						const rMaterial = materials[ matId ];
-						material = this._createMaterial( rMaterial, data.renderEnvironment );
-
+						material = this._createMaterial( rMaterial, data.renderEnvironment, attributes, images );
 
 					} else {
 
@@ -710,7 +1112,7 @@ class Rhino3dmLoader extends Loader {
 
 				} else {
 
-					_color = attributes.drawColor;
+					_color = attributes.plotColor;
 
 					if ( _color.r > 1 || _color.g > 1 || _color.b > 1 ) {
 						color = new Color(
@@ -746,6 +1148,13 @@ class Rhino3dmLoader extends Loader {
 
 				if ( obj.geometry === null ) return;
 
+				if ( mat === null ) {
+
+					mat = this._createMaterial();
+					mat = this._compareMaterials( mat );
+
+				}
+
 				geometry = loader.parse( obj.geometry );
 
 				if ( geometry.attributes.hasOwnProperty( 'color' ) ) {
@@ -759,14 +1168,8 @@ class Rhino3dmLoader extends Loader {
 
 				}
 
-				if ( mat === null ) {
-
-					mat = this._createMaterial();
-					mat = this._compareMaterials( mat );
-
-				}
-
 				const mesh = new Mesh( geometry, mat );
+
 				mesh.castShadow = attributes.castsShadows;
 				mesh.receiveShadow = attributes.receivesShadows;
 				mesh.userData[ 'attributes' ] = attributes;
@@ -784,7 +1187,39 @@ class Rhino3dmLoader extends Loader {
 
 				geometry = loader.parse( obj.geometry );
 
-				_color = attributes.drawColor;
+				// Check if LineSegments vertex colors have been passed as a user string
+
+				if ( attributes.userStrings && attributes.userStrings.some( item => item[ 0 ] === 'colors' ) ) {
+
+					for ( const arr of attributes.userStrings ) {
+
+						if ( arr[ 0 ] === 'colors' ) {
+
+							const color_array = arr[ 1 ].split( ',' ).map( Number );
+
+							for ( let i = 0; i < color_array.length; i += 3 ) {
+
+								color = new Color(
+									color_array[ i ] / 255.0,
+									color_array[ i + 1 ] / 255.0,
+									color_array[ i + 2 ] / 255.0
+								).convertSRGBToLinear();
+
+								color_array[ i ] = color.r;
+								color_array[ i + 1 ] = color.g;
+								color_array[ i + 2 ] = color.b;
+
+							}
+
+							geometry.setAttribute( 'color', new BufferAttribute( new Float32Array( color_array ), 3, false ) );
+
+						}
+
+					}
+
+				}
+
+				_color = attributes.plotColor;
 
 				if ( _color.r > 1 || _color.g > 1 || _color.b > 1 ) {
 					color = new Color(
@@ -831,7 +1266,7 @@ class Rhino3dmLoader extends Loader {
 				ctx.font = font;
 				ctx.textBaseline = 'middle';
 				ctx.textAlign = 'center';
-				color = attributes.drawColor;
+				color = attributes.plotColor;
 				ctx.fillStyle = `rgba(${color.r},${color.g},${color.b},${color.a})`;
 				ctx.fillRect( 0, 0, width, height );
 				ctx.fillStyle = 'white';
@@ -920,6 +1355,7 @@ class Rhino3dmLoader extends Loader {
 				if ( light ) {
 
 					light.intensity = geometry.intensity;
+
 					_color = geometry.diffuse;
 
 					if ( _color.r > 1 || _color.g > 1 || _color.b > 1 ) {
