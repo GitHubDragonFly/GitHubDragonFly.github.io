@@ -403,13 +403,13 @@ class Rhino3dmExporter {
 
 			scene.traverse( function ( object ) {
 
-				function cumulative_matrix_check( parent ) {
+				function cumulative_matrix_check( parent, mesh_in_mesh = false ) {
 
-					if ( parent && ( parent.type === 'Group' || parent.type === 'Object3D' ) ) {
+					if ( parent && ( parent.type === 'Group' || parent.type === 'Object3D' || mesh_in_mesh === true ) ) {
 
 						mesh_matrix4 = mesh_matrix4.premultiply( parent.matrix );
 
-						cumulative_matrix_check( parent.parent );
+						cumulative_matrix_check( parent.parent, ( parent.isMesh && parent.parent && parent.parent.isMesh ) );
 
 					}	
 
@@ -423,7 +423,8 @@ class Rhino3dmExporter {
 
 					mesh_matrix4 = new Matrix4().copy( object.matrix );
 
-					cumulative_matrix_check( object.parent );
+					cumulative_matrix_check( object.parent, ( object.isMesh && object.parent && object.parent.isMesh ) );
+
 					geometry_clone = geometry_clone.applyMatrix4( mesh_matrix4 );
 
 				}
