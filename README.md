@@ -90,8 +90,8 @@ Number Type Converter
 - Notes about GLTF viewers:
   - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component:
     - Supports both local (blob) and remote URL loading
-    - Local loading only supports self-contained models (embedded GLTF or binary GLB)
-    - The viewer supports loading of multiple models, switchable with the viewer's `M` button
+    - Local loading supports self-contained models (embedded GLTF or binary GLB) as well as GLTF + BIN + Textures
+    - The viewer supports loading of multiple models at once, which will be switchable with the viewer's `M` button
     - Support for USDZ was also added but is untested
   - `GLTF Viewer` is for v2.0 glTF files and is currently using r161 of three.js:
     - doesn't support obsolete `pbrSpecularGlossiness`
