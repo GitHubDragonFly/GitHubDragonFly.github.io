@@ -54,6 +54,8 @@ class Rhino3dmLoader extends Loader {
 		this.materials = [];
 		this.warnings = [];
 
+		this.materialArray = [];
+
 	}
 
 	setLibraryPath( path ) {
@@ -260,10 +262,9 @@ class Rhino3dmLoader extends Loader {
 
 			return new MeshStandardMaterial( {
 				color: new Color( 1, 1, 1 ),
-				metalness: 0.5,
-				roughness: 0.6,
 				name: Loader.DEFAULT_MATERIAL_NAME,
-				side: DoubleSide
+				side: DoubleSide,
+				metalness: 0.8
 			} );
 
 		}
@@ -393,7 +394,15 @@ class Rhino3dmLoader extends Loader {
 
 					let params = JSON.parse( item[ 1 ] );
 
+					if ( params.isArrayMember ) {
+
+						if ( ! mat.userStrings ) mat.userStrings = {};
+						mat.userStrings.isArrayMember = true;
+
+					}
+
 					mat.side = params.side;
+
 					if ( params.alphaTest !== undefined ) mat.alphaTest = params.alphaTest;
 					if ( params.bumpScale !== undefined ) mat.bumpScale = params.bumpScale;
 					if ( params.normalMapType !== undefined ) mat.normalMapType = params.normalMapType;
@@ -991,7 +1000,7 @@ class Rhino3dmLoader extends Loader {
 
 					}
 
-					const _object = this._createObject( obj, material );
+					const _object = this._createObject( obj, material, materials, data.renderEnvironment, images );
 
 					if ( _object === undefined ) {
 
@@ -1079,13 +1088,14 @@ class Rhino3dmLoader extends Loader {
 
 	}
 
-	_createObject( obj, mat ) {
+	_createObject( obj, mat, materials, renderEnvironment, images ) {
 
 		const loader = new BufferGeometryLoader();
 
 		const attributes = obj.attributes;
 
 		let geometry, material, _color, color;
+		let vertexColors = false;
 
 		switch ( obj.objectType ) {
 
@@ -1137,24 +1147,56 @@ class Rhino3dmLoader extends Loader {
 
 				if ( obj.geometry === null ) return;
 
+				geometry = loader.parse( obj.geometry );
+
+				// With the current design, if geometry has groups then
+				// the geometry_groups entry should be the first array
+				// item followed by all object's materials
+
+				if ( attributes.userStrings && attributes.userStrings[ 0 ][ 0 ] === 'geometry_groups' ) {
+
+					geometry.groups = JSON.parse( attributes.userStrings[ 0 ][ 1 ] );
+
+				}
+
 				if ( mat === null ) {
 
 					mat = this._createMaterial();
 
 				}
 
-				geometry = loader.parse( obj.geometry );
-
 				if ( geometry.attributes.hasOwnProperty( 'color' ) ) {
 
 					geometry = this._processVertexColors( geometry );
-					mat.vertexColors = true;
+					vertexColors = true;
 
 				}
 
-				mat = this._compareMaterials( mat );
+				if ( mat.userStrings && mat.userStrings.isArrayMember ) {
 
-				const mesh = new Mesh( geometry, mat );
+					// Redo material as an array from attributes materials
+
+					if ( attributes.userStrings ) {
+
+						const count_start = geometry.groups ? 1 : 0;
+
+						for ( let i = count_start; i < attributes.userStrings.length; i++ ) {
+
+							let new_material = this._createMaterial( materials[ i - 1 ], renderEnvironment, attributes, images );
+							new_material.vertexColors = vertexColors;
+							this.materialArray.push( new_material );
+						}
+
+					}
+
+				} else {
+
+					mat.vertexColors = vertexColors;
+					mat = this._compareMaterials( mat );
+
+				}
+
+				const mesh = this.materialArray.length > 0 ? new Mesh( geometry, this.materialArray ) : new Mesh( geometry, mat );
 
 				mesh.castShadow = attributes.castsShadows;
 				mesh.receiveShadow = attributes.receivesShadows;
