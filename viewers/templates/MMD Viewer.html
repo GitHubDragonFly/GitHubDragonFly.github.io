@@ -6,8 +6,24 @@
     <meta name="description" content="MMD (Miku Miku Dance) Viewer - supported formats: PMD, PMX, VMD, VPD, SPH, SPA, MP3, OGG">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.8.2/dist/es-module-shims.js"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "@gltf-transform/core": "https://esm.sh/@gltf-transform/core",
+          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions",
+          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions"
+        }
+      }
+    </script>
+
+    <!-- For encoding GLB with meshopt compression -->
+    <script src="https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_encoder.js" defer></script>
+
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.4.0/rhino3dm.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.131.0/examples/js/libs/ammo.wasm.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.131.0" defer></script>
     <script src="../static/js/effects/OutlineEffect.js" defer></script>
@@ -25,6 +41,7 @@
     <script src="../static/js/OrbitControls.js" defer></script>
     <script src="../static/js/OrbitControlsGizmo.js" defer></script>
     <script src="../static/js/utils/TextureUtils.js" defer></script>
+    <script src="../static/js/exporters/3DMExporter.js" defer></script>
     <script src="../static/js/exporters/PLYExporter.js" defer></script>
     <script src="../static/js/exporters/STLExporter.js" defer></script>
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
@@ -54,7 +71,7 @@
         -webkit-border-radius: 2px;
         border-radius: 2px;
         margin: 2px 2px 2px 0;
-        min-width: 22px;
+        min-width: 20px;
         height: 22px;
         padding: 1px;
         vertical-align: middle;
@@ -79,7 +96,7 @@
       input[type=file] {
         vertical-align: middle;
         margin: 2px 0 2px 0;
-        max-width: 175px;
+        max-width: 165px;
       }
 
       input[type=range] {
@@ -240,6 +257,7 @@
     </style>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- Using glTF Transform for MESHOPT / WEBP compression: https://gltf-transform.dev -->
     <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/ThreeOrbitControlsGizmo -->
     <!-- Animated GIF export is based on the following example and library: -->
     <!--   https://github.com/mrdoob/omggif-example  -->
@@ -283,9 +301,12 @@
         <label title="Wireframe"><input type="checkbox" id="wireframe" onchange="show_wireframe();" disabled />Wire</label>
         <select title="Export" id="export_names" style="min-width: 90px;" disabled>
           <option title="Export Formats" value="export" selected disabled>Export</option>
+          <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
           <option title="DAE - Collada Format" value="dae" onclick="export_dae();">DAE</option>
-          <option title="GLB - GL Transmission Format binary" value="glb" onclick="export_gltf( true );">GLB</option>
-          <option title="GLTF - GL Transmission Format ascii" value="gltf" onclick="export_gltf( false );">GLTF</option>
+          <option title="GLB - GL Transmission Format binary regular export" value="glb" onclick="export_gltf( true );">GLB</option>
+          <option title="GLB - GL Transmission Format binary regular export with Meshopt compression" value="glbmeshopt" onclick="export_gltf( true, true );">GLB_m</option>
+          <option title="GLB - GL Transmission Format binary regular export with Meshopt and WEBP texture compression" value="glbmeshoptwebp" onclick="export_gltf( true, true, true );">GLB_mw</option>
+          <option title="GLTF - GL Transmission Format ascii regular export" value="gltf" onclick="export_gltf();">GLTF</option>
           <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
           <option title="PLY - Polygon File Format ascii" value="ply" onclick="export_ply( false );">PLY_a</option>
           <option title="PLY - Polygon File Format binary" value="ply" onclick="export_ply( true );">PLY_b</option>
@@ -811,7 +832,7 @@
         }
       }
 
-      async function export_gltf( binary = false ) {
+      async function export_gltf( binary = false, meshopt = false, webp = false ) {
         if (mmd_obj) {
           start_export();
 
@@ -819,26 +840,44 @@
 
           let gltf_exporter = new THREE.GLTFExporter( manager );
 
-          let options = { binary: binary, maxTextureSize: 4096 || Infinity };
+          let options = { binary: binary, maxTextureSize: 1024 || Infinity };
 
           gltf_exporter.parse( mmd_obj, async json => {
             let blob;
 
             if (binary === true) {
-              blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+              blob = new Blob( [ meshopt === true ? (webp === true ? await meshopt_compress( new Uint8Array( json ), true ) : await meshopt_compress( new Uint8Array( json ) ) ) : json ], { type: 'application/octet-stream' } );
+
+              zip.file( filename + '.glb', blob );
+              await process_zip( '_GLB' + ( meshopt === true ? '_MESHOPT' : '' ) + ( webp === true ? '_WEBP' : '' ));
             } else {
               let string = JSON.stringify( json, null, 2 );
               blob = new Blob( [ string ], { type: 'text/plain' } );
+
+              zip.file( filename + '.gltf', blob );
+              await process_zip( '_GLTF' );
             }
-
-            let ext = (binary === true) ? '.glb' : '.gltf';
-
-            zip.file( filename + ext, blob );
-
-            ext = (binary === true) ? '_GLB' : '_GLTF';
-
-            await process_zip( ext );
           }, function( error ) { console.log( error ); }, options);
+        }
+      }
+
+      async function export_3dm() {
+        if (mmd_obj) {
+          start_export();
+
+          await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+          let rhino_exporter = new THREE.Rhino3dmExporter( manager );
+
+          let options = { vertexColorsCorrection: 0 };
+
+          rhino_exporter.parse( mmd_obj, async function( arrayBuffer ) {
+            let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
+
+            zip.file( filename + '.3dm', blob );
+
+            await process_zip( '_3DM' );
+          }, function( error ) { console.log( error ); }, options );
         }
       }
 
@@ -2890,6 +2929,49 @@
         document.getElementById('div_spinner').style.display = 'none';
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
+      }
+
+      /* Encode GLB with meshopt compression - geometry, morphs, animations */
+
+      async function meshopt_compress( arrayBuffer, webp = false ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { meshopt, compressTexture } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
+
+        await MeshoptEncoder.ready;
+
+        const io = new WebIO()
+        io.registerExtensions( KHRONOS_EXTENSIONS )
+        io.registerDependencies({
+          'meshopt.encoder': MeshoptEncoder,
+        });
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform( meshopt( { encoder: MeshoptEncoder, level: 'high' } ) );
+
+        if (webp === true) {
+          const textures = doc.getRoot().listTextures();
+
+          for (const texture of textures) {
+            await compressTexture( texture, {
+              targetFormat: 'webp',
+              resize: [ 1024, 1024 ]
+            });
+          }
+        }
+
+        doc.createExtension( EXTMeshoptCompression )
+        .setRequired( true )
+        .setEncoderOptions({
+          method: EXTMeshoptCompression.EncoderMethod.QUANTIZE,  // or EXTMeshoptCompression.EncoderMethod.FILTER
+        });
+
+        io.registerExtensions( [ EXTMeshoptCompression ] );
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        return compressedArrayBuffer;
       }
 
       function show_polar_grid() {
