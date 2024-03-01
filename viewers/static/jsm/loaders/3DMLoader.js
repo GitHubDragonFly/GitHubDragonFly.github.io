@@ -55,6 +55,7 @@ class Rhino3dmLoader extends Loader {
 		this.warnings = [];
 
 		this.materialArray = [];
+		this.lastIndex = 0;
 
 	}
 
@@ -1090,6 +1091,8 @@ class Rhino3dmLoader extends Loader {
 
 	_createObject( obj, mat, materials, renderEnvironment, images ) {
 
+		this.materialArray = [];
+
 		const loader = new BufferGeometryLoader();
 
 		const attributes = obj.attributes;
@@ -1150,8 +1153,8 @@ class Rhino3dmLoader extends Loader {
 				geometry = loader.parse( obj.geometry );
 
 				// With the current design, if geometry has groups then
-				// the geometry_groups entry should be the first array
-				// item followed by all object's materials
+				// the geometry_groups entry should be the first item in
+				// the array and followed by all object's materials
 
 				if ( attributes.userStrings && attributes.userStrings[ 0 ][ 0 ] === 'geometry_groups' ) {
 
@@ -1178,13 +1181,28 @@ class Rhino3dmLoader extends Loader {
 
 					if ( attributes.userStrings ) {
 
-						const count_start = geometry.groups ? 1 : 0;
+						if ( geometry.groups ) {
 
-						for ( let i = count_start; i < attributes.userStrings.length; i++ ) {
+							for ( const group of geometry.groups ) {
 
-							let new_material = this._createMaterial( materials[ i - 1 ], renderEnvironment, attributes, images );
-							new_material.vertexColors = vertexColors;
-							this.materialArray.push( new_material );
+								let new_material = this._createMaterial( materials[ this.lastIndex + group.materialIndex ], renderEnvironment, attributes, images );
+								new_material.vertexColors = vertexColors;
+								this.materialArray.push( new_material );
+
+							}
+
+							this.lastIndex += geometry.groups.length;
+
+						} else {
+
+							for ( let i = 0; i < attributes.userStrings.length; i++ ) {
+
+								let new_material = this._createMaterial( materials[ i ], renderEnvironment, attributes, images );
+								new_material.vertexColors = vertexColors;
+								this.materialArray.push( new_material );
+
+							}
+
 						}
 
 					}
