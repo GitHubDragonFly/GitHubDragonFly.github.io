@@ -908,33 +908,6 @@
         }
       }
 
-      async function export_usdz() {
-        if (mesh) {
-          if (document.getElementById('btn_material').innerHTML !== 'MS') {
-            document.getElementById('export_names').selectedIndex = 0;
-            alert( 'USDZExporter: only MeshStandardMaterial is supported, use the material button to change the material before exporting.' );
-            return;
-          }
-
-          start_export();
-
-          await new Promise( resolve => setTimeout( resolve, 20 ) );
-
-          const { USDZExporter } = await import( "../static/jsm/exporters/USDZExporter.js" );
-
-          let usdz_exporter = new USDZExporter( manager );
-
-          let mesh_clone = await create_meshes( true );
-
-          let arraybuffer = await usdz_exporter.parse( mesh_clone );
-          let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
-
-          zip.file( filename + '.usdz', blob );
-
-          await process_zip( '_USDZ' );
-        }
-      }
-
       async function export_assimp( format = 'fbx' ) {
         if (mesh) {
           start_export();
@@ -1038,84 +1011,52 @@
         }
       }
 
+      async function export_usdz() {
+        if (mesh) {
+          if (document.getElementById('btn_material').innerHTML !== 'MS') {
+            document.getElementById('export_names').selectedIndex = 0;
+            alert( 'USDZExporter: only MeshStandardMaterial is supported, use the material button to change the material before exporting.' );
+            return;
+          }
+
+          start_export();
+
+          await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+          const { USDZExporter } = await import( "../static/jsm/exporters/USDZExporter.js" );
+
+          let usdz_exporter = new USDZExporter( manager );
+
+          let mesh_clone = await create_meshes( true );
+
+          let arraybuffer = await usdz_exporter.parse( mesh_clone );
+          let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
+
+          zip.file( filename + '.usdz', blob );
+
+          await process_zip( '_USDZ' );
+        }
+      }
+
       async function export_3dm() {
         if (mesh) {
           start_export();
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let uuid_array = [];
+          const { Rhino3dmExporter } = await import( "../static/jsm/exporters/3DMExporter.js" );
 
-          if (bim === true) {
-            // Export BIM to PLY format first, PRWM format second and then export to 3DM
+          let rhino_exporter = new Rhino3dmExporter( manager );
 
-            const { PLYLoader } = await import( "three/addons/loaders/PLYLoader.js" );
-            const { PRWMLoader } = await import( "../static/jsm/loaders/PRWMLoader.js" );
-            const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.js" );
+          let mesh_clone = (bim === true) ? await create_meshes( true ) : mesh.clone();
 
-            let bigEndian = false;
-            let arrayBuffer;
+          rhino_exporter.parse( mesh_clone, async function( arrayBuffer ) {
+            let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
 
-            let mesh_clone = await create_meshes();
+            zip.file( filename + '.3dm', blob );
 
-            new PLYExporter().parse( mesh_clone, async function( json ) {
-              let blob1 = new Blob( [ json ], { type: 'application/octet-stream' } );
-
-              new PLYLoader().load( URL.createObjectURL( blob1 ), async function( json_geometry ) {
-                URL.revokeObjectURL( blob1 );
-
-                arrayBuffer = threeBuffergeometryToPrwm( json_geometry, bigEndian);
-
-                let blob2 = new Blob( [ arrayBuffer ], { type: 'application/binary' } );
-
-                new PRWMLoader().load( URL.createObjectURL( blob2 ), async function( object ) {
-                  URL.revokeObjectURL( blob2 );
-
-                  let material = new THREE.MeshStandardMaterial( {
-                    side: THREE.DoubleSide,
-                    envMapIntensity: 1.0,
-                    vertexColors: true,
-                    flatShading: bim === true,
-                    metalness: 0.5,
-                    roughness: 0.5,
-                    opacity: 1,
-                    fog: true
-                  });
-
-                  let smooth = object;
-
-                  let uvs = smooth.getAttribute( 'uv' );
-
-                  if (uvs && uvs.array.length > 0) {
-                    if (uvs.array.some( e => e.toString() === 'NaN' || e === null )) smooth.deleteAttribute( 'uv' );
-                  }
-
-                  smooth.computeVertexNormals();
-                  smooth.normalizeNormals();
-                  smooth.center();
-
-                  mesh_clone = new THREE.Mesh( smooth, material );
-                  await export_rhino3dm( mesh_clone );
-                });
-              });
-            }, { binary: true, littleEndian: true });
-          } else {
-            await export_rhino3dm( mesh );
-          }
-
-          async function export_rhino3dm( mesh_to_process ) {
-            const { Rhino3dmExporter } = await import( "../static/jsm/exporters/3DMExporter.js" );
-
-            let rhino_exporter = new Rhino3dmExporter( manager );
-
-            rhino_exporter.parse( mesh_to_process, async function( arrayBuffer ) {
-              let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
-
-              zip.file( filename + '.3dm', blob );
-
-              await process_zip( '_3DM' );
-            }, function( error ) { console.log( error ); }, { vertexColorsCorrection: 0 });
-          }
+            await process_zip( '_3DM' );
+          }, function( error ) { console.log( error ); }, { vertexColorsCorrection: 64 });
         }
       }
 
@@ -2048,38 +1989,54 @@
             (iges === true) ? result = await occt.ReadIgesFile( fileBuffer, null ) : ( (brep === true) ? result = await occt.ReadBrepFile( fileBuffer, null ) : result = await occt.ReadStepFile( fileBuffer, null ));
 
             if (result.success && result.meshes.length > 0) {
+              if (result.meshes.length > 1) multi_mesh_model = true;
+
+              let defaultMaterial = new THREE.MeshStandardMaterial({
+                side: THREE.DoubleSide,
+                opacity: 1,
+                metalness: 0.5,
+                roughness: 0.5,
+                envMapIntensity: 1.0,
+                transparent: enable_opacity,
+                flatShading: false,
+                color: 0xFFFFFF
+              });
+
               let mesh_count = 1;
 
               // Modified version of the original example code at https://github.com/kovacsv/occt-import-js/blob/main/examples/three_viewer.html#L42-L89
-              for (let resultMesh of result.meshes) {
+
+              for (const resultMesh of result.meshes) {
+                let dm = defaultMaterial.clone();
+
                 let geometry = new THREE.BufferGeometry();
 
                 geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( resultMesh.attributes.position.array, 3 ) );
 
                 if (resultMesh.attributes.normal) {
                   geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( resultMesh.attributes.normal.array, 3 ) );
+                } else {
+                  geometry.computeVertexNormals();
                 }
+
+                geometry.normalizeNormals();
 
                 let index = Uint32Array.from( resultMesh.index.array );
-                geometry.setIndex( new THREE.BufferAttribute( index, 1 ) );
-            
-                let defaultMaterial;
+                geometry.setIndex( new THREE.Uint16BufferAttribute( index, 1 ) );
 
                 if (resultMesh.color) {
-                  let color = new THREE.Color( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
-                  defaultMaterial = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: color } );
-                } else {
-                  defaultMaterial = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: 0xFFFFFF } );
+                  dm.color.set( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
                 }
 
-                let materials = defaultMaterial;
+                let materials = dm;
 
                 if (resultMesh.brep_faces && resultMesh.brep_faces.length > 0) {
-                  materials = [ defaultMaterial ];
+                  materials = [ dm ];
 
                   for (let faceColor of resultMesh.brep_faces) {
-                    let color = faceColor.color ? new THREE.Color( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] ) : defaultMaterial.color;
-                    materials.push( new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: color } ) );
+                    let dm_clone = dm.clone();
+                    if (faceColor.color) dm_clone.color.set( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] );
+                    materials.push( dm_clone );
                   }
 
                   let triangleCount = resultMesh.index.array.length / 3;
@@ -2091,14 +2048,16 @@
                     let lastIndex = null;
                     let materialIndex = null;
 
+                    let face = resultMesh.brep_faces[ faceColorGroupIndex ];
+
                     if (faceColorGroupIndex >= resultMesh.brep_faces.length) {
-                      lastIndex = triangleCount;
                       materialIndex = 0;
-                    } else if (triangleIndex < resultMesh.brep_faces[ faceColorGroupIndex ].first) {
-                      lastIndex = resultMesh.brep_faces[ faceColorGroupIndex ].first;
+                      break;
+                    } else if (triangleIndex < face.first) {
+                      lastIndex = face.first;
                       materialIndex = 0;
                     } else {
-                      lastIndex = resultMesh.brep_faces[ faceColorGroupIndex ].last + 1;
+                      lastIndex = face.last + 1;
                       materialIndex = faceColorGroupIndex + 1;
                       faceColorGroupIndex++;
                     }
@@ -2109,14 +2068,12 @@
                     let innerGeometry = new THREE.BufferGeometry();
                     innerGeometry.setAttribute( 'position', geometry.attributes.position );
                     if (geometry.attributes.normal) innerGeometry.setAttribute( 'normal', geometry.attributes.normal );
-                    innerGeometry.setIndex( new THREE.BufferAttribute( index.slice( firstIndex * 3, lastIndex * 3 ), 1 ) );
+                    innerGeometry.setIndex( geometry.index, 1 );
                     let innerEdgesGeometry = new THREE.EdgesGeometry( innerGeometry, 30 );
                     let edge = new THREE.LineSegments( innerEdgesGeometry, outline_material );
                     edges.add( edge );
                   }
                 }
-
-                if (result.meshes.length > 1) multi_mesh_model = true;
 
                 let new_mesh = new THREE.Mesh( geometry, materials );
                 new_mesh.name = 'mesh_' + mesh_count;
@@ -2126,6 +2083,22 @@
                 original_vertex_color_array[ new_mesh.name ] = new_mesh.geometry.getAttribute( 'color' );
 
                 mesh.add( new_mesh );
+
+                if (Array.isArray( materials )) {
+                  materials.forEach( mtl => {
+                    mtl.dispose();
+                  });
+
+                  new_mesh.material.forEach( mtrl => {
+                    mtrl.dispose();
+                  });
+                } else {
+                  materials.dispose();
+                  new_mesh.material.dispose();
+                }
+
+                geometry.dispose();
+                new_mesh.geometry.dispose();
               }
 
               occt = null;
@@ -2243,38 +2216,54 @@
               iges ? result = await occt.ReadIgesFile( fileBuffer, null ) : ( brep ? result = await occt.ReadBrepFile( fileBuffer, null ) : result = await occt.ReadStepFile( fileBuffer, null ));
 
               if (result.success && result.meshes.length > 0) {
+                if (result.meshes.length > 1) multi_mesh_model = true;
+
+                let defaultMaterial = new THREE.MeshStandardMaterial({
+                  side: THREE.DoubleSide,
+                  opacity: 1,
+                  metalness: 0.5,
+                  roughness: 0.5,
+                  envMapIntensity: 1.0,
+                  transparent: enable_opacity,
+                  flatShading: false,
+                  color: 0xFFFFFF
+                });
+
                 let mesh_count = 1;
 
                 // Modified version of the original example code at https://github.com/kovacsv/occt-import-js/blob/main/examples/three_viewer.html#L42-L89
-                for (let resultMesh of result.meshes) {
+
+                for (const resultMesh of result.meshes) {
+                  let dm = defaultMaterial.clone();
+
                   let geometry = new THREE.BufferGeometry();
 
                   geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( resultMesh.attributes.position.array, 3 ) );
 
                   if (resultMesh.attributes.normal) {
                     geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( resultMesh.attributes.normal.array, 3 ) );
+                  } else {
+                    geometry.computeVertexNormals();
                   }
+
+                  geometry.normalizeNormals();
 
                   let index = Uint32Array.from( resultMesh.index.array );
-                  geometry.setIndex( new THREE.BufferAttribute( index, 1 ) );
-
-                  let defaultMaterial;
+                  geometry.setIndex( new THREE.Uint16BufferAttribute( index, 1 ) );
 
                   if (resultMesh.color) {
-                    let color = new THREE.Color( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
-                    defaultMaterial = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: color } );
-                  } else {
-                    defaultMaterial = new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: 0xFFFFFF } );
+                    dm.color.set( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
                   }
 
-                  let materials = defaultMaterial;
+                  let materials = dm;
 
                   if (resultMesh.brep_faces && resultMesh.brep_faces.length > 0) {
-                    materials = [ defaultMaterial ];
+                    materials = [ dm ];
 
                     for (let faceColor of resultMesh.brep_faces) {
-                      let color = faceColor.color ? new THREE.Color( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] ) : defaultMaterial.color;
-                      materials.push( new THREE.MeshStandardMaterial( { side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0, transparent: enable_opacity, flatShading: false, color: color } ) );
+                      let dm_clone = dm.clone();
+                      if (faceColor.color) dm_clone.color.set( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] );
+                      materials.push( dm_clone );
                     }
 
                     let triangleCount = resultMesh.index.array.length / 3;
@@ -2286,14 +2275,16 @@
                       let lastIndex = null;
                       let materialIndex = null;
 
+                      let face = resultMesh.brep_faces[ faceColorGroupIndex ];
+
                       if (faceColorGroupIndex >= resultMesh.brep_faces.length) {
-                        lastIndex = triangleCount;
                         materialIndex = 0;
-                      } else if (triangleIndex < resultMesh.brep_faces[ faceColorGroupIndex ].first) {
-                        lastIndex = resultMesh.brep_faces[ faceColorGroupIndex ].first;
+                        break;
+                      } else if (triangleIndex < face.first) {
+                        lastIndex = face.first;
                         materialIndex = 0;
                       } else {
-                        lastIndex = resultMesh.brep_faces[ faceColorGroupIndex ].last + 1;
+                        lastIndex = face.last + 1;
                         materialIndex = faceColorGroupIndex + 1;
                         faceColorGroupIndex++;
                       }
@@ -2304,14 +2295,12 @@
                       let innerGeometry = new THREE.BufferGeometry();
                       innerGeometry.setAttribute( 'position', geometry.attributes.position );
                       if (geometry.attributes.normal) innerGeometry.setAttribute( 'normal', geometry.attributes.normal );
-                      innerGeometry.setIndex( new THREE.BufferAttribute( index.slice( firstIndex * 3, lastIndex * 3 ), 1 ) );
+                      innerGeometry.setIndex( geometry.index, 1 );
                       let innerEdgesGeometry = new THREE.EdgesGeometry( innerGeometry, 30 );
                       let edge = new THREE.LineSegments( innerEdgesGeometry, outline_material );
                       edges.add( edge );
                     }
                   }
-
-                  if (result.meshes.length > 1) multi_mesh_model = true;
 
                   let new_mesh = new THREE.Mesh( geometry, materials );
                   new_mesh.name = 'mesh_' + mesh_count;
@@ -2454,15 +2443,26 @@
 
         m_meshes.traverse( function( child ) {
           if (child.isInstancedMesh) {
-            const material = new THREE.MeshStandardMaterial( { name: 'Default', side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0 } );
+            const material = new THREE.MeshStandardMaterial( {
+              name: 'Default',
+              side: THREE.DoubleSide,
+              opacity: 1,
+              metalness: 0.5,
+              roughness: 0.5,
+              envMapIntensity: 1.0
+            });
 
             // Alternative GLB export will apply DRACO compression on indexed geometries only
+            // This will also merge vertices of BIM models for 3DM and USDZ exports
+
             if (alternative === true && !child.geometry.index) {
               child.geometry = merge_vertices( child.geometry, 1e-6 );
               child.geometry.computeVertexNormals();
             }
 
             for ( let i = 0; i < child.count; i += 1 ) {
+              let child_clone;
+
               if (child.material) {
                 child_clone = new THREE.Mesh( child.geometry, child.material );
               } else {
@@ -2479,7 +2479,12 @@
                 }
               }
 
-              (child.userData[ i ].name && child.userData[ i ].name !== '') ? child_clone.name = child.userData[ i ].name : child_clone.name = 'mesh_' + child.id + '_' + i;
+              if (child.userData[ i ].name && child.userData[ i ].name !== '') {
+                child_clone.name = child.userData[ i ].name;
+              } else {
+                child_clone.name = 'mesh_' + child.id + '_' + i;
+              }
+
               if (child.userData[ i ].guid) child_clone.userData[ 'guid' ] = child.userData[ i ].guid;
               if (child.userData[ i ].type) child_clone.userData[ 'type' ] = child.userData[ i ].type;
               if (child.userData[ i ].info) child_clone.userData[ 'info' ] = child.userData[ i ].info;
