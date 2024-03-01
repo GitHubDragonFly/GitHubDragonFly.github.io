@@ -431,7 +431,7 @@ class Rhino3dmExporter {
 
 					// Geometry groups don't seem to get processed so pass them as a user string
 
-					if ( geometry_clone.groups )
+					if ( geometry_clone.groups && geometry_clone.groups.length > 1 )
 						rhino_attributes.setUserString( 'geometry_groups', JSON.stringify( geometry_clone.groups ) );
 
 				}
@@ -517,11 +517,11 @@ class Rhino3dmExporter {
 
 							if ( object.isLine || object.isLineSegments ) {
 
-								if ( exportLineSegments === true ) process_material( material.clone(), true );
+								if ( exportLineSegments === true ) process_material( material.clone(), object.material.length > 1 );
 
 							} else {
 
-								process_material( material.clone(), true );
+								process_material( material.clone(), object.material.length > 1 );
 
 							}
 
