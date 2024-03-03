@@ -5,8 +5,8 @@ import {
 	Matrix4,
 } from "three";
 
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/utils/TextureUtils.js";
-import { deinterleaveAttribute } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/utils/BufferGeometryUtils.js";
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/TextureUtils.js";
+import { deinterleaveAttribute } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/BufferGeometryUtils.js";
 
 import * as rhino3dm from "https://cdn.jsdelivr.net/npm/rhino3dm@8.4.0/rhino3dm.module.min.js";
 
@@ -330,18 +330,16 @@ class Rhino3dmExporter {
 				tex.offset = texture.offset;
 				tex.repeat = texture.repeat;
 				tex.rotation = texture.rotation;
-				tex.mapping = texture.mapping;
 				tex.minFilter = texture.minFilter;
 				tex.magFilter = texture.magFilter;
-				tex.width = texture.source.data.width;
-				tex.height = texture.source.data.height;
+				tex.mapping = texture.mapping ? texture.mapping : 300;
 
 				if ( texture.wrapS ) tex.wrapU = texture.wrapS === 1000 ? 0 : 1;
 				if ( texture.wrapT ) tex.wrapV = texture.wrapT === 1000 ? 0 : 1;
 
 				tex.image = map_type;
 
-				// Pass image as a user string
+				// Store image as a base64 string
 
 				if ( ! processed_images[ texture.uuid ] ) {
 
@@ -352,7 +350,7 @@ class Rhino3dmExporter {
 					}
 
 					const image_url = scope.imageURLfromTexture( texture, true, maxTextureSize );
-					processed_images[ tex.uuid ] = image_url;
+					if ( image_url ) processed_images[ tex.uuid ] = image_url;
 
 				}
 
@@ -668,6 +666,8 @@ class Rhino3dmExporter {
 
 		} else {
 
+			// Pass each image as a user string
+
 			Object.keys( processed_images ).forEach(  key => {
 
 				rhino_file.strings().set( key, processed_images[ key ] );
@@ -778,7 +778,7 @@ class Rhino3dmExporter {
 
 			} else {
 
-				context.drawImage( image, 0, 0 );
+				context.drawImage( image, 0, 0, _canvas.width, _canvas.height );
 
 			}
 
