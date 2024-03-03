@@ -43,8 +43,8 @@ import {
 	VectorKeyframeTrack
 } from "three";
 
-import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/loaders/TGALoader.js";
-import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/loaders/DDSLoader.js";
+import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/loaders/TGALoader.js";
+import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/loaders/DDSLoader.js";
 
 class ColladaLoader extends Loader {
 
@@ -1871,7 +1871,7 @@ class ColladaLoader extends Loader {
 
 					case 'color':
 						const array = parseFloats( child.textContent );
-						data.color = new Color().fromArray( array );
+						data.color = new Color().setRGB( array[ 0 ], array[ 1 ], array[ 2 ], LinearSRGBColorSpace );
 						break;
 
 					case 'falloff_angle':
