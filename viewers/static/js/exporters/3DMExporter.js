@@ -10,24 +10,24 @@
 	*
 	*		Import rhino module in your application:
 	*
-	*		<script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.4.0/rhino3dm.js" defer></script>
+	*			<script src="https://cdn.jsdelivr.net/npm/rhino3dm@8.4.0/rhino3dm.js" defer></script>
 	*
 	*		Construct the exporter and parse the scene:
 	*
-	*		const exporter = new THREE.Rhino3dmExporter( manager );
+	*			const exporter = new THREE.Rhino3dmExporter( manager );
 	*
-	*		exporter.parse( scene, function( arrayBuffer ) {
-	*			let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
+	*			exporter.parse( scene, function( arrayBuffer ) {
+	*				let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
 	*
-	*			let link = document.createElement( 'a' );
-	*			link.style.display = 'none';
-	*			document.body.appendChild( link );
-	*			link.href = URL.createObjectURL( blob );
-	*			URL.revokeObjectURL( blob );
-	*			link.download = 'Model.3dm';
-	*			link.click();
-	*			document.body.removeChild( link );
-	*		}
+	*				let link = document.createElement( 'a' );
+	*				link.style.display = 'none';
+	*				document.body.appendChild( link );
+	*				link.href = URL.createObjectURL( blob );
+	*				URL.revokeObjectURL( blob );
+	*				link.download = 'Model.3dm';
+	*				link.click();
+	*				document.body.removeChild( link );
+	*			}
 	*
 	*	Optional full format: exporter.parse( scene, onDone, onError, options );
 	*
@@ -323,7 +323,6 @@
 					let tex = {};
 					tex.type = map_type;
 					tex.uuid = texture.uuid;
-					tex.flipY = map_flip_required;
 
 					texture = texture.clone();
 
@@ -331,11 +330,9 @@
 					tex.offset = texture.offset;
 					tex.repeat = texture.repeat;
 					tex.rotation = texture.rotation;
-					tex.mapping = texture.mapping;
 					tex.minFilter = texture.minFilter;
 					tex.magFilter = texture.magFilter;
-					tex.width = texture.image.width;
-					tex.height = texture.image.height;
+					tex.mapping = texture.mapping ? texture.mapping : 300;
 
 					if ( texture.wrapS ) tex.wrapU = texture.wrapS === 1000 ? 0 : 1;
 					if ( texture.wrapT ) tex.wrapV = texture.wrapT === 1000 ? 0 : 1;
@@ -352,8 +349,8 @@
 
 						}
 
-						const image_url = scope.imageURLfromTexture( texture, true, maxTextureSize );
-						processed_images[ tex.uuid ] = image_url;
+						const image_url = scope.imageURLfromTexture( texture, true, maxTextureSize, map_flip_required );
+						if ( image_url ) processed_images[ tex.uuid ] = image_url;
 
 					}
 
@@ -527,11 +524,11 @@
 
 								if ( object.isLine || object.isLineSegments ) {
 
-									if ( exportLineSegments === true ) process_material( material.clone(), true );
+									if ( exportLineSegments === true ) process_material( material.clone(), object.material.length > 1 );
 
 								} else {
 
-									process_material( material.clone(), true );
+									process_material( material.clone(), object.material.length > 1 );
 
 								}
 
@@ -677,6 +674,8 @@
 				}
 
 			} else {
+
+				// Pass each image as a user string
 
 				Object.keys( processed_images ).forEach(  key => {
 
@@ -883,7 +882,7 @@
 
 		// Reference: https://discourse.threejs.org/t/save-load-a-texture-with-alpha-component/23526/11
 
-		imageURLfromTexture( texture, retain_alpha = true, maxTextureSize ) {
+		imageURLfromTexture( texture, retain_alpha = true, maxTextureSize, map_flip_required = false ) {
 
 			const image = texture.image;
 
@@ -900,23 +899,32 @@
 				_canvas.width = Math.min( image.width, maxTextureSize );
 				_canvas.height = Math.min( image.height, maxTextureSize );
 
-				const context = _canvas.getContext( '2d' );
+				const ctx = _canvas.getContext( '2d' );
+
+				if ( map_flip_required === true ) {
+
+					// Flip image vertically
+
+					ctx.translate( 0, _canvas.height );
+					ctx.scale( 1, - 1 );
+
+				}
 
 				// this seems to also work fine for exporting TGA images as PNG
 
 				if ( image instanceof ImageData ) {
 
-					context.putImageData( image, 0, 0 );
+					ctx.putImageData( image, 0, 0 );
 
 				} else if ( image.data && image.data.constructor === Uint8Array ) {
 
 					let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
 
-					context.putImageData( imgData, 0, 0 );
+					ctx.putImageData( imgData, 0, 0 );
 
 				} else {
 
-					context.drawImage( image, 0, 0 );
+					ctx.drawImage( image, 0, 0, _canvas.width, _canvas.height );
 
 				}
 
