@@ -322,7 +322,6 @@ class Rhino3dmExporter {
 				let tex = {};
 				tex.type = map_type;
 				tex.uuid = texture.uuid;
-				tex.flipY = map_flip_required;
 
 				texture = texture.clone();
 
@@ -349,7 +348,7 @@ class Rhino3dmExporter {
 
 					}
 
-					const image_url = scope.imageURLfromTexture( texture, true, maxTextureSize );
+					const image_url = scope.imageURLfromTexture( texture, true, maxTextureSize, map_flip_required );
 					if ( image_url ) processed_images[ tex.uuid ] = image_url;
 
 				}
@@ -745,7 +744,7 @@ class Rhino3dmExporter {
 
 	// Reference: https://discourse.threejs.org/t/save-load-a-texture-with-alpha-component/23526/11
 
-	imageURLfromTexture( texture, retain_alpha = true, maxTextureSize ) {
+	imageURLfromTexture( texture, retain_alpha = true, maxTextureSize, map_flip_required = false ) {
 
 		const image = texture.image;
 
@@ -762,23 +761,32 @@ class Rhino3dmExporter {
 			_canvas.width = Math.min( image.width, maxTextureSize );
 			_canvas.height = Math.min( image.height, maxTextureSize );
 	
-			const context = _canvas.getContext( '2d' );
+			const ctx = _canvas.getContext( '2d' );
+
+			if ( map_flip_required === true ) {
+
+				// Flip image vertically
+
+				ctx.translate( 0, _canvas.height );
+				ctx.scale( 1, - 1 );
+
+			}
 
 			// this seems to also work fine for exporting TGA images as PNG
 
 			if ( image instanceof ImageData ) {
 
-				context.putImageData( image, 0, 0 );
+				ctx.putImageData( image, 0, 0 );
 
 			} else if ( image.data && image.data.constructor === Uint8Array ) {
 
 				let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
 
-				context.putImageData( imgData, 0, 0 );
+				ctx.putImageData( imgData, 0, 0 );
 
 			} else {
 
-				context.drawImage( image, 0, 0, _canvas.width, _canvas.height );
+				ctx.drawImage( image, 0, 0, _canvas.width, _canvas.height );
 
 			}
 
