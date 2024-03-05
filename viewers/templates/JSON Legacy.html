@@ -321,7 +321,6 @@
           <option title="GLTF - GL Transmission Format ascii regular export" value="gltf" onclick="export_gltf( false, false );">GLTF</option>
           <option title="JSON - Three.js Format" value="json" onclick="export_json();">JSON</option>
           <option title="OBJ - Wavefront Technologies 3D Format - regular textures" value="obj" onclick="export_obj();">OBJ</option>
-          <option title="OBJ - Wavefront Technologies 3D Format - Y flip exported textures" value="obj" onclick="export_obj( true );">OBJ_Y</option>
           <option title="PLY - Polygon File Format ascii" value="ply" onclick="export_ply( false );">PLY_a</option>
           <option title="PLY - Polygon File Format binary" value="ply" onclick="export_ply( true );">PLY_b</option>
           <option title="STL - Stereolithography Format" value="stl" onclick="export_stl();">STL</option>
@@ -749,7 +748,7 @@
         });
       }
 
-      async function export_obj( flip = false ) {
+      async function export_obj() {
         if (mesh) {
           start_export();
 
@@ -766,28 +765,35 @@
               if (exported[ 'tex' ] && exported[ 'tex' ].length > 0) {
                 let processed_index = 0;
 
-                if (flip === true) {
-                  exported[ 'tex' ].forEach( tex => {
-                    let blob = new Blob( [ tex.data ], { type: 'image/png' } );
+                exported[ 'tex' ].forEach( async tex => {
+                  let blob = new Blob( [ tex.data ], { type: 'image/png' } );
 
+                  if (tex_res === Infinity && tex_flip === false) {
+                    zip.file( `${ tex.name }.${ tex.ext }`, blob );
+                    if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
+                    processed_index += 1;
+                  } else {
+                    let canvas = document.createElement('canvas');
                     let img = new Image();
 
                     img.onload = async function() {
-                      let canvas = document.createElement('canvas');
-
-                      canvas.width = img.naturalWidth;
-                      canvas.height = img.naturalHeight;
+                      canvas.width = Math.min( img.naturalWidth, tex_res );
+                      canvas.height = Math.min( img.naturalHeight, tex_res );
 
                       const ctx = canvas.getContext( '2d' );
 
-                      // Flip image vertically
-                      ctx.scale( 1, -1 );
-                      ctx.drawImage( img, 0, -canvas.height );
+                      if (tex_flip === true) {
+                        // Flip image vertically
+                        ctx.translate( 0, canvas.height );
+                        ctx.scale( 1, - 1 );
+                      }
+
+                      ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
 
                       await new Promise( resolve => canvas.toBlob( resolve ) ).then( async function( canvas_blob ) {
                         zip.file( `${ tex.name }.${ tex.ext }`, canvas_blob );
 
-                        if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ_Y' );
+                        if (processed_index === exported[ 'tex' ].length - 1) await process_zip( tex_flip ? '_OBJ_Y' : '_OBJ' );
                       });
 
                       processed_index += 1;
@@ -795,18 +801,8 @@
 
                     img.src = URL.createObjectURL( blob );
                     URL.revokeObjectURL( blob );
-                  });
-                } else {
-                  exported[ 'tex' ].forEach( async tex => {
-                    let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
-
-                    zip.file( `${ tex.name }.${ tex.ext }`, blob );
-
-                    if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
-
-                    processed_index += 1;
-                  });
-                }
+                  }
+                });
               } else {
                 await process_zip( '_OBJ' );
               }
@@ -946,7 +942,7 @@
               // export to USDZ format
               let usdz_exporter = new THREE.USDZExporter();
 
-              let arraybuffer = await usdz_exporter.parse( gltf.scene );
+              let arraybuffer = await usdz_exporter.parse( gltf.scene, { map_flip_required: tex_flip } );
               let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
 
               zip.file( filename + '.usdz', blob );
@@ -2203,7 +2199,7 @@
               child_count += 1;
             }
 
-            if (child.geometry.type.toUpperCase() === 'GEOMETRY') {
+            if (child.geometry.type !== 'BufferGeometry') {
               child.geometry = new THREE.BufferGeometry().fromGeometry( child.geometry );
             }
 
