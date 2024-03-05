@@ -237,14 +237,14 @@ Number Type Converter
     - PLY exporter will include vertex colors and will convert material color to vertex color if the material has no texture
   - GLB exports, where applicable, can additionally have either DRACO or DRACO+WEBP or MESHOPT or MESHOPT+WEBP compression applied by using [glTF Transform](https://gltf-transform.dev):
     - These exports are marked as either of: `GLB_d` `GLB_dw` `GLB_m` `GLB_mw` (for regular exports) `GLBx_d` `GLBx_dw` `GLBx_m` `GLBx_mw` (for alternative exports)
-    - WEBP exported texture resolution is fixed at 1k in mobile GLTF Viewer but is selectable in desktop viewers (1k, 2k, 4k)
+    - WEBP exported texture resolution is fixed at 1k in mobile GLTF Viewer but is selectable in desktop viewers (256, 512, 1k, 2k, 4k)
     - Seem to work fine in general but might not be good for some rare models
   - Some viewers also offer alternative exports marked as `OBJx` `DAEx` `GLTFx` `USDZx`:
     - Should be tried either out of curiosity or if their regular export counterparts don't produce good results
     - Might even produce smaller exported file size than regular export
     - If applicable, will support exporting THREE.InstancedMesh to OBJ + MTL / DAE / USDZ as well
     - If applicable, will support exporting morph animations but will not export other animations
-  - Some viewers also offer setting the exported textures resolution and Y flip
+  - Some viewers also offer setting the exported textures resolution (256, 512, 1k, 2k, 4k) and Y-flip
   - GLTFS Viewer seems to do OK job in exporting models with `pbrSpecularGlossiness`
 - Buttons, where applicable:
   - `A` - animations
