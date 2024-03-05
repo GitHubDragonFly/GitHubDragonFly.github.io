@@ -61,7 +61,7 @@
 				output += 'o ' + mesh.name + '\n';
 
 				// name of the mesh material
-				if ( mesh.material && mesh.material.name ) {
+				if ( mesh.material && mesh.material.name !== undefined ) {
 
 					if ( mesh.material.name === '' ) {
 
