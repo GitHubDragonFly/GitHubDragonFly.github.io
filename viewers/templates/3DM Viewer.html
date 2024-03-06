@@ -332,13 +332,19 @@
           <option title="GIF - Animated GIF" value="gif" onclick="export_animated_gif();">GIF</option>
           <option title="PNG - Animated PNG (APNG)" value="apng" onclick="export_animated_png();">PNG</option>
         </select>
-        <select title="Exported Texture Resolution for GLTF / GLB" id="export_tex_res" style="min-width: 60px;" disabled>
-          <option title="Original" value="original" onclick="tex_res = Infinity;" selected>None</option>
-          <option title="256 (256x256)" value="256" onclick="tex_res = 256;">256</option>
-          <option title="512 (512x512)" value="512" onclick="tex_res = 512;">512</option>
-          <option title="1k (1024x1024)" value="1k" onclick="tex_res = 1024;">1k</option>
-          <option title="2k (2048x2048)" value="2k" onclick="tex_res = 2048;">2k</option>
-          <option title="4k (4096x4096)" value="4k" onclick="tex_res = 4096;">4k</option>
+        <select title="Maximum Exported Texture Resolution and Y flip" id="export_tex_res" style="min-width: 60px;" disabled>
+          <option title="Original" value="original" onclick="tex_res = Infinity; tex_flip = false;" selected>None</option>
+          <option title="256 (256x256)" value="256" onclick="tex_res = 256; tex_flip = false;">256</option>
+          <option title="512 (512x512)" value="512" onclick="tex_res = 512; tex_flip = false;">512</option>
+          <option title="1k (1024x1024)" value="1k" onclick="tex_res = 1024; tex_flip = false;">1k</option>
+          <option title="2k (2048x2048)" value="2k" onclick="tex_res = 2048; tex_flip = false;">2k</option>
+          <option title="4k (4096x4096)" value="4k" onclick="tex_res = 4096; tex_flip = false;">4k</option>
+          <option title="Original Y flipped" value="original_flipped" onclick="tex_res = Infinity; tex_flip = true;">Flip</option>
+          <option title="256 (256x256) Y flipped" value="256_flipped" onclick="tex_res = 256; tex_flip = true;">256 Y</option>
+          <option title="512 (512x512) Y flipped" value="512_flipped" onclick="tex_res = 512; tex_flip = true;">512 Y</option>
+          <option title="1k (1024x1024) Y flipped" value="1k_flipped" onclick="tex_res = 1024; tex_flip = true;">1k Y</option>
+          <option title="2k (2048x2048) Y flipped" value="2k_flipped" onclick="tex_res = 2048; tex_flip = true;">2k Y</option>
+          <option title="4k (4096x4096) Y flipped" value="4k_flipped" onclick="tex_res = 4096; tex_flip = true;">4k Y</option>
         </select>
         <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; width: 40px;" disabled>RST</button>
         <button title="Full Screen" id="btn_full_screen" onclick="full_screen();" style="background-color: transparent; min-width: 24px;"><p class="full_screen"></p></button>
@@ -679,14 +685,14 @@
       var lil_gui, gui, gui_set = false, gui_multi_layers, params, toneMappingOptions;
       var guiExposure = null, guiToneMapping, guiBlurriness, guiIntensity;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
-      var controls, orb_controls, gizmo, orb_controls_gizmo, tex_res;
+      var controls, orb_controls, gizmo, orb_controls_gizmo;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
       var bounding_box, outline_material, gif_export, zip;
       var first_run = false, fr_count = 0, count = 0;
-      var filename, textures, current_texture;
+      var filename, textures, current_texture, tex_res, tex_flip;
       var original_side, original_side_array, flatShading_enabled;
       var original_color, original_color_array, bgnd_linear_gradient;
       var original_vertex_colors, original_vertex_colors_array;
@@ -766,13 +772,43 @@
                 let processed_index = 0;
 
                 exported[ 'tex' ].forEach( async tex => {
-                  let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+                  let blob = new Blob( [ tex.data ], { type: 'image/png' } );
 
-                  zip.file( `${ tex.name }.${ tex.ext }`, blob );
+                  if (tex_res === Infinity && tex_flip === false) {
+                    zip.file( `${ tex.name }.${ tex.ext }`, blob );
+                    if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
+                    processed_index += 1;
+                  } else {
+                    let canvas = document.createElement('canvas');
+                    let img = new Image();
 
-                  if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
+                    img.onload = async function() {
+                      canvas.width = Math.min( img.naturalWidth, tex_res );
+                      canvas.height = Math.min( img.naturalHeight, tex_res );
 
-                  processed_index += 1;
+                      const ctx = canvas.getContext( '2d' );
+
+                      if (tex_flip === true) {
+                        // Flip image vertically
+                        ctx.translate( 0, canvas.height );
+                        ctx.scale( 1, - 1 );
+                      }
+
+                      ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                      await new Promise( resolve => canvas.toBlob( resolve ) ).then( async function( canvas_blob ) {
+                        zip.file( `${ tex.name }.${ tex.ext }`, canvas_blob );
+
+                        let str = '_OBJ' + (tex_flip === true ? '_Y' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '');
+                        if (processed_index === exported[ 'tex' ].length - 1) await process_zip( str );
+                      });
+
+                      processed_index += 1;
+                    }
+
+                    img.src = URL.createObjectURL( blob );
+                    URL.revokeObjectURL( blob );
+                  }
                 });
               } else {
                 await process_zip( '_OBJ' );
@@ -854,15 +890,52 @@
           if (result.textures && result.textures.length > 0) {
             let processed_index = 0;
 
-            result.textures.forEach( async tex => {
-              let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
+            if (tex_res !== Infinity || tex_flip === true) {
+              result.textures.forEach( tex => {
+                let blob = new Blob( [ tex.data ], { type: 'image/png' } );
 
-              zip.file( `${ tex.name }.${ tex.ext }`, blob );
+                let img = new Image();
 
-              if (processed_index === result.textures.length - 1) await process_zip( '_DAE' );
+                img.onload = async function() {
+                  let canvas = document.createElement('canvas');
 
-              processed_index += 1;
-            });
+                  canvas.width = Math.min( img.naturalWidth, tex_res );
+                  canvas.height = Math.min( img.naturalHeight, tex_res );
+
+                  const ctx = canvas.getContext( '2d' );
+
+                  if (tex_flip === true) {
+                    // Flip image vertically
+                    ctx.translate( 0, canvas.height );
+                    ctx.scale( 1, -1 );
+                  }
+
+                  ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                  await new Promise( resolve => canvas.toBlob( resolve ) ).then( async function( canvas_blob ) {
+                    zip.file( `${ tex.name }.${ tex.ext }`, canvas_blob );
+
+                    let str = '_DAE' + (tex_flip === true ? '_Y' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '');
+                    if (processed_index === result.textures.length - 1) await process_zip( str );
+                  });
+
+                  processed_index += 1;
+                }
+
+                img.src = URL.createObjectURL( blob );
+                URL.revokeObjectURL( blob );
+              });
+            } else {
+              result.textures.forEach( async tex => {
+                let blob = new Blob( [ tex.data ], { type: 'image/png' } );
+
+                zip.file( `${ tex.name }.${ tex.ext }`, blob );
+
+                if (processed_index === result.textures.length - 1) await process_zip( '_DAE' );
+
+                processed_index += 1;
+              });
+            }
           } else {
             await process_zip( '_DAE' );
           }
@@ -931,7 +1004,9 @@
 
           let usdz_exporter = new USDZExporter( manager );
 
-          let arraybuffer = await usdz_exporter.parse( rhino_obj, { maxTextureSize: tex_res } );
+          let options = { maxTextureSize: tex_res, map_flip_required: tex_flip };
+
+          let arraybuffer = await usdz_exporter.parse( rhino_obj, options );
           let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
 
           zip.file( filename + '.usdz', blob );
@@ -1785,6 +1860,7 @@
         mouse_down = false;
         mouse_wheel = true;
         tex_res = Infinity;
+        tex_flip = false;
         textures = [];
         edges = new THREE.Group();
         edges_visible = false;
@@ -2193,14 +2269,14 @@
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
         if (webp === true) {
-          const res = tex_res === Infinity ? 1024 : tex_res;
           const textures = doc.getRoot().listTextures();
 
           for (const texture of textures) {
-            await compressTexture( texture, {
-              targetFormat: 'webp',
-              resize: [ res, res ]
-            });
+            if (tex_res === Infinity) {
+              await compressTexture( texture, { targetFormat: 'webp' } );
+            } else {
+              await compressTexture( texture, { targetFormat: 'webp', resize: [ tex_res, tex_res ] } );
+            }
           }
         }
 
@@ -2236,14 +2312,14 @@
         await doc.transform( meshopt( { encoder: MeshoptEncoder, level: 'high' } ) );
 
         if (webp === true) {
-          const res = tex_res === Infinity ? 1024 : tex_res;
           const textures = doc.getRoot().listTextures();
 
           for (const texture of textures) {
-            await compressTexture( texture, {
-              targetFormat: 'webp',
-              resize: [ res, res ]
-            });
+            if (tex_res === Infinity) {
+              await compressTexture( texture, { targetFormat: 'webp' } );
+            } else {
+              await compressTexture( texture, { targetFormat: 'webp', resize: [ tex_res, tex_res ] } );
+            }
           }
         }
 
