@@ -449,7 +449,7 @@
 
 							rhino_object = new Module.Mesh.createFromThreejsJSON( { data: geometry_clone } );
 
-						} else if ( ( object.isLine || object.isLineSegments ) && exportLineSegments ) {
+						} else if ( ( object.isLine || object.isLineSegments ) && exportLineSegments === true ) {
 
 							const curvePoints = new Module.Point3dList();
 
@@ -492,7 +492,7 @@
 
 							}
 
-							if ( ( object.isLine || object.isLineSegments ) && exportLineSegments ) {
+							if ( ( object.isLine || object.isLineSegments ) && exportLineSegments === true ) {
 
 								// Pass LineSegments vertex colors as a user string
 
@@ -524,11 +524,17 @@
 
 								if ( object.isLine || object.isLineSegments ) {
 
-									if ( exportLineSegments === true ) process_material( material.clone(), object.material.length > 1 );
+									if ( exportLineSegments === true ) {
+
+										process_material( material.clone(), object.material.length > 1 );
+										rhino_file.objects().add( rhino_object, rhino_attributes );
+
+									}
 
 								} else {
 
 									process_material( material.clone(), object.material.length > 1 );
+									rhino_file.objects().add( rhino_object, rhino_attributes );
 
 								}
 
@@ -538,17 +544,21 @@
 
 							if ( object.isLine || object.isLineSegments ) {
 
-								if ( exportLineSegments === true ) process_material( object.material.clone() );
+								if ( exportLineSegments === true ) {
+
+									process_material( object.material.clone() );
+									rhino_file.objects().add( rhino_object, rhino_attributes );
+
+								}
 
 							} else {
 
 								process_material( object.material.clone() );
+								rhino_file.objects().add( rhino_object, rhino_attributes );
 
 							}
 
 						}
-
-						rhino_file.objects().add( rhino_object, rhino_attributes );
 
 					} else if ( object.isPoints ) {
 
