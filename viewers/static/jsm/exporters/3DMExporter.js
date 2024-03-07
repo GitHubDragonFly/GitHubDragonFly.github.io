@@ -2,8 +2,7 @@ import {
 	BufferAttribute,
 	DefaultLoadingManager,
 	InterleavedBufferAttribute,
-	Matrix4,
-	MeshStandardMaterial
+	Matrix4
 } from "three";
 
 import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/TextureUtils.js";
