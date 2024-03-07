@@ -31,22 +31,18 @@
 	*
 	*	Optional full format: exporter.parse( scene, onDone, onError, options );
 	*
-	*		options = { vertexColorsCorrection: 32, exportLineSegments: false, lineSegmentsRotateX: Math.PI / 2 };
+	*		options = { vertexColorsCorrection: 32, exportLineSegments: false };
 	*		options = { vertexColorsCorrection: 0, maxTextureSize: 1024, map_flip_required: true };
 	*
-	*			vertexColorsCorrection	[ default = 0 ]	-	can improve the look of vertex colors in some formats
-	*														value from range [ 0, 128 ]
+	*			vertexColorsCorrection	[ default = 0 ]		-	can improve the look of vertex colors in some formats
+	*										value from range [ 0, 128 ]
 	*
 	*			exportLineSegments	[ default = true ]	-	mainly intended for exporting from LDRAW format
 	*
-	*			lineSegmentsRotateX	[ default = 0 ]		- 	angle in radians to rotate LineSegments over X-Axis
-	*														has no effect if exportLineSegments is set to false
-	*														mainly intended for exporting from LDRAW format
-	*
-	*			maxTextureSize	[ default = Infinity ]	-	scale exported textures down / up
+	*			maxTextureSize		[ default = Infinity ]	-	scale exported textures down / up
 	*
 	*			map_flip_required	[ default = false ]	-	Y-flip exported textures
-	*														compressed textures seem to require this flip
+	*										compressed textures seem to require this flip
 	*
 	*/
 
@@ -75,7 +71,6 @@
 			const defaultOptions = {
 				vertexColorsCorrection: 0,
 				exportLineSegments: true,
-				lineSegmentsRotateX: 0,
 				map_flip_required: false,
 				maxTextureSize: Infinity
 			};
@@ -84,7 +79,6 @@
 
 			const vertexColorsCorrection = Math.max( 0, Math.min( 128, options.vertexColorsCorrection ) );
 			const exportLineSegments = options.exportLineSegments;
-			const lineSegmentsRotateX = options.lineSegmentsRotateX;
 			const map_flip_required = options.map_flip_required;
 			const maxTextureSize = options.maxTextureSize;
 
@@ -339,7 +333,7 @@
 
 					tex.image = map_type;
 
-					// Pass image as a user string
+					// Store image as a base64 string
 
 					if ( ! processed_images[ texture.uuid ] ) {
 
@@ -449,28 +443,23 @@
 
 							rhino_object = new Module.Mesh.createFromThreejsJSON( { data: geometry_clone } );
 
-						} else if ( ( object.isLine || object.isLineSegments ) && exportLineSegments === true ) {
+						} else if ( object.isLine || object.isLineSegments ) {
 
-							const curvePoints = new Module.Point3dList();
+							if ( exportLineSegments === true ) {
 
-							for ( let i = 0; i < geometry_clone.attributes.position.array.length; i += 3 ) {
+								const curvePoints = new Module.Point3dList();
 
-								curvePoints.add(
-									geometry_clone.attributes.position.array[ i ],
-									geometry_clone.attributes.position.array[ i + 1 ],
-									geometry_clone.attributes.position.array[ i + 2 ]
-								);
+								for ( let i = 0; i < geometry_clone.attributes.position.array.length; i += 3 ) {
 
-							}
+									curvePoints.add(
+										geometry_clone.attributes.position.array[ i ],
+										geometry_clone.attributes.position.array[ i + 1 ],
+										geometry_clone.attributes.position.array[ i + 2 ]
+									);
 
-							rhino_object = new Module.PolylineCurve( curvePoints );
+								}
 
-							if ( lineSegmentsRotateX !== 0 ) {
-
-								// Rotation params: angle, axis, rotation point
-
-								let xform = Module.Transform.rotation( lineSegmentsRotateX, [ 1, 0, 0 ], [ 0, 0, 0 ] );
-								rhino_object.transform( xform );
+								rhino_object = new Module.PolylineCurve( curvePoints );
 
 							}
 
@@ -492,19 +481,23 @@
 
 							}
 
-							if ( ( object.isLine || object.isLineSegments ) && exportLineSegments === true ) {
+							if ( object.isLine || object.isLineSegments ) {
 
-								// Pass LineSegments vertex colors as a user string
+								if ( exportLineSegments === true ) {
 
-								let color_array = '';
+									// Pass LineSegments vertex colors as a user string
 
-								for ( let j = 0; j < dataAsUint8Array.length; j += geometry_clone.attributes.color.itemSize ) {
+									let color_array = '';
 
-									color_array += dataAsUint8Array[ j ] + ',' + dataAsUint8Array[ j + 1 ] + ',' + dataAsUint8Array[ j + 2 ] + ',';
+									for ( let j = 0; j < dataAsUint8Array.length; j += geometry_clone.attributes.color.itemSize ) {
+
+										color_array += dataAsUint8Array[ j ] + ',' + dataAsUint8Array[ j + 1 ] + ',' + dataAsUint8Array[ j + 2 ] + ',';
+
+									}
+
+									rhino_attributes.setUserString( 'colors', color_array.slice( 0, -1 ) );
 
 								}
-
-								rhino_attributes.setUserString( 'colors', color_array.slice( 0, -1 ) );
 
 							} else {
 
@@ -879,6 +872,25 @@
 							geo.setAttribute( attribute, geometry_attribute_array );
 
 						}
+
+					}
+
+				} else {
+
+					if ( geo.attributes[ attribute ] && geo.attributes[ attribute ].array ) {
+
+						const itemSize = geo.attributes[ attribute ].itemSize;
+						const arr = geo.attributes[ attribute ].array;
+						const temp_array = [];
+
+						for ( let i = 0, l = arr.length; i < l; i ++ ) {
+
+							temp_array[ i ] = isNaN( arr[ i ] ) ? 0 : arr[ i ]; // avoid NaN values
+
+						}
+
+						geo.deleteAttribute( attribute );
+						geo.setAttribute( attribute, new THREE.BufferAttribute( new Float32Array( temp_array ), itemSize ) );
 
 					}
 
