@@ -276,7 +276,8 @@ class Rhino3dmLoader extends Loader {
 			diffuse_color = new Color(
 				material.diffuseColor.r / 255.0,
 				material.diffuseColor.g / 255.0,
-				material.diffuseColor.b / 255.0 );
+				material.diffuseColor.b / 255.0
+			);
 		} else {
 			diffuse_color = new Color( material.diffuseColor.r, material.diffuseColor.g, material.diffuseColor.b );
 		}
@@ -285,7 +286,8 @@ class Rhino3dmLoader extends Loader {
 			emissive_color = new Color(
 				material.emissionColor.r / 255.0,
 				material.emissionColor.g / 255.0,
-				material.emissionColor.b / 255.0 );
+				material.emissionColor.b / 255.0
+			);
 		} else {
 			emissive_color = new Color( material.emissionColor.r, material.emissionColor.g, material.emissionColor.b );
 		}
@@ -294,7 +296,8 @@ class Rhino3dmLoader extends Loader {
 			specular_color = new Color(
 				material.specularColor.r / 255.0,
 				material.specularColor.g / 255.0,
-				material.specularColor.b / 255.0 );
+				material.specularColor.b / 255.0
+			);
 		} else {
 			specular_color = new Color( material.specularColor.r, material.specularColor.g, material.specularColor.b );
 		}
@@ -326,7 +329,8 @@ class Rhino3dmLoader extends Loader {
 				mat.color = new Color(
 					pbr.baseColor.r / 255.0,
 					pbr.baseColor.g / 255.0,
-					pbr.baseColor.b / 255.0 );
+					pbr.baseColor.b / 255.0
+				);
 			} else {
 				mat.color = new Color( pbr.baseColor.r, pbr.baseColor.g, pbr.baseColor.b );
 			}
@@ -1119,7 +1123,8 @@ class Rhino3dmLoader extends Loader {
 						color = new Color(
 							_color.r / 255.0,
 							_color.g / 255.0,
-							_color.b / 255.0 );
+							_color.b / 255.0
+						);
 					} else {
 						color = new Color( _color.r, _color.g, _color.b );
 					}
@@ -1255,27 +1260,32 @@ class Rhino3dmLoader extends Loader {
 
 							}
 
-							vertexColors = true;
-							geometry.setAttribute( 'color', new BufferAttribute( new Float32Array( color_array ), 3, false ) );
+							geometry.setAttribute( 'color', new BufferAttribute( new Float32Array( color_array ), 3 ) );
 
 						}
 
 					}
 
-				}
+					material = new LineBasicMaterial( { vertexColors: true } );
 
-				_color = attributes.plotColor;
-
-				if ( _color.r > 1 || _color.g > 1 || _color.b > 1 ) {
-					color = new Color(
-						_color.r / 255.0,
-						_color.g / 255.0,
-						_color.b / 255.0 );
 				} else {
-					color = new Color( _color.r, _color.g, _color.b );
+
+					_color = attributes.plotColor;
+
+					if ( _color.r > 1 || _color.g > 1 || _color.b > 1 ) {
+						color = new Color(
+							_color.r / 255.0,
+							_color.g / 255.0,
+							_color.b / 255.0
+						);
+					} else {
+						color = new Color( _color.r, _color.g, _color.b );
+					}
+
+					material = new LineBasicMaterial( { color: color } );
+
 				}
 
-				material = new LineBasicMaterial( { color: color, vertexColors: vertexColors } );
 				material = this._compareMaterials( material );
 
 				const lines = new Line( geometry, material );
@@ -1407,7 +1417,8 @@ class Rhino3dmLoader extends Loader {
 						color = new Color(
 							_color.r / 255.0,
 							_color.g / 255.0,
-							_color.b / 255.0 );
+							_color.b / 255.0
+						);
 					} else {
 						color = new Color( _color.r, _color.g, _color.b );
 					}
