@@ -39,7 +39,7 @@
 	*
 	*			exportLineSegments	[ default = true ]	-	mainly intended for exporting from LDRAW format
 	*
-	*			maxTextureSize		[ default = Infinity ]	-	scale exported textures down / up
+	*			maxTextureSize	[ default = Infinity ]		-	scale exported textures down / up
 	*
 	*			map_flip_required	[ default = false ]	-	Y-flip exported textures
 	*										compressed textures seem to require this flip
@@ -511,45 +511,49 @@
 
 						}
 
-						if ( Array.isArray( object.material ) ) {
+						if ( exportLineSegments === false ) { // LDRAW export without line segments
 
-							for ( const material of object.material ) {
+							if ( Array.isArray( object.material ) ) {
 
-								if ( object.isLine || object.isLineSegments ) {
+								for ( const material of object.material ) {
 
-									if ( exportLineSegments === true ) {
+									if ( object.isMesh ) {
 
 										process_material( material.clone(), object.material.length > 1 );
 										rhino_file.objects().add( rhino_object, rhino_attributes );
 
 									}
 
-								} else {
-
-									process_material( material.clone(), object.material.length > 1 );
-									rhino_file.objects().add( rhino_object, rhino_attributes );
-
 								}
 
-							}
+							} else {
 
-						} else {
-
-							if ( object.isLine || object.isLineSegments ) {
-
-								if ( exportLineSegments === true ) {
+								if ( object.isMesh ) {
 
 									process_material( object.material.clone() );
 									rhino_file.objects().add( rhino_object, rhino_attributes );
 
 								}
 
+							}
+
+						} else { // Other exports
+
+							if ( Array.isArray( object.material ) ) {
+
+								for ( const material of object.material ) {
+
+									process_material( material.clone(), object.material.length > 1 );
+
+								}
+
 							} else {
 
 								process_material( object.material.clone() );
-								rhino_file.objects().add( rhino_object, rhino_attributes );
 
 							}
+
+							rhino_file.objects().add( rhino_object, rhino_attributes );
 
 						}
 
