@@ -297,7 +297,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>STEP Viewer</title>
+    <title>STEP++ Viewer</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -698,11 +698,11 @@
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
       var bounding_box, gif_export, bgnd_linear_gradient;
       var flat_shading_enabled, enable_opacity, zip;
-      var multi_mesh_model, iges, brep, bim, tex;
       var first_run = false, fr_count = 0, count = 0;
       var initial_opacity, initial_opacity_array;
       var edges, edges_visible, bim_edges_created;
-      var initial_transparency, initial_transparency_array, outline_material;
+      var initial_transparency, initial_transparency_array;
+      var iges, brep, bim, tex, defaultMaterial, outline_material;
       var selected_step_file, selected_url_file = '', filename, response, buffer, fileBuffer;
       var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
       var vertex_colors_enabled, original_vertex_color_array, random_vertex_colors_enabled, random_vertex_color_array;
@@ -1850,7 +1850,6 @@
         grid_visible = false;
         polar_grid_visible = false;
         gif_export = false;
-        multi_mesh_model = false;
         render_requested = false;
         flat_shading_enabled = false;
         bgnd_linear_gradient = false;
@@ -1987,17 +1986,142 @@
           });
         }
 
+        if (defaultMaterial === undefined) {
+          defaultMaterial = new THREE.MeshStandardMaterial({
+            side: THREE.DoubleSide,
+            envMapIntensity: 1.0,
+            transparent: false,
+            flatShading: false,
+            color: 0xFFFFFF,
+            opacity: 1,
+            metalness: 0.5,
+            roughness: 0.6
+          });
+        }
+
         // Load the model
         selected_step_file !== null ? ( bim === true ? loadBIM() : loadFile() ) : loadURLFile();
+      }
+
+      function process_mesh( resultMesh, mesh_count ) {
+        // Modified version of the original example code at https://github.com/kovacsv/occt-import-js/blob/main/examples/three_viewer.html#L42-L89
+        let geometry = new THREE.BufferGeometry();
+
+        geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( resultMesh.attributes.position.array, 3 ) );
+
+        if (resultMesh.attributes.normal) {
+          geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( resultMesh.attributes.normal.array, 3 ) );
+        } else {
+          geometry.computeVertexNormals();
+        }
+
+        geometry.normalizeNormals();
+
+        let index = Uint32Array.from( resultMesh.index.array );
+        geometry.setIndex( new THREE.Uint16BufferAttribute( index, 1 ) );
+
+        let dm;
+
+        if (resultMesh.color) {
+          dm = defaultMaterial.clone();
+
+          dm.color.setRGB(
+            resultMesh.color[ 0 ],
+            resultMesh.color[ 1 ],
+            resultMesh.color[ 2 ],
+            THREE.LinearSRGBColorSpace
+          );
+        } else {
+          dm = defaultMaterial.clone();
+        }
+
+        let materials = dm;
+
+        if (resultMesh.brep_faces && resultMesh.brep_faces.length > 0) {
+          materials = [];
+
+          for (let faceColor of resultMesh.brep_faces) {
+            let dm_clone = dm.clone();
+
+            if (faceColor.color) {
+              dm_clone.color.setRGB(
+                faceColor.color[ 0 ],
+                faceColor.color[ 1 ],
+                faceColor.color[ 2 ],
+                THREE.LinearSRGBColorSpace
+              );
+            }
+
+            materials.push( dm_clone );
+          }
+
+          let triangleCount = resultMesh.index.array.length / 3;
+          let triangleIndex = 0;
+          let faceColorGroupIndex = 0;
+
+          while (triangleIndex < triangleCount) {
+            let firstIndex = triangleIndex;
+            let lastIndex = null;
+            let materialIndex = null;
+
+            let face = resultMesh.brep_faces[ faceColorGroupIndex ];
+
+            if (faceColorGroupIndex >= resultMesh.brep_faces.length) {
+              materialIndex = 0;
+              break;
+            } else if (triangleIndex < face.first) {
+              lastIndex = face.first;
+              materialIndex = 0;
+            } else {
+              lastIndex = face.last + 1;
+              materialIndex = faceColorGroupIndex;
+              faceColorGroupIndex++;
+            }
+
+            geometry.addGroup( firstIndex * 3, ( lastIndex - firstIndex ) * 3, materialIndex );
+            triangleIndex = lastIndex;
+
+            let innerGeometry = new THREE.BufferGeometry();
+            innerGeometry.setAttribute( 'position', geometry.attributes.position );
+            if (geometry.attributes.normal) innerGeometry.setAttribute( 'normal', geometry.attributes.normal );
+            innerGeometry.setIndex( geometry.index, 1 );
+            let innerEdgesGeometry = new THREE.EdgesGeometry( innerGeometry, 30 );
+            let edge = new THREE.LineSegments( innerEdgesGeometry, outline_material );
+            edges.add( edge );
+          }
+        }
+
+        let new_mesh = new THREE.Mesh( geometry, materials );
+        new_mesh.name = 'mesh_' + mesh_count;
+        mesh_count += 1;
+
+        let length = new_mesh.geometry.attributes.position.array.length;
+        random_vertex_color_array[ new_mesh.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
+        original_vertex_color_array[ new_mesh.name ] = new_mesh.geometry.getAttribute( 'color' );
+
+        mesh.add( new_mesh );
+
+        if (Array.isArray( materials )) {
+          materials.forEach( mtl => {
+            mtl.dispose();
+          });
+
+          new_mesh.material.forEach( mtrl => {
+            mtrl.dispose();
+          });
+        } else {
+          materials.dispose();
+          new_mesh.material.dispose();
+        }
+
+        geometry.dispose();
+        new_mesh.geometry.dispose();
       }
 
       function loadBIM() {
         bim_loader.load( URL.createObjectURL( selected_step_file ), function( bim_meshes ) {
           URL.revokeObjectURL( selected_step_file );
-
           mesh = bim_meshes;
-          multi_mesh_model = true;
-
           addFileInScene();
         });
       }
@@ -2023,117 +2147,8 @@
             }
 
             if (result.success && result.meshes.length > 0) {
-              if (result.meshes.length > 1) multi_mesh_model = true;
-
-              let defaultMaterial = new THREE.MeshStandardMaterial({
-                side: THREE.DoubleSide,
-                opacity: 1,
-                metalness: 0.5,
-                roughness: 0.5,
-                envMapIntensity: 1.0,
-                transparent: enable_opacity,
-                flatShading: false,
-                color: 0xFFFFFF
-              });
-
-              let mesh_count = 1;
-
-              // Modified version of the original example code at https://github.com/kovacsv/occt-import-js/blob/main/examples/three_viewer.html#L42-L89
-
-              for (const resultMesh of result.meshes) {
-                let dm = defaultMaterial.clone();
-
-                let geometry = new THREE.BufferGeometry();
-
-                geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( resultMesh.attributes.position.array, 3 ) );
-
-                if (resultMesh.attributes.normal) {
-                  geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( resultMesh.attributes.normal.array, 3 ) );
-                } else {
-                  geometry.computeVertexNormals();
-                }
-
-                geometry.normalizeNormals();
-
-                let index = Uint32Array.from( resultMesh.index.array );
-                geometry.setIndex( new THREE.Uint16BufferAttribute( index, 1 ) );
-
-                if (resultMesh.color) {
-                  dm.color.set( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
-                }
-
-                let materials = dm;
-
-                if (resultMesh.brep_faces && resultMesh.brep_faces.length > 0) {
-                  materials = [ dm ];
-
-                  for (let faceColor of resultMesh.brep_faces) {
-                    let dm_clone = dm.clone();
-                    if (faceColor.color) dm_clone.color.set( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] );
-                    materials.push( dm_clone );
-                  }
-
-                  let triangleCount = resultMesh.index.array.length / 3;
-                  let triangleIndex = 0;
-                  let faceColorGroupIndex = 0;
-
-                  while (triangleIndex < triangleCount) {
-                    let firstIndex = triangleIndex;
-                    let lastIndex = null;
-                    let materialIndex = null;
-
-                    let face = resultMesh.brep_faces[ faceColorGroupIndex ];
-
-                    if (faceColorGroupIndex >= resultMesh.brep_faces.length) {
-                      materialIndex = 0;
-                      break;
-                    } else if (triangleIndex < face.first) {
-                      lastIndex = face.first;
-                      materialIndex = 0;
-                    } else {
-                      lastIndex = face.last + 1;
-                      materialIndex = faceColorGroupIndex + 1;
-                      faceColorGroupIndex++;
-                    }
-
-                    geometry.addGroup( firstIndex * 3, ( lastIndex - firstIndex ) * 3, materialIndex );
-                    triangleIndex = lastIndex;
-
-                    let innerGeometry = new THREE.BufferGeometry();
-                    innerGeometry.setAttribute( 'position', geometry.attributes.position );
-                    if (geometry.attributes.normal) innerGeometry.setAttribute( 'normal', geometry.attributes.normal );
-                    innerGeometry.setIndex( geometry.index, 1 );
-                    let innerEdgesGeometry = new THREE.EdgesGeometry( innerGeometry, 30 );
-                    let edge = new THREE.LineSegments( innerEdgesGeometry, outline_material );
-                    edges.add( edge );
-                  }
-                }
-
-                let new_mesh = new THREE.Mesh( geometry, materials );
-                new_mesh.name = 'mesh_' + mesh_count;
-                mesh_count += 1;
-
-                let length = new_mesh.geometry.attributes.position.array.length;
-                random_vertex_color_array[ new_mesh.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
-                original_vertex_color_array[ new_mesh.name ] = new_mesh.geometry.getAttribute( 'color' );
-
-                mesh.add( new_mesh );
-
-                if (Array.isArray( materials )) {
-                  materials.forEach( mtl => {
-                    mtl.dispose();
-                  });
-
-                  new_mesh.material.forEach( mtrl => {
-                    mtrl.dispose();
-                  });
-                } else {
-                  materials.dispose();
-                  new_mesh.material.dispose();
-                }
-
-                geometry.dispose();
-                new_mesh.geometry.dispose();
+              for (let resultMesh of result.meshes) {
+                process_mesh( resultMesh, 1 );
               }
 
               occt = null;
@@ -2257,117 +2272,8 @@
               }
 
               if (result.success && result.meshes.length > 0) {
-                if (result.meshes.length > 1) multi_mesh_model = true;
-
-                let defaultMaterial = new THREE.MeshStandardMaterial({
-                  side: THREE.DoubleSide,
-                  opacity: 1,
-                  metalness: 0.5,
-                  roughness: 0.5,
-                  envMapIntensity: 1.0,
-                  transparent: enable_opacity,
-                  flatShading: false,
-                  color: 0xFFFFFF
-                });
-
-                let mesh_count = 1;
-
-                // Modified version of the original example code at https://github.com/kovacsv/occt-import-js/blob/main/examples/three_viewer.html#L42-L89
-
                 for (const resultMesh of result.meshes) {
-                  let dm = defaultMaterial.clone();
-
-                  let geometry = new THREE.BufferGeometry();
-
-                  geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( resultMesh.attributes.position.array, 3 ) );
-
-                  if (resultMesh.attributes.normal) {
-                    geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( resultMesh.attributes.normal.array, 3 ) );
-                  } else {
-                    geometry.computeVertexNormals();
-                  }
-
-                  geometry.normalizeNormals();
-
-                  let index = Uint32Array.from( resultMesh.index.array );
-                  geometry.setIndex( new THREE.Uint16BufferAttribute( index, 1 ) );
-
-                  if (resultMesh.color) {
-                    dm.color.set( resultMesh.color[ 0 ], resultMesh.color[ 1 ], resultMesh.color[ 2 ] );
-                  }
-
-                  let materials = dm;
-
-                  if (resultMesh.brep_faces && resultMesh.brep_faces.length > 0) {
-                    materials = [ dm ];
-
-                    for (let faceColor of resultMesh.brep_faces) {
-                      let dm_clone = dm.clone();
-                      if (faceColor.color) dm_clone.color.set( faceColor.color[ 0 ], faceColor.color[ 1 ], faceColor.color[ 2 ] );
-                      materials.push( dm_clone );
-                    }
-
-                    let triangleCount = resultMesh.index.array.length / 3;
-                    let triangleIndex = 0;
-                    let faceColorGroupIndex = 0;
-
-                    while (triangleIndex < triangleCount) {
-                      let firstIndex = triangleIndex;
-                      let lastIndex = null;
-                      let materialIndex = null;
-
-                      let face = resultMesh.brep_faces[ faceColorGroupIndex ];
-
-                      if (faceColorGroupIndex >= resultMesh.brep_faces.length) {
-                        materialIndex = 0;
-                        break;
-                      } else if (triangleIndex < face.first) {
-                        lastIndex = face.first;
-                        materialIndex = 0;
-                      } else {
-                        lastIndex = face.last + 1;
-                        materialIndex = faceColorGroupIndex + 1;
-                        faceColorGroupIndex++;
-                      }
-
-                      geometry.addGroup( firstIndex * 3, ( lastIndex - firstIndex ) * 3, materialIndex );
-                      triangleIndex = lastIndex;
-
-                      let innerGeometry = new THREE.BufferGeometry();
-                      innerGeometry.setAttribute( 'position', geometry.attributes.position );
-                      if (geometry.attributes.normal) innerGeometry.setAttribute( 'normal', geometry.attributes.normal );
-                      innerGeometry.setIndex( geometry.index, 1 );
-                      let innerEdgesGeometry = new THREE.EdgesGeometry( innerGeometry, 30 );
-                      let edge = new THREE.LineSegments( innerEdgesGeometry, outline_material );
-                      edges.add( edge );
-                    }
-                  }
-
-                  let new_mesh = new THREE.Mesh( geometry, materials );
-                  new_mesh.name = 'mesh_' + mesh_count;
-                  mesh_count += 1;
-
-                  let length = new_mesh.geometry.attributes.position.array.length;
-                  random_vertex_color_array[ new_mesh.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
-                  original_vertex_color_array[ new_mesh.name ] = new_mesh.geometry.getAttribute( 'color' );
-
-                  mesh.add( new_mesh );
-
-                  if (Array.isArray( materials )) {
-                    materials.forEach( mtl => {
-                      mtl.dispose();
-                    });
-
-                    new_mesh.material.forEach( mtrl => {
-                      mtrl.dispose();
-                    });
-                  } else {
-                    materials.dispose();
-                    new_mesh.material.dispose();
-                  }
-
-                  geometry.dispose();
-                  new_mesh.geometry.dispose();
+                  process_mesh( resultMesh, 1 );
                 }
 
                 occt = null;
@@ -2387,8 +2293,6 @@
       async function loadURLBIM() {
         bim_loader.load( selected_url_file, function( bim_meshes ) {
           mesh = bim_meshes;
-          multi_mesh_model = true;
-
           addFileInScene();
         });
       }
@@ -2488,10 +2392,10 @@
             const material = new THREE.MeshStandardMaterial( {
               name: 'Default',
               side: THREE.DoubleSide,
+              envMapIntensity: 1.0,
               opacity: 1,
               metalness: 0.5,
-              roughness: 0.5,
-              envMapIntensity: 1.0
+              roughness: 0.6
             });
 
             // Alternative GLB export will apply DRACO compression on indexed geometries only
@@ -2538,7 +2442,15 @@
               meshes.updateMatrixWorld( true, true );
             }
           } else if (child.isMesh) {
-            const material = new THREE.MeshStandardMaterial( { name: 'Default', side: THREE.DoubleSide, opacity: 1, metalness: 0.5, roughness: 0.5, envMapIntensity: 1.0 } );
+            const material = new THREE.MeshStandardMaterial( {
+              name: 'Default',
+              side: THREE.DoubleSide,
+              envMapIntensity: 1.0,
+              opacity: 1,
+              metalness: 0.5,
+              roughness: 0.6
+            } );
+
             let child_clone;
 
             if (!child.geometry.index) {
@@ -2784,7 +2696,7 @@
                   side: THREE.DoubleSide,
                   envMapIntensity: 1.0,
                   metalness: 0.5,
-                  roughness: 0.5,
+                  roughness: 0.6,
                   flatShading: flat_shading_enabled,
                   envMap: (gui && params.setEnvMap) ? scene.environment : null
                 });
@@ -2795,8 +2707,13 @@
                     mtrl.transparent = mtl.transparent;
                     mtrl.opacity = mtl.opacity;
 
-                    if (mtl.color) { mtrl.color.setRGB( mtl.color.r, mtl.color.g, mtl.color.b ); }
-                    if (mtl.map) { mtrl.map = mtl.map; mtl.map.dispose(); mtl.map = null; }
+                    if (mtl.color) mtrl.color.setRGB( mtl.color.r, mtl.color.g, mtl.color.b );
+
+                    if (mtl.map) {
+                      mtrl.map = mtl.map;
+                      mtl.map.dispose();
+                      mtl.map = null;
+                    }
 
                     mtl.dispose();
                     child.material[ index ] = mtrl;
@@ -2807,8 +2724,13 @@
                   mtrl.transparent = child.material.transparent;
                   mtrl.opacity = child.material.opacity;
 
-                  if (child.material.color) { mtrl.color.setRGB( child.material.color.r, child.material.color.g, child.material.color.b ); }
-                  if (child.material.map) { mtrl.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
+                  if (child.material.color) mtrl.color.setRGB( child.material.color.r, child.material.color.g, child.material.color.b );
+
+                  if (child.material.map) {
+                    mtrl.map = child.material.map;
+                    child.material.map.dispose();
+                    child.material.map = null;
+                  }
 
                   child.material.dispose();
                   child[ 'material' ] = mtrl;
@@ -2833,8 +2755,13 @@
                     mtrl.transparent = mtl.transparent;
                     mtrl.opacity = mtl.opacity;
 
-                    if (mtl.color) { mtrl.color.setRGB( mtl.color.r, mtl.color.g, mtl.color.b ); }
-                    if (mtl.map) { mtrl.map = mtl.map; mtl.map.dispose(); mtl.map = null; }
+                    if (mtl.color) mtrl.color.setRGB( mtl.color.r, mtl.color.g, mtl.color.b );
+
+                    if (mtl.map) {
+                      mtrl.map = mtl.map;
+                      mtl.map.dispose();
+                      mtl.map = null;
+                    }
 
                     mtl.dispose();
                     child.material[ index ] = mtrl;
@@ -2845,8 +2772,13 @@
                   mtrl.transparent = child.material.transparent;
                   mtrl.opacity = child.material.opacity;
 
-                  if (child.material.color) { mtrl.color.setRGB( child.material.color.r, child.material.color.g, child.material.color.b ); }
-                  if (child.material.map) { mtrl.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
+                  if (child.material.color) mtrl.color.setRGB( child.material.color.r, child.material.color.g, child.material.color.b );
+
+                  if (child.material.map) {
+                    mtrl.map = child.material.map;
+                    child.material.map.dispose();
+                    child.material.map = null;
+                  }
 
                   child.material.dispose();
                   child[ 'material' ] = mtrl;
@@ -2875,8 +2807,13 @@
                     mtrl.transparent = mtl.transparent;
                     mtrl.opacity = mtl.opacity;
 
-                    if (mtl.color) { mtrl.color.setRGB( mtl.color.r, mtl.color.g, mtl.color.b ); }
-                    if (mtl.map) { mtrl.map = mtl.map; mtl.map.dispose(); mtl.map = null; }
+                    if (mtl.color) mtrl.color.setRGB( mtl.color.r, mtl.color.g, mtl.color.b );
+
+                    if (mtl.map) {
+                      mtrl.map = mtl.map;
+                      mtl.map.dispose();
+                      mtl.map = null;
+                    }
 
                     mtl.dispose();
                     child.material[ index ] = mtrl;
@@ -2887,8 +2824,13 @@
                   mtrl.transparent = child.material.transparent;
                   mtrl.opacity = child.material.opacity;
 
-                  if (child.material.color) { mtrl.color.setRGB( child.material.color.r, child.material.color.g, child.material.color.b ); }
-                  if (child.material.map) { mtrl.map = child.material.map; child.material.map.dispose(); child.material.map = null; }
+                  if (child.material.color) mtrl.color.setRGB( child.material.color.r, child.material.color.g, child.material.color.b );
+
+                  if (child.material.map) {
+                    mtrl.map = child.material.map;
+                    child.material.map.dispose();
+                    child.material.map = null;
+                  }
 
                   child.material.dispose();
                   child[ 'material' ] = mtrl;
@@ -2953,7 +2895,7 @@
         mesh.traverse( function( child ) {
     	    if (child.isMesh) {
             if (random_vertex_colors_enabled === true) {
-              child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3, false ) );
+              child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3 ) );
             } else {
               if (original_vertex_color_array[ child.name ]) {
                 child.geometry.setAttribute( 'color', original_vertex_color_array[ child.name ] );
