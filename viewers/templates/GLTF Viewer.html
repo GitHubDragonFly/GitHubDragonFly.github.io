@@ -2052,7 +2052,7 @@
         animation_running = false;
         extras = [];
         extra_running = false;
-        edges = {};
+        edges = new THREE.Group();
         edges_visible = false;
         lines_present = false;
         lines_visible = false;
@@ -3095,18 +3095,30 @@
 
         gltf_obj.traverse( function( child ) {
           if (child.isMesh || child.isPoints || child.isLineSegments) {
-            let length;
+            // Create random vertex colors
+
+            let length = child.geometry.attributes.position.array.length;
+            random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
+
+            // Store mesh edges
 
             if (child.isMesh) {
-              edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material );
-              edges[ child.name ].name = child.name + '_edges';
-              length = edges[ child.name ].geometry.attributes.position.array.length;
-              random_vertex_color_array[ edges[ child.name ].name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
-              original_vertex_colors[ edges[ child.name ].name ] = edges[ child.name ].geometry.getAttribute( 'color' );
-            }
+              let child_edge = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material );
 
-            length = child.geometry.attributes.position.array.length;
-            random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
+              if (child.isInstancedMesh) {
+                for ( let i = 0; i < child.count; i++ ) {
+                  let child_edge_clone = child_edge.clone();
+
+                  let m4 = new THREE.Matrix4();
+                  child.getMatrixAt( i, m4 );
+                  child_edge_clone.applyMatrix4( m4 );
+
+                  edges.add( child_edge_clone );
+                }
+              } else {
+                edges.add( child_edge );
+              }
+            }
           } else if (child.type === 'PointLight' || child.type === 'SpotLight') {
             child.intensity *= 2000;
           }
@@ -3234,8 +3246,8 @@
         let g = parseInt( e_color.substring( 3, 5 ), 16 ) / 255.0;
         let b = parseInt( e_color.substring( 5 ), 16 ) / 255.0;
 
-        Object.keys( edges ).forEach( ( key ) => {
-          edges[ key ].material.color.setRGB( r, g, b );
+        edges.traverse( ( child ) => {
+          if (child.isLineSegments) child.material.color.setRGB( r, g, b );
         });
 
         mouse_wheel = true;
@@ -3243,13 +3255,13 @@
 
       function show_edges() {
         if (edges_visible === true) {
-          gltf_obj.traverse( function( child ) { if (child.isMesh) child.remove( edges[ child.name ] ); });
+          gltf_obj.remove( edges );
           edges_visible = false;
 
           document.getElementById('edge_color').disabled = true;
           document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
         } else {
-          gltf_obj.traverse( function( child ) { if (child.isMesh) child.add( edges[ child.name ] ); });
+          gltf_obj.add( edges );
           edges_visible = true;
 
           document.getElementById('edge_color').disabled = false;
@@ -3409,7 +3421,7 @@
         random_vertex_changed();
 
         gltf_obj.traverse( function( child ) {
-          if (child.isMesh || child.isPoints || child.isLineSegments) {
+          if (child.isMesh || child.isPoints || (child.isLineSegments && child.geometry.type !== 'EdgesGeometry')) {
             if (Array.isArray( child.material )) {
               let child_count_array = 1;
 
@@ -3438,7 +3450,7 @@
         }
 
         gltf_obj.traverse( function( child ) {
-    	    if (child.isMesh || child.isPoints || child.isLineSegments) {
+    	    if (child.isMesh || child.isPoints || (child.isLineSegments && child.geometry.type !== 'EdgesGeometry')) {
             if (random_vertex_colors_enabled === true) {
               current_colors[ child.name ] = child.geometry.getAttribute( 'color' );
               child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3, false ) );
