@@ -776,7 +776,7 @@ class Rhino3dmExporter {
 
 		if ( image !== undefined ) {
 
-			if ( /^data:/i.test( image.src ) ) {
+			if ( /^data:/i.test( image.src ) && maxTextureSize === Infinity && map_flip_required === false ) {
 
 				return image.src;
 
