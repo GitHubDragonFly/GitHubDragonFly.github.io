@@ -329,7 +329,7 @@
           <option title="GIF - Animated GIF" value="gif" onclick="export_animated_gif();">GIF</option>
           <option title="PNG - Animated PNG (APNG)" value="apng" onclick="export_animated_png();">PNG</option>
         </select>
-        <select title="Maximum Exported Texture Resolution and Y flip" id="export_tex_res" style="min-width: 60px;" disabled>
+        <select title="Maximum Exported Texture Resolution and Y flip" id="export_tex_res" style="min-width: 65px;" disabled>
           <option title="Original" value="original" onclick="tex_res = Infinity; tex_flip = false;" selected>None</option>
           <option title="256 (256x256)" value="256" onclick="tex_res = 256; tex_flip = false;">256</option>
           <option title="512 (512x512)" value="512" onclick="tex_res = 512; tex_flip = false;">512</option>
@@ -891,13 +891,13 @@
               blob = new Blob( [ draco === true ? await draco_compress( new Uint8Array( json ), webp ) : ( meshopt === true ? await meshopt_compress( new Uint8Array( json ), webp ) : json ) ], { type: 'application/octet-stream' } );
 
               zip.file( filename + '.glb', blob );
-              await process_zip( '_GLB' + ( draco === true ? '_DRACO' : (meshopt === true) ? '_MESHOPT' : '' ) + ( webp === true ? '_WEBP' : '' ) );
+              await process_zip( '_GLB' + (draco === true ? '_DRACO' : (meshopt === true ? '_MESHOPT' : '')) + (webp === true ? '_WEBP' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '') );
             } else {
               let string = JSON.stringify( json, null, 2 );
               blob = new Blob( [ string ], { type: 'text/plain' } );
 
               zip.file( filename + '.gltf', blob );
-              await process_zip( '_GLTF' );
+              await process_zip( '_GLTF' + (tex_res !== Infinity ? ' (' + tex_res + ')' : '') );
             }
           }, function( error ) { console.log( error ); }, options);
         }
@@ -930,26 +930,16 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          // export to GLB format first
-          let options = { binary: true, maxTextureSize: tex_res };
+          let usdz_exporter = new THREE.USDZExporter( manager );
 
-          new THREE.GLTFExporter().parse( mesh, async json => {
-            let blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+          let options = { maxTextureSize: tex_res, map_flip_required: tex_flip };
 
-            // load the exported GLB
-            new THREE.GLTFLoader().load( URL.createObjectURL( blob ), async function( gltf ) {
+          let arraybuffer = await usdz_exporter.parse( mesh.clone(), options );
+          let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
 
-              // export to USDZ format
-              let usdz_exporter = new THREE.USDZExporter();
+          zip.file( filename + '.usdz', blob );
 
-              let arraybuffer = await usdz_exporter.parse( gltf.scene, { map_flip_required: tex_flip } );
-              let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
-
-              zip.file( filename + '.usdz', blob );
-
-              await process_zip( '_USDZ' );
-            }, function( xhr ) {}, function( error ) { console.log( error ); });
-          }, function( error ) { console.log( error ); }, options);
+          await process_zip( '_USDZ' + (tex_flip === true ? '_Y' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '') );
         }
       }
 
@@ -968,7 +958,7 @@
 
             zip.file( filename + '.3dm', blob );
 
-            await process_zip( '_3DM' );
+            await process_zip( '_3DM' + (tex_flip === true ? '_Y' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '') );
           }, function( error ) { console.log( error ); }, options );
         }
       }
@@ -2224,7 +2214,7 @@
               original_vertex_color_array[ child.name ] = child.geometry.attributes[ 'color' ];
 
               if (child.isMesh === true) {
-                edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material );
+                edges[ child.id ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material );
               } else {
                 object_is_points = true;
               }
@@ -2432,7 +2422,7 @@
                 original_vertex_color_array[ child.name ] = child.geometry.attributes[ 'color' ];
 
                 if (child.isMesh === true) {
-                  edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material );
+                  edges[ child.id ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material );
                 } else {
                   object_is_points = true;
                 }
@@ -2627,7 +2617,8 @@
             original_color_array[ mesh.name ] = {};
             original_side_array[ mesh.name ] = {};
 
-            random_vertex_color_array[ 'mesh_0' ] = new Float32Array( Array.from( { length: mesh.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
+            let length = mesh.geometry.attributes.position.array.length;
+            random_vertex_color_array[ 'mesh_0' ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
             original_vertex_color_array[ 'mesh_0' ] = mesh.geometry.attributes[ 'color' ];
 
             if (Object.getOwnPropertyNames( textures ).length !== 0) {
@@ -2662,7 +2653,8 @@
               mesh.material.needsUpdate = true;
             }
 
-            if (mesh.geometry && mesh.geometry.attributes && mesh.geometry.attributes.position) edges[ mesh.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), outline_material );
+            if (mesh.geometry && mesh.geometry.attributes && mesh.geometry.attributes.position)
+              edges[ mesh.id ] = new THREE.LineSegments( new THREE.EdgesGeometry( mesh.geometry, 30 ), outline_material );
           } else {
             mesh.traverse( function( child ) {
               if (child.name === '') {
@@ -2677,9 +2669,11 @@
 
                 if (child.isMesh === true) {
                   if (child.isSkinnedMesh) child.frustumCulled = false;
-                  edges[ child.name ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material );
+                  edges[ child.id ] = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material );
                 } else {
                   object_is_points = true;
+                  child.sizeAttenuation = true;
+                  child.sortPoints = true;
                 }
 
                 if (child.material) {
@@ -2698,9 +2692,14 @@
                       original_side_array[ child.name ][ child_count_array ] = mtl.side;
 
                       mtl.vertexColors = vertex_colors_enabled;
-                      mtl.format = THREE.RGBAFormat;
-                      mtl.side = THREE.DoubleSide;
-                      mtl.flatShading = false;
+
+                      if (child.isPoints) {
+                        mtl.size = isMobile === true ? 0.8 : 0.5;
+                      } else {
+                        mtl.format = THREE.RGBAFormat;
+                        mtl.side = THREE.DoubleSide;
+                        mtl.flatShading = false;
+                      }
 
                       child_count_array += 1;
 
@@ -2713,9 +2712,14 @@
                     original_side[ child.name ] = child.material.side;
 
                     child.material.vertexColors = vertex_colors_enabled;
-                    child.material.format = THREE.RGBAFormat;
-                    child.material.side = THREE.DoubleSide;
-                    child.material.flatShading = false;
+
+                    if (child.isPoints) {
+                      child.material.size = isMobile === true ? 0.8 : 0.5;
+                    } else {
+                      child.material.format = THREE.RGBAFormat;
+                      child.material.side = THREE.DoubleSide;
+                      child.material.flatShading = false;
+                    }
 
                     child.material.needsUpdate = true;
                   }
@@ -3149,13 +3153,13 @@
       function show_edges() {
         if (Object.getOwnPropertyNames( edges ).length !== 0) {
           if (edges_visible === true) {
-            mesh.traverse( function( child ) { if (child.isMesh) child.remove( edges[ child.name ] ); } );
+            mesh.traverse( function( child ) { if (child.isMesh) child.remove( edges[ child.id ] ); } );
             edges_visible = false;
 
             document.getElementById('edge_color').disabled = true;
             document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
           } else {
-            mesh.traverse( function( child ) { if (child.isMesh) child.add( edges[ child.name ] ); } );
+            mesh.traverse( function( child ) { if (child.isMesh) child.add( edges[ child.id ] ); } );
             edges_visible = true;
 
             document.getElementById('edge_color').disabled = false;
