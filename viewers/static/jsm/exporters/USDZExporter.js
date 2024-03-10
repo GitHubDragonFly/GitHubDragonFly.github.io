@@ -97,10 +97,6 @@ class USDZExporter {
 
 							material.map = map;
 
-							// DAE and FBX model exports need this map flip
-
-							if ( options.map_flip_required === true ) material.map.repeat.y = - 1;
-
 						}
 
 					}
@@ -142,10 +138,6 @@ class USDZExporter {
 								transparent: object.material.transparent || false
 
 							} );
-
-							// DAE and FBX model exports might need this map flip
-
-							if ( options.map_flip_required === true ) material.map.repeat.y = - 1;
 
 						} else {
 
@@ -218,7 +210,7 @@ class USDZExporter {
 
 			}
 
-			const canvas = imageToCanvas( texture.image, texture.flipY, options.maxTextureSize );
+			const canvas = imageToCanvas( texture.image, options.map_flip_required, options.maxTextureSize );
 			const blob = await new Promise( resolve => canvas.toBlob( resolve, 'image/png', 1 ) );
 
 			files[ `textures/Texture_${ id }.png` ] = new Uint8Array( await blob.arrayBuffer() );
@@ -649,7 +641,6 @@ function buildMaterial( material, textures, quickLookCompatible = false ) {
 		}`;
 
 	}
-
 
 	if ( material.side === DoubleSide ) {
 
