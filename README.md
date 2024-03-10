@@ -244,7 +244,8 @@ Number Type Converter
     - Might even produce smaller exported file size than regular export
     - If applicable, will support exporting THREE.InstancedMesh to OBJ + MTL / DAE / USDZ as well
     - If applicable, will support exporting morph animations but will not export other animations
-  - Some viewers also offer setting the exported textures resolution (256, 512, 1k, 2k, 4k) and Y-flip
+  - Some viewers also offer setting the exported textures resolution (256, 512, 1k, 2k, 4k) and Y-flip:
+    - Y-flip is intended for 3DM / DAE / OBJ / USDZ exports
   - GLTFS Viewer seems to do OK job in exporting models with `pbrSpecularGlossiness`
 - Buttons, where applicable:
   - `A` - animations
@@ -260,7 +261,7 @@ Number Type Converter
   - `S` - skeleton with demo (JSON viewers)
   - `T` - textures
   - `V` - variants (GLTF viewer)
-  - `W` - wireframe (available on simple mobile viewers only)
+  - `W` - wireframe
   - `X` - morphs
   - `As` - and / or `atoms` button (available in PDB viewers only)
   - `Bs` - and / or `bonds` button (available in PDB viewers only)
