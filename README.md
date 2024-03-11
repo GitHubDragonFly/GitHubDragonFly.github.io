@@ -263,7 +263,7 @@ Number Type Converter
   - `S` - skeleton with demo (JSON viewers)
   - `T` - textures
   - `V` - variants (GLTF viewer)
-  - `W` - wireframe
+  - `W` - button or `Wire` checkbox to show wireframe
   - `X` - morphs
   - `As` - and / or `atoms` button (available in PDB viewers only)
   - `Bs` - and / or `bonds` button (available in PDB viewers only)
