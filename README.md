@@ -256,19 +256,19 @@ Number Type Converter
   - `F` - flatShading
   - `G` - linear gradient background
   - `I` - raycasting intersects (VTK Viewer)
-  - `K` - kinematics (DAE viewer)
+  - `K` - kinematics (DAE Viewer)
   - `L` - lines (LDRAW and its exports in GLTF, OBJ, JSON viewers)
   - `O` - opacity
-  - `P` - poses (MMD viewer)
+  - `P` - poses (MMD Viewer)
   - `S` - skeleton with demo (JSON viewers)
   - `T` - textures
-  - `V` - variants (GLTF viewer)
+  - `V` - variants (GLTF / GLTFS / GM viewers)
   - `W` - button or `Wire` checkbox to show wireframe
   - `X` - morphs
   - `As` - and / or `atoms` button (available in PDB viewers only)
   - `Bs` - and / or `bonds` button (available in PDB viewers only)
   - `C0` - camera index, with 0 being default (GLTF viewer) (`CAM` + Index in GLTF Legacy viewer)
-  - `CS` - construction step (LDRAW viewer)
+  - `CS` - construction step (LDRAW Viewer)
   - `Ls` - and / or `labels` button (available in PDB viewers only)
   - `MP` - material switching - Phong (MP), Standard (MS), Lambert (ML)
   - `OL` - outline effect (MMD Viewer)
