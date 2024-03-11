@@ -6,7 +6,8 @@ Designed to serve as a hub with links to repositories, Number Type Converter and
 Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations:
   - see screenshots below for different appearances of the main menu page
   - as per the [PageSpeed Insights](https://pagespeed.web.dev/) basic tests, almost all the pages / code:
-    - are highly performant
+    - are highly performant:
+      - this is relative and depends on how busy and / or responsive the `cdn.jsdelivr.net` and `esm.sh` networks are at the time of testing
     - follow Best Practices
     - are Accessibility (AODA in Ontario) and SEO optimized
 
