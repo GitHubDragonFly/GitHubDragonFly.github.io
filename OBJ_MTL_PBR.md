@@ -1,6 +1,6 @@
 # OBJ Material Entries (MTL file)
 
-Keep in mind that this repository is using the following customized OBJ related three.js files: `MTL Loader` and `OBJ Exporter`.
+Keep in mind that this repository is using the following customized OBJ related three.js files: `OBJ Loader`, `MTL Loader` and `OBJ Exporter`.
 
 These files have been synchronized to work with each other and process all custom PBR entries found in the MTL file, as listed further below, aiming at providing the GLTF alike functionality in the OBJ Viewer by taking advantage of the `THREE.MeshPhysicalMaterial` and a modified `GLTF Loader`.
 
