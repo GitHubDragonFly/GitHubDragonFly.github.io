@@ -1,10 +1,20 @@
 ( function () {
 
-	// As for the 'decompress' function - the app implementing this exporter should import it from TextureUtils.js
-
 	class OBJExporter {
 
-		parse( object, filename = 'model', onDone ) {
+		parse( object, onDone, options = {} ) {
+
+			const defaultOptions = {
+				filename: 'model',
+				map_flip_required: false,
+				maxTextureSize: Infinity
+			};
+
+			options = Object.assign( defaultOptions, options );
+
+			const map_flip_required = options.map_flip_required;
+			const maxTextureSize = options.maxTextureSize;
+			const filename = options.filename;
 
 			let output = '';
 			let indexVertex = 0;
@@ -178,8 +188,8 @@
 
 					for ( let i = 0, l = uvs.count; i < l; i ++, nbVertexUvs ++ ) {
 
-						uv.x = uvs.getX( i );
-						uv.y = uvs.getY( i );
+						uv.x = uvs.getX( i ) || 0; // avoid NaN values
+						uv.y = uvs.getY( i ) || 0; // avoid NaN values
 
 						// transform the uv to export format
 						output += 'vt ' + uv.x + ' ' + uv.y + '\n';
@@ -299,39 +309,34 @@
 
 				// shortcuts
 				const vertices = geometry.getAttribute( 'position' );
+				const colors = geometry.getAttribute( 'color' );
 
 				// name of the line object
 				output += 'o ' + line.name + '\n';
 
 				if ( line.material ) {
 
-					if ( line.material ) {
+					if ( line.material.name ) {
 
-						if ( line.material.name ) {
+						if ( line.material.name === '' ) {
 
-							if ( line.material.name === '' ) {
-
-								line.material.name = 'line_material_' + line_count;
-
-							} else {
-
-								line.material.name = line.material.name.replaceAll( '#', '' );
-								line.material.name = line.material.name.replaceAll( ' ', '_' );
-
-							}
+							line.material.name = 'line_material_' + line_count;
 
 						} else {
 
-							line.material[ 'name' ] = 'line_material_' + line_count;
+							line.material.name = line.material.name.replaceAll( '#', '' );
+							line.material.name = line.material.name.replaceAll( ' ', '_' );
 
 						}
 
-						output += 'usemtl ' + line.material.name + '\n';
-						materials[ line.material.name ] = line.material;
+					} else {
 
-						line_count += 1;
+						line.material[ 'name' ] = 'line_material_' + line_count;
 
 					}
+
+					output += 'usemtl ' + line.material.name + '\n';
+					materials[ line.material.name ] = line.material;
 
 					line_count += 1;
 
@@ -349,7 +354,26 @@
 						vertex.applyMatrix4( line.matrixWorld );
 
 						// transform the vertex to export format
-						output += 'v ' + vertex.x + ' ' + vertex.y + ' ' + vertex.z + '\n';
+						output += 'v ' + vertex.x + ' ' + vertex.y + ' ' + vertex.z;
+
+						if ( colors !== undefined ) {
+
+							color.fromBufferAttribute( colors, i ).convertLinearToSRGB();
+							output += ' ' + color.r + ' ' + color.g + ' ' + color.b;
+
+						}
+
+						output += '\n';
+
+					}
+
+				}
+
+				if ( type === 'LineSegments' ) {
+
+					for ( let j = 1, k = j + 1, l = vertices.count; j < l; j += 2, k = j + 1 ) {
+
+						output += 'l ' + ( indexVertex + j ) + ' ' + ( indexVertex + k ) + '\n';
 
 					}
 
@@ -366,16 +390,6 @@
 					}
 
 					output += '\n';
-
-				}
-
-				if ( type === 'LineSegments' ) {
-
-					for ( let j = 1, k = j + 1, l = vertices.count; j < l; j += 2, k = j + 1 ) {
-
-						output += 'l ' + ( indexVertex + j ) + ' ' + ( indexVertex + k ) + '\n';
-
-					}
 
 				}
 
@@ -479,19 +493,19 @@
 
 				if ( child.isMesh === true ) {
 
-					parseMesh( child );
+					parseMesh( child.clone() );
 
 				}
 
 				if ( child.isLine === true || child.isLineSegments === true ) {
 
-					parseLine( child );
+					parseLine( child.clone() );
 
 				}
 
 				if ( child.isPoints === true ) {
 
-					parsePoints( child );
+					parsePoints( child.clone() );
 
 				}
 
@@ -609,7 +623,24 @@
 							if ( mat.specularColor ) mtlOutput += 'Psp ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
 							if ( mat.specularIntensity !== undefined ) mtlOutput += 'Psi ' + mat.specularIntensity + '\n';
 						}
-						if ( mat.thickness && mat.thickness > 0 ) mtlOutput += 'Pth ' + mat.thickness + '\n';
+						// thickness value currently appears to need a certain correction depending on the transmission and its own value
+						// this workaround just brings the look of all Khronos examples with thickness rather close to GLTF Viewer's
+						// not sure why this would be required in the first place
+						if ( mat.thickness && mat.thickness > 0 ) {
+							if ( mat.transmission && mat.transmission > 0 ) {
+								if ( mat.thickness < 1 ) {
+									mtlOutput += 'Pth ' + ( mat.thickness * 140 ) + '\n';
+								} else {
+									mtlOutput += 'Pth ' + ( mat.thickness * 11 ) + '\n';
+								}
+							} else {
+								if ( mat.thickness < 1 ) {
+									mtlOutput += 'Pth ' + ( mat.thickness * 210 ) + '\n';
+								} else {
+									mtlOutput += 'Pth ' + ( mat.thickness * 17 ) + '\n';
+								}
+							}
+						}
 						if ( mat.transmission && mat.transmission > 0 ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
 
 						if ( mat.reflectivity !== undefined && mat.reflectivity > 0 ) mtlOutput += 'Prf ' + mat.reflectivity + '\n';
@@ -622,7 +653,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.map, 1024 );
+								map_to_process = decompress( mat.map, maxTextureSize );
 
 							}
 
@@ -634,6 +665,9 @@
 								const yo = mat.map.offset.y;
 								const ws = mat.map.wrapS;
 								const wt = mat.map.wrapT;
+								const xc = mat.map.center.x;
+								const yc = mat.map.center.y;
+								const rot = mat.map.rotation;
 
 								if ( map_uuids.includes( mat.map.uuid ) === false ) {
 
@@ -646,11 +680,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Kd -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Kd -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Kd -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.map.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Kd -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.map.uuid ] + '.png' + '\n';
 
 								}
 
@@ -664,7 +698,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.specularMap, 1024 );
+								map_to_process = decompress( mat.specularMap, maxTextureSize );
 
 							}
 
@@ -676,6 +710,9 @@
 								const yo = mat.specularMap.offset.y;
 								const ws = mat.specularMap.wrapS;
 								const wt = mat.specularMap.wrapT;
+								const xc = mat.specularMap.center.x;
+								const yc = mat.specularMap.center.y;
+								const rot = mat.specularMap.rotation;
 
 								if ( map_uuids.includes( mat.specularMap.uuid ) === false ) {
 
@@ -690,11 +727,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Ks -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ks -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Ks -s ' + xs + ' ' + ys  + ' 1'+ ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.specularMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ks -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys  + ' 1'+ ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.specularMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -708,7 +745,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.emissiveMap, 1024 );
+								map_to_process = decompress( mat.emissiveMap, maxTextureSize );
 
 							}
 
@@ -720,6 +757,9 @@
 								const yo = mat.emissiveMap.offset.y;
 								const ws = mat.emissiveMap.wrapS;
 								const wt = mat.emissiveMap.wrapT;
+								const xc = mat.emissiveMap.center.x;
+								const yc = mat.emissiveMap.center.y;
+								const rot = mat.emissiveMap.rotation;
 
 								if ( map_uuids.includes( mat.emissiveMap.uuid ) === false ) {
 
@@ -734,11 +774,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Ke -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ke -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Ke -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.emissiveMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ke -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.emissiveMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -752,7 +792,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.bumpMap, 1024 );
+								map_to_process = decompress( mat.bumpMap, maxTextureSize );
 
 							}
 
@@ -764,6 +804,9 @@
 								const yo = mat.bumpMap.offset.y;
 								const ws = mat.bumpMap.wrapS;
 								const wt = mat.bumpMap.wrapT;
+								const xc = mat.bumpMap.center.x;
+								const yc = mat.bumpMap.center.y;
+								const rot = mat.bumpMap.rotation;
 
 								if ( map_uuids.includes( mat.bumpMap.uuid ) === false ) {
 
@@ -780,11 +823,11 @@
 
 									if ( mat.bumpScale === 1 ) {
 
-										mtlOutput += 'map_bump -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+										mtlOutput += 'map_bump -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 									} else {
 
-										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 									}
 
@@ -792,11 +835,11 @@
 
 									if ( mat.bumpScale === 1 ) {
 
-										mtlOutput += 'map_bump -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
+										mtlOutput += 'map_bump -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
 
 									} else {
 
-										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
+										mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.bumpMap.uuid ] + '.png' + '\n';
 
 									}
 
@@ -812,7 +855,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.lightMap, 1024 );
+								map_to_process = decompress( mat.lightMap, maxTextureSize );
 
 							}
 
@@ -824,6 +867,9 @@
 								const yo = mat.lightMap.offset.y;
 								const ws = mat.lightMap.wrapS;
 								const wt = mat.lightMap.wrapT;
+								const xc = mat.lightMap.center.x;
+								const yc = mat.lightMap.center.y;
+								const rot = mat.lightMap.rotation;
 
 								if ( map_uuids.includes( mat.lightMap.uuid ) === false ) {
 
@@ -838,11 +884,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'Pbr_pl_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'Pbr_pl_map -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'Pbr_pl_map -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.lightMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'Pbr_pl_map -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.lightMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -858,7 +904,7 @@
 
 								if ( map_to_process.isCompressedTexture === true ) {
 
-									map_to_process = decompress( mat.metalnessMap, 1024 );
+									map_to_process = decompress( mat.metalnessMap, maxTextureSize );
 
 								}
 
@@ -870,6 +916,9 @@
 									const yo = mat.metalnessMap.offset.y;
 									const ws = mat.metalnessMap.wrapS;
 									const wt = mat.metalnessMap.wrapT;
+									const xc = mat.metalnessMap.center.x;
+									const yc = mat.metalnessMap.center.y;
+									const rot = mat.metalnessMap.rotation;
 
 									if ( map_uuids.includes( mat.metalnessMap.uuid ) === false ) {
 
@@ -886,12 +935,12 @@
 
 										if ( mat.roughnessMap && mat.roughnessMap === mat.metalnessMap ) {
 
-											mtlOutput += 'map_Px -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+											mtlOutput += 'map_Px -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 											map_Px_set = true;
 
 										} else {
 
-											mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+											mtlOutput += 'map_Pm -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 										}
 
@@ -899,12 +948,12 @@
 
 										if ( mat.roughnessMap && mat.roughnessMap === mat.metalnessMap ) {
 
-											mtlOutput += 'map_Px -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
+											mtlOutput += 'map_Px -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
 											map_Px_set = true;
 
 										} else {
 
-											mtlOutput += 'map_Pm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
+											mtlOutput += 'map_Pm -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.metalnessMap.uuid ] + '.png' + '\n';
 
 										}
 
@@ -924,7 +973,7 @@
 
 								if ( map_to_process.isCompressedTexture === true ) {
 
-									map_to_process = decompress( mat.roughnessMap, 1024 );
+									map_to_process = decompress( mat.roughnessMap, maxTextureSize );
 
 								}
 
@@ -936,6 +985,9 @@
 									const yo = mat.roughnessMap.offset.y;
 									const ws = mat.roughnessMap.wrapS;
 									const wt = mat.roughnessMap.wrapT;
+									const xc = mat.roughnessMap.center.x;
+									const yc = mat.roughnessMap.center.y;
+									const rot = mat.roughnessMap.rotation;
 
 									if ( map_uuids.includes( mat.roughnessMap.uuid ) === false ) {
 
@@ -952,12 +1004,12 @@
 
 										if ( mat.metalnessMap && mat.metalnessMap === mat.roughnessMap ) {
 
-											mtlOutput += 'map_Px -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+											mtlOutput += 'map_Px -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 											map_Px_set = true;
 
 										} else {
 
-											mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+											mtlOutput += 'map_Pr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 										}
 
@@ -965,12 +1017,12 @@
 
 										if ( mat.metalnessMap && mat.metalnessMap === mat.roughnessMap ) {
 
-											mtlOutput += 'map_Px -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
+											mtlOutput += 'map_Px -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
 											map_Px_set = true;
 
 										} else {
 
-											mtlOutput += 'map_Pr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
+											mtlOutput += 'map_Pr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.roughnessMap.uuid ] + '.png' + '\n';
 
 										}
 
@@ -988,7 +1040,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.displacementMap, 1024 );
+								map_to_process = decompress( mat.displacementMap, maxTextureSize );
 
 							}
 
@@ -1000,6 +1052,9 @@
 								const yo = mat.displacementMap.offset.y;
 								const ws = mat.displacementMap.wrapS;
 								const wt = mat.displacementMap.wrapT;
+								const xc = mat.displacementMap.center.x;
+								const yc = mat.displacementMap.center.y;
+								const rot = mat.displacementMap.rotation;
 
 								if ( map_uuids.includes( mat.displacementMap.uuid ) === false ) {
 
@@ -1014,11 +1069,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'disp -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'disp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'disp -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'disp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1032,7 +1087,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.normalMap, 1024 );
+								map_to_process = decompress( mat.normalMap, maxTextureSize );
 
 							}
 
@@ -1044,6 +1099,9 @@
 								const yo = mat.normalMap.offset.y;
 								const ws = mat.normalMap.wrapS;
 								const wt = mat.normalMap.wrapT;
+								const xc = mat.normalMap.center.x;
+								const yc = mat.normalMap.center.y;
+								const rot = mat.normalMap.rotation;
 
 								if ( map_uuids.includes( mat.normalMap.uuid ) === false ) {
 
@@ -1058,11 +1116,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'norm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'norm -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'norm -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.normalMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'norm -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.normalMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1076,7 +1134,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.alphaMap, 1024 );
+								map_to_process = decompress( mat.alphaMap, maxTextureSize );
 
 							}
 
@@ -1088,6 +1146,9 @@
 								const yo = mat.alphaMap.offset.y;
 								const ws = mat.alphaMap.wrapS;
 								const wt = mat.alphaMap.wrapT;
+								const xc = mat.alphaMap.center.x;
+								const yc = mat.alphaMap.center.y;
+								const rot = mat.alphaMap.rotation;
 
 								if ( map_uuids.includes( mat.alphaMap.uuid ) === false ) {
 
@@ -1102,11 +1163,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_d -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_d -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_d -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.alphaMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_d -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.alphaMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1120,7 +1181,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.aoMap, 1024 );
+								map_to_process = decompress( mat.aoMap, maxTextureSize );
 
 							}
 
@@ -1132,6 +1193,9 @@
 								const yo = mat.aoMap.offset.y;
 								const ws = mat.aoMap.wrapS;
 								const wt = mat.aoMap.wrapT;
+								const xc = mat.aoMap.center.x;
+								const yc = mat.aoMap.center.y;
+								const rot = mat.aoMap.rotation;
 
 								if ( map_uuids.includes( mat.aoMap.uuid ) === false ) {
 
@@ -1146,11 +1210,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Ka -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ka -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Ka -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.aoMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ka -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.aoMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1164,7 +1228,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.anisotropyMap, 1024 );
+								map_to_process = decompress( mat.anisotropyMap, maxTextureSize );
 
 							}
 
@@ -1176,6 +1240,9 @@
 								const yo = mat.anisotropyMap.offset.y;
 								const ws = mat.anisotropyMap.wrapS;
 								const wt = mat.anisotropyMap.wrapT;
+								const xc = mat.anisotropyMap.center.x;
+								const yc = mat.anisotropyMap.center.y;
+								const rot = mat.anisotropyMap.rotation;
 
 								if ( map_uuids.includes( mat.anisotropyMap.uuid ) === false ) {
 
@@ -1190,11 +1257,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pa -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pa -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pa -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.anisotropyMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pa -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.anisotropyMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1208,7 +1275,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.clearcoatMap, 1024 );
+								map_to_process = decompress( mat.clearcoatMap, maxTextureSize );
 
 							}
 
@@ -1220,6 +1287,9 @@
 								const yo = mat.clearcoatMap.offset.y;
 								const ws = mat.clearcoatMap.wrapS;
 								const wt = mat.clearcoatMap.wrapT;
+								const xc = mat.clearcoatMap.center.x;
+								const yc = mat.clearcoatMap.center.y;
+								const rot = mat.clearcoatMap.rotation;
 
 								if ( map_uuids.includes( mat.clearcoatMap.uuid ) === false ) {
 
@@ -1234,11 +1304,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pcc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pcc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pcc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pcc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.clearcoatMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1252,7 +1322,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.clearcoatNormalMap, 1024 );
+								map_to_process = decompress( mat.clearcoatNormalMap, maxTextureSize );
 
 							}
 
@@ -1264,6 +1334,9 @@
 								const yo = mat.clearcoatNormalMap.offset.y;
 								const ws = mat.clearcoatNormalMap.wrapS;
 								const wt = mat.clearcoatNormalMap.wrapT;
+								const xc = mat.clearcoatNormalMap.center.x;
+								const yc = mat.clearcoatNormalMap.center.y;
+								const rot = mat.clearcoatNormalMap.rotation;
 
 								if ( map_uuids.includes( mat.clearcoatNormalMap.uuid ) === false ) {
 
@@ -1278,11 +1351,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pcn -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pcn -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pcn -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pcn -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.clearcoatNormalMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1296,7 +1369,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.clearcoatRoughnessMap, 1024 );
+								map_to_process = decompress( mat.clearcoatRoughnessMap, maxTextureSize );
 
 							}
 
@@ -1308,6 +1381,9 @@
 								const yo = mat.clearcoatRoughnessMap.offset.y;
 								const ws = mat.clearcoatRoughnessMap.wrapS;
 								const wt = mat.clearcoatRoughnessMap.wrapT;
+								const xc = mat.clearcoatRoughnessMap.center.x;
+								const yc = mat.clearcoatRoughnessMap.center.y;
+								const rot = mat.clearcoatRoughnessMap.rotation;
 
 								if ( map_uuids.includes( mat.clearcoatRoughnessMap.uuid ) === false ) {
 
@@ -1322,11 +1398,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pcr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pcr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pcr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pcr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.clearcoatRoughnessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1340,7 +1416,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.iridescenceMap, 1024 );
+								map_to_process = decompress( mat.iridescenceMap, maxTextureSize );
 
 							}
 
@@ -1352,6 +1428,9 @@
 								const yo = mat.iridescenceMap.offset.y;
 								const ws = mat.iridescenceMap.wrapS;
 								const wt = mat.iridescenceMap.wrapT;
+								const xc = mat.iridescenceMap.center.x;
+								const yc = mat.iridescenceMap.center.y;
+								const rot = mat.iridescenceMap.rotation;
 
 								if ( map_uuids.includes( mat.iridescenceMap.uuid ) === false ) {
 
@@ -1366,11 +1445,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.iridescenceMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.iridescenceMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1384,7 +1463,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.iridescenceThicknessMap, 1024 );
+								map_to_process = decompress( mat.iridescenceThicknessMap, maxTextureSize );
 
 							}
 
@@ -1396,6 +1475,9 @@
 								const yo = mat.iridescenceThicknessMap.offset.y;
 								const ws = mat.iridescenceThicknessMap.wrapS;
 								const wt = mat.iridescenceThicknessMap.wrapT;
+								const xc = mat.iridescenceThicknessMap.center.x;
+								const yc = mat.iridescenceThicknessMap.center.y;
+								const rot = mat.iridescenceThicknessMap.rotation;
 
 								if ( map_uuids.includes( mat.iridescenceThicknessMap.uuid ) === false ) {
 
@@ -1410,11 +1492,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pit -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pit -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pit -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.iridescenceThicknessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pit -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.iridescenceThicknessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1428,7 +1510,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.sheenColorMap, 1024 );
+								map_to_process = decompress( mat.sheenColorMap, maxTextureSize );
 
 							}
 
@@ -1440,6 +1522,9 @@
 								const yo = mat.sheenColorMap.offset.y;
 								const ws = mat.sheenColorMap.wrapS;
 								const wt = mat.sheenColorMap.wrapT;
+								const xc = mat.sheenColorMap.center.x;
+								const yc = mat.sheenColorMap.center.y;
+								const rot = mat.sheenColorMap.rotation;
 
 								if ( map_uuids.includes( mat.sheenColorMap.uuid ) === false ) {
 
@@ -1454,11 +1539,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Psc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Psc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Psc -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.sheenColorMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Psc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.sheenColorMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1472,7 +1557,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.sheenRoughnessMap, 1024 );
+								map_to_process = decompress( mat.sheenRoughnessMap, maxTextureSize );
 
 							}
 
@@ -1484,6 +1569,9 @@
 								const yo = mat.sheenRoughnessMap.offset.y;
 								const ws = mat.sheenRoughnessMap.wrapS;
 								const wt = mat.sheenRoughnessMap.wrapT;
+								const xc = mat.sheenRoughnessMap.center.x;
+								const yc = mat.sheenRoughnessMap.center.y;
+								const rot = mat.sheenRoughnessMap.rotation;
 
 								if ( map_uuids.includes( mat.sheenRoughnessMap.uuid ) === false ) {
 
@@ -1498,11 +1586,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Psr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Psr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Psr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.sheenRoughnessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Psr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.sheenRoughnessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1516,7 +1604,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.specularIntensityMap, 1024 );
+								map_to_process = decompress( mat.specularIntensityMap, maxTextureSize );
 
 							}
 
@@ -1528,6 +1616,9 @@
 								const yo = mat.specularIntensityMap.offset.y;
 								const ws = mat.specularIntensityMap.wrapS;
 								const wt = mat.specularIntensityMap.wrapT;
+								const xc = mat.specularIntensityMap.center.x;
+								const yc = mat.specularIntensityMap.center.y;
+								const rot = mat.specularIntensityMap.rotation;
 
 								if ( map_uuids.includes( mat.specularIntensityMap.uuid ) === false ) {
 
@@ -1542,11 +1633,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Psi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Psi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Psi -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Psi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.specularIntensityMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1560,7 +1651,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.specularColorMap, 1024 );
+								map_to_process = decompress( mat.specularColorMap, maxTextureSize );
 
 							}
 
@@ -1572,6 +1663,9 @@
 								const yo = mat.specularColorMap.offset.y;
 								const ws = mat.specularColorMap.wrapS;
 								const wt = mat.specularColorMap.wrapT;
+								const xc = mat.specularColorMap.center.x;
+								const yc = mat.specularColorMap.center.y;
+								const rot = mat.specularColorMap.rotation;
 
 								if ( map_uuids.includes( mat.specularColorMap.uuid ) === false ) {
 
@@ -1586,11 +1680,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Psp -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Psp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Psp -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Psp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.specularColorMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1604,7 +1698,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.thicknessMap, 1024 );
+								map_to_process = decompress( mat.thicknessMap, maxTextureSize );
 
 							}
 
@@ -1616,6 +1710,9 @@
 								const yo = mat.thicknessMap.offset.y;
 								const ws = mat.thicknessMap.wrapS;
 								const wt = mat.thicknessMap.wrapT;
+								const xc = mat.thicknessMap.center.x;
+								const yc = mat.thicknessMap.center.y;
+								const rot = mat.thicknessMap.rotation;
 
 								if ( map_uuids.includes( mat.thicknessMap.uuid ) === false ) {
 
@@ -1630,11 +1727,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Pth -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Pth -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Pth -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Pth -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.thicknessMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1648,7 +1745,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.transmissionMap, 1024 );
+								map_to_process = decompress( mat.transmissionMap, maxTextureSize );
 
 							}
 
@@ -1660,6 +1757,9 @@
 								const yo = mat.transmissionMap.offset.y;
 								const ws = mat.transmissionMap.wrapS;
 								const wt = mat.transmissionMap.wrapT;
+								const xc = mat.transmissionMap.center.x;
+								const yc = mat.transmissionMap.center.y;
+								const rot = mat.transmissionMap.rotation;
 
 								if ( map_uuids.includes( mat.transmissionMap.uuid ) === false ) {
 
@@ -1674,11 +1774,11 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Ptr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									mtlOutput += 'map_Ptr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								} else {
 
-									mtlOutput += 'map_Ptr -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
+									mtlOutput += 'map_Ptr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.transmissionMap.uuid ] + '.png' + '\n';
 
 								}
 
@@ -1727,12 +1827,27 @@
 				let canvas, ctx;
 
 				canvas = canvas || document.createElement( 'canvas' );
+
+				canvas.width = Math.min( image.width, maxTextureSize );
+				canvas.height = Math.min( image.height, maxTextureSize );
+
 				ctx = ctx || canvas.getContext( '2d' );
-				canvas.width = image.width;
-				canvas.height = image.height;
+
+				if ( map_flip_required === true ) {
+
+					// Flip image vertically
+
+					ctx.translate( 0, canvas.height );
+					ctx.scale( 1, - 1 );
+
+				}
 
 				// this seems to also work fine for exporting TGA images as PNG
-				if ( image.data && image.data.constructor === Uint8Array ) {
+				if ( image instanceof ImageData ) {
+
+					ctx.putImageData( image, 0, 0 );
+	
+				} else if ( image.data && image.data.constructor === Uint8Array ) {
 
 					let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
 
@@ -1740,7 +1855,7 @@
 
 				} else {
 
-					ctx.drawImage( image, 0, 0 );
+					ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
 
 				}
 
@@ -1764,6 +1879,83 @@
 				}
 
 				return buf;
+
+			}
+
+			// decompress function is from TextureUtils.js
+
+			function decompress( texture, maxTextureSize = Infinity, renderer = null ) {
+
+				let _renderer;
+				let fullscreenQuadGeometry;
+				let fullscreenQuadMaterial;
+				let fullscreenQuad;
+
+				if ( ! fullscreenQuadGeometry ) fullscreenQuadGeometry = new THREE.PlaneGeometry( 2, 2, 1, 1 );
+				if ( ! fullscreenQuadMaterial ) fullscreenQuadMaterial = new THREE.ShaderMaterial( {
+					uniforms: { blitTexture: new THREE.Uniform( texture ) },
+					vertexShader: `
+						varying vec2 vUv;
+						void main(){
+							vUv = uv;
+							gl_Position = vec4(position.xy * 1.0,0.,.999999);
+						}`,
+					fragmentShader: `
+						uniform sampler2D blitTexture; 
+						varying vec2 vUv;
+		
+						void main(){ 
+							gl_FragColor = vec4(vUv.xy, 0, 1);
+						
+							#ifdef IS_SRGB
+							gl_FragColor = LinearTosRGB( texture2D( blitTexture, vUv) );
+							#else
+							gl_FragColor = texture2D( blitTexture, vUv);
+							#endif
+						}`
+				} );
+
+				fullscreenQuadMaterial.uniforms.blitTexture.value = texture;
+				fullscreenQuadMaterial.defines.IS_SRGB = texture.colorSpace == THREE.SRGBColorSpace;
+				fullscreenQuadMaterial.needsUpdate = true;
+
+				if ( ! fullscreenQuad ) {
+
+					fullscreenQuad = new THREE.Mesh( fullscreenQuadGeometry, fullscreenQuadMaterial );
+					fullscreenQuad.frustrumCulled = false;
+
+				}
+
+				const _camera = new THREE.PerspectiveCamera();
+				const _scene = new THREE.Scene();
+				_scene.add( fullscreenQuad );
+
+				if ( ! renderer ) {
+
+					renderer = _renderer = new THREE.WebGLRenderer( { antialias: false } );
+
+				}
+
+				renderer.setSize( Math.min( texture.image.width, maxTextureSize ), Math.min( texture.image.height, maxTextureSize ) );
+				renderer.clear();
+				renderer.render( _scene, _camera );
+
+				const readableTexture = new THREE.Texture( renderer.domElement );
+
+				readableTexture.minFilter = texture.minFilter;
+				readableTexture.magFilter = texture.magFilter;
+				readableTexture.wrapS = texture.wrapS;
+				readableTexture.wrapT = texture.wrapT;
+				readableTexture.name = texture.name;
+
+				if ( _renderer ) {
+
+					_renderer.dispose();
+					_renderer = null;
+
+				}
+
+				return readableTexture;
 
 			}
 
