@@ -36,7 +36,7 @@
       import { DDSLoader } from "three/addons/loaders/DDSLoader.js";
       import { TGALoader } from "three/addons/loaders/TGALoader.js";
       import { RGBELoader } from "three/addons/loaders/RGBELoader.js";
-      import { OBJLoader } from "three/addons/loaders/OBJLoader.js";
+      import { OBJLoader } from "../static/jsm/loaders/OBJLoader.js";
       import { MTLLoader } from "../static/jsm/loaders/MTLLoader.js";
       import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.js";
       import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
@@ -813,9 +813,11 @@
 
           let obj_exporter = new OBJExporter( manager );
 
+          let options = { filename: filename, maxTextureSize: tex_res, map_flip_required: tex_flip };
+
           let mesh_clone = alternative === true ? await create_meshes() : Obj;
 
-          await obj_exporter.parse( mesh_clone, filename, async function( exported ) {
+          await obj_exporter.parse( mesh_clone, async function( exported ) {
             zip.file( filename + '.obj', exported[ 'obj' ] );
 
             if (exported[ 'mtl' ]) {
@@ -826,42 +828,14 @@
 
                 exported[ 'tex' ].forEach( async tex => {
                   let blob = new Blob( [ tex.data ], { type: 'image/png' } );
+                  zip.file( `${ tex.name }.${ tex.ext }`, blob );
 
-                  if (tex_res === Infinity && tex_flip === false) {
-                    zip.file( `${ tex.name }.${ tex.ext }`, blob );
-                    if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' + (alternative === true ? 'x' : '') );
-                    processed_index += 1;
-                  } else {
-                    let canvas = document.createElement('canvas');
-                    let img = new Image();
-
-                    img.onload = async function() {
-                      canvas.width = Math.min( img.naturalWidth, tex_res );
-                      canvas.height = Math.min( img.naturalHeight, tex_res );
-
-                      const ctx = canvas.getContext( '2d' );
-
-                      if (tex_flip === true) {
-                        // Flip image vertically
-                        ctx.translate( 0, canvas.height );
-                        ctx.scale( 1, - 1 );
-                      }
-
-                      ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
-
-                      await new Promise( resolve => canvas.toBlob( resolve ) ).then( async function( canvas_blob ) {
-                        zip.file( `${ tex.name }.${ tex.ext }`, canvas_blob );
-
-                        let str = '_OBJ' + (alternative === true ? 'x' : '') + (tex_flip === true ? '_Y' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '');
-                        if (processed_index === exported[ 'tex' ].length - 1) await process_zip( str );
-                      });
-
-                      processed_index += 1;
-                    }
-
-                    img.src = URL.createObjectURL( blob );
-                    URL.revokeObjectURL( blob );
+                  if (processed_index === exported[ 'tex' ].length - 1) {
+                    let str = '_OBJ' + (alternative === true ? 'x' : '') + (tex_flip === true ? '_Y' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '');
+                    await process_zip( str );
                   }
+
+                  processed_index += 1;
                 });
               } else {
                 await process_zip( '_OBJ' + (alternative === true ? 'x' : '') );
@@ -869,7 +843,7 @@
             } else {
               await process_zip( '_OBJ' + (alternative === true ? 'x' : '') );
             }
-          });
+          }, options );
         }
       }
 
@@ -1978,7 +1952,7 @@
           if (wireframe_enabled === true) show_wireframe();
 
           Obj.traverse( function( child ) {
-            if (child.isMesh || child.isPoints || child.isLineSegments) {
+            if (child.isMesh || child.isPoints || child.isLine) {
               if (child.material) {
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
@@ -2283,15 +2257,7 @@
               let child_count = 1;
 
               Obj.traverse( function( child ) {
-                if (child.isLineSegments) {
-                  if (child.name === '') child.name = 'childLines_' + child_count;
-
-                  lines_present = lines_visible = true;
-                  document.getElementById('btn_lines').disabled = false;
-                  document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
-                }
-
-                if (child.isMesh || child.isPoints) {
+                if (child.isMesh || child.isPoints || child.isLine) {
                   if (child.geometry.isBufferGeometry) {
                     child.geometry.computeBoundingBox();
                     child.geometry.computeBoundingSphere();
@@ -2306,7 +2272,19 @@
                     document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                     document.getElementById('btn_random_vertex_colors').disabled = false;
                   }
+                }
 
+                if (child.isLine) {
+                  if (child.name === '') child.name = 'childLines_' + child_count;
+                  child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+                  original_vertex_colors[ child.name ] = child.material.vertexColors;
+
+                  lines_present = lines_visible = true;
+                  document.getElementById('btn_lines').disabled = false;
+                  document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
+                }
+
+                if (child.isMesh || child.isPoints) {
                   if (child.isMesh) {
                     original_indices[ child.name ] = child.geometry.getIndex();
                     original_uvs[ child.name ] = child.geometry.getAttribute( 'uv' );
@@ -2315,6 +2293,8 @@
                     original_positions[ child.name ] = child.geometry.getAttribute( 'position' );
                     if (child.isSkinnedMesh) child.frustumCulled = false;
                   } else {
+                    child.sizeAttenuation = true;
+                    child.sortPoints = true;
                     object_is_points = true;
                   }
 
@@ -2337,6 +2317,7 @@
 
                       set_texture_colorSpace( mtrl );
                       mtrl.vertexColors = child.geometry.hasAttribute( 'color' );
+                      if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 0.5;
 
                       initial_opacity_array[ child.name ][ child_count_array ] = mtrl.opacity;
                       initial_transparency_array[ child.name ][ child_count_array ] = mtrl.transparent;
@@ -2358,18 +2339,13 @@
 
                     set_texture_colorSpace( child.material );
                     child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+                    if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 0.5;
 
                     initial_opacity[ child.name ] = child.material.opacity;
                     initial_transparency[ child.name ] = child.material.transparent;
                     original_color[ child.name ] = new THREE.Color( child.material.color );
                     original_side[ child.name ] = child.material.side;
                     original_vertex_colors[ child.name ] = child.material.vertexColors;
-
-                    if (child.isPoints) {
-                      child.material.size = 0.3;
-                      child.sizeAttenuation = true;
-                      child.sortPoints = true;
-                    }
 
                     child.material.needsUpdate = true;
                   }
@@ -2420,15 +2396,7 @@
             let child_count = 1;
 
             Obj.traverse( function( child ) {
-              if (child.isLineSegments) {
-                if (child.name === '') child.name = 'childLines_' + child_count;
-
-                lines_present = lines_visible = true;
-                document.getElementById('btn_lines').disabled = false;
-                document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
-              }
-
-              if (child.isMesh || child.isPoints) {
+              if (child.isMesh || child.isPoints || child.isLine) {
                 if (child.geometry.isBufferGeometry) {
                   child.geometry.computeBoundingBox();
                   child.geometry.computeBoundingSphere();
@@ -2443,7 +2411,19 @@
                   document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                   document.getElementById('btn_random_vertex_colors').disabled = false;
                 }
+              }
 
+              if (child.isLine) {
+                if (child.name === '') child.name = 'childLines_' + child_count;
+                child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+                original_vertex_colors[ child.name ] = child.material.vertexColors;
+
+                lines_present = lines_visible = true;
+                document.getElementById('btn_lines').disabled = false;
+                document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
+              }
+
+              if (child.isMesh || child.isPoints) {
                 if (child.isMesh) {
                   original_indices[ child.name ] = child.geometry.getIndex();
                   original_uvs[ child.name ] = child.geometry.getAttribute( 'uv' );
@@ -2452,6 +2432,8 @@
                   original_positions[ child.name ] = child.geometry.getAttribute( 'position' );
                   if (child.isSkinnedMesh) child.frustumCulled = false;
                 } else {
+                  child.sizeAttenuation = true;
+                  child.sortPoints = true;
                   object_is_points = true;
                 }
 
@@ -2467,13 +2449,8 @@
                   child.material.forEach( mtrl => {
                     if (mtrl.isMeshPhysicalMaterial === true) physical_mtl = true;
 
-                    if (mtrl.aoMap && child.geometry.attributes.uv1 === undefined && child.geometry.attributes.uv !== undefined) {
-                      child.geometry.setAttribute( 'uv1', child.geometry.attributes.uv );
-                      mtrl.aoMap.channel = 1;
-                    }
-
-                    set_texture_colorSpace( mtrl );
                     mtrl.vertexColors = child.geometry.hasAttribute( 'color' );
+                    if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 0.5;
 
                     initial_opacity_array[ child.name ][ child_count_array ] = mtrl.opacity;
                     initial_transparency_array[ child.name ][ child_count_array ] = mtrl.transparent;
@@ -2488,25 +2465,14 @@
                 } else {
                   if (child.material.isMeshPhysicalMaterial === true) physical_mtl = true;
 
-                  if (child.material.aoMap && child.geometry.attributes.uv1 === undefined && child.geometry.attributes.uv !== undefined) {
-                    child.geometry.setAttribute( 'uv1', child.geometry.attributes.uv );
-                    child.material.aoMap.channel = 1;
-                  }
-
-                  set_texture_colorSpace( child.material );
                   child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+                  if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 0.5;
 
                   initial_opacity[ child.name ] = child.material.opacity;
                   initial_transparency[ child.name ] = child.material.transparent;
                   original_color[ child.name ] = new THREE.Color( child.material.color );
                   original_side[ child.name ] = child.material.side;
                   original_vertex_colors[ child.name ] = child.material.vertexColors;
-
-                  if (child.isPoints) {
-                    child.material.size = 0.3;
-                    child.sizeAttenuation = true;
-                    child.sortPoints = true;
-                  }
 
                   child.material.needsUpdate = true;
                 }
@@ -2611,15 +2577,7 @@
                     let child_count = 1;
 
                     Obj.traverse( function( child ) {
-                      if (child.isLineSegments) {
-                        if (child.name === '') child.name = 'childLines_' + child_count;
-
-                        lines_visible = true;
-                        document.getElementById('btn_lines').disabled = false;
-                        document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
-                      }
-
-                      if (child.isMesh || child.isPoints) {
+                      if (child.isMesh || child.isPoints || child.isLine) {
                         if (child.geometry.isBufferGeometry) {
                           child.geometry.computeBoundingBox();
                           child.geometry.computeBoundingSphere();
@@ -2634,7 +2592,19 @@
                           document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                           document.getElementById('btn_random_vertex_colors').disabled = false;
                         }
+                      }
 
+                      if (child.isLine) {
+                        if (child.name === '') child.name = 'childLines_' + child_count;
+                        child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+                        original_vertex_colors[ child.name ] = child.material.vertexColors;
+
+                        lines_visible = true;
+                        document.getElementById('btn_lines').disabled = false;
+                        document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
+                      }
+
+                      if (child.isMesh || child.isPoints) {
                         if (child.isMesh) {
                           original_indices[ child.name ] = child.geometry.getIndex();
                           original_uvs[ child.name ] = child.geometry.getAttribute( 'uv' );
@@ -2643,6 +2613,8 @@
                           original_positions[ child.name ] = child.geometry.getAttribute( 'position' );
                           if (child.isSkinnedMesh) child.frustumCulled = false;
                         } else {
+                          child.sizeAttenuation = true;
+                          child.sortPoints = true;
                           object_is_points = true;
                         }
 
@@ -2674,6 +2646,7 @@
                             }
 
                             mtrl.vertexColors = child.geometry.hasAttribute( 'color' );
+                            if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 0.5;
 
                             initial_opacity_array[ child.name ][ child_count_array ] = mtrl.opacity;
                             initial_transparency_array[ child.name ][ child_count_array ] = mtrl.transparent;
@@ -2704,18 +2677,13 @@
                           }
 
                           child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+                          if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 0.5;
 
                           initial_opacity[ child.name ] = child.material.opacity;
                           initial_transparency[ child.name ] = child.material.transparent;
                           original_color[ child.name ] = new THREE.Color( child.material.color );
                           original_side[ child.name ] = child.material.side;
                           original_vertex_colors[ child.name ] = child.material.vertexColors;
-
-                          if (child.isPoints) {
-                            child.material.size = 0.3;
-                            child.sizeAttenuation = true;
-                            child.sortPoints = true;
-                          }
 
                           child.material.needsUpdate = true;
                         }
@@ -2743,15 +2711,7 @@
                   let child_count = 1;
 
                   Obj.traverse( function( child ) {
-                    if (child.isLineSegments) {
-                      if (child.name === '') child.name = 'childLines_' + child_count;
-
-                      lines_visible = true;
-                      document.getElementById('btn_lines').disabled = false;
-                      document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
-                    }
-
-                    if (child.isMesh || child.isPoints) {
+                    if (child.isMesh || child.isPoints || child.isLine) {
                       if (child.geometry.isBufferGeometry) {
                         child.geometry.computeBoundingBox();
                         child.geometry.computeBoundingSphere();
@@ -2766,7 +2726,19 @@
                         document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                         document.getElementById('btn_random_vertex_colors').disabled = false;
                       }
+                    }
 
+                    if (child.isLine) {
+                      if (child.name === '') child.name = 'childLines_' + child_count;
+                      child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+                      original_vertex_colors[ child.name ] = child.material.vertexColors;
+
+                      lines_visible = true;
+                      document.getElementById('btn_lines').disabled = false;
+                      document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
+                    }
+
+                    if (child.isMesh || child.isPoints) {
                       if (child.isMesh) {
                         original_indices[ child.name ] = child.geometry.getIndex();
                         original_uvs[ child.name ] = child.geometry.getAttribute( 'uv' );
@@ -2775,6 +2747,8 @@
                         original_positions[ child.name ] = child.geometry.getAttribute( 'position' );
                         if (child.isSkinnedMesh) child.frustumCulled = false;
                       } else {
+                        child.sizeAttenuation = true;
+                        child.sortPoints = true;
                         object_is_points = true;
                       }
 
@@ -2790,22 +2764,8 @@
                         child.material.forEach( mtrl => {
                           if (mtrl.isMeshPhysicalMaterial === true) physical_mtl = true;
 
-                          if (mtrl.aoMap && child.geometry.attributes.uv1 === undefined && child.geometry.attributes.uv !== undefined) {
-                            child.geometry.setAttribute( 'uv1', child.geometry.attributes.uv );
-                            mtrl.aoMap.channel = 1;
-                          }
-
-                          set_texture_colorSpace( mtrl );
-
-                          if (mtrl.map) {
-                            if (document.getElementById('btn_textures').disabled) {
-                              mtrl.map.generateMipmaps = true;
-                            } else {
-                              mtrl.map = null;
-                            }
-                          }
-
                           mtrl.vertexColors = child.geometry.hasAttribute( 'color' );
+                          if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 0.5;
 
                           initial_opacity_array[ child.name ][ child_count_array ] = mtrl.opacity;
                           initial_transparency_array[ child.name ][ child_count_array ] = mtrl.transparent;
@@ -2820,34 +2780,14 @@
                       } else {
                         if (child.material.isMeshPhysicalMaterial === true) physical_mtl = true;
 
-                        if (child.material.aoMap && child.geometry.attributes.uv1 === undefined && child.geometry.attributes.uv !== undefined) {
-                          child.geometry.setAttribute( 'uv1', child.geometry.attributes.uv );
-                          child.material.aoMap.channel = 1;
-                        }
-
-                        set_texture_colorSpace( child.material );
-
-                        if (child.material.map) {
-                          if (document.getElementById('btn_textures').disabled) {
-                            child.material.map.generateMipmaps = true;
-                          } else {
-                            child.material.map = null;
-                          }
-                        }
-
                         child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+                        if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 0.5;
 
                         initial_opacity[ child.name ] = child.material.opacity;
                         initial_transparency[ child.name ] = child.material.transparent;
                         original_color[ child.name ] = new THREE.Color( child.material.color );
                         original_side[ child.name ] = child.material.side;
                         original_vertex_colors[ child.name ] = child.material.vertexColors;
-
-                        if (child.isPoints) {
-                          child.material.size = 0.3;
-                          child.sizeAttenuation = true;
-                          child.sortPoints = true;
-                        }
 
                         child.material.needsUpdate = true;
                       }
@@ -2885,15 +2825,7 @@
               let child_count = 1;
 
               Obj.traverse( function( child ) {
-                if (child.isLineSegments) {
-                  if (child.name === '') child.name = 'childLines_' + child_count;
-
-                  lines_visible = true;
-                  document.getElementById('btn_lines').disabled = false;
-                  document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
-                }
-
-                if (child.isMesh || child.isPoints) {
+                if (child.isMesh || child.isPoints || child.isLine) {
                   if (child.geometry.isBufferGeometry) {
                     child.geometry.computeBoundingBox();
                     child.geometry.computeBoundingSphere();
@@ -2908,7 +2840,19 @@
                     document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                     document.getElementById('btn_random_vertex_colors').disabled = false;
                   }
+                }
 
+                if (child.isLine) {
+                  if (child.name === '') child.name = 'childLines_' + child_count;
+                  child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+                  original_vertex_colors[ child.name ] = child.material.vertexColors;
+
+                  lines_visible = true;
+                  document.getElementById('btn_lines').disabled = false;
+                  document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
+                }
+
+                if (child.isMesh || child.isPoints) {
                   if (child.isMesh) {
                     original_indices[ child.name ] = child.geometry.getIndex();
                     original_uvs[ child.name ] = child.geometry.getAttribute( 'uv' );
@@ -2917,6 +2861,8 @@
                     original_positions[ child.name ] = child.geometry.getAttribute( 'position' );
                     if (child.isSkinnedMesh) child.frustumCulled = false;
                   } else {
+                    child.sizeAttenuation = true;
+                    child.sortPoints = true;
                     object_is_points = true;
                   }
 
@@ -2932,13 +2878,8 @@
                     child.material.forEach( mtrl => {
                       if (mtrl.isMeshPhysicalMaterial === true) physical_mtl = true;
 
-                      if (mtrl.aoMap && child.geometry.attributes.uv1 === undefined && child.geometry.attributes.uv !== undefined) {
-                        child.geometry.setAttribute( 'uv1', child.geometry.attributes.uv );
-                        mtrl.aoMap.channel = 1;
-                      }
-
-                      set_texture_colorSpace( mtrl );
                       mtrl.vertexColors = child.geometry.hasAttribute( 'color' );
+                      if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 0.5;
 
                       initial_opacity_array[ child.name ][ child_count_array ] = mtrl.opacity;
                       initial_transparency_array[ child.name ][ child_count_array ] = mtrl.transparent;
@@ -2953,25 +2894,14 @@
                   } else {
                     if (child.material.isMeshPhysicalMaterial === true) physical_mtl = true;
 
-                    if (child.material.aoMap && child.geometry.attributes.uv1 === undefined && child.geometry.attributes.uv !== undefined) {
-                      child.geometry.setAttribute( 'uv1', child.geometry.attributes.uv );
-                      child.material.aoMap.channel = 1;
-                    }
-
-                    set_texture_colorSpace( child.material );
                     child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+                    if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 0.5;
 
                     initial_opacity[ child.name ] = child.material.opacity;
                     initial_transparency[ child.name ] = child.material.transparent;
                     original_color[ child.name ] = new THREE.Color( child.material.color );
                     original_side[ child.name ] = child.material.side;
                     original_vertex_colors[ child.name ] = child.material.vertexColors;
-
-                    if (child.isPoints) {
-                      child.material.size = 0.3;
-                      child.sizeAttenuation = true;
-                      child.sortPoints = true;
-                    }
 
                     child.material.needsUpdate = true;
                   }
@@ -3067,7 +2997,7 @@
 
             meshes.add( child_clone );
             meshes.updateMatrixWorld( true, true );
-          } else if (child.isLineSegments) {
+          } else if (child.isLine) {
             const material = new THREE.LineBasicMaterial();
             let child_clone = new THREE.LineSegments( child.geometry, child.material || material );
 
@@ -3182,7 +3112,7 @@
         resize();
 
         Obj.traverse( function( child ) {
-          if (child.isMesh || child.isPoints || child.isLineSegments) {
+          if (child.isMesh || child.isPoints || child.isLine) {
             let length;
 
             if (child.isMesh) {
@@ -3260,7 +3190,7 @@
         }
 
         Obj.traverse( child => {
-          if (child.isLineSegments && child.geometry.type !== 'EdgesGeometry') {
+          if (child.isLine && child.geometry.type !== 'EdgesGeometry') {
             child.visible = lines_visible;
           }
 
@@ -3499,7 +3429,7 @@
         }
 
         Obj.traverse( async function( child ) {
-          if (child.isMesh || child.isPoints) {
+          if (child.isMesh || child.isPoints || child.isLine) {
             if (current_texture === -1) {
               // Remove texture
               if (Array.isArray( child.material )) {
@@ -3696,7 +3626,7 @@
         random_vertex_changed();
 
         Obj.traverse( function( child ) {
-    	    if (child.isMesh || child.isPoints) {
+    	    if (child.isMesh || child.isPoints || child.isLine) {
             if (child.isPoints) document.getElementById('btn_xtra_smooth').disabled = true;
 
             if (Array.isArray( child.material )) {
@@ -3727,7 +3657,7 @@
         }
 
         Obj.traverse( function( child ) {
-    	    if (child.isMesh || child.isPoints || child.isLineSegments) {
+    	    if (child.isMesh || child.isPoints || child.isLine) {
             if (random_vertex_colors_enabled === true) {
               current_colors[ child.name ] = child.geometry.getAttribute( 'color' );
               child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3 ) );
