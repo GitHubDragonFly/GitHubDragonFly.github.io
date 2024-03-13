@@ -3,12 +3,25 @@ import {
 	Matrix3,
 	Vector2,
 	Vector3
-} from 'three';
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/utils/TextureUtils.js";
+} from "three";
+
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/TextureUtils.js";
 
 class OBJExporter {
 
-	parse( object, filename = 'model', onDone ) {
+	parse( object, onDone, options = {} ) {
+
+		const defaultOptions = {
+			filename: 'model',
+			map_flip_required: false,
+			maxTextureSize: Infinity
+		};
+
+		options = Object.assign( defaultOptions, options );
+
+		const map_flip_required = options.map_flip_required;
+		const maxTextureSize = options.maxTextureSize;
+		const filename = options.filename;
 
 		let output = '';
 		let indexVertex = 0;
@@ -303,39 +316,34 @@ class OBJExporter {
 
 			// shortcuts
 			const vertices = geometry.getAttribute( 'position' );
-				
+			const colors = geometry.getAttribute( 'color' );
+
 			// name of the line object
 			output += 'o ' + line.name + '\n';
 
 			if ( line.material ) {
 
-				if ( line.material ) {
+				if ( line.material.name ) {
 
-					if ( line.material.name ) {
+					if ( line.material.name === '' ) {
 
-						if ( line.material.name === '' ) {
-
-							line.material.name = 'line_material_' + line_count;
-
-						} else {
-
-							line.material.name = line.material.name.replaceAll( '#', '' );
-							line.material.name = line.material.name.replaceAll( ' ', '_' );
-
-						}
+						line.material.name = 'line_material_' + line_count;
 
 					} else {
 
-						line.material[ 'name' ] = 'line_material_' + line_count;
+						line.material.name = line.material.name.replaceAll( '#', '' );
+						line.material.name = line.material.name.replaceAll( ' ', '_' );
 
 					}
 
-					output += 'usemtl ' + line.material.name + '\n';
-					materials[ line.material.name ] = line.material;
+				} else {
 
-					line_count += 1;
+					line.material[ 'name' ] = 'line_material_' + line_count;
 
 				}
+
+				output += 'usemtl ' + line.material.name + '\n';
+				materials[ line.material.name ] = line.material;
 
 				line_count += 1;
 
@@ -353,7 +361,26 @@ class OBJExporter {
 					vertex.applyMatrix4( line.matrixWorld );
 
 					// transform the vertex to export format
-					output += 'v ' + vertex.x + ' ' + vertex.y + ' ' + vertex.z + '\n';
+					output += 'v ' + vertex.x + ' ' + vertex.y + ' ' + vertex.z;
+
+					if ( colors !== undefined ) {
+
+						color.fromBufferAttribute( colors, i ).convertLinearToSRGB();
+						output += ' ' + color.r + ' ' + color.g + ' ' + color.b;
+
+					}
+
+					output += '\n';
+
+				}
+
+			}
+
+			if ( type === 'LineSegments' ) {
+
+				for ( let j = 1, k = j + 1, l = vertices.count; j < l; j += 2, k = j + 1 ) {
+
+					output += 'l ' + ( indexVertex + j ) + ' ' + ( indexVertex + k ) + '\n';
 
 				}
 
@@ -370,16 +397,6 @@ class OBJExporter {
 				}
 
 				output += '\n';
-
-			}
-
-			if ( type === 'LineSegments' ) {
-
-				for ( let j = 1, k = j + 1, l = vertices.count; j < l; j += 2, k = j + 1 ) {
-
-					output += 'l ' + ( indexVertex + j ) + ' ' + ( indexVertex + k ) + '\n';
-
-				}
 
 			}
 
@@ -483,19 +500,19 @@ class OBJExporter {
 
 			if ( child.isMesh === true ) {
 
-				parseMesh( child );
+				parseMesh( child.clone() );
 
 			}
 
 			if ( child.isLine === true || child.isLineSegments === true ) {
 
-				parseLine( child );
+				parseLine( child.clone() );
 
 			}
 
 			if ( child.isPoints === true ) {
 
-				parsePoints( child );
+				parsePoints( child.clone() );
 
 			}
 
@@ -643,7 +660,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.map, 1024 );
+							map_to_process = decompress( mat.map, maxTextureSize );
 
 						}
 
@@ -688,7 +705,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.specularMap, 1024 );
+							map_to_process = decompress( mat.specularMap, maxTextureSize );
 
 						}
 
@@ -735,7 +752,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.emissiveMap, 1024 );
+							map_to_process = decompress( mat.emissiveMap, maxTextureSize );
 
 						}
 
@@ -782,7 +799,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.bumpMap, 1024 );
+							map_to_process = decompress( mat.bumpMap, maxTextureSize );
 
 						}
 
@@ -845,7 +862,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.lightMap, 1024 );
+							map_to_process = decompress( mat.lightMap, maxTextureSize );
 
 						}
 
@@ -894,7 +911,7 @@ class OBJExporter {
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.metalnessMap, 1024 );
+								map_to_process = decompress( mat.metalnessMap, maxTextureSize );
 
 							}
 
@@ -963,7 +980,7 @@ class OBJExporter {
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.roughnessMap, 1024 );
+								map_to_process = decompress( mat.roughnessMap, maxTextureSize );
 
 							}
 
@@ -1030,7 +1047,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.displacementMap, 1024 );
+							map_to_process = decompress( mat.displacementMap, maxTextureSize );
 
 						}
 
@@ -1077,7 +1094,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.normalMap, 1024 );
+							map_to_process = decompress( mat.normalMap, maxTextureSize );
 
 						}
 
@@ -1124,7 +1141,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.alphaMap, 1024 );
+							map_to_process = decompress( mat.alphaMap, maxTextureSize );
 
 						}
 
@@ -1171,7 +1188,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.aoMap, 1024 );
+							map_to_process = decompress( mat.aoMap, maxTextureSize );
 
 						}
 
@@ -1218,7 +1235,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.anisotropyMap, 1024 );
+							map_to_process = decompress( mat.anisotropyMap, maxTextureSize );
 
 						}
 
@@ -1265,7 +1282,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.clearcoatMap, 1024 );
+							map_to_process = decompress( mat.clearcoatMap, maxTextureSize );
 
 						}
 
@@ -1312,7 +1329,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.clearcoatNormalMap, 1024 );
+							map_to_process = decompress( mat.clearcoatNormalMap, maxTextureSize );
 
 						}
 
@@ -1359,7 +1376,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.clearcoatRoughnessMap, 1024 );
+							map_to_process = decompress( mat.clearcoatRoughnessMap, maxTextureSize );
 
 						}
 
@@ -1406,7 +1423,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.iridescenceMap, 1024 );
+							map_to_process = decompress( mat.iridescenceMap, maxTextureSize );
 
 						}
 
@@ -1453,7 +1470,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.iridescenceThicknessMap, 1024 );
+							map_to_process = decompress( mat.iridescenceThicknessMap, maxTextureSize );
 
 						}
 
@@ -1500,7 +1517,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.sheenColorMap, 1024 );
+							map_to_process = decompress( mat.sheenColorMap, maxTextureSize );
 
 						}
 
@@ -1547,7 +1564,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.sheenRoughnessMap, 1024 );
+							map_to_process = decompress( mat.sheenRoughnessMap, maxTextureSize );
 
 						}
 
@@ -1594,7 +1611,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.specularIntensityMap, 1024 );
+							map_to_process = decompress( mat.specularIntensityMap, maxTextureSize );
 
 						}
 
@@ -1641,7 +1658,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.specularColorMap, 1024 );
+							map_to_process = decompress( mat.specularColorMap, maxTextureSize );
 
 						}
 
@@ -1688,7 +1705,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.thicknessMap, 1024 );
+							map_to_process = decompress( mat.thicknessMap, maxTextureSize );
 
 						}
 
@@ -1735,7 +1752,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.transmissionMap, 1024 );
+							map_to_process = decompress( mat.transmissionMap, maxTextureSize );
 
 						}
 
@@ -1817,12 +1834,27 @@ class OBJExporter {
 			let canvas, ctx;
 
 			canvas = canvas || document.createElement( 'canvas' );
+
+			canvas.width = Math.min( image.width, maxTextureSize );
+			canvas.height = Math.min( image.height, maxTextureSize );
+
 			ctx = ctx || canvas.getContext( '2d' );
-			canvas.width = image.width;
-			canvas.height = image.height;
+
+			if ( map_flip_required === true ) {
+
+				// Flip image vertically
+
+				ctx.translate( 0, canvas.height );
+				ctx.scale( 1, - 1 );
+
+			}
 
 			// this seems to also work fine for exporting TGA images as PNG
-			if ( image.data && image.data.constructor === Uint8Array ) {
+			if ( image instanceof ImageData ) {
+
+				ctx.putImageData( image, 0, 0 );
+
+			} else if ( image.data && image.data.constructor === Uint8Array ) {
 
 				let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
 
@@ -1830,7 +1862,7 @@ class OBJExporter {
 
 			} else {
 
-				ctx.drawImage( image, 0, 0 );
+				ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
 
 			}
 
