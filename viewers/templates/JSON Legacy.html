@@ -45,6 +45,7 @@
     <script src="../static/js/exporters/OBJExporter.js" defer></script>
     <script src="../static/js/exporters/GLTFExporter.js" defer></script>
     <script src="../static/js/exporters/USDZExporter.js" defer></script>
+    <script src="../static/js/exporters/ColladaExporter.js" defer></script>
     <script src="../static/js/utils/BufferGeometryUtils.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.111.0/examples/js/loaders/GLTFLoader.js" defer></script>
 
@@ -318,6 +319,7 @@
         <select title="Export" id="export_names" style="min-width: 90px;" disabled>
           <option title="Export Formats" value="export" selected disabled>Export</option>
           <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
+          <option title="DAE - Collada Format regular export" value="dae" onclick="export_dae();">DAE</option>
           <option title="GLB - GL Transmission Format binary regular export" value="glb" onclick="export_gltf( true );">GLB</option>
           <option title="GLB - GL Transmission Format binary regular export with DRACO compression" value="glbdraco" onclick="export_gltf( true, true );">GLB_d</option>
           <option title="GLB - GL Transmission Format binary regular export with DRACO and WEBP texture compression" value="glbdracowebp" onclick="export_gltf( true, true, false, true );">GLB_dw</option>
@@ -845,6 +847,75 @@
           zip.file( filename + '.stl', blob );
 
           await process_zip( '_STL' );
+        }
+      }
+
+      async function export_dae() {
+        if (mesh) {
+          start_export();
+
+          await new Promise( resolve => setTimeout( resolve, 20 ) );
+
+          let dae_exporter = new THREE.ColladaExporter( manager );
+
+          let result = await dae_exporter.parse( mesh );
+
+          zip.file( filename + '.dae', result.data );
+
+          if (result.textures && result.textures.length > 0) {
+            let processed_index = 0;
+
+            if (tex_res !== Infinity || tex_flip === true) {
+              result.textures.forEach( tex => {
+                let blob = new Blob( [ tex.data ], { type: 'image/png' } );
+
+                let img = new Image();
+
+                img.onload = async function() {
+                  let canvas = document.createElement('canvas');
+
+                  canvas.width = Math.min( img.naturalWidth, tex_res );
+                  canvas.height = Math.min( img.naturalHeight, tex_res );
+
+                  const ctx = canvas.getContext( '2d' );
+
+                  if (tex_flip === true) {
+                    // Flip image vertically
+                    ctx.translate( 0, canvas.height );
+                    ctx.scale( 1, -1 );
+                  }
+
+                  ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                  await new Promise( resolve => canvas.toBlob( resolve ) ).then( async function( canvas_blob ) {
+                    zip.file( `${ tex.name }.${ tex.ext }`, canvas_blob );
+
+                    if (processed_index === result.textures.length - 1) {
+                      let str = '_DAE' + (tex_flip === true ? '_Y' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '');
+                      await process_zip( str );
+                    }
+                  });
+
+                  processed_index += 1;
+                }
+
+                img.src = URL.createObjectURL( blob );
+                URL.revokeObjectURL( blob );
+              });
+            } else {
+              result.textures.forEach( async tex => {
+                let blob = new Blob( [ tex.data ], { type: 'image/png' } );
+
+                zip.file( `${ tex.name }.${ tex.ext }`, blob );
+
+                if (processed_index === result.textures.length - 1) await process_zip( '_DAE' );
+
+                processed_index += 1;
+              });
+            }
+          } else {
+            await process_zip( '_DAE' );
+          }
         }
       }
 
