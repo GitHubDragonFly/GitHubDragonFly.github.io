@@ -1,9 +1,14 @@
 import {
 	Color,
+	BufferAttribute,
 	DoubleSide,
+	InterleavedBufferAttribute,
 	Matrix4,
 	MeshBasicMaterial
 } from "three";
+
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/TextureUtils.js";
+import { deinterleaveAttribute } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/BufferGeometryUtils.js";
 
 /**
  * https://github.com/gkjohnson/collada-exporter-js
@@ -96,8 +101,9 @@ class ColladaExporter {
 
 			} ).join( '\n' );
 
-		} // Convert an image into a png format for saving
+		}
 
+		// Convert an image into a png format for saving
 
 		function base64ToBuffer( str ) {
 
@@ -124,99 +130,121 @@ class ColladaExporter {
 			canvas.height = image.height;
 
 			// this seems to work fine for exporting TGA images as PNG but unflipped
-			if ( image.data && image.data.constructor === Uint8Array ) {
+			if ( image instanceof ImageData ) {
 
-				let imgData = ctx.createImageData( image.width, image.height );
+				ctx.putImageData( image, 0, 0 );
 
-				for (let i = 0; i < imgData.data.length; i += 4) {
+			} else if ( image.data && image.data.constructor === Uint8Array ) {
 
-					imgData.data[ i + 0 ] = image.data[ i + 0 ];
-					  imgData.data[ i + 1 ] = image.data[ i + 1 ];
-					  imgData.data[ i + 2 ] = image.data[ i + 2 ];
-					  imgData.data[ i + 3 ] = image.data[ i + 3 ];
-
-				}
+				let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
 
 				ctx.putImageData( imgData, 0, 0 );
 
 			} else {
 
-				ctx.drawImage( image, 0, 0 ); // Get the base64 encoded data
+				ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
 
 			}
 
-			const base64data = canvas.toDataURL( `image/${ext}`, 1 ).replace( /^data:image\/(png|jpg);base64,/, '' ); // Convert to a uint8 array
+			// Get the base64 encoded data
+			const base64data = canvas.toDataURL( `image/${ext}`, 1 ).replace( /^data:image\/(png|jpg);base64,/, '' );
 
+			// Convert to a uint8 array
 			return base64ToBuffer( base64data );
 
-		} // gets the attribute array. Generate a new array if the attribute is interleaved
+		}
 
+		function deinterleave( geometry, attribute = 'color' ) {
 
-		const getFuncs = [ 'getX', 'getY', 'getZ', 'getW' ];
-		const tempColor = new Color();
+			const attr = geometry.attributes[ attribute ];
+			const itemSize = attr.itemSize;
+			const offset = attr.offset;
 
-		function attrBufferToArray( attr, isColor = false ) {
+			const data = attr.data;
 
-			if ( isColor ) {
+			if ( data === undefined ) return [];
 
-				// convert the colors to srgb before export
-				// colors are always written as floats
-				const arr = new Float32Array( attr.count * 3 );
+			let iBA = new InterleavedBufferAttribute( data, itemSize, offset );
 
-				for ( let i = 0, l = attr.count; i < l; i ++ ) {
+			let attr_items = deinterleaveAttribute( iBA );
 
-					tempColor.fromBufferAttribute( attr, i ).convertLinearToSRGB();
-					arr[ 3 * i + 0 ] = tempColor.r;
-					arr[ 3 * i + 1 ] = tempColor.g;
-					arr[ 3 * i + 2 ] = tempColor.b;
+			let temp_array = [];
 
-				}
+			for ( let i = 0, l = attr_items.array.length; i < l; i ++ ) {
 
-				return arr;
+				temp_array[ i ] = isNaN( attr_items.array[ i ] ) ? 0 : attr_items.array[ i ]; // avoid NaN values
 
-			} else if ( attr.isInterleavedBufferAttribute ) {
+			}
 
-				// use the typed array constructor to save on memory
-				const arr = new attr.array.constructor( attr.count * attr.itemSize );
-				const size = attr.itemSize;
+			return new BufferAttribute( new Float32Array( temp_array ), itemSize );
 
-				for ( let i = 0, l = attr.count; i < l; i ++ ) {
+		}
 
-					for ( let j = 0; j < size; j ++ ) {
+		function interleaved_buffer_attribute_check( geo ) {
 
-						arr[ i * size + j ] = attr[ getFuncs[ j ] ]( i );
+			const attribute_array = [ 'position', 'normal', 'color', 'tangent', 'uv', 'uv1', 'uv2', 'uv3' ];
+
+			for (const attribute of attribute_array) {
+
+				if ( geo.attributes[ attribute ] && geo.attributes[ attribute ].isInterleavedBufferAttribute ) {
+
+					if ( geo.attributes[ attribute ].data ) {
+
+						if ( geo.attributes[ attribute ].data.array ) {
+
+							let geometry_attribute_array = deinterleave( geo, attribute );
+
+							geo.deleteAttribute( attribute );
+							geo.setAttribute( attribute, geometry_attribute_array );
+
+						}
 
 					}
 
+				} else if ( geo.attributes[ attribute ] ) {
+
+					const itemSize = geo.attributes[ attribute ].itemSize;
+					const arr = geo.attributes[ attribute ].array;
+
+					let temp_array = [];
+
+					for ( let i = 0, l = arr.length; i < l; i ++ ) {
+
+						temp_array[ i ] = isNaN( arr[ i ] ) ? 0 : arr[ i ]; // avoid NaN values
+
+					}
+
+					geo.deleteAttribute( attribute );
+					geo.setAttribute( attribute, new BufferAttribute( new Float32Array( temp_array ), itemSize ) );
+
 				}
-
-				return arr;
-
-			} else {
-
-				return attr.array;
 
 			}
 
-		} // Returns an array of the same type starting at the `st` index,
-		// and `ct` length
+			return geo;
 
+		}
+
+		// Returns an array of the same type starting at the `st` index,
+		// and `ct` length
 
 		function subArray( arr, st, ct ) {
 
 			if ( Array.isArray( arr ) ) return arr.slice( st, st + ct ); else return new arr.constructor( arr.buffer, st * arr.BYTES_PER_ELEMENT, ct );
 
-		} // Returns the string for a geometry's attribute
+		}
 
+		// Returns the string for a geometry's attribute
 
-		function getAttribute( attr, name, params, type, isColor = false ) {
+		function getAttribute( attr, name, params, type ) {
 
-			const array = attrBufferToArray( attr, isColor );
+			const array = attr.array;
 			const res = `<source id="${name}">` + `<float_array id="${name}-array" count="${array.length}">` + array.join( ' ' ) + '</float_array>' + '<technique_common>' + `<accessor source="#${name}-array" count="${Math.floor( array.length / attr.itemSize )}" stride="${attr.itemSize}">` + params.map( n => `<param name="${n}" type="${type}" />` ).join( '' ) + '</accessor>' + '</technique_common>' + '</source>';
 			return res;
 
-		} // Returns the string for a node's transform information
+		}
 
+		// Returns the string for a node's transform information
 
 		let transMat;
 
@@ -230,9 +258,10 @@ class ColladaExporter {
 			transMat.transpose();
 			return `<matrix>${transMat.toArray().join( ' ' )}</matrix>`;
 
-		} // Process the given piece of geometry into the geometry library
-		// Returns the mesh id
+		}
 
+		// Process the given piece of geometry into the geometry library
+		// Returns the mesh id
 
 		function processGeometry( g ) {
 
@@ -241,7 +270,7 @@ class ColladaExporter {
 			if ( ! info ) {
 
 				// convert the geometry to bufferGeometry if it isn't already
-				const bufferGeometry = g;
+				const bufferGeometry = interleaved_buffer_attribute_check( g.clone() );
 
 				if ( bufferGeometry.isBufferGeometry !== true ) {
 
@@ -301,7 +330,7 @@ class ColladaExporter {
 
 					// colors are always written as floats
 					const colName = `${meshid}-color`;
-					gnode += getAttribute( bufferGeometry.attributes.color, colName, [ 'R', 'G', 'B' ], 'float', true );
+					gnode += getAttribute( bufferGeometry.attributes.color, colName, [ 'R', 'G', 'B' ], 'float' );
 					triangleInputs += `<input semantic="COLOR" source="#${colName}" offset="0" />`;
 
 				}
@@ -310,7 +339,7 @@ class ColladaExporter {
 
 				if ( bufferGeometry.index ) {
 
-					indexArray = attrBufferToArray( bufferGeometry.index );
+					indexArray = bufferGeometry.index.array;
 
 				} else {
 
@@ -350,6 +379,12 @@ class ColladaExporter {
 
 		function processTexture( tex ) {
 
+			if ( tex.isCompressedTexture === true ) {
+
+				tex = decompress( tex.clone() );
+
+			}
+
 			let texid = imageMap.get( tex );
 
 			if ( texid == null ) {
@@ -385,9 +420,10 @@ class ColladaExporter {
 
 			return texid;
 
-		} // Process the given material into the material and effect libraries
-		// Returns the material id
+		}
 
+		// Process the given material into the material and effect libraries
+		// Returns the material id
 
 		function processMaterial( m ) {
 
@@ -396,6 +432,7 @@ class ColladaExporter {
 			if ( matid == null ) {
 
 				matid = `Mat${libraryEffects.length + 1}`;
+
 				let type = 'phong';
 
 				if ( m.isMeshLambertMaterial === true ) {
@@ -426,9 +463,11 @@ class ColladaExporter {
 				const specular = m.specular ? m.specular.clone() : new Color( 1, 1, 1 );
 				const shininess = m.shininess || 0;
 				const reflectivity = m.reflectivity || 0;
-				emissive.convertLinearToSRGB();
-				specular.convertLinearToSRGB();
-				diffuse.convertLinearToSRGB(); // Do not export and alpha map for the reasons mentioned in issue (#13792)
+				//emissive.convertLinearToSRGB();
+				//specular.convertLinearToSRGB();
+				//diffuse.convertLinearToSRGB();
+
+				// Do not export and alpha map for the reasons mentioned in issue (#13792)
 				// in three.js alpha maps are black and white, but collada expects the alpha
 				// channel to specify the transparency
 
@@ -460,11 +499,11 @@ class ColladaExporter {
 			let node = `<node name="${o.name}">`;
 			node += getTransform( o );
 
-			if ( ( o.isMesh === true || o.isPoints === true ) && o.geometry !== null ) {
+			if ( ( o.isMesh === true || o.isPoints === true ) && o.geometry ) {
 
 				// function returns the id associated with the mesh and a "BufferGeometry" version
 				// of the geometry in case it's not a geometry.
-				const geomInfo = processGeometry( o.geometry );
+				const geomInfo = processGeometry( o.geometry.clone() );
 				const meshid = geomInfo.meshid;
 				const geometry = geomInfo.bufferGeometry; // ids of the materials to bind to the geometry
 
@@ -473,7 +512,7 @@ class ColladaExporter {
 				// If the amount of subgroups is greater than the materials, than reuse
 				// the materials.
 
-				const mat = o.material || new MeshBasicMaterial();
+				const mat = o.material ? o.material : new MeshBasicMaterial();
 				const materials = Array.isArray( mat ) ? mat : [ mat ];
 
 				if ( geometry.groups.length > materials.length ) {
