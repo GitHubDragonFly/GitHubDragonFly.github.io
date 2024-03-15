@@ -13,7 +13,8 @@
         "imports": {
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions",
-          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions"
+          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions",
+          "ktx2-encoder": "https://esm.sh/ktx2-encoder"
         }
       }
     </script>
@@ -164,6 +165,7 @@
 
     <!-- Using Google's Model Viewer element: https://github.com/google/model-viewer -->
     <!-- Using glTF Transform for DRACO / MESHOPT / WEBP compression: https://gltf-transform.dev -->
+    <!-- Using experimental ktx2-encoder for KTX2 compression: https://npm.io/package/ktx2-encoder -->
 
     <title>GM Viewer</title>
   </head>
@@ -184,10 +186,8 @@
         <select id="export_names" title="Export" style="min-width: 90px; margin-left: 3px;" disabled>
           <option title="Export Formats" value="export" selected disabled>Export</option>
           <option title="GLB - GL Transmission Format binary regular export" value="glb" onclick="export_glb()">GLB</option>
-          <option title="GLB - GL Transmission Format binary regular export with DRACO compression" value="glbd" onclick="export_glb( true, false, false )">GLB_d</option>
-          <option title="GLB - GL Transmission Format binary regular export with DRACO and WEBP texture compression" value="glbdw" onclick="export_glb( true, false, true );">GLB_dw</option>
-          <option title="GLB - GL Transmission Format binary regular export with Meshopt compression" value="glbm" onclick="export_glb( false, true, false )">GLB_m</option>
-          <option title="GLB - GL Transmission Format binary regular export with Meshopt and WEBP texture compression" value="glbmw" onclick="export_glb( false, true, true );">GLB_mw</option>
+          <option title="GLB - GL Transmission Format binary regular export with DRACO and optionally texture compression" value="glbd" onclick="export_glb( true, false )">GLB_d</option>
+          <option title="GLB - GL Transmission Format binary regular export with Meshopt and optionally texture compression" value="glbm" onclick="export_glb( false, true )">GLB_m</option>
           <option title="GLTF - GL Transmission Format ascii regular export" value="gltf" onclick="export_gltf()">GLTF</option>
         </select>
         <select title="Maximum Exported Texture Resolution" id="export_tex_res" style="min-width: 60px;" disabled>
@@ -197,6 +197,11 @@
           <option title="1k (1024x1024)" value="1k" onclick="tex_res = 1024;">1k</option>
           <option title="2k (2048x2048)" value="2k" onclick="tex_res = 2048;">2k</option>
           <option title="4k (4096x4096)" value="4k" onclick="tex_res = 4096;">4k</option>
+        </select>
+        <select title="Exported Texture Format" id="export_tex_fmt" style="min-width: 60px;" disabled>
+          <option title="Original" value="original" onclick="tex_fmt = '';" selected>None</option>
+          <option title="WEBP" value="webp" onclick="tex_fmt = 'webp';">WEBP</option>
+          <option title="KTX2" value="ktx2" onclick="tex_fmt = 'ktx2';">KTX2</option>
         </select>
         <button id="btn_full_screen" title="Full Screen" onclick="full_screen()" style="float: inline-end; min-width: 24px;"><p class="full_screen"></p></button>
       </div>
@@ -263,7 +268,7 @@
 
       var gltf_filenames, usdz_filenames, models, current_model = 0;
       var filename, selected_file, other_files, selected_url_file = '';
-      var url_displayed = false, url_loading = false, tex_res;
+      var url_displayed = false, url_loading = false, tex_res, tex_fmt;
       var ww = window.innerWidth, wh = window.innerHeight, link;
       var variants, current_variant = 0, variants_available = false;
       var animations, current_animation = 0, animation_running = false;
@@ -293,7 +298,7 @@
         link = undefined;
       }
 
-      async function export_glb( draco = false, meshopt = false, webp = false ) {
+      async function export_glb( draco = false, meshopt = false ) {
         document.getElementById('export_names').selectedIndex = 0;
 
         if (!link) {
@@ -309,13 +314,15 @@
 
         let glTF = await modelViewer.exportScene( options );
 
+        let glTF_array;
+
         if ( draco === true || meshopt === true || tex_res !== Infinity ) {
-          glTF = await glTF.arrayBuffer();
-          glTF = new Uint8Array( glTF );
-          file_name += (draco === true ? ' DRACO' : (meshopt === true ? ' MESHOPT' : '')) + (webp === true ? ' WEBP' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '');
+          const glTF_arrayBuffer = await glTF.arrayBuffer();
+          glTF_array = new Uint8Array( glTF_arrayBuffer );
+          file_name += (draco === true ? ' DRACO' : (meshopt === true ? ' MESHOPT' : '')) + (tex_fmt !== '' ? ' ' + tex_fmt : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '');
         }
 
-        let file = new File( [ draco === true ? await draco_compress( glTF, webp ) : (meshopt === true ? await meshopt_compress( glTF, webp ) : glTF) ], file_name + '.glb' );
+        let file = new File( [ draco === true ? await draco_compress( glTF_array ) : (meshopt === true ? await meshopt_compress( glTF_array ) : glTF) ], file_name + '.glb' );
 
         link.download = file.name;
         link.href = URL.createObjectURL( file );
@@ -328,10 +335,11 @@
 
       /* Encode with draco compression - geometry */
 
-      async function draco_compress( arrayBuffer, webp = false ) {
+      async function draco_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
         const { compressTexture } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+        const { KHRONOS_EXTENSIONS, KHRTextureBasisu, KHRDracoMeshCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+        const { encodeToKTX2 } = await import( "ktx2-encoder" );
 
         const io = new WebIO();
 
@@ -343,14 +351,23 @@
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
-        if (webp === true) {
+        if (tex_fmt !== '') {
           const textures = doc.getRoot().listTextures();
 
           for (const texture of textures) {
-            if (tex_res === Infinity) {
-              await compressTexture( texture, { targetFormat: 'webp' } );
+            if (tex_fmt.startsWith( 'ktx' )) {
+              await encodeToKTX2( texture.getImage(), {} )
+              .then( ktx_texture => {
+                texture.setImage( ktx_texture );
+                texture.setMimeType( 'image/ktx2' );
+                doc.createExtension( KHRTextureBasisu ).setRequired( true );
+              });
             } else {
-              await compressTexture( texture, { targetFormat: 'webp', resize: [ tex_res, tex_res ] } );
+              if (tex_res === Infinity) {
+                await compressTexture( texture, { targetFormat: tex_fmt } );
+              } else {
+                await compressTexture( texture, { targetFormat: tex_fmt, resize: [ tex_res, tex_res ] } );
+              }
             }
           }
         }
@@ -369,10 +386,11 @@
 
       /* Encode with meshopt compression - geometry, morphs, animations */
 
-      async function meshopt_compress( arrayBuffer, webp = false ) {
+      async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
         const { meshopt, compressTexture } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
+        const { KHRONOS_EXTENSIONS, KHRTextureBasisu, EXTMeshGPUInstancing, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
+        const { encodeToKTX2 } = await import( "ktx2-encoder" );
 
         await MeshoptEncoder.ready;
 
@@ -388,14 +406,23 @@
 
         await doc.transform( meshopt( { encoder: MeshoptEncoder, level: 'high' } ) );
 
-        if (webp === true) {
+        if (tex_fmt !== '') {
           const textures = doc.getRoot().listTextures();
 
           for (const texture of textures) {
-            if (tex_res === Infinity) {
-              await compressTexture( texture, { targetFormat: 'webp' } );
+            if (tex_fmt.startsWith( 'ktx' )) {
+              await encodeToKTX2( texture.getImage(), {} )
+              .then( ktx_texture => {
+                texture.setImage( ktx_texture );
+                texture.setMimeType( 'image/ktx2' );
+                doc.createExtension( KHRTextureBasisu ).setRequired( true );
+              });
             } else {
-              await compressTexture( texture, { targetFormat: 'webp', resize: [ tex_res, tex_res ] } );
+              if (tex_res === Infinity) {
+                await compressTexture( texture, { targetFormat: tex_fmt } );
+              } else {
+                await compressTexture( texture, { targetFormat: tex_fmt, resize: [ tex_res, tex_res ] } );
+              }
             }
           }
         }
@@ -421,6 +448,7 @@
         animations = {};
         variants = {};
         filename = null;
+        tex_fmt = '';
         tex_res = Infinity;
         gltf_filenames = {};
         usdz_filenames = {};
@@ -864,6 +892,7 @@
         document.getElementById('btn_variants').style.backgroundColor = 'transparent';
         document.getElementById('btn_variants').disabled = true;
         document.getElementById('btn_variants').innerHTML = 'V';
+        document.getElementById('export_tex_fmt').selectedIndex = 0;
         document.getElementById('export_tex_res').selectedIndex = 0;
 
         if (page_loading) {
@@ -885,6 +914,7 @@
         document.getElementById('equi').disabled = disable;
         document.getElementById('rotate').disabled = disable;
         document.getElementById('export_names').disabled = disable;
+        document.getElementById('export_tex_fmt').disabled = disable;
         document.getElementById('export_tex_res').disabled = disable;
 
         if (document.getElementById('equi').checked === false) {
@@ -898,10 +928,12 @@
 
     <script>
       async function document_ready() {
+        $('#export_tex_fmt').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#export_tex_res').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
 
         if(navigator.userAgent.indexOf('Chrome') !== -1 || navigator.userAgent.indexOf('Safari') !== -1) {
+          $('#export_tex_fmt').change( function() { $(this).children(':selected').click(); });
           $('#export_tex_res').change( function() { $(this).children(':selected').click(); });
           $('#export_names').change( function() { $(this).children(':selected').click(); });
         }
