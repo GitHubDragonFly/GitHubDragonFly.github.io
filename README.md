@@ -14,7 +14,7 @@ Originally designed for a desktop but has been adapted to also show properly on 
 
 The `M3D` button, which stands for `Mobile 3D`, will open a page to access stripped down and simplified version of mobile friendly 3D viewers:
  - Almost all viewers are currently available and should work fine on desktop devices as well
- - Mobile `Quick Viewer` and `GLTF Viewer` also include some export options and more features
+ - Mobile `Quick Viewer`, `GM Viewer` and `GLTF Viewer` also include some export options and more features
  - All mobile testing was done on an Android mobile phone and an iPad
  - Consider bookmarking the [mobile main page](https://githubdragonfly.github.io/viewers/templates/Mobile/index.html) for continuous access to all viewers
  - Consider bookmarking any single viewer's link for continuous access to that particular viewer
@@ -237,9 +237,10 @@ Number Type Converter
       - Delete all other copies of that same texture
       - This bug might eventually get fixed
     - PLY exporter will include vertex colors and will convert material color to vertex color if the material has no texture
-  - GLB exports, where applicable, can additionally have either DRACO or DRACO+WEBP or MESHOPT or MESHOPT+WEBP compression applied by using [glTF Transform](https://gltf-transform.dev):
+  - GLB exports, where applicable, can additionally have either DRACO or MESHOPT and optional WEBP texture compression available by using [glTF Transform](https://gltf-transform.dev):
     - These exports are marked as either of: `GLB_d` `GLB_dw` `GLB_m` `GLB_mw` (for regular exports) `GLBx_d` `GLBx_dw` `GLBx_m` `GLBx_mw` (for alternative exports)
     - WEBP exported texture resolution is fixed at 1k in mobile GLTF Viewer but is selectable in desktop viewers (256, 512, 1k, 2k, 4k)
+    - GM Viewer additionally offers KTX2 texture compression by using [ktx2-encoder](https://www.npmjs.com/package/ktx2-encoder)
     - Seem to work fine in general but might not be good for some rare models
   - Some viewers also offer alternative exports marked as `OBJx` `DAEx` `GLTFx` `USDZx`:
     - Should be tried either out of curiosity or if their regular export counterparts don't produce good results
