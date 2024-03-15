@@ -708,7 +708,7 @@ class Rhino3dmExporter {
 
 		let attr_items = deinterleaveAttribute( iBA );
 
-		let temp_array = [];
+		let temp_array = Array( attr_items.array.length );
 
 		for ( let i = 0, l = attr_items.array.length; i < l; i ++ ) {
 
@@ -747,7 +747,7 @@ class Rhino3dmExporter {
 
 					const itemSize = geo.attributes[ attribute ].itemSize;
 					const arr = geo.attributes[ attribute ].array;
-					const temp_array = [];
+					const temp_array = Array( arr.length );
 
 					for ( let i = 0, l = arr.length; i < l; i ++ ) {
 
