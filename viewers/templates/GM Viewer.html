@@ -185,9 +185,9 @@
         <label title="Auto Rotate"><input type="checkbox" id="rotate" onchange="set_rotation();" disabled />R</label>
         <select id="export_names" title="Export" style="min-width: 80px; margin-left: 3px;" disabled>
           <option title="Export Formats" value="export" selected disabled>Export</option>
-          <option title="GLB - GL Transmission Format binary regular export" value="glb" onclick="export_glb()">GLB</option>
-          <option title="GLB - GL Transmission Format binary regular export with DRACO and optionally texture compression" value="glbd" onclick="export_glb( true, false )">GLB_d</option>
-          <option title="GLB - GL Transmission Format binary regular export with Meshopt and optionally texture compression" value="glbm" onclick="export_glb( false, true )">GLB_m</option>
+          <option title="GLB - GL Transmission Format binary regular export with optional texture compression" value="glb" onclick="export_glb()">GLB</option>
+          <option title="GLB - GL Transmission Format binary regular export with DRACO and optional texture compression" value="glbd" onclick="export_glb( true, false )">GLB_d</option>
+          <option title="GLB - GL Transmission Format binary regular export with Meshopt and optional texture compression" value="glbm" onclick="export_glb( false, true )">GLB_m</option>
           <option title="GLTF - GL Transmission Format ascii regular export" value="gltf" onclick="export_gltf()">GLTF</option>
         </select>
         <select title="Maximum Exported Texture Resolution" id="export_tex_res" disabled>
@@ -325,13 +325,13 @@
 
         let glTF_array;
 
-        if ( draco === true || meshopt === true || tex_res !== Infinity ) {
+        if ( draco === true || meshopt === true || tex_res !== Infinity || tex_fmt !== '' ) {
           const glTF_arrayBuffer = await glTF.arrayBuffer();
           glTF_array = new Uint8Array( glTF_arrayBuffer );
           file_name += (draco === true ? ' DRACO' : (meshopt === true ? ' MESHOPT' : '')) + (tex_fmt !== '' ? ' ' + tex_fmt : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '');
         }
 
-        let file = new File( [ draco === true ? await draco_compress( glTF_array ) : (meshopt === true ? await meshopt_compress( glTF_array ) : glTF) ], file_name + '.glb' );
+        let file = new File( [ draco === true ? await draco_compress( glTF_array ) : (meshopt === true ? await meshopt_compress( glTF_array ) : ( tex_fmt !== '' ? await texture_compress( glTF_array ) : glTF)) ], file_name + '.glb' );
 
         link.download = file.name;
         link.href = URL.createObjectURL( file );
@@ -346,7 +346,7 @@
       async function draco_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
         const { compressTexture } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, KHRTextureBasisu, KHRDracoMeshCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+        const { KHRONOS_EXTENSIONS, KHRTextureBasisu, EXTTextureWebP, KHRDracoMeshCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
         const { encodeToKTX2 } = await import( "ktx2-encoder" );
 
         const io = new WebIO();
@@ -371,11 +371,9 @@
                 doc.createExtension( KHRTextureBasisu ).setRequired( true );
               });
             } else {
-              if (tex_res === Infinity) {
-                await compressTexture( texture, { targetFormat: tex_fmt } );
-              } else {
-                await compressTexture( texture, { targetFormat: tex_fmt, resize: [ tex_res, tex_res ] } );
-              }
+              await compressTexture( texture, { targetFormat: tex_fmt } );
+              doc.createExtension( EXTTextureWebP ).setRequired( true );
+              io.registerExtensions( [ EXTTextureWebP ] );
             }
           }
         }
@@ -397,7 +395,7 @@
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
         const { meshopt, compressTexture } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, KHRTextureBasisu, EXTMeshGPUInstancing, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
+        const { KHRONOS_EXTENSIONS, KHRTextureBasisu, EXTTextureWebP, EXTMeshGPUInstancing, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
         const { encodeToKTX2 } = await import( "ktx2-encoder" );
 
         await MeshoptEncoder.ready;
@@ -426,11 +424,9 @@
                 doc.createExtension( KHRTextureBasisu ).setRequired( true );
               });
             } else {
-              if (tex_res === Infinity) {
-                await compressTexture( texture, { targetFormat: tex_fmt } );
-              } else {
-                await compressTexture( texture, { targetFormat: tex_fmt, resize: [ tex_res, tex_res ] } );
-              }
+              await compressTexture( texture, { targetFormat: tex_fmt } );
+              doc.createExtension( EXTTextureWebP ).setRequired( true );
+              io.registerExtensions( [ EXTTextureWebP ] );
             }
           }
         }
@@ -442,6 +438,45 @@
         });
 
         io.registerExtensions( [ EXTMeshoptCompression ] );
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        return compressedArrayBuffer;
+      }
+
+      /* Encode textures only with either of WEBP or KTX2 compression */
+
+      async function texture_compress( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { compressTexture } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, KHRTextureBasisu, EXTTextureWebP, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+        const { encodeToKTX2 } = await import( "ktx2-encoder" );
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        if (tex_fmt !== '') {
+          const textures = doc.getRoot().listTextures();
+
+          for (const texture of textures) {
+            if (tex_fmt.startsWith( 'ktx' )) {
+              await encodeToKTX2( texture.getImage(), {} )
+              .then( ktx_texture => {
+                texture.setImage( ktx_texture );
+                texture.setMimeType( 'image/ktx2' );
+                doc.createExtension( KHRTextureBasisu ).setRequired( true );
+              });
+            } else {
+              await compressTexture( texture, { targetFormat: tex_fmt } );
+              doc.createExtension( EXTTextureWebP ).setRequired( true );
+              io.registerExtensions( [ EXTTextureWebP ] );
+            }
+          }
+        }
 
         const compressedArrayBuffer = await io.writeBinary( doc );
 
