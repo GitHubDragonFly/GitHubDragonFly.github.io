@@ -193,8 +193,9 @@
         <select title="Exported Texture Format" id="export_tex_fmt" disabled>
           <option title="Original" value="original" onclick="tex_fmt = '';" selected>None</option>
           <option title="WEBP" value="webp" onclick="tex_fmt = 'webp';">WEBP</option>
-          <option title="KTX2 ETC1S" value="ktx2e" onclick="tex_fmt = 'ktx2e';">KTX2e</option>
-          <option title="KTX2 UASTC" value="ktx2u" onclick="tex_fmt = 'ktx2u';">KTX2u</option>
+          <option title="KTX2 ETC1S + UASTC" value="ktx2" onclick="tex_fmt = 'ktx2';">KTX2</option>
+          <option title="KTX2 ETC1S Only" value="ktx2e" onclick="tex_fmt = 'ktx2e';">KTX2e</option>
+          <option title="KTX2 UASTC Only" value="ktx2u" onclick="tex_fmt = 'ktx2u';">KTX2u</option>
         </select>
         <label for="back_color" title="Background Color">BG</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
@@ -312,9 +313,8 @@
 
       async function draco_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { compressTexture } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, KHRTextureBasisu, EXTTextureWebP, KHRDracoMeshCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
-        const { encodeToKTX2 } = await import( "ktx2-encoder" );
+        const { dedup, prune } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
 
         const io = new WebIO();
 
@@ -326,18 +326,81 @@
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
+        await doc.transform( prune(), dedup() );
+
         if (tex_fmt !== '') {
           const textures = doc.getRoot().listTextures();
 
-          for (const texture of textures) {
-            if (tex_fmt.startsWith( 'ktx' )) {
-              await encodeToKTX2( texture.getImage(), { isUASTC: tex_fmt.endsWith( 'u' ) === true } )
-              .then( ktx_texture => {
-                texture.setImage( ktx_texture );
-                texture.setMimeType( 'image/ktx2' );
-                doc.createExtension( KHRTextureBasisu ).setRequired( true );
-              });
-            } else {
+          if (tex_fmt.startsWith( 'ktx' )) {
+            const { listTextureSlots } = await import( "@gltf-transform/functions" );
+            const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
+            const { encodeToKTX2 } = await import( "ktx2-encoder" );
+
+            const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+            for (const texture of textures) {
+              const slots = await listTextureSlots( texture );
+              const size = await texture.getSize();
+
+              const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
+
+              // check if texture dimensions are multiples of 4
+              const width_p2 = size[ 0 ] % 4 === 0;
+              const height_p2 = size[ 1 ] % 4 === 0;
+
+              if (!width_p2 || !height_p2) {
+                // this should produce minimal scale down
+                const width = width_p2 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+                const height = height_p2 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
+
+                const file_reader = new FileReader();
+
+                file_reader.onload = function( e ) {
+                  const img = new Image();
+
+                  img.onload = async function() {
+                    const canvas = document.createElement('canvas');
+
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                    const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                    const a2b = atob( base64data );
+                    const buff = new Uint8Array( a2b.length );
+
+                    for ( let i = 0, l = buff.length; i < l; i ++ ) {
+                      buff[ i ] = a2b.charCodeAt( i );
+                    }
+
+                    await encodeToKTX2( buff, { isUASTC: uastc } )
+                    .then( ktx_texture => {
+                      texture.setImage( ktx_texture );
+                      texture.setMimeType( 'image/ktx2' );
+                      doc.createExtension( KHRTextureBasisu ).setRequired( true );
+                    });
+                  }
+
+                  img.src = e.target.result;
+                }
+
+                file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
+              } else {
+                await encodeToKTX2( texture.getImage(), { isUASTC: uastc } )
+                .then( ktx_texture => {
+                  texture.setImage( ktx_texture );
+                  texture.setMimeType( 'image/ktx2' );
+                  doc.createExtension( KHRTextureBasisu ).setRequired( true );
+                });
+              }
+            }
+          } else {
+            const { compressTexture } = await import( "@gltf-transform/functions" );
+            const { EXTTextureWebP } = await import( "@gltf-transform/extensions" );
+
+            for (const texture of textures) {
               await compressTexture( texture, { targetFormat: tex_fmt } );
               doc.createExtension( EXTTextureWebP ).setRequired( true );
               io.registerExtensions( [ EXTTextureWebP ] );
@@ -354,6 +417,10 @@
 
         const compressedArrayBuffer = io.writeBinary( doc );
 
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
         return compressedArrayBuffer;
       }
 
@@ -361,9 +428,8 @@
 
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { meshopt, compressTexture } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, KHRTextureBasisu, EXTTextureWebP, EXTMeshGPUInstancing, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
-        const { encodeToKTX2 } = await import( "ktx2-encoder" );
+        const { meshopt } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
 
         await MeshoptEncoder.ready;
 
@@ -382,15 +448,76 @@
         if (tex_fmt !== '') {
           const textures = doc.getRoot().listTextures();
 
-          for (const texture of textures) {
-            if (tex_fmt.startsWith( 'ktx' )) {
-              await encodeToKTX2( texture.getImage(), { isUASTC: tex_fmt.endsWith( 'u' ) === true } )
-              .then( ktx_texture => {
-                texture.setImage( ktx_texture );
-                texture.setMimeType( 'image/ktx2' );
-                doc.createExtension( KHRTextureBasisu ).setRequired( true );
-              });
-            } else {
+          if (tex_fmt.startsWith( 'ktx' )) {
+            const { listTextureSlots } = await import( "@gltf-transform/functions" );
+            const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
+            const { encodeToKTX2 } = await import( "ktx2-encoder" );
+
+            const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+            for (const texture of textures) {
+              const slots = await listTextureSlots( texture );
+              const size = await texture.getSize();
+
+              const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
+
+              // check if texture dimensions are multiples of 4
+              const width_p2 = size[ 0 ] % 4 === 0;
+              const height_p2 = size[ 1 ] % 4 === 0;
+
+              if (!width_p2 || !height_p2) {
+                // this should produce minimal scale down
+                const width = width_p2 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+                const height = height_p2 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
+
+                const file_reader = new FileReader();
+
+                file_reader.onload = function( e ) {
+                  const img = new Image();
+
+                  img.onload = async function() {
+                    const canvas = document.createElement('canvas');
+
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                    const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                    const a2b = atob( base64data );
+                    const buff = new Uint8Array( a2b.length );
+
+                    for ( let i = 0, l = buff.length; i < l; i ++ ) {
+                      buff[ i ] = a2b.charCodeAt( i );
+                    }
+
+                    await encodeToKTX2( buff, { isUASTC: uastc } )
+                    .then( ktx_texture => {
+                      texture.setImage( ktx_texture );
+                      texture.setMimeType( 'image/ktx2' );
+                      doc.createExtension( KHRTextureBasisu ).setRequired( true );
+                    });
+                  }
+
+                  img.src = e.target.result;
+                }
+
+                file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
+              } else {
+                await encodeToKTX2( texture.getImage(), { isUASTC: uastc } )
+                .then( ktx_texture => {
+                  texture.setImage( ktx_texture );
+                  texture.setMimeType( 'image/ktx2' );
+                  doc.createExtension( KHRTextureBasisu ).setRequired( true );
+                });
+              }
+            }
+          } else {
+            const { compressTexture } = await import( "@gltf-transform/functions" );
+            const { EXTTextureWebP } = await import( "@gltf-transform/extensions" );
+
+            for (const texture of textures) {
               await compressTexture( texture, { targetFormat: tex_fmt } );
               doc.createExtension( EXTTextureWebP ).setRequired( true );
               io.registerExtensions( [ EXTTextureWebP ] );
@@ -408,6 +535,10 @@
 
         const compressedArrayBuffer = await io.writeBinary( doc );
 
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
         return compressedArrayBuffer;
       }
 
@@ -415,9 +546,8 @@
 
       async function texture_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { compressTexture } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, KHRTextureBasisu, EXTTextureWebP, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
-        const { encodeToKTX2 } = await import( "ktx2-encoder" );
+        const { dedup, prune } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
 
         const io = new WebIO();
 
@@ -426,18 +556,81 @@
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
+        await doc.transform( prune(), dedup() );
+
         if (tex_fmt !== '') {
           const textures = doc.getRoot().listTextures();
 
-          for (const texture of textures) {
-            if (tex_fmt.startsWith( 'ktx' )) {
-              await encodeToKTX2( texture.getImage(), { isUASTC: tex_fmt.endsWith( 'u' ) === true } )
-              .then( ktx_texture => {
-                texture.setImage( ktx_texture );
-                texture.setMimeType( 'image/ktx2' );
-                doc.createExtension( KHRTextureBasisu ).setRequired( true );
-              });
-            } else {
+          if (tex_fmt.startsWith( 'ktx' )) {
+            const { listTextureSlots } = await import( "@gltf-transform/functions" );
+            const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
+            const { encodeToKTX2 } = await import( "ktx2-encoder" );
+
+            const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+            for (const texture of textures) {
+              const slots = await listTextureSlots( texture );
+              const size = await texture.getSize();
+
+              const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
+
+              // check if texture dimensions are multiples of 4
+              const width_p2 = size[ 0 ] % 4 === 0;
+              const height_p2 = size[ 1 ] % 4 === 0;
+
+              if (!width_p2 || !height_p2) {
+                // this should produce minimal scale down
+                const width = width_p2 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+                const height = height_p2 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
+
+                const file_reader = new FileReader();
+
+                file_reader.onload = function( e ) {
+                  const img = new Image();
+
+                  img.onload = async function() {
+                    const canvas = document.createElement('canvas');
+
+                    canvas.width = width;
+                    canvas.height = height;
+
+                    const ctx = canvas.getContext('2d');
+                    ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                    const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                    const a2b = atob( base64data );
+                    const buff = new Uint8Array( a2b.length );
+
+                    for ( let i = 0, l = buff.length; i < l; i ++ ) {
+                      buff[ i ] = a2b.charCodeAt( i );
+                    }
+
+                    await encodeToKTX2( buff, { isUASTC: uastc } )
+                    .then( ktx_texture => {
+                      texture.setImage( ktx_texture );
+                      texture.setMimeType( 'image/ktx2' );
+                      doc.createExtension( KHRTextureBasisu ).setRequired( true );
+                    });
+                  }
+
+                  img.src = e.target.result;
+                }
+
+                file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
+              } else {
+                await encodeToKTX2( texture.getImage(), { isUASTC: uastc } )
+                .then( ktx_texture => {
+                  texture.setImage( ktx_texture );
+                  texture.setMimeType( 'image/ktx2' );
+                  doc.createExtension( KHRTextureBasisu ).setRequired( true );
+                });
+              }
+            }
+          } else {
+            const { compressTexture } = await import( "@gltf-transform/functions" );
+            const { EXTTextureWebP } = await import( "@gltf-transform/extensions" );
+
+            for (const texture of textures) {
               await compressTexture( texture, { targetFormat: tex_fmt } );
               doc.createExtension( EXTTextureWebP ).setRequired( true );
               io.registerExtensions( [ EXTTextureWebP ] );
@@ -446,6 +639,10 @@
         }
 
         const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
 
         return compressedArrayBuffer;
       }
