@@ -8,9 +8,9 @@ import {
 import {
 	strToU8,
 	zipSync,
-} from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/fflate.module.js";
+} from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/libs/fflate.module.js";
 
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/utils/TextureUtils.js";
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/TextureUtils.js";
 
 class USDZExporter {
 
@@ -523,6 +523,21 @@ function buildPrimvars( attributes ) {
 		}
 
 	}
+
+	// Handle vertex colors
+
+	const colorAttribute = attributes.color;
+
+	if (colorAttribute !== undefined) {
+
+		const count = colorAttribute.count;
+
+		string += `
+		color3f[] primvars:displayColor = [${buildVector3Array( colorAttribute, count )}] (
+			interpolation = "vertex"
+		)`;
+
+  	}
 
 	return string;
 
