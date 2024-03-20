@@ -16,7 +16,7 @@ import {
 	Vector2
 } from "three";
 
-import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/libs/fflate.module.js";
+import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/libs/fflate.module.js";
 
 class USDAParser {
 
@@ -314,6 +314,14 @@ class USDZLoader extends Loader {
 
 					}
 
+					// Move displayColor to Mesh
+
+					if ( 'color3f[] primvars:displayColor' in data ) {
+
+						object[ 'color3f[] primvars:displayColor' ] = data[ 'color3f[] primvars:displayColor' ];
+
+					}
+
 					// Move st to Mesh
 
 					if ( 'texCoord2f[] primvars:st' in data ) {
@@ -403,6 +411,15 @@ class USDZLoader extends Loader {
 					geometry.setAttribute( 'uv', attribute );
 
 				}
+
+			}
+
+			if ( 'color3f[] primvars:displayColor' in data ) {
+
+				const color = JSON.parse( data[ 'color3f[] primvars:displayColor' ].replace( /[()]*/g, '' ) );
+				const attribute = new BufferAttribute( new Float32Array( color ), 3 );
+
+				geometry.setAttribute( 'color', attribute );
 
 			}
 
