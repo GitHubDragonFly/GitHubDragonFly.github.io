@@ -955,6 +955,8 @@ class USDZLoader extends Loader {
 			const geometry = buildGeometry( findMeshGeometry( data ) );
 			const material = buildMaterial( findMeshMaterial( data ) );
 
+			if ( geometry && geometry.hasAttribute( 'color' ) ) material.vertexColors = true;
+
 			const mesh = geometry ? new Mesh( geometry, material ) : new Object3D();
 
 			if ( 'matrix4d xformOp:transform' in data ) {
