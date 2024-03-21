@@ -25,7 +25,7 @@ import {
 	Vector3,
 	Quaternion,
 } from "three";
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/utils/TextureUtils.js";
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/TextureUtils.js";
 
 /**
  * The KHR_mesh_quantization extension allows these extra attribute component types
@@ -481,7 +481,6 @@ class GLTFWriter {
 		this.buffers = [];
 
 		this.byteOffset = 0;
-		this.buffers = [];
 		this.nodeMap = new Map();
 		this.skins = [];
 
@@ -979,7 +978,17 @@ class GLTFWriter {
 
 		}
 
-		const byteLength = getPaddedBufferSize( count * attribute.itemSize * componentSize );
+		let byteStride = attribute.itemSize * componentSize;
+
+		if ( target === WEBGL_CONSTANTS.ARRAY_BUFFER ) {
+
+			// Each element of a vertex attribute MUST be aligned to 4-byte boundaries
+			// inside a bufferView
+			byteStride = Math.ceil( byteStride / 4 ) * 4;
+
+		}
+
+		const byteLength = getPaddedBufferSize( count * byteStride );
 		const dataView = new DataView( new ArrayBuffer( byteLength ) );
 		let offset = 0;
 
@@ -1044,6 +1053,12 @@ class GLTFWriter {
 
 			}
 
+			if ( ( offset % byteStride ) !== 0 ) {
+
+				offset += byteStride - ( offset % byteStride );
+
+			}
+
 		}
 
 		const bufferViewDef = {
@@ -1059,7 +1074,7 @@ class GLTFWriter {
 		if ( target === WEBGL_CONSTANTS.ARRAY_BUFFER ) {
 
 			// Only define byteStride for vertex attributes.
-			bufferViewDef.byteStride = attribute.itemSize * componentSize;
+			bufferViewDef.byteStride = byteStride;
 
 		}
 
@@ -1276,7 +1291,18 @@ class GLTFWriter {
 
 			} else {
 
-				ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+				if ( ( typeof HTMLImageElement !== 'undefined' && image instanceof HTMLImageElement ) ||
+					( typeof HTMLCanvasElement !== 'undefined' && image instanceof HTMLCanvasElement ) ||
+					( typeof ImageBitmap !== 'undefined' && image instanceof ImageBitmap ) ||
+					( typeof OffscreenCanvas !== 'undefined' && image instanceof OffscreenCanvas ) ) {
+
+					ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+
+				} else {
+
+					throw new Error( 'THREE.GLTFExporter: Invalid image type. Use HTMLImageElement, HTMLCanvasElement or ImageBitmap.' );
+
+				}
 
 			}
 
@@ -2538,7 +2564,7 @@ class GLTFMaterialsUnlitExtension {
 		extensionsUsed[ this.name ] = true;
 
 		materialDef.pbrMetallicRoughness.metallicFactor = 0.0;
-		materialDef.pbrMetallicRoughness.roughnessFactor = 0.9;
+		materialDef.pbrMetallicRoughness.roughnessFactor = 0.8;
 
 	}
 
