@@ -240,7 +240,10 @@ Number Type Converter
   - GLB exports, where applicable, can additionally have either DRACO or MESHOPT and optional WEBP texture compression available by using [glTF Transform](https://gltf-transform.dev):
     - These exports are marked as either of: `GLB_d` `GLB_dw` `GLB_m` `GLB_mw` (for regular exports) `GLBx_d` `GLBx_dw` `GLBx_m` `GLBx_mw` (for alternative exports)
     - WEBP exported texture resolution is fixed at 1k in mobile GLTF Viewer but is selectable in desktop viewers (256, 512, 1k, 2k, 4k)
-    - GM Viewer additionally offers KTX2 texture compression by using [ktx2-encoder](https://www.npmjs.com/package/ktx2-encoder)
+    - KTX2 texture compression is additionally available by using [ktx2-encoder](https://www.npmjs.com/package/ktx2-encoder) and marked as following:
+      - `KTX2` offers ETC1S + UASTC compression as per specific type of texture
+      - `KTX2e` offers ETC1S only compression applicable to all textures
+      - `KTX2u` offers UASTC only compression applicable to all textures
     - Seem to work fine in general but might not be good for some rare models
   - Some viewers also offer alternative exports marked as `OBJx` `DAEx` `GLTFx` `USDZx`:
     - Should be tried either out of curiosity or if their regular export counterparts don't produce good results
