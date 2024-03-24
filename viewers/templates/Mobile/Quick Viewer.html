@@ -18,31 +18,9 @@
     </script>
 
     <script type="module">
-      import {
-        EmbeddedViewer,
-        EnvironmentSettings,
-        Init3DViewerElements,
-        RGBColor,
-        SetExternalLibLocation
-      } from "o3dv";
-
       import * as three_js from "three";
 
       THREE = three_js;
-
-      OV = {
-        EmbeddedViewer: EmbeddedViewer,
-        EnvironmentSettings: EnvironmentSettings,
-        Init3DViewerElements: Init3DViewerElements,
-        RGBColor: RGBColor,
-        SetExternalLibLocation: SetExternalLibLocation
-      };
-
-      // Set the external libraries location
-      OV.SetExternalLibLocation( 'https://cdn.jsdelivr.net/npm/online-3d-viewer@0.12.0/libs' );
-
-      // Init all the 3d viewer elements.
-      OV.Init3DViewerElements();
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
@@ -250,7 +228,7 @@
         <label for="edge_color" title="Edge Color">EC</label>
         <input type="color" title="Edge Color" id="edge_color" onchange="set_edge_color();" disabled />
         <button title="Edges" id="btn_edges" onclick="show_edges();" disabled>E</button>
-        <button title="Switch UP Vector" id="btn_up" onclick="set_up_vector();" style="background-color: transparent; min-width: 14px;">&#x2191</button>
+        <button title="Switch UP Vector" id="btn_up" onclick="switch_up_vector();" style="background-color: transparent; min-width: 14px;">&#x2191</button>
         <button title="Flip UP Vector" id="btn_flip" onclick="flip_up_vector();" style="background-color: transparent; min-width: 14px;">&#x2193</button>
       </div>
       <div class="fm" title="Export Download Link" id="div_download" style="display: none;">
@@ -307,7 +285,7 @@
 
       function clear_url() { document.getElementById('url_entry').value = ''; }
 
-      function resize() { o3dv_embedded_viewer.viewer.Resize(); }
+      function resize() { o3dv_embedded_viewer.viewer.Resize(); o3dv_embedded_viewer.viewer.ResizeRenderer(); }
 
       // Modified version of code from:
       // https://github.com/kovacsv/Online3DViewer/blob/fefe79f09c4df6ef7a84af7e84e091183dc9f5ba/test/tests/exportimport_test.js
@@ -380,7 +358,31 @@
 
       const backgroundIsEnvMap = false;
 
-      function first_run() {
+      async function first_run() {
+        if (OV === undefined) {
+          const {
+            EmbeddedViewer,
+            EnvironmentSettings,
+            Init3DViewerElements,
+            RGBColor,
+            SetExternalLibLocation
+          } = await import( "o3dv" );
+
+          OV = {
+            EmbeddedViewer: EmbeddedViewer,
+            EnvironmentSettings: EnvironmentSettings,
+            Init3DViewerElements: Init3DViewerElements,
+            RGBColor: RGBColor,
+            SetExternalLibLocation: SetExternalLibLocation
+          };
+
+          // Set the external libraries location
+          OV.SetExternalLibLocation( 'https://cdn.jsdelivr.net/npm/online-3d-viewer@0.12.0/libs' );
+
+          // Init all the 3d viewer elements.
+          OV.Init3DViewerElements();
+        }
+
         let model_viewer = document.createElement('div');
 
         model_viewer.setAttribute( 'id', 'o3dv_element' );
@@ -418,7 +420,7 @@
           set_directional_light_intensity();
           set_ambient_light_color();
           set_directional_light_color();
-          if (edges_visible) show_edges();
+          if (edges_visible === true) show_edges();
         }
       }
 
@@ -452,6 +454,7 @@
       function set_directional_light_intensity() {
         let dli_value = document.getElementById('directional_light_intensity').value;
         document.getElementById('dli_val').innerText = dli_value;
+
         o3dv_embedded_viewer.viewer.scene.children[ 2 ].intensity = parseFloat( dli_value );
 
         o3dv_embedded_viewer.viewer.Render();
@@ -491,7 +494,7 @@
         o3dv_embedded_viewer.viewer.Render();
       }
 
-      function set_up_vector() {
+      function switch_up_vector() {
         if (up === false) {
           o3dv_embedded_viewer.viewer.SetUpVector( OV.Direction.Z, true );
           up = true;
@@ -512,7 +515,7 @@
           mesh !== undefined ? mesh.remove( edges ) : o3dv_embedded_viewer.viewer.scene.remove( edges );
 
           document.getElementById('edge_color').disabled = true;
-          document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_edges').style.backgroundColor = 'transparent';
         } else {
           if (edges_added === false) {
             o3dv_embedded_viewer.viewer.scene.traverse( child => {
@@ -547,7 +550,43 @@
       var url_displayed = false, url_loading = false, zip;
       var edges, edges_added, edges_visible, defaultMaterial, outline_material;
 
-      async function init_other_ov() {
+      function clear_viewer() {
+        if (o3dv_embedded_viewer !== undefined) {
+          o3dv_embedded_viewer.viewer.SetBackgroundColor( new OV.RGBAColor( 1, 1, 1 ) );
+
+          if (edges_added && edges.children.length > 0) {
+            edges.traverse( child => {
+              if (child.type === 'LineSegments') {
+                if (child.material) child.material.dispose();
+                if (child.geometry) child.geometry.dispose();
+              }
+            });
+          }
+
+          if (mesh !== undefined) {
+            mesh.traverse( ( child ) => {
+              if (child.isMesh) {
+                if (child.material) {
+                  if (Array.isArray( child.material )) {
+                    for (const material of child.material) { material.dispose(); }
+                  } else {
+                    child.material.dispose();
+                  }
+                }
+
+                if (child.geometry) child.geometry.dispose();
+              }
+            });
+
+            o3dv_embedded_viewer.viewer.scene.remove( mesh );
+            mesh = undefined;
+          }
+
+          o3dv_embedded_viewer.viewer.Clear();
+        }
+      }
+
+      async function import_other_ov() {
         if (OV.Model === undefined) {
           const {
             ConvertThreeGeometryToMesh,
@@ -566,34 +605,14 @@
       }
 
       async function init() {
-        await init_other_ov();
+        await import_other_ov();
 
         if (zip === undefined) zip = new JSZip();
 
         document.getElementById('btn_edges').style.backgroundColor = 'transparent';
         document.getElementById('edge_color').disabled = true;
 
-        if (o3dv_embedded_viewer !== undefined) {
-          o3dv_embedded_viewer.viewer.SetBackgroundColor( new OV.RGBAColor( 1, 1, 1 ) );
-          o3dv_embedded_viewer.viewer.Clear();
-
-          if (edges_added && edges.children.length > 0) {
-            edges.traverse( child => {
-              if (child.type === 'LineSegments') {
-                if (child.material && child.material.map) child.material.map.dispose();
-                if (child.material) child.material.dispose();
-                if (child.geometry) child.geometry.dispose();
-              }
-            });
-          }
-
-          if (mesh !== undefined) {
-            if (mesh.material && mesh.material.map) mesh.material.map.dispose();
-            if (mesh.material) mesh.material.dispose();
-            if (mesh.geometry) mesh.geometry.dispose();
-            mesh = undefined;
-          }
-        }
+        clear_viewer();
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_spinner').style.display = 'block';
@@ -1023,6 +1042,7 @@
       function reset() {
         document.getElementById('file_input').value = '';
         document.getElementById('url_entry').value = '';
+        clear_viewer();
         enable_disable( true );
         set_lights();
       }
