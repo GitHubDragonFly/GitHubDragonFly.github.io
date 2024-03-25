@@ -86,7 +86,7 @@ Number Type Converter
     - `https://raw.githubusercontent.com/GitHubDragonFly/GitHubDragonFly.github.io/main/viewers/examples/legobrick.splat`
   - This viewer also supports loading of Luma Splats URLs:
     - An example URL to use for testing `https://lumalabs.ai/capture/ca9ea966-ca24-4ec1-ab0f-af665cb546ff`
-    - More info on [Luma WebGL Library](https://lumalabs.ai/luma-web-library)
+    - More info on [Luma WebGL Library](https://github.com/lumalabs/luma-web-examples)
     - [Luma AI](https://lumalabs.ai/) website appears to have an iOS App available for capturing luma splats
 
 - Notes about GLTF viewers:
