@@ -85,17 +85,17 @@ function dotbim_Elemment2Mesh(element, geometrys) {
         }
     }
 
-    let name = info.Name || '';
+    let name = ( info && info.Name ) ? info.Name : '';
 
     geometry.computeVertexNormals();
 
     let material = new THREE.MeshStandardMaterial({
-        name: info[ 'Material' ] || 'Default Material',
+        name: ( info && info[ 'Material' ] ) ? info[ 'Material' ] : '__DEFAULT',
         side: THREE.DoubleSide,
         flatShading: false,
         transparent: true,
-        metalness: 0.5,
-        roughness: 0.5,
+        metalness: 0.4,
+        roughness: 0.6,
         color: 0xFFFFFF
     });
 
@@ -104,27 +104,21 @@ function dotbim_Elemment2Mesh(element, geometrys) {
     }
 
     // Support `face_colors` in element
-    if (face_colors) {
-        let colors = createFaceColors(face_colors);
-        geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 4));
-    }
-    else if (color)
-    {
-        geometry.deleteAttribute('color'); // Remove default color in the geometry
+    if ( face_colors && face_colors.length > 0 ) {
+        if ( geometry.index ) geometry = geometry.toNonIndexed(); // Remove index to make color work with face
+        if ( geometry.hasAttribute( 'color' ) ) geometry.deleteAttribute( 'color' );
 
-        material.color = convertTHREEColorRGB(color.r,color.g,color.b);
-        material.opacity = convertColorAlpha(color.a);
-        material.transparent = material.opacity < 1.0;
-        material.needsUpdate = true;
-    }
+        const buffer_colors = createFaceColors( face_colors, 3, 4 * geometry.attributes.position.count );
+        geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( buffer_colors, 4 ) );
 
-    // Force to use geometry color if exists ('colors')
-    if (geometry.getAttribute('color')) {
         material.color.setRGB( 1, 1, 1 );
         material.opacity = 1.0;
         material.transparent = true;
         material.vertexColors = true;
-        material.needsUpdate = true;
+    } else if ( color ) {
+        material.color = new THREE.Color( color.r / 255.0, color.g / 255.0, color.b / 255.0, THREE.SRGBColorSpace );
+        material.opacity = color.a / 255.0;
+        material.transparent = material.opacity < 1.0;
     }
 
     if (!vector) vector = { x: 0, y: 0, z: 0 };
@@ -194,16 +188,15 @@ function dotbim_Mesh2GeometryColor(mesh) {
 
     let geometry = new THREE.BufferGeometry();
 
-    geometry.setIndex(indices);
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(coordinates, 3));
-    geometry = geometry.toNonIndexed(); // Use this to remove Index and make color work with face
+    geometry.computeVertexNormals();
 
     if (colors) {
-        buffer_colors = createFaceColors(colors, 3, 4 * indices.length);
+        const buffer_colors = createFaceColors(colors, 3, 4 * geometry.attributes.position.count);
         geometry.setAttribute('color', new THREE.Float32BufferAttribute(buffer_colors, 4));
+    } else {
+        if (indices) geometry.setIndex( indices );
     }
-
-    geometry.computeVertexNormals();
 
     geometry.userData[ 'mesh_id' ] = mesh_id;
 
@@ -213,14 +206,12 @@ function dotbim_Mesh2GeometryColor(mesh) {
 function createFaceColors(color4arrary, repeat = 3, max = 0) {
     let colors = [];
     for (let index = 0; index < color4arrary.length; index += 4) {
-        let c1 = color4arrary[index + 0];
-        let c2 = color4arrary[index + 1];
-        let c3 = color4arrary[index + 2];
-        let c4 = convertColorAlpha(color4arrary[index + 3]);
-        var color = convertTHREEColorRGB(c1,c2,c3);
+        let c1 = color4arrary[ index + 0 ] / 255.0;
+        let c2 = color4arrary[ index + 1 ] / 255.0;
+        let c3 = color4arrary[ index + 2 ] / 255.0;
+        let c4 = color4arrary[ index + 3 ] / 255.0;
 
-        for (let i = 0; i < repeat; i++)
-            colors.push(color.r, color.g, color.b, c4);
+        for ( let i = 0; i < repeat; i++ ) { colors.push( c1, c2, c3, c4 ); }
     }
 
     while (colors.length < max) {
@@ -229,14 +220,4 @@ function createFaceColors(color4arrary, repeat = 3, max = 0) {
     }
 
     return colors;
-}
-
-function convertTHREEColorRGB(r,g,b)
-{
-    return new THREE.Color(r/255.0, g/255.0, b/255.0);
-}
-
-function convertColorAlpha(alpha)
-{
-    return alpha / 255.0;
 }
