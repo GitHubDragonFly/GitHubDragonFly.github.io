@@ -359,6 +359,7 @@
         <select title="Export" id="export_names" style="min-width: 90px;" disabled>
           <option title="Export Formats" value="export" selected disabled>Export</option>
           <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
+          <option title="BIM - Dotbim File Format" value="bim" onclick="export_bim()">BIM</option>
           <option title="DAE - Collada Format" value="dae" onclick="export_dae();">DAE</option>
           <option title="GLB - GL Transmission Format binary regular export" value="glb" onclick="export_gltf( true, false );">GLB</option>
           <option title="GLB - GL Transmission Format binary regular export with DRACO compression" value="glbdraco" onclick="export_gltf( true, false, true, false );">GLB_d</option>
@@ -782,6 +783,41 @@
         });
       }
 
+      function handle_export_error( error ) {
+        alert( 'Export error!' );
+        console.log( error );
+
+        document.getElementById('div_loading').innerHTML = '';
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('fixed_menu').style.display = 'block';
+        if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
+        render_requested = true;
+        mouse_wheel = true;
+        render();
+
+        document.body.removeChild( link );
+        link = undefined;
+      }
+
+      async function export_bim() {
+        if (mesh) {
+          start_export();
+
+          const { BIMExporter } = await import( "../static/jsm/exporters/BIMExporter.js" );
+
+          let bim_exporter = new BIMExporter( manager );
+
+          let options = { skipMatrixCheck: bim === true };
+
+          let mesh_clone = (bim === true) ? await create_meshes() : mesh.clone();
+
+          await bim_exporter.parse( mesh_clone, async function( dotbim ) {
+            zip.file( filename + '.bim', dotbim );
+            await process_zip( '_BIM' );
+          }, function( error ) { handle_export_error( error ); }, options);
+        }
+      }
+
       async function export_obj( alternative = false ) {
         if (mesh) {
           start_export();
@@ -1089,7 +1125,7 @@
             zip.file( filename + '.3dm', blob );
 
             await process_zip( '_3DM' );
-          }, function( error ) { console.log( error ); }, { vertexColorsCorrection: 0 });
+          }, function( error ) { handle_export_error( error ); }, { vertexColorsCorrection: 0 });
         }
       }
 
@@ -2125,7 +2161,6 @@
 
         let new_mesh = new THREE.Mesh( geometry, materials );
         new_mesh.name = 'mesh_' + mesh_count;
-        mesh_count += 1;
 
         let length = new_mesh.geometry.attributes.position.array.length;
         random_vertex_color_array[ new_mesh.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
@@ -2179,8 +2214,11 @@
             }
 
             if (result.success && result.meshes.length > 0) {
+              let mesh_count = 1;
+
               for (let resultMesh of result.meshes) {
-                process_mesh( resultMesh, 1 );
+                process_mesh( resultMesh, mesh_count );
+                mesh_count ++;
               }
 
               occt = null;
@@ -2232,24 +2270,22 @@
               initial_transparency_array[ child.name ] = {};
 
               child.material.forEach( mtl => {
-                if (child.geometry.hasAttribute( 'color' ) === true) mtl.vertexColors = true;
-
                 initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
                 initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
 
                 // Default to double side
                 mtl.side = THREE.DoubleSide;
+                mtl.needsUpdate = true;
 
                 child_count_array += 1;
               });
             } else {
-              if (child.geometry.hasAttribute( 'color' ) === true) child.material.vertexColors = true;
-
               initial_opacity[ child.name ] = child.material.opacity;
               initial_transparency[ child.name ] = child.material.transparent;
 
               // Default to double side
               child.material.side = THREE.DoubleSide;
+              child.material.needsUpdate = true;
             }
           }
 
@@ -2304,8 +2340,11 @@
               }
 
               if (result.success && result.meshes.length > 0) {
+                let mesh_count = 1;
+
                 for (const resultMesh of result.meshes) {
-                  process_mesh( resultMesh, 1 );
+                  process_mesh( resultMesh, mesh_count );
+                  mesh_count ++;
                 }
 
                 occt = null;
@@ -2442,9 +2481,9 @@
               let child_clone;
 
               if (child.material) {
-                child_clone = new THREE.Mesh( child.geometry, child.material );
+                child_clone = new THREE.Mesh( child.geometry.clone(), child.material.clone() );
               } else {
-                child_clone = new THREE.Mesh( child.geometry, material );
+                child_clone = new THREE.Mesh( child.geometry.clone(), material );
 
                 if (child.instanceColor) {
                   let colors = [];
