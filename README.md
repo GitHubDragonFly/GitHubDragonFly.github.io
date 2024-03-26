@@ -239,7 +239,7 @@ Number Type Converter
     - PLY exporter will include vertex colors and will convert material color to vertex color if the material has no texture
   - GLB exports, where applicable, can additionally have either DRACO or MESHOPT and optional WEBP texture compression available by using [glTF Transform](https://gltf-transform.dev):
     - These exports are marked as either of: `GLB_d` `GLB_dw` `GLB_m` `GLB_mw` (for regular exports) `GLBx_d` `GLBx_dw` `GLBx_m` `GLBx_mw` (for alternative exports)
-    - WEBP exported texture resolution is fixed at 1k in mobile GLTF Viewer but is selectable in desktop viewers (256, 512, 1k, 2k, 4k)
+    - WEBP exported texture resolution is fixed at 1k in mobile GLTF Viewer but is selectable in desktop viewers (128, 256, 512, 768, 1k, 1.2k, 1.5k, 1.7k, 2k, 3k, 4k)
     - KTX2 texture compression is additionally available by using [ktx2-encoder](https://www.npmjs.com/package/ktx2-encoder) and marked as following:
       - `KTX2` offers ETC1S + UASTC compression as per specific type of texture
       - `KTX2e` offers ETC1S only compression applicable to all textures
@@ -250,9 +250,8 @@ Number Type Converter
     - Might even produce smaller exported file size than regular export
     - If applicable, will support exporting THREE.InstancedMesh to OBJ + MTL / DAE / USDZ as well
     - If applicable, will support exporting morph animations but will not export other animations
-  - Some viewers also offer setting the exported textures resolution (128, 256, 512, 768, 1k, 1.2k, 1.5k, 1.7k, 2k, 3k, 4k) and Y-flip:
-    - Y-flip is intended for 3DM / DAE / OBJ / USDZ exports
-  - GLTFS Viewer seems to do OK job in exporting models with `pbrSpecularGlossiness`
+  - Some viewers also offer setting the exported textures resolution (128, 256, 512, 768, 1k, 1.2k, 1.5k, 1.7k, 2k, 3k, 4k) and Y-flip (intended for 3DM / DAE / OBJ / USDZ exports)
+  - GLTFS Viewer seems to do OK job in exporting still models with `pbrSpecularGlossiness`
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
