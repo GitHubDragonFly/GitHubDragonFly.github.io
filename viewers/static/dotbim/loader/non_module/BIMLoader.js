@@ -172,8 +172,8 @@
 					side: THREE.DoubleSide,
 					flatShading: false,
 					transparent: true,
-					metalness: 0.5,
-					roughness: 0.5,
+					metalness: 0.4,
+					roughness: 0.6,
 					color: 0xFFFFFF
 
 				} );
@@ -188,11 +188,17 @@
 
 				if ( face_colors ) {
 
-					geometry = geometry.clone();
+					if ( geometry.index ) geometry = geometry.toNonIndexed(); // Remove index to make color work with face
 
-					let colors = createFaceColors( face_colors );
+					if ( geometry.hasAttribute( 'color' ) ) geometry.deleteAttribute( 'color' );
 
+					let colors = createFaceColors( face_colors, 3, 4 * geometry.attributes.position.count );
 					geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 4 ) );
+
+					material.color.setRGB( 1, 1, 1 );
+					material.opacity = 1.0;
+					material.transparent = true;
+					material.vertexColors = true;
 
 				} else if ( color )	{
 
@@ -200,21 +206,9 @@
 
 					geometry.deleteAttribute( 'color' ); // Remove default color in the geometry
 
-					material.color = convertTHREEColorRGB( color.r, color.g, color.b );
-					material.opacity = convertColorAlpha( color.a );
+					material.color = new THREE.Color( color.r / 255.0, color.g / 255.0, color.b / 255.0, THREE.SRGBColorSpace );
+					material.opacity = color.a / 255.0;
 					material.transparent = material.opacity < 1.0;
-					material.needsUpdate = true;
-
-				}
-
-				// Force the use of geometry color if exists ('colors')
-
-				if ( geometry.getAttribute( 'color' ) ) {
-
-					material.color.setRGB( 1, 1, 1 );
-					material.opacity = 1.0;
-					material.transparent = true;
-					material.vertexColors = true;
 					material.needsUpdate = true;
 
 				}
@@ -247,7 +241,7 @@
 					if (name === '') name = 'mesh_' + mesh_id + '_' + mesh.id + '_' + mesh_id_key.current_instance;
 
 					mesh.userData[ mesh_id_key.current_instance ] = { name: name, guid: guid || {}, type: type || {}, info: info || {} };
-	
+
 					mesh_id_key.current_instance++;
 
 				} else { // expected existing 'color'
@@ -299,19 +293,19 @@
 
 				let geometry = new THREE.BufferGeometry();
 
-				geometry.setIndex( indices );
 				geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( coordinates, 3 ) );
-
-				geometry = geometry.toNonIndexed(); // Use this to remove Index and make color work with face
+				geometry.computeVertexNormals();
 
 				if ( colors ) {
 
-					buffer_colors = createFaceColors( colors, 3, 4 * indices.length );
+					buffer_colors = createFaceColors( colors, 3, 4 * geometry.attributes.position.count );
 					geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( buffer_colors, 4 ) );
 
-				}
+				} else {
 
-				geometry.computeVertexNormals();
+					if ( indices ) geometry.setIndex( indices );
+
+				}
 
 				geometry.userData[ 'mesh_id' ] = mesh_id;
 
@@ -325,15 +319,12 @@
 
 				for ( let index = 0, length = color4arrary.length; index < length; index += 4 ) {
 
-					let c1 = color4arrary[ index + 0 ];
-					let c2 = color4arrary[ index + 1 ];
-					let c3 = color4arrary[ index + 2 ];
+					let c1 = color4arrary[ index + 0 ] / 255.0;
+					let c2 = color4arrary[ index + 1 ] / 255.0;
+					let c3 = color4arrary[ index + 2 ] / 255.0;
+					let c4 = color4arrary[ index + 3 ] / 255.0;
 
-					let c4 = convertColorAlpha( color4arrary[ index + 3 ] );
-
-					let color = convertTHREEColorRGB( c1, c2, c3 );
-
-					for ( let i = 0; i < repeat; i++ ) colors.push( color.r, color.g, color.b, c4 );
+					for ( let i = 0; i < repeat; i++ ) colors.push( c1, c2, c3, c4 );
 
 				}
 
@@ -344,21 +335,6 @@
 				}
 
 				return colors;
-
-			}
-
-			function convertTHREEColorRGB( r, g, b ) {
-
-				let new_color = new THREE.Color( r / 255.0, g / 255.0, b / 255.0 );
-				new_color.setStyle( new_color.getStyle(), THREE.SRGBColorSpace );
-
-				return new_color;
-
-			}
-
-			function convertColorAlpha( alpha )	{
-
-				return alpha / 255.0;
 
 			}
 
