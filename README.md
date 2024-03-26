@@ -182,10 +182,12 @@ Number Type Converter
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
   - OCCT supported formats: STEP, STP, IGES, IGS, BREP, BRP, BIM
-    - STEP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js) and a modified version of [dotbim.three.js](https://github.com/ricaun/dotbim.three.js)
+    - STEP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js) and a modified version of [dotbim.three.js](https://github.com/ricaun/dotbim.three.js):
+      - Custom BIM Loader is also available
 - Export formats, where applicable:
   - 3DM, BIM, DAE, APNG, FBX, M3D, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, OFF, PLY, STL, PRWM, USDZ
-    - BIM and OFF exports are only available in Quick Viewer, as stated above
+    - OFF exports are only available in the Quick Viewer, as stated further above
+    - BIM exports are available in the Quick Viewer as well as some other viewers with custom BIM Exporter
     - Try not to change file names when saving files during initial export
     - Exporting some models might crash the browser when running out of memory 
     - Exporting some models might be easier / better done with multiple viewers, examples:
