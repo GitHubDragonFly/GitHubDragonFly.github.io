@@ -85,8 +85,6 @@ class BIMExporter {
 
 			if ( child.isMesh ) {
 
-				console.log('child ', child);
-
 				const uuid = child.userData.guid ? child.userData.guid : child.uuid;
 
 				let child_geometry_clone = scope.interleaved_buffer_attribute_check( child.geometry.clone() );
