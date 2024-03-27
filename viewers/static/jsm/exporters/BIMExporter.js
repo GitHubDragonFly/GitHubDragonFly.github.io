@@ -110,7 +110,7 @@ class BIMExporter {
 
 				const element_name = child.userData.name ? child.userData.name : ( child.name ? child.name : 'element_' + id );
 				const element_info = child.userData.info ? child.userData.info : { Name: element_name };
-				const element_type = child.userData.type ? child.userData.type : `Unknown`;
+				const element_type = child.userData.type ? child.userData.type : `Other`;
 
 				let element_color;
 
