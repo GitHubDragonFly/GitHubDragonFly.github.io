@@ -313,20 +313,24 @@ class PLYExporter {
 
 							}
 
-							output.setUint8( vOffset, Math.floor( mesh.material[ geometry.groups[ j ].materialIndex ].color.r * 255 ) );
+							const color_clone = mesh.material[ geometry.groups[ j ].materialIndex ].color.clone().convertLinearToSRGB();
+
+							output.setUint8( vOffset, Math.floor( color_clone.r * 255 ) );
 							vOffset += 1;
-							output.setUint8( vOffset, Math.floor( mesh.material[ geometry.groups[ j ].materialIndex ].color.g * 255 ) );
+							output.setUint8( vOffset, Math.floor( color_clone.g * 255 ) );
 							vOffset += 1;
-							output.setUint8( vOffset, Math.floor( mesh.material[ geometry.groups[ j ].materialIndex ].color.b * 255 ) );
+							output.setUint8( vOffset, Math.floor( color_clone.b * 255 ) );
 							vOffset += 1;
 
 						} else if ( ( mesh.material && geometry.groups && geometry.groups.length === 1 ) || ( mesh.material && mesh.material.color ) ) {
 
-							output.setUint8( vOffset, Math.floor( mesh.material.color.r * 255 ) );
+							const color_clone = mesh.material.color.clone().convertLinearToSRGB();
+
+							output.setUint8( vOffset, Math.floor( color_clone.r * 255 ) );
 							vOffset += 1;
-							output.setUint8( vOffset, Math.floor( mesh.material.color.g * 255 ) );
+							output.setUint8( vOffset, Math.floor( color_clone.g * 255 ) );
 							vOffset += 1;
-							output.setUint8( vOffset, Math.floor( mesh.material.color.b * 255 ) );
+							output.setUint8( vOffset, Math.floor( color_clone.b * 255 ) );
 							vOffset += 1;
 
 						} else {
@@ -479,13 +483,16 @@ class PLYExporter {
 						} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length <= mesh.material.length ) ) {
 
 							if ( i === ( geometry.groups[ j ].start + geometry.groups[ j ].count - 1 ) && j < geometry.groups.length - 1 ) j += 1;
-							let group_material_color = mesh.material[ geometry.groups[ j ].materialIndex ].color;
 
-							line += ' ' + Math.floor( group_material_color.r * 255 ) + ' ' + Math.floor( group_material_color.g * 255 ) + ' ' + Math.floor( group_material_color.b * 255 );
+							const color_clone = mesh.material[ geometry.groups[ j ].materialIndex ].color.clone().convertLinearToSRGB();
+
+							line += ' ' + Math.floor( color_clone.r * 255 ) + ' ' + Math.floor( color_clone.g * 255 ) + ' ' + Math.floor( color_clone.b * 255 );
 
 						} else if ( ( geometry.groups && mesh.material && geometry.groups.length === 1 ) || ( mesh.material && mesh.material.color ) ) {
 
-							line += ' ' + Math.floor( mesh.material.color.r * 255 ) + ' ' + Math.floor( mesh.material.color.g * 255 ) + ' ' + Math.floor( mesh.material.color.b * 255 );
+							const color_clone = mesh.material.color.clone().convertLinearToSRGB();
+
+							line += ' ' + Math.floor( color_clone.r * 255 ) + ' ' + Math.floor( color_clone.g * 255 ) + ' ' + Math.floor( color_clone.b * 255 );
 
 						} else {
 
