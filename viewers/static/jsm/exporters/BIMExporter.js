@@ -160,15 +160,17 @@ class BIMExporter {
 
 						// Convert to vertex colors
 
-						const mtl_color = child.material[ group.materialIndex ].color.clone().convertLinearToSRGB();
-						const mtl_opacity = child.material[ group.materialIndex ].opacity;
+						let mtl_color, mtl_opacity;
 
-						for ( let i = group.start; i < ( group.start + group.count ); i += 3 ) {
+						if ( Array.isArray( child.material ) && child.material[ group.materialIndex ] ) {
 
-							face_colors.push( Math.round( mtl_color.r * 255.0 ) );
-							face_colors.push( Math.round( mtl_color.g * 255.0 ) );
-							face_colors.push( Math.round( mtl_color.b * 255.0 ) );
-							face_colors.push( Math.round( mtl_opacity * 255.0 ) );
+							mtl_color = child.material[ group.materialIndex ].color.clone().convertLinearToSRGB();
+							mtl_opacity = child.material[ group.materialIndex ].opacity;
+
+						} else {
+
+							mtl_color = child.material.color.clone().convertLinearToSRGB();
+							mtl_opacity = child.material.opacity;
 
 						}
 
