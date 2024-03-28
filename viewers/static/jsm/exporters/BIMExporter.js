@@ -174,6 +174,15 @@ class BIMExporter {
 
 						}
 
+						for ( let i = group.start; i < ( group.start + group.count ); i += 3 ) {
+
+							face_colors.push( Math.round( mtl_color.r * 255.0 ) );
+							face_colors.push( Math.round( mtl_color.g * 255.0 ) );
+							face_colors.push( Math.round( mtl_color.b * 255.0 ) );
+							face_colors.push( Math.round( mtl_opacity * 255.0 ) );
+
+						}
+
 					}
 
 				} else {
