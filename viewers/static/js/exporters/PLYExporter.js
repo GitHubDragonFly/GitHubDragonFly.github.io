@@ -15,7 +15,7 @@
 
 	class PLYExporter {
 
-		parse( object, onDone, options, ldraw = false ) {
+		parse( object, onDone, options = {} ) {
 
 			if ( onDone && typeof onDone === 'object' ) {
 
@@ -58,8 +58,7 @@
 
 			const defaultOptions = {
 				binary: false,
-				excludeAttributes: [],
-				// normal, uv, color, index
+				excludeAttributes: [], // normal, uv, color, index
 				littleEndian: false
 			};
 
@@ -316,37 +315,25 @@
 
 								}
 
-								output.setUint8( vOffset, Math.floor( mesh.material[ geometry.groups[ j ].materialIndex ].color.r * 255 ) );
+								const color_clone = mesh.material[ geometry.groups[ j ].materialIndex ].color.clone().convertLinearToSRGB();
+
+								output.setUint8( vOffset, Math.floor( color_clone.r * 255 ) );
 								vOffset += 1;
-								output.setUint8( vOffset, Math.floor( mesh.material[ geometry.groups[ j ].materialIndex ].color.g * 255 ) );
+								output.setUint8( vOffset, Math.floor( color_clone.g * 255 ) );
 								vOffset += 1;
-								output.setUint8( vOffset, Math.floor( mesh.material[ geometry.groups[ j ].materialIndex ].color.b * 255 ) );
+								output.setUint8( vOffset, Math.floor( color_clone.b * 255 ) );
 								vOffset += 1;
 
 							} else if ( ( mesh.material && geometry.groups && geometry.groups.length === 1 ) || ( mesh.material && mesh.material.color ) ) {
 
-								if ( ldraw === true ) {
+								const color_clone = mesh.material.color.clone().convertLinearToSRGB();
 
-									let new_material_color = new THREE.Color( mesh.material.color.r, mesh.material.color.g, mesh.material.color.b );
-									new_material_color.convertLinearToSRGB();
-
-									output.setUint8( vOffset, Math.floor( new_material_color.r * 255 ) );
-									vOffset += 1;
-									output.setUint8( vOffset, Math.floor( new_material_color.g * 255 ) );
-									vOffset += 1;
-									output.setUint8( vOffset, Math.floor( new_material_color.b * 255 ) );
-									vOffset += 1;
-	
-								} else {
-
-									output.setUint8( vOffset, Math.floor( mesh.material.color.r * 255 ) );
-									vOffset += 1;
-									output.setUint8( vOffset, Math.floor( mesh.material.color.g * 255 ) );
-									vOffset += 1;
-									output.setUint8( vOffset, Math.floor( mesh.material.color.b * 255 ) );
-									vOffset += 1;
-
-								}
+								output.setUint8( vOffset, Math.floor( color_clone.r * 255 ) );
+								vOffset += 1;
+								output.setUint8( vOffset, Math.floor( color_clone.g * 255 ) );
+								vOffset += 1;
+								output.setUint8( vOffset, Math.floor( color_clone.b * 255 ) );
+								vOffset += 1;
 
 							} else {
 
@@ -497,24 +484,16 @@
 							} else if ( geometry.groups && mesh.material && ( Array.isArray( mesh.material ) === true ) && ( geometry.groups.length <= mesh.material.length ) ) {
 
 								if ( i === ( geometry.groups[ j ].start + geometry.groups[ j ].count - 1 ) && j < geometry.groups.length - 1 ) j += 1;
-								let group_material_color = mesh.material[ geometry.groups[ j ].materialIndex ].color;
 
-								line += ' ' + Math.floor( group_material_color.r * 255 ) + ' ' + Math.floor( group_material_color.g * 255 ) + ' ' + Math.floor( group_material_color.b * 255 );
+								const color_clone = mesh.material[ geometry.groups[ j ].materialIndex ].color.clone().convertLinearToSRGB();
+
+								line += ' ' + Math.floor( color_clone.r * 255 ) + ' ' + Math.floor( color_clone.g * 255 ) + ' ' + Math.floor( color_clone.b * 255 );
 
 							} else if ( ( geometry.groups && mesh.material && geometry.groups.length === 1 ) || ( mesh.material && mesh.material.color ) ) {
 
-								if ( ldraw === true ) {
+								const color_clone = mesh.material.color.clone().convertLinearToSRGB();
 
-									let new_material_color = new THREE.Color( mesh.material.color.r, mesh.material.color.g, mesh.material.color.b );
-									new_material_color.convertLinearToSRGB();
-
-									line += ' ' + Math.floor( new_material_color.r * 255 ) + ' ' + Math.floor( new_material_color.g * 255 ) + ' ' + Math.floor( new_material_color.b * 255 );
-
-								} else {
-
-									line += ' ' + Math.floor( mesh.material.color.r * 255 ) + ' ' + Math.floor( mesh.material.color.g * 255 ) + ' ' + Math.floor( mesh.material.color.b * 255 );
-
-								}
+								line += ' ' + Math.floor( color_clone.r * 255 ) + ' ' + Math.floor( color_clone.g * 255 ) + ' ' + Math.floor( color_clone.b * 255 );
 
 							} else {
 
