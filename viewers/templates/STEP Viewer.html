@@ -418,7 +418,6 @@
           </div>
         </button>
         <button title="Quick -90deg X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="background-color: transparent; min-width: 15px;">&#x2191</button>
-        <label title="Wireframe">Wire<input type="checkbox" id="wireframe" onchange="show_wireframe();" disabled /></label>
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
             <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="20" step="0.05" value="5" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
@@ -446,6 +445,7 @@
         <button title="Switch Material" id="btn_material" onclick="set_material();" style="min-width: 28px; margin-right: 0px;" disabled>MS</button>
         <button title="Vertex Colors" id="btn_vertex_colors" onclick="set_vertex_colors();" style="min-width: 27px;" disabled>VC</button>
         <button title="Random Vertex Colors" id="btn_random_vertex_colors" onclick="set_random_vertex_colors();" style="min-width: 15px;" disabled>!</button>
+        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" style="min-width: 22px;" disabled >W</button>
         <button title="Grid" id="btn_grid" onclick="show_grid()" disabled>#</button>
         <button title="Polar Grid" id="btn_polar_grid" onclick="show_polar_grid();" style="min-width: 24px;" disabled><p class="polar"></p></button>
       </div>
@@ -732,7 +732,7 @@
       var initial_opacity, initial_opacity_array;
       var edges, edges_visible, bim_edges_created;
       var initial_transparency, initial_transparency_array;
-      var iges, brep, bim, tex, defaultMaterial, outline_material;
+      var iges, brep, bim, tex, defaultMaterial, outline_material, wireframe_enabled;
       var selected_step_file, selected_url_file = '', filename, response, buffer, fileBuffer;
       var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
       var vertex_colors_enabled, original_vertex_color_array, random_vertex_colors_enabled, random_vertex_color_array;
@@ -962,18 +962,32 @@
             let blob;
 
             if (binary === true) {
-              blob = new Blob( [ draco === true ? await draco_compress( new Uint8Array( json ) ) : (meshopt === true ? await meshopt_compress( new Uint8Array( json ) ) : json ) ], { type: 'application/octet-stream' } );
+              if (draco === true) {
+                blob = new Blob( [ await draco_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
+              } else if (meshopt === true) {
+                blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
+              } else {
+                blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+              }
 
               zip.file( filename + '.glb', blob );
-              await process_zip( '_GLB' + (alternative === true ? 'x' : '') + (draco === true ? '_DRACO' : (meshopt === true ? '_MESHOPT' : '')) );
+              let str = '_GLB';
+              if (alternative === true) str += 'x';
+              if (draco === true) {
+                str += '_DRACO';
+              } else if (meshopt === true) {
+                str += '_MESHOPT';
+              }
+
+              await process_zip( str );
             } else {
               let string = JSON.stringify( json, null, 2 );
               blob = new Blob( [ string ], { type: 'text/plain' } );
 
               zip.file( filename + '.gltf', blob );
-              await process_zip( '_GLTF' );
+              await process_zip( '_GLTF' + (alternative === true) ? 'x' : '' );
             }
-          }, function( error ) { console.log( error ); }, options);
+          }, function( error ) { handle_export_error( error ); }, options);
         }
       }
 
@@ -1010,14 +1024,9 @@
 
                 // check if the conversion succeeded
                 if (result.IsSuccess() === false || fileCount === 0) {
-                  console.log( 'Error exporting the model!' );
-                  console.log( result.GetErrorCode() );
-                  document.getElementById('div_loading').innerHTML = '';
-                  document.getElementById('div_loading').style.display = 'none';
-                  document.getElementById('fixed_menu').style.display = 'block';
-                  if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
-                  render_requested = true;
-                  render();
+                  handle_export_error( result.GetErrorCode() );
+                  ajs = null;
+                  result = null;
                   return;
                 }
 
@@ -1031,7 +1040,7 @@
                 await process_zip( '_' + format.toUpperCase() );
               });
             });
-          }, function( error ) { console.log( error ); }, options);
+          }, function( error ) { handle_export_error( error ); }, options);
         }
       }
 
@@ -1084,7 +1093,7 @@
         if (mesh) {
           if (document.getElementById('btn_material').innerHTML !== 'MS') {
             document.getElementById('export_names').selectedIndex = 0;
-            alert( 'USDZExporter: only MeshStandardMaterial is supported, use the material button to change the material before exporting.' );
+            alert( 'USDZ Exporter: only MeshStandardMaterial is supported, use the material button to change the material before exporting.' );
             return;
           }
 
@@ -1840,6 +1849,7 @@
         if (scene) {
           if (polar_grid_visible) show_polar_grid();
           if (grid_visible) show_grid();
+          if (wireframe_enabled === true) show_wireframe();
 
           if (mesh) {
             mesh.traverse( function( child ) {
@@ -1917,6 +1927,7 @@
         polar_grid_visible = false;
         gif_export = false;
         render_requested = false;
+        wireframe_enabled = false;
         flat_shading_enabled = false;
         bgnd_linear_gradient = false;
         vertex_colors_enabled = false;
@@ -2709,14 +2720,22 @@
 
       function show_wireframe() {
         if (mesh) {
+          if (wireframe_enabled === true) {
+            document.getElementById('btn_wireframe').style.backgroundColor = '#d1cefc';
+            wireframe_enabled = false;
+          } else {
+            document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
+            wireframe_enabled = true;
+          }
+
           mesh.traverse( function( child ) {
             if (child.isMesh) {
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
-                  mtl.wireframe = document.getElementById('wireframe').checked;
+                  mtl.wireframe = wireframe_enabled;
                 });
               } else {
-                child.material.wireframe = document.getElementById('wireframe').checked;
+                child.material.wireframe = wireframe_enabled;
               }
             }
 
@@ -2768,6 +2787,7 @@
                   envMapIntensity: 1.0,
                   metalness: 0.5,
                   roughness: 0.6,
+                  wireframe: wireframe_enabled,
                   flatShading: flat_shading_enabled,
                   envMap: (gui && params.setEnvMap) ? scene.environment : null
                 });
@@ -2817,6 +2837,7 @@
               if (child.isMesh) {
                 let mtrl = new THREE.MeshLambertMaterial( {
                   side: THREE.DoubleSide,
+                  wireframe: wireframe_enabled,
                   envMap: (gui && params.setEnvMap) ? scene.environment : null,
                 });
 
@@ -2869,6 +2890,7 @@
                   envMap: (gui && params.setEnvMap) ? scene.environment : null,
                   specular: 0xA0A0A0,
                   shininess: 50,
+                  wireframe: wireframe_enabled,
                   flatShading: flat_shading_enabled,
                 });
 
@@ -2912,7 +2934,6 @@
           }
 
           set_model_opacity();
-          show_wireframe();
 
           mouse_wheel = true;
         }
@@ -3080,6 +3101,7 @@
       function reset_only() {
         if (polar_grid_visible) show_polar_grid();
         if (grid_visible) show_grid();
+        if (wireframe_enabled === true) show_wireframe();
 
         if (mesh) {
           mesh.traverse( function( child ) {
@@ -3159,9 +3181,8 @@
         document.getElementById('dlight').checked = false;
         radio_changed();
 
-        // Reset the equi and wireframe checkboxes
+        // Reset the equi checkbox
         document.getElementById('equi').checked = false;
-        document.getElementById('wireframe').checked = false;
 
         // Reset the opacity values
         enable_opacity = false;
@@ -3169,7 +3190,9 @@
         document.getElementById('model_opacity').disabled = true;
         document.getElementById('btn_dc_opacity').style.backgroundColor = 'transparent';
 
-        // Reset flat, edges and material related values
+        // Reset wireframe, flat, edges and material related values
+        wireframe_enabled = false;
+        document.getElementById('btn_wireframe').style.backgroundColor = '#d1cefc';
         flat_shading_enabled = false;
         document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
         edges_visible = false;
@@ -3204,7 +3227,6 @@
           controls.reset();
           directionalLight.position.set( 0, 0, 250 );
           set_scene_image();
-          show_wireframe();
           set_back_color();
           set_ambient_light_color();
           set_hemisphere_light_color();
@@ -3272,7 +3294,6 @@
         document.getElementById('rotation_y').disabled = disable;
         document.getElementById('rotation_z').disabled = disable;
         document.getElementById('equi').disabled = disable;
-        document.getElementById('wireframe').disabled = disable;
         document.getElementById('model_scale').disabled = disable;
         document.getElementById('ambient_light_color').disabled = disable;
         document.getElementById('hemisphere_light_color').disabled = disable;
@@ -3288,6 +3309,7 @@
         document.getElementById('btn_dc_ali').disabled = disable;
         document.getElementById('btn_dc_dli').disabled = disable;
         document.getElementById('btn_quick_x').disabled = disable;
+        document.getElementById('btn_wireframe').disabled = disable;
         document.getElementById('btn_dc_opacity').disabled = disable;
         document.getElementById('btn_material').disabled = disable;
         document.getElementById('btn_vertex_colors').disabled = disable;

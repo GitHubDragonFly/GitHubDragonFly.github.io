@@ -366,7 +366,7 @@
           <option title="GIF - Animated GIF" value="gif" onclick="export_animated_gif();">GIF</option>
           <option title="PNG - Animated PNG (APNG)" value="apng" onclick="export_animated_png();">PNG</option>
         </select>
-        <select title="Maximum Exported Texture Resolution and Y flip" id="export_tex_res" style="min-width: 65px;" disabled>
+        <select title="Maximum Exported Texture Resolution and Y flip" id="export_tex_res" disabled>
           <option title="Original" value="original" onclick="tex_res = Infinity; tex_flip = false;" selected>None</option>
           <option title="128 (128x128)" value="128" onclick="tex_res = 128; tex_flip = false;">128</option>
           <option title="256 (256x256)" value="256" onclick="tex_res = 256; tex_flip = false;">256</option>
@@ -797,6 +797,22 @@
         });
       }
 
+      function handle_export_error( error ) {
+        alert( 'Export error!' );
+        console.log( error );
+
+        document.getElementById('div_loading').innerHTML = '';
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('fixed_menu').style.display = 'block';
+        if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
+        render_requested = true;
+        mouse_wheel = true;
+        render();
+
+        document.body.removeChild( link );
+        link = undefined;
+      }
+
       async function export_obj() {
         if (mesh) {
           start_export();
@@ -809,7 +825,7 @@
 
           let options = { filename: filename, maxTextureSize: tex_res, map_flip_required: tex_flip };
 
-          await obj_exporter.parse( mesh, async function( exported ) {
+          await obj_exporter.parse( mesh.clone(), async function( exported ) {
             zip.file( filename + '.obj', exported[ 'obj' ] );
 
             if (exported[ 'mtl' ]) {
@@ -851,7 +867,7 @@
 
           let options = { binary: binary, littleEndian: true };
 
-          ply_exporter.parse( mesh, async function( json ) {
+          ply_exporter.parse( mesh.clone(), async function( json ) {
             let blob;
 
             if (binary === true) {
@@ -898,7 +914,7 @@
 
           let dae_exporter = new ColladaExporter( manager );
 
-          let result = dae_exporter.parse( mesh );
+          let result = dae_exporter.parse( mesh.clone() );
 
           zip.file( filename + '.dae', result.data );
 
@@ -975,18 +991,36 @@
             let blob;
 
             if (binary === true) {
-              blob = new Blob( [ draco === true ? await draco_compress( new Uint8Array( json ) ) : (meshopt === true ? await meshopt_compress( new Uint8Array( json ) ) : (tex_fmt !== '' ? await texture_compress( new Uint8Array( json ) ) : json)) ], { type: 'application/octet-stream' } );
+              if (draco === true) {
+                blob = new Blob( [ await draco_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
+              } else if (meshopt === true) {
+                blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
+              } else if (tex_fmt !== '') {
+                blob = new Blob( [ await texture_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
+              } else {
+                blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+              }
 
               zip.file( filename + '.glb', blob );
-              await process_zip( '_GLB' + (draco === true ? '_DRACO' : (meshopt === true ? '_MESHOPT' : '')) + (tex_fmt !== '' ? ' ' + tex_fmt : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : ''));
+              let str = '_GLB';
+              if (draco === true) {
+                str += '_DRACO';
+              } else if (meshopt === true) {
+                str += '_MESHOPT';
+              }
+              if (tex_fmt !== '') str += ' ' + tex_fmt;
+              if (tex_res !== Infinity) str += ' (' + tex_res + ')';
+
+              await process_zip( str );
             } else {
               let string = JSON.stringify( json, null, 2 );
               blob = new Blob( [ string ], { type: 'text/plain' } );
 
               zip.file( filename + '.gltf', blob );
-              await process_zip( '_GLTF' + (tex_res !== Infinity ? ' (' + tex_res + ')' : '') );
+
+              await process_zip( '_GLTF' + (tex_res !== Infinity) ? ' (' + tex_res + ')' : '' );
             }
-          }, function( error ) { console.log( error ); }, options);
+          }, function( error ) { handle_export_error( error ); }, options);
         }
       }
 
@@ -996,7 +1030,7 @@
 
           await new Promise( resolve => setTimeout( resolve, 20 ) );
 
-          let json = JSON.stringify( ( mesh ).toJSON() );
+          let json = JSON.stringify( ( mesh.clone() ).toJSON() );
           let blob = new Blob( [ json ], { type: 'text/plain' } );
 
           zip.file( filename + '.json', blob );
@@ -1017,13 +1051,13 @@
 
           let options = { vertexColorsCorrection: 0, maxTextureSize: tex_res, map_flip_required: tex_flip };
 
-          rhino_exporter.parse( mesh, async function( arrayBuffer ) {
+          rhino_exporter.parse( mesh.clone(), async function( arrayBuffer ) {
             let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
 
             zip.file( filename + '.3dm', blob );
 
             await process_zip( '_3DM' + (tex_flip === true ? '_Y' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '') );
-          }, function( error ) { console.log( error ); }, options );
+          }, function( error ) { handle_export_error( error ); }, options );
         }
       }
 

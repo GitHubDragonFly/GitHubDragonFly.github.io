@@ -382,6 +382,7 @@
         <select title="Export" id="export_names" style="min-width: 90px;" disabled>
           <option title="Export Formats" value="export" selected disabled>Export</option>
           <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
+          <option title="BIM - Dotbim File Format" value="bim" onclick="export_bim()">BIM</option>
           <option title="DAE - Collada Format regular export" value="dae" onclick="export_dae();">DAE</option>
           <option title="GLB - GL Transmission Format binary regular export with optional texture compression" value="glb" onclick="export_gltf( true );">GLB</option>
           <option title="GLB - GL Transmission Format binary regular export with DRACO and optional texture compression" value="glbdraco" onclick="export_gltf( true, false, true );">GLB_d</option>
@@ -405,7 +406,7 @@
           <option title="OBJ - Wavefront Technologies 3D Format alternative export" value="objx" onclick="export_obj( true );">OBJx</option>
           <option title="USDZ - Universal Scene Description Format alternative export" value="usdzx" onclick="export_usdz( true );">USDZx</option>
         </select>
-        <select title="Maximum Exported Texture Resolution and Y flip" id="export_tex_res" style="min-width: 65px;" disabled>
+        <select title="Maximum Exported Texture Resolution and Y flip" id="export_tex_res" disabled>
           <option title="Original" value="original" onclick="tex_res = Infinity; tex_flip = false;" selected>None</option>
           <option title="128 (128x128)" value="128" onclick="tex_res = 128; tex_flip = false;">128</option>
           <option title="256 (256x256)" value="256" onclick="tex_res = 256; tex_flip = false;">256</option>
@@ -502,7 +503,7 @@
         <button title="Material Side" id="btn_mtl_side" onclick="switch_mtl_side();" style="min-width: 28px;" disabled>OS</button>
         <button title="Vertex Colors" id="btn_vertex_colors" onclick="set_vertex_colors();" style="min-width: 28px;" disabled>VC</button>
         <button title="Random Vertex Colors" id="btn_random_vertex_colors" onclick="set_random_vertex_colors();" style="min-width: 15px;" disabled>!</button>
-        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
+        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" style="min-width: 22px;" disabled >W</button>
         <button title="Grid" id="btn_grid" onclick="show_grid();" disabled>#</button>
         <button title="Polar Grid" id="btn_polar_grid" onclick="show_polar_grid();" style="min-width: 24px;" disabled><p class="polar"></p></button>
       </div>
@@ -849,6 +850,45 @@
         });
       }
 
+      function handle_export_error( error ) {
+        alert( 'Export error!' );
+        console.log( error );
+
+        document.getElementById('div_loading').innerHTML = '';
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('fixed_menu').style.display = 'block';
+        if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
+        render_requested = true;
+        mouse_wheel = true;
+        render();
+
+        document.body.removeChild( link );
+        link = undefined;
+      }
+
+      async function export_bim() {
+        if (gltf_obj) {
+          if (object_is_points === true) {
+            document.getElementById('export_names').selectedIndex = 0;
+            alert( 'BIM Exporter: points are not supported!' );
+            return;
+          }
+
+          start_export();
+
+          const { BIMExporter } = await import( "../static/jsm/exporters/BIMExporter.js" );
+
+          let bim_exporter = new BIMExporter( manager );
+
+          let mesh_clone = gltf_obj.clone();
+
+          await bim_exporter.parse( mesh_clone, async function( dotbim ) {
+            zip.file( filename + '.bim', dotbim );
+            await process_zip( '_BIM' );
+          }, function( error ) { handle_export_error( error ); } );
+        }
+      }
+
       async function export_obj( alternative = false ) {
         if (gltf_obj) {
           start_export();
@@ -877,7 +917,10 @@
                   zip.file( `${ tex.name }.${ tex.ext }`, blob );
 
                   if (processed_index === exported[ 'tex' ].length - 1) {
-                    let str = '_OBJ' + (alternative === true ? 'x' : '') + (tex_flip === true ? '_Y' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '');
+                    let str = '_OBJ';
+                    if (alternative === true) str += 'x';
+                    if (tex_flip === true) str += '_Y';
+                    if (tex_res !== Infinity) str += ' (' + tex_res + ')';
                     await process_zip( str );
                   }
 
@@ -933,7 +976,7 @@
         if (gltf_obj) {
           if (object_is_points === true) {
             document.getElementById('export_names').selectedIndex = 0;
-            alert( 'STLExporter: points are not supported!' );
+            alert( 'STL Exporter: points are not supported!' );
             return;
           }
 
@@ -998,7 +1041,10 @@
                   await new Promise( resolve => canvas.toBlob( resolve ) ).then( async function( canvas_blob ) {
                     zip.file( `${ tex.name }.${ tex.ext }`, canvas_blob );
 
-                    let str = '_DAE' + (alternative === true ? 'x' : '') + (tex_flip === true ? '_Y' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '');
+                    let str = '_DAE';
+                    if (alternative === true) str += 'x';
+                    if (tex_flip === true) str += '_Y';
+                    if (tex_res !== Infinity) str += ' (' + tex_res + ')';
                     if (processed_index === result.textures.length - 1) await process_zip( str );
                   });
 
@@ -1049,18 +1095,40 @@
             let blob;
 
             if (binary === true) {
-              blob = new Blob( [ draco === true ? await draco_compress( new Uint8Array( json ) ) : (meshopt === true ? await meshopt_compress( new Uint8Array( json ) ) : (tex_fmt !== '' ? await texture_compress( new Uint8Array( json ) ) : json)) ], { type: 'application/octet-stream' } );
+              if (draco === true) {
+                blob = new Blob( [ await draco_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
+              } else if (meshopt === true) {
+                blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
+              } else if (tex_fmt !== '') {
+                blob = new Blob( [ await texture_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
+              } else {
+                blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+              }
 
               zip.file( filename + '.glb', blob );
-              await process_zip( '_GLB' + (alternative === true ? 'x' : '') + (draco === true ? '_DRACO' : (meshopt === true ? '_MESHOPT' : '')) + (tex_fmt !== '' ? ' ' + tex_fmt : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : ''));
+              let str = '_GLB';
+              if (alternative === true) str += 'x';
+              if (draco === true) {
+                str += '_DRACO';
+              } else if (meshopt === true) {
+                str += '_MESHOPT';
+              }
+              if (tex_fmt !== '') str += ' ' + tex_fmt;
+              if (tex_res !== Infinity) str += ' (' + tex_res + ')';
+
+              await process_zip( str );
             } else {
               let string = JSON.stringify( json, null, 2 );
               blob = new Blob( [ string ], { type: 'text/plain' } );
 
               zip.file( filename + '.gltf', blob );
-              await process_zip( '_GLTF' + (alternative === true ? 'x' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '') );
+              let str = '_GLTF';
+              if (alternative === true) str += 'x';
+              if (tex_res !== Infinity) str += ' (' + tex_res + ')';
+
+              await process_zip( str );
             }
-          }, function( error ) { console.log( error ); }, options);
+          }, function( error ) { handle_export_error( error ); }, options);
         }
       }
 
@@ -1085,7 +1153,7 @@
         if (gltf_obj) {
           if (object_is_points === true) {
             document.getElementById('export_names').selectedIndex = 0;
-            alert( 'USDZExporter: points are not supported!' );
+            alert( 'USDZ Exporter: points are not supported!' );
             return;
           }
 
@@ -1106,7 +1174,11 @@
 
           zip.file( filename + '.usdz', blob );
 
-          await process_zip( '_USDZ' + (alternative === true ? 'x' : '') + (tex_flip === true ? '_Y' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '') );
+          let str = '_USDZ';
+          if (alternative === true) str += 'x';
+          if (tex_flip === true) str += '_Y';
+          if (tex_res !== Infinity) str += ' (' + tex_res + ')';
+          await process_zip( str );
         }
       }
 
@@ -1128,7 +1200,7 @@
             zip.file( filename + '.3dm', blob );
 
             await process_zip( '_3DM' + (tex_flip === true ? '_Y' : '') + (tex_res !== Infinity ? ' (' + tex_res + ')' : '') );
-          }, function( error ) { console.log( error ); }, options );
+          }, function( error ) { handle_export_error( error ); }, options );
         }
       }
 
