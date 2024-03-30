@@ -68,9 +68,9 @@ import {
 	InstancedBufferAttribute
 } from "three";
 
-import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/DDSLoader.js";
-import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/TGALoader.js";
-import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/EXRLoader.js";
+import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/DDSLoader.min.js";
+import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/TGALoader.min.js";
+import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/EXRLoader.min.js";
 
 class GLTFLoader extends Loader {
 

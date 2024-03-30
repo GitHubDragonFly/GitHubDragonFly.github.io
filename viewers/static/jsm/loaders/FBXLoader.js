@@ -46,8 +46,8 @@ import {
 	VectorKeyframeTrack,
 	SRGBColorSpace
 } from "three";
-import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/libs/fflate.module.js";
-import { NURBSCurve } from "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/curves/NURBSCurve.js";
+import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/libs/fflate.module.min.js";
+import { NURBSCurve } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/curves/NURBSCurve.min.js";
 
 /**
 * THREE.Loader loads FBX file and generates THREE.Group representing FBX scene.
@@ -2717,7 +2717,7 @@ class AnimationParser {
 		const euler = new Euler();
 		const quaternionValues = [];
 
-		if ( ! values || ! times ) return new QuaternionKeyframeTrack( modelName + '.quaternion', [], [] );
+		if ( ! values || ! times ) return new QuaternionKeyframeTrack( modelName + '.quaternion', [ 0 ], [ 0 ] );
 
 		for ( let i = 0; i < values.length; i += 3 ) {
 
