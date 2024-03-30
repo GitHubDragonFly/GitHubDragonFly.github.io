@@ -65,10 +65,10 @@ import {
 	VectorKeyframeTrack
 } from "three";
 
-import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/loaders/DDSLoader.js";
-import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/loaders/TGALoader.js";
-import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/loaders/EXRLoader.js";
-import { toTrianglesDrawMode } from "https://cdn.jsdelivr.net/npm/three@0.161.0/examples/jsm/utils/BufferGeometryUtils.js";
+import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/loaders/DDSLoader.min.js";
+import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/loaders/TGALoader.min.js";
+import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/loaders/EXRLoader.min.js";
+import { toTrianglesDrawMode } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/BufferGeometryUtils.min.js";
 
 class GLTFLoader extends Loader {
 
@@ -178,7 +178,7 @@ class GLTFLoader extends Loader {
 			return new GLTFMeshGpuInstancing( parser );
 
 		} );
-		
+
 		this.register( function ( parser ) {
 
 			return new GLTFAnimationPointerExtension( parser );
@@ -2071,6 +2071,7 @@ class GLTFTextureWebPExtension {
 
 				// Lossy test image. Support for lossy images doesn't guarantee support for all
 				// WebP images, unfortunately.
+
 				image.src = 'data:image/webp;base64,UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEADsD+JaQAA3AAAAAA';
 
 				image.onload = image.onerror = function () {
@@ -2554,7 +2555,7 @@ class GLTFDracoMeshCompressionExtension {
 
 		return parser.getDependency( 'bufferView', bufferViewIndex ).then( function ( bufferView ) {
 
-			return new Promise( function ( resolve ) {
+			return new Promise( function ( resolve, reject ) {
 
 				dracoLoader.decodeDracoFile( bufferView, function ( geometry ) {
 
@@ -2569,7 +2570,7 @@ class GLTFDracoMeshCompressionExtension {
 
 					resolve( geometry );
 
-				}, threeAttributeMap, attributeTypeMap );
+				}, threeAttributeMap, attributeTypeMap, LinearSRGBColorSpace, reject );
 
 			} );
 
@@ -3260,6 +3261,12 @@ class GLTFParser {
 				return ext.afterRoot && ext.afterRoot( result );
 
 			} ) ).then( function () {
+
+				for ( const scene of result.scenes ) {
+
+					scene.updateMatrixWorld();
+
+				}
 
 				onLoad( result );
 
