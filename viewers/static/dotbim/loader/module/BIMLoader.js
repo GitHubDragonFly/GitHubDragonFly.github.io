@@ -10,11 +10,10 @@ import {
 	Matrix4,
 	MeshStandardMaterial,
 	Quaternion,
-	SRGBColorSpace,
 	Vector3
 } from "three";
 
-import { mergeVertices } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/BufferGeometryUtils.js";
+import { mergeVertices } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/utils/BufferGeometryUtils.min.js";
 
 // Based on: https://github.com/ricaun/dotbim.three.js
 
@@ -144,7 +143,7 @@ class BIMLoader extends Loader {
 
 			} else if ( color ) {
 
-				material.color = new Color( color.r / 255.0, color.g / 255.0, color.b / 255.0, SRGBColorSpace );
+				material.color = new Color( color.r / 255.0, color.g / 255.0, color.b / 255.0 );
 				material.opacity = color.a / 255.0;
 				material.transparent = material.opacity < 1.0;
 
@@ -182,6 +181,8 @@ class BIMLoader extends Loader {
 				mesh_id_key.current_instance++;
 
 			} else { // expected existing 'color'
+
+				if ( ! color ) return;
 
 				let el_color = [ color.r, color.g, color.b, color.a ];
 				let mesh_id_key = mesh_id_keys[ mesh_id ][ 'color_group' ][ el_color ];
@@ -307,7 +308,7 @@ class BIMLoader extends Loader {
 
 			}
 
-			elements.forEach( element => {
+			for ( const element of elements ) {
 
 				if ( ! mesh_id_keys[ element[ 'mesh_id' ] ]) mesh_id_keys[ element[ 'mesh_id' ] ] = { face_colors_group: {}, color_group: {} };
 
@@ -327,6 +328,8 @@ class BIMLoader extends Loader {
 
 				} else { // expected existing element[ 'color' ]
 
+					if ( ! element[ 'color' ] ) continue;
+
 					let el_color = [ element[ 'color' ].r, element[ 'color' ].g, element[ 'color' ].b, element[ 'color' ].a ];
 					let mesh_id_key = mesh_id_keys[ element[ 'mesh_id' ] ][ 'color_group' ][ el_color ];
 
@@ -342,15 +345,21 @@ class BIMLoader extends Loader {
 
 				}
 
-			});
+			}
 
 			const geometries = dotbim_Meshes2Geometries( meshes );
 
 			dotbim_Elemments2Meshes( elements, geometries ).forEach( bim_mesh => {
 
-				bim_meshes.add( bim_mesh );
+				if ( bim_mesh ) bim_meshes.add( bim_mesh );
 
 			});
+
+			if ( bim_meshes.children.length === 0 ) {
+
+				throw new Error( 'THREE.BIMLoader: No meshes found!' );
+
+			}
 
 			if ( bim_meshes.children.length > 1 ) bim_meshes.rotateX( - Math.PI / 2 );
 
