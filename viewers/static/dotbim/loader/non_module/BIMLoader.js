@@ -74,7 +74,7 @@
 
 				}
 
-				elements.forEach( element => {
+				for ( const element of elements ) {
 
 					if ( ! mesh_id_keys[ element[ 'mesh_id' ] ]) mesh_id_keys[ element[ 'mesh_id' ] ] = { face_colors_group: {}, color_group: {} };
 
@@ -94,6 +94,8 @@
 
 					} else { // expected existing element[ 'color' ]
 
+						if ( ! element[ 'color' ] ) continue;
+
 						let el_color = [ element[ 'color' ].r, element[ 'color' ].g, element[ 'color' ].b, element[ 'color' ].a ];
 						let mesh_id_key = mesh_id_keys[ element[ 'mesh_id' ] ][ 'color_group' ][ el_color ];
 
@@ -109,7 +111,7 @@
 
 					}
 
-				});
+				}
 
 				const geometries = dotbim_Meshes2Geometries( meshes );
 
@@ -118,6 +120,12 @@
 					bim_meshes.add( bim_mesh );
 
 				});
+
+				if ( bim_meshes.children.length === 0 ) {
+
+					throw new Error( 'THREE.BIMLoader: No meshes found!' );
+
+				}
 
 				if ( bim_meshes.children.length > 1 ) bim_meshes.rotateX( - Math.PI / 2 );
 
@@ -245,6 +253,8 @@
 					mesh_id_key.current_instance++;
 
 				} else { // expected existing 'color'
+
+					if ( ! color ) return;
 
 					let el_color = [ color.r, color.g, color.b, color.a ];
 					let mesh_id_key = mesh_id_keys[ mesh_id ][ 'color_group' ][ el_color ];
