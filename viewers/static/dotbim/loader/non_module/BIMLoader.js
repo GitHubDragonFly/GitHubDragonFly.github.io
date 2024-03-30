@@ -117,7 +117,7 @@
 
 				dotbim_Elemments2Meshes( elements, geometries ).forEach( bim_mesh => {
 
-					bim_meshes.add( bim_mesh );
+					if ( bim_mesh ) bim_meshes.add( bim_mesh );
 
 				});
 
