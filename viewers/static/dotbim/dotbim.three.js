@@ -21,7 +21,7 @@ function dotbim_CreateMeshes(dotbim) {
         return [];
     }
 
-    elements.forEach( element => {
+    for ( const element of elements ) {
         if (!mesh_id_keys[ element[ 'mesh_id' ] ]) mesh_id_keys[ element[ 'mesh_id' ] ] = { face_colors_group: {}, color_group: {} };
 
         if (element[ 'face_colors' ]) {
@@ -33,6 +33,8 @@ function dotbim_CreateMeshes(dotbim) {
                 mesh_id_key.instance_count++;
             }
         } else { // expected existing element[ 'color' ]
+            if (!element[ 'color' ]) continue;
+
             let el_color = [ element[ 'color' ].r, element[ 'color' ].g, element[ 'color' ].b, element[ 'color' ].a ];
             let mesh_id_key = mesh_id_keys[ element[ 'mesh_id' ] ][ 'color_group' ][ el_color ];
 
@@ -42,7 +44,7 @@ function dotbim_CreateMeshes(dotbim) {
                 mesh_id_key.instance_count++;
             }
         }
-    });
+    }
 
     let geometrys = dotbim_Meshes2Geometrys(meshes);
 
@@ -52,8 +54,13 @@ function dotbim_CreateMeshes(dotbim) {
     if (info.Name && info.Name !== '') bim_meshes.name = info.Name;
 
     dotbim_Elemments2Meshes(elements, geometrys).forEach( bim_mesh => {
-        bim_meshes.add( bim_mesh );
+        if ( bim_mesh ) bim_meshes.add( bim_mesh );
     });
+
+    if ( bim_meshes.children.length === 0 ) {
+        console.log( 'No meshes or elements found!' );
+        return [];
+    }
 
     if ( bim_meshes.children.length > 1 ) bim_meshes.rotateX( - Math.PI / 2 );
 
@@ -149,6 +156,8 @@ function dotbim_Elemment2Mesh(element, geometrys) {
 
         mesh_id_key.current_instance++;
     } else { // expected existing 'color'
+        if (!color) return;
+
         let el_color = [ color.r, color.g, color.b, color.a ];
         let mesh_id_key = mesh_id_keys[ mesh_id ][ 'color_group' ][ el_color ];
 
