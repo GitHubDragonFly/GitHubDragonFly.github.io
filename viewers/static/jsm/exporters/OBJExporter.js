@@ -5,7 +5,7 @@ import {
 	Vector3
 } from "three";
 
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/TextureUtils.js";
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/utils/TextureUtils.min.js";
 
 class OBJExporter {
 
@@ -609,10 +609,6 @@ class OBJExporter {
 						mtlOutput += 'Pa ' + mat.anisotropy + '\n';
 						if ( mat.anisotropyRotation !== undefined ) mtlOutput += 'Par ' + mat.anisotropyRotation + '\n';
 					}
-					if ( mat.attenuationDistance && mat.attenuationDistance !== Infinity ) {
-						mtlOutput += 'Pac ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
-						mtlOutput += 'Pad ' + mat.attenuationDistance + '\n';
-					}
 					if ( mat.iridescence && mat.iridescence > 0 ) {
 						mtlOutput += 'Pi ' + mat.iridescence + '\n';
 						if ( mat.iridescenceIOR && mat.iridescenceIOR >= 1 ) mtlOutput += 'Pii ' + mat.iridescenceIOR + '\n';
@@ -648,6 +644,10 @@ class OBJExporter {
 							}
 						}
 					}
+					if ( mat.attenuationDistance && mat.attenuationDistance !== Infinity ) {
+						mtlOutput += 'Pac ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
+						mtlOutput += 'Pad ' + ( mat.attenuationDistance + ( mat.thickness || 0 ) ) + '\n';
+					}
 					if ( mat.transmission && mat.transmission > 0 ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
 
 					if ( mat.reflectivity !== undefined && mat.reflectivity > 0 ) mtlOutput += 'Prf ' + mat.reflectivity + '\n';
@@ -672,9 +672,9 @@ class OBJExporter {
 							const yo = mat.map.offset.y;
 							const ws = mat.map.wrapS;
 							const wt = mat.map.wrapT;
-							const xc = mat.map.center.x;
-							const yc = mat.map.center.y;
-							const rot = mat.map.rotation;
+							const xc = mat.map.center ? mat.map.center.x : 0;
+							const yc = mat.map.center ? mat.map.center.y : 0;
+							const rot = mat.map.rotation ? mat.map.rotation : 0;
 
 							if ( map_uuids.includes( mat.map.uuid ) === false ) {
 
@@ -717,9 +717,9 @@ class OBJExporter {
 							const yo = mat.specularMap.offset.y;
 							const ws = mat.specularMap.wrapS;
 							const wt = mat.specularMap.wrapT;
-							const xc = mat.specularMap.center.x;
-							const yc = mat.specularMap.center.y;
-							const rot = mat.specularMap.rotation;
+							const xc = mat.specularMap.center ? mat.specularMap.center.x : 0;
+							const yc = mat.specularMap.center ? mat.specularMap.center.y : 0;
+							const rot = mat.specularMap.rotation ? mat.specularMap.rotation : 0;
 
 							if ( map_uuids.includes( mat.specularMap.uuid ) === false ) {
 
@@ -764,9 +764,9 @@ class OBJExporter {
 							const yo = mat.emissiveMap.offset.y;
 							const ws = mat.emissiveMap.wrapS;
 							const wt = mat.emissiveMap.wrapT;
-							const xc = mat.emissiveMap.center.x;
-							const yc = mat.emissiveMap.center.y;
-							const rot = mat.emissiveMap.rotation;
+							const xc = mat.emissiveMap.center ? mat.emissiveMap.center.x : 0;
+							const yc = mat.emissiveMap.center ? mat.emissiveMap.center.y : 0;
+							const rot = mat.emissiveMap.rotation ? mat.emissiveMap.rotation : 0;
 
 							if ( map_uuids.includes( mat.emissiveMap.uuid ) === false ) {
 
@@ -811,9 +811,9 @@ class OBJExporter {
 							const yo = mat.bumpMap.offset.y;
 							const ws = mat.bumpMap.wrapS;
 							const wt = mat.bumpMap.wrapT;
-							const xc = mat.bumpMap.center.x;
-							const yc = mat.bumpMap.center.y;
-							const rot = mat.bumpMap.rotation;
+							const xc = mat.bumpMap.center ? mat.bumpMap.center.x : 0;
+							const yc = mat.bumpMap.center ? mat.bumpMap.center.y : 0;
+							const rot = mat.bumpMap.rotation ? mat.bumpMap.rotation : 0;
 
 							if ( map_uuids.includes( mat.bumpMap.uuid ) === false ) {
 
@@ -874,9 +874,9 @@ class OBJExporter {
 							const yo = mat.lightMap.offset.y;
 							const ws = mat.lightMap.wrapS;
 							const wt = mat.lightMap.wrapT;
-							const xc = mat.lightMap.center.x;
-							const yc = mat.lightMap.center.y;
-							const rot = mat.lightMap.rotation;
+							const xc = mat.lightMap.center ? mat.lightMap.center.x : 0;
+							const yc = mat.lightMap.center ? mat.lightMap.center.y : 0;
+							const rot = mat.lightMap.rotation ? mat.lightMap.rotation : 0;
 
 							if ( map_uuids.includes( mat.lightMap.uuid ) === false ) {
 
@@ -923,9 +923,9 @@ class OBJExporter {
 								const yo = mat.metalnessMap.offset.y;
 								const ws = mat.metalnessMap.wrapS;
 								const wt = mat.metalnessMap.wrapT;
-								const xc = mat.metalnessMap.center.x;
-								const yc = mat.metalnessMap.center.y;
-								const rot = mat.metalnessMap.rotation;
+								const xc = mat.metalnessMap.center ? mat.metalnessMap.center.x : 0;
+								const yc = mat.metalnessMap.center ? mat.metalnessMap.center.y : 0;
+								const rot = mat.metalnessMap.rotation ? mat.metalnessMap.rotation : 0;
 
 								if ( map_uuids.includes( mat.metalnessMap.uuid ) === false ) {
 
@@ -992,9 +992,9 @@ class OBJExporter {
 								const yo = mat.roughnessMap.offset.y;
 								const ws = mat.roughnessMap.wrapS;
 								const wt = mat.roughnessMap.wrapT;
-								const xc = mat.roughnessMap.center.x;
-								const yc = mat.roughnessMap.center.y;
-								const rot = mat.roughnessMap.rotation;
+								const xc = mat.roughnessMap.center ? mat.roughnessMap.center.x : 0;
+								const yc = mat.roughnessMap.center ? mat.roughnessMap.center.y : 0;
+								const rot = mat.roughnessMap.rotation ? mat.roughnessMap.rotation : 0;
 
 								if ( map_uuids.includes( mat.roughnessMap.uuid ) === false ) {
 
@@ -1059,9 +1059,9 @@ class OBJExporter {
 							const yo = mat.displacementMap.offset.y;
 							const ws = mat.displacementMap.wrapS;
 							const wt = mat.displacementMap.wrapT;
-							const xc = mat.displacementMap.center.x;
-							const yc = mat.displacementMap.center.y;
-							const rot = mat.displacementMap.rotation;
+							const xc = mat.displacementMap.center ? mat.displacementMap.center.x : 0;
+							const yc = mat.displacementMap.center ? mat.displacementMap.center.y : 0;
+							const rot = mat.displacementMap.rotation ? mat.displacementMap.rotation : 0;
 
 							if ( map_uuids.includes( mat.displacementMap.uuid ) === false ) {
 
@@ -1106,9 +1106,9 @@ class OBJExporter {
 							const yo = mat.normalMap.offset.y;
 							const ws = mat.normalMap.wrapS;
 							const wt = mat.normalMap.wrapT;
-							const xc = mat.normalMap.center.x;
-							const yc = mat.normalMap.center.y;
-							const rot = mat.normalMap.rotation;
+							const xc = mat.normalMap.center ? mat.normalMap.center.x : 0;
+							const yc = mat.normalMap.center ? mat.normalMap.center.y : 0;
+							const rot = mat.normalMap.rotation ? mat.normalMap.rotation : 0;
 
 							if ( map_uuids.includes( mat.normalMap.uuid ) === false ) {
 
@@ -1153,9 +1153,9 @@ class OBJExporter {
 							const yo = mat.alphaMap.offset.y;
 							const ws = mat.alphaMap.wrapS;
 							const wt = mat.alphaMap.wrapT;
-							const xc = mat.alphaMap.center.x;
-							const yc = mat.alphaMap.center.y;
-							const rot = mat.alphaMap.rotation;
+							const xc = mat.alphaMap.center ? mat.alphaMap.center.x : 0;
+							const yc = mat.alphaMap.center ? mat.alphaMap.center.y : 0;
+							const rot = mat.alphaMap.rotation ? mat.alphaMap.rotation : 0;
 
 							if ( map_uuids.includes( mat.alphaMap.uuid ) === false ) {
 
@@ -1200,9 +1200,9 @@ class OBJExporter {
 							const yo = mat.aoMap.offset.y;
 							const ws = mat.aoMap.wrapS;
 							const wt = mat.aoMap.wrapT;
-							const xc = mat.aoMap.center.x;
-							const yc = mat.aoMap.center.y;
-							const rot = mat.aoMap.rotation;
+							const xc = mat.aoMap.center ? mat.aoMap.center.x : 0;
+							const yc = mat.aoMap.center ? mat.aoMap.center.y : 0;
+							const rot = mat.aoMap.rotation ? mat.aoMap.rotation : 0;
 
 							if ( map_uuids.includes( mat.aoMap.uuid ) === false ) {
 

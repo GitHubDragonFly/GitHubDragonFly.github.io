@@ -8,13 +8,19 @@ import {
 import {
 	strToU8,
 	zipSync,
-} from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/libs/fflate.module.js";
+} from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/libs/fflate.module.min.js";
 
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/TextureUtils.js";
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/utils/TextureUtils.min.js";
 
 class USDZExporter {
 
-	async parse( scene, options = {} ) {
+	parse( scene, onDone, onError, options ) {
+
+		this.parseAsync( scene, options ).then( onDone ).catch( onError );
+
+	}
+
+	async parseAsync( scene, options = {} ) {
 
 		options = Object.assign( {
 			ar: {
