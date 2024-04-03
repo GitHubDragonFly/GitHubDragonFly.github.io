@@ -1074,15 +1074,19 @@ class GLTFMaterialsVolumeExtension {
 
 		const extension = materialDef.extensions[ this.name ];
 
-		materialParams.thickness = extension.thicknessFactor !== undefined ? extension.thicknessFactor : 0;
+		if ( extension.thicknessFactor ) materialParams.thickness = extension.thicknessFactor;
 
-		if ( extension.thicknessTexture !== undefined ) {
+		if ( extension.thicknessTexture ) {
 
 			pending.push( parser.assignTexture( materialParams, 'thicknessMap', extension.thicknessTexture ) );
 
 		}
 
-		materialParams.attenuationDistance = extension.attenuationDistance || Infinity;
+		if ( extension.attenuationDistance ) {
+
+			materialParams.attenuationDistance = extension.attenuationDistance + ( materialParams.thickness || 0 );
+
+		}
 
 		const colorArray = extension.attenuationColor || [ 1, 1, 1 ];
 		materialParams.attenuationColor = new Color().setRGB( colorArray[ 0 ], colorArray[ 1 ], colorArray[ 2 ], LinearSRGBColorSpace );
