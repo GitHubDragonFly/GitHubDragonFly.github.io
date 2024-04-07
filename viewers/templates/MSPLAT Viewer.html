@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="SPLAT (3D Gaussian Splatting) Viewer">
+    <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.8.3/dist/es-module-shims.min.js"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/",
+          "three/examples/jsm/postprocessing/Pass": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/postprocessing/Pass.min.js",
+          "three/examples/jsm/utils/BufferGeometryUtils": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/utils/BufferGeometryUtils.min.js",
+          "@lumaai/luma-web": "https://cdn.jsdelivr.net/npm/@lumaai/luma-web@0.2.2/dist/library/luma-web.module.min.js"
+        }
+      }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { OrbitControls } from "three/addons/controls/OrbitControls.min.js";
+      import { Splat, SplatLoader } from "https://cdn.jsdelivr.net/npm/@pmndrs/vanilla@1.15.1/core/Splat.min.js";
+
+      THREE = three_js;
+
+      manager = new THREE.LoadingManager();
+      manager.onLoad = function() { mouse_wheel = true; }
+
+      orb_controls = OrbitControls;
+      splat_loader = SplatLoader;
+      splat = Splat;
+    </script>
+
+    <style>
+      body, html {
+        backdrop-filter: blur(10px);
+        position: relative;
+        display: block;
+        background-color: black;
+        width: 100%;
+        min-height: 100vh;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button {
+        background-color: transparent;
+        border: 1px solid blue;
+        -webkit-border-radius: 3px;
+        border-radius: 3px;
+        text-align: center;
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+        min-width: 19px;
+        height: 22px;
+        padding: 1px;
+      }
+
+      input[type=file] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        max-width: 160px;
+      }
+
+      input[type=text] {
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+      }
+
+      select {
+        vertical-align: middle;
+        border: 1px solid blue;
+        -webkit-border-radius: 3px;
+        border-radius: 3px;
+        background: none;
+        min-width: 70px;
+        height: 22px;
+        padding: 2px;
+        margin: 1px;
+        color: blue;
+      }
+
+      .error_msg {
+        background-color: transparent;
+        position: absolute;
+        text-align: center;
+        font-size: x-large;
+        display: none;
+        color: red;
+        width: 240px;
+        height: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .loading_msg {
+        background-color: transparent;
+        color: greenyellow;
+        position: absolute;
+        text-align: center;
+        font-size: large;
+        display: none;
+        height: 240px;
+        width: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .fm {
+        color: navy;
+        width: calc(100% - 4px);
+        border: 1px solid navy;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        padding: 4px;
+        margin: 1px;
+      }
+
+      .fixed-menu {
+        background-color: whitesmoke;
+        display: inline-block;
+        position: fixed;
+        padding: 1px;
+        width: 100%;
+        z-index: 1;
+        margin: 0;
+      }
+    </style>
+
+    <!-- Using @pmndrs/drei-vanilla Library from: https://github.com/pmndrs/drei-vanilla#splat -->
+    <!-- A declarative abstraction around antimatter15/splat from: https://github.com/antimatter15/splat -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>SPLAT Viewer</title>
+  </head>
+  <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <button title="URL of the remote splat" id="btn_url" onclick="show_url();" style="min-width: 34px;">URL</button>
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".splat" />
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="width: 70%; margin-right: 3px;" />
+        <button title="Load" id="btn_load" onclick="load_url_file();" style="min-width: 38px; margin-right: 3px;">Load</button>
+        <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 38px; margin-right: 1px;">Clear</button>
+      </div>
+      <div class="fm">
+        <select title="Quick XYZ Rotation" id="quick_rotation" disabled>
+          <option title="Quick XYZ Rotation" value="qrot" selected disabled>Rotate</option>
+          <option title="Rotate 180x" value="180x" onclick="quick_x_rotation( '1' );">180x</option>
+          <option title="Rotate 90x" value="90x" onclick="quick_x_rotation( '0.5' );">90x</option>
+          <option title="Rotate -90x" value="-90x" onclick="quick_x_rotation( '-0.5' );">-90x</option>
+          <option title="Rotate 180y" value="180y" onclick="quick_y_rotation( '1' );">180y</option>
+          <option title="Rotate 90y" value="90y" onclick="quick_y_rotation( '0.5' );">90y</option>
+          <option title="Rotate -90y" value="-90y" onclick="quick_y_rotation( '-0.5' );">-90y</option>
+          <option title="Rotate 180z" value="180z" onclick="quick_z_rotation( '1' );">180z</option>
+          <option title="Rotate 90z" value="90z" onclick="quick_z_rotation( '0.5' );">90z</option>
+          <option title="Rotate -90z" value="-90z" onclick="quick_z_rotation( '-0.5' );">-90z</option>
+        </select>
+        <select title="Model Scale" id="model_scale" disabled>
+          <option title="Model Scale" value="scale" selected disabled>Scale</option>
+          <option title="Scale 0.05x" value="0.05x" onclick="set_model_scale( '0.05x' );">0.05x</option>
+          <option title="Scale 0.1x" value="0.1x" onclick="set_model_scale( '0.1x' );">0.1x</option>
+          <option title="Scale 0.2x" value="0.2x" onclick="set_model_scale( '0.2x' );">0.2x</option>
+          <option title="Scale 0.5x" value="0.5x" onclick="set_model_scale( '0.5x' );">0.5x</option>
+          <option title="Scale 2x" value="2x" onclick="set_model_scale( '2x' );">2x</option>
+          <option title="Scale 5x" value="5x" onclick="set_model_scale( '5x' );">5x</option>
+          <option title="Scale 10x" value="10x" onclick="set_model_scale( '10x' );">10x</option>
+          <option title="Scale 20x" value="20x" onclick="set_model_scale( '20x' );">20x</option>
+        </select>
+        <button title="Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="color: blue;" disabled>G</button>
+      </div>
+    </div>
+
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">Loading</div>
+
+    <script>
+      function show_url() {
+        if (url_displayed === true) {
+          document.getElementById('url').style.display = 'none';
+          url_displayed = false;
+        } else {
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+
+        mouse_wheel = true;
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+
+        window.addEventListener( 'pointerdown', ( event ) => { mouse_down = true; }, false);
+        window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
+        window.addEventListener( 'keydown', ( event ) => {
+          if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
+            controls.listenToKeyEvents( window );
+            mouse_wheel = true;
+          }
+        }, false);
+        window.addEventListener( 'keyup', ( event ) => {
+          if (arrow_keys.some( k => k === event.key )) {
+            controls.stopListenToKeyEvents();
+            mouse_wheel = false;
+          }
+        }, false);
+      }
+
+      function resize() {
+        if (scene) {
+          mouse_wheel = true;
+
+          renderer.setSize( window.innerWidth, window.innerHeight );
+
+          camera.aspect = window.innerWidth / window.innerHeight;
+          camera.updateProjectionMatrix();
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          mouse_wheel = true;
+        }
+      }
+    </script>
+
+    <script>
+      var THREE, splat_loader, splat, splats, manager, isMobile;
+      var controls, orb_controls, renderer, scene, camera, render_requested;
+      var ww = window.innerWidth, wh = window.innerHeight, bgnd_linear_gradient;
+      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
+      var selected_local_file, selected_url_file = '';
+      var first_run = false, fr_count = 0, count = 0;
+      var url_displayed = false, url_loading = false;
+
+      function set_bgnd_linear_gradient() {
+        if (bgnd_linear_gradient === true) {
+          scene.background = null;
+          bgnd_linear_gradient = false;
+          renderer.toneMappingExposure = 1.2;
+          document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+        } else {
+          bgnd_linear_gradient = true;
+
+          let canvas = document.createElement('canvas');
+          let context = canvas.getContext("2d");
+          canvas.width = ww;
+          canvas.height = wh;
+
+          let gradient = context.createLinearGradient( 0, 0, 0, wh );
+          let gradient_colors = [ [ 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.15 ], [ '#151525', '#252535', '#454555', '#656575', '#787888', '#8A8A9A', '#9A9AAA', '#A5A5B5' ] ];
+          let i = gradient_colors[ 0 ].length;
+          while( i-- ) { gradient.addColorStop( gradient_colors[ 0 ][ i ], gradient_colors[ 1 ][ i ] ); }
+          context.fillStyle = gradient;
+          context.fillRect( 0, 0, ww, wh );
+          let lg_texture = new THREE.Texture( canvas );
+          lg_texture.mapping = THREE.EquirectangularReflectionMapping;
+          renderer.toneMappingExposure = 0.7;
+          scene.background = lg_texture;
+          lg_texture.needsUpdate = true;
+
+          document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'lightgreen';
+        }
+
+        mouse_wheel = true;
+      }
+
+      function set_model_scale( scale ) {
+        document.getElementById('model_scale').selectedIndex = 0;
+
+        splats.scale.multiplyScalar( parseFloat( scale.slice( 0, -1 ) ) );
+
+        mouse_wheel = true;
+      }
+
+      function quick_x_rotation( angle ) {
+        document.getElementById('quick_rotation').selectedIndex = 0;
+
+        splats.rotateX( Math.PI * parseFloat( angle ) );
+
+        mouse_wheel = true;
+      }
+
+      function quick_y_rotation( angle ) {
+        document.getElementById('quick_rotation').selectedIndex = 0;
+
+        splats.rotateY( Math.PI * parseFloat( angle ) );
+
+        mouse_wheel = true;
+      }
+
+      function quick_z_rotation( angle ) {
+        document.getElementById('quick_rotation').selectedIndex = 0;
+
+        splats.rotateZ( Math.PI * parseFloat( angle ) );
+
+        mouse_wheel = true;
+      }
+
+      function init() {
+        if (scene) {
+          if (splats) {
+            scene.remove( splats );
+            splats = null;
+          }
+
+          reset_all( true );
+        }
+
+        enable_disable( true );
+
+        splats = null;
+        selected_local_file = null;
+        mouse_down = false;
+        mouse_wheel = true;
+        render_requested = false;
+        bgnd_linear_gradient = false;
+
+        console.time( 'Loading Time' );
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (url_loading === false) {
+          // Loaded splat file
+          var fi = document.getElementById('file_input');
+
+          if (!fi.files[ 0 ]) {
+            handle_error( 'No file found!' );
+            return;
+          }
+
+          if (fi.files[ 0 ].name.toUpperCase().endsWith('.SPLAT')) selected_local_file = fi.files[ 0 ];
+
+          if (selected_local_file === null) {
+            handle_error( 'No valid SPLAT file selected!' );
+            return;
+          }
+
+          selected_url_file = '';
+        } else {
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          url_loading = false;
+        }
+
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: false, alpha: true } );
+          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.toneMapping = THREE.NeutralToneMapping;
+          renderer.toneMappingExposure = 1.2;
+          renderer.setSize( ww, wh );
+          renderer.autoClear = false;
+          renderer.xr.enabled = true;
+
+          document.body.appendChild( renderer.domElement );
+        }
+
+        if (scene === undefined) {
+          scene = new THREE.Scene();
+          scene.backgroundBlurriness = 1.0;
+          scene.backgroundIntensity = 0.5;
+        }
+
+        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+        if (camera === undefined) {
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 5000 );
+          camera.position.set( 0, 0, 30 );
+          scene.add( camera );
+        }
+
+        if (controls === undefined) {
+          controls = new orb_controls( camera, renderer.domElement );
+          controls.zoomToCursor = true;
+          controls.zoomSpeed = 0.3;
+          controls.rotateSpeed = 0.5;
+          controls.keyPanSpeed = 0.3; 
+          controls.panSpeed = 0.3;
+          //controls.enableDamping = true;
+          //controls.dampingFactor = 0.3;
+          //controls.enableKeys = false;
+          //controls.enableZoom = true;
+          //controls.maxPolarAngle = 2.2;
+          //controls.minPolarAngle = 1.1;
+          //controls.rotateSpeed = 0.2;
+          //controls.minDistance = 2;
+          //controls.maxDistance = 500;
+        }
+
+        (selected_local_file !== null) ? loadFile() : loadURLFile();
+      }
+
+      async function loadFile() {
+        await new splat_loader( renderer ).loadAsync( URL.createObjectURL( selected_local_file ),
+        function( xhr ) { },
+        function( error ) {
+          URL.revokeObjectURL( selected_local_file );
+          handle_error( error );
+        }).then( loaded_splat => {
+          URL.revokeObjectURL( selected_local_file );
+
+          splats = new splat( loaded_splat, camera );
+
+          scene.add( splats );
+
+          finish_loading();
+        });
+      }
+
+      async function loadURLFile() {
+        if (selected_url_file !== '') {
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+          }
+
+          // No extension checking for URL so it has to point to either a Splat or Luma Splat model
+
+          console.log( 'Trying drei-vanilla splat loader...' );
+
+          await new splat_loader( renderer ).loadAsync( selected_url_file,
+          function( xhr ) { },
+          async function( error ) {
+            console.log( 'Not a regular splat!' );
+            console.log( 'Trying luma splat loader...' );
+
+            const { LumaSplatsThree, LumaSplatsSemantics } = await import( "@lumaai/luma-web" );
+
+            splats = new LumaSplatsThree({
+              source: selected_url_file,
+              particleRevealEnabled: true,
+              enableThreeShaderIntegration: false,
+              loadingAnimationEnabled: false
+            });
+
+            splats.material.transparent = false;
+
+            splats.onLoad = () => {
+              // filter splats to only show foreground layers
+              splats.semanticsMask = LumaSplatsSemantics.FOREGROUND;
+
+              scene.add( splats );
+
+              resize();
+
+              finish_loading();
+            }
+
+            splats.onError = () => {
+              handle_error( 'Check URL!' );
+            }
+          }).then( loaded_splat => {
+            splats = new splat( loaded_splat, camera );
+
+            scene.add( splats );
+
+            finish_loading();
+          });
+        }
+      }
+
+      function finish_loading() {
+        console.timeEnd( 'Loading Time' );
+        enable_disable( false );
+        render_requested = true;
+        mouse_wheel = true;
+        first_run = true;
+        fr_count = 0;
+        render();
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        mouse_wheel = true;
+        render_requested = false;
+        enable_disable( true );
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      async function render() {
+        if (first_run || mouse_down || mouse_wheel) {
+          if (splats) {
+            // If it might be slow to render initially
+            if (first_run === true) {
+              fr_count += 1;
+              if (fr_count > 10) {
+                first_run = false;
+                document.getElementById('div_loading').style.display = 'none';
+              }
+            } else {
+              if (mouse_wheel === true) {
+                if (count > 10) {
+                  mouse_wheel = false;
+                  count = 0;
+                } else {
+                  count += 1;
+                }
+              }
+            }
+
+            controls.update();
+
+            renderer.clear();
+            renderer.render( scene, camera );
+          }
+        }
+
+        if (render_requested === true) requestAnimationFrame( render );
+      }
+
+      function reset_only() {
+        if (scene) {
+          scene.remove( splats );
+          splats = null;
+        }
+
+        reset_all( true );
+
+        console.time( 'Loading Time' );
+
+        document.getElementById('div_loading').innerHTML = 'Reload';
+        document.getElementById('div_loading').style.display = 'block';
+
+        mouse_wheel = true;
+
+        (selected_local_file !== null) ? loadFile() : loadURLFile();
+      }
+
+      function reset_all( reset = false ) {
+        bgnd_linear_gradient = false;
+        document.getElementById('btn_url').style.backgroundColor = 'transparent';
+        document.getElementById('btn_load').style.backgroundColor = 'transparent';
+        document.getElementById('btn_clear').style.backgroundColor = 'transparent';
+
+        document.getElementById('btn_bgnd_linear_gradient').disabled = false;
+        document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+
+        // Reset the view
+        if (reset === true) {
+          controls.reset();
+          first_run = true;
+          fr_count = 0;
+        } else {
+          // Page (re)loading
+          if (scene) {
+            if (splats) {
+              scene.remove( splats );
+              splats = null;
+            }
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+          }
+
+          document.getElementById('file_input').value = '';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+          enable_disable( true );
+        }
+
+        disabled_changed();
+
+        mouse_wheel = true;
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('btn_bgnd_linear_gradient').disabled = disable;
+        document.getElementById('quick_rotation').disabled = disable;
+        document.getElementById('model_scale').disabled = disable;
+        disabled_changed();
+
+        mouse_wheel = true;
+      }
+    </script>
+
+    <script>
+      function document_ready() {
+        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform ))
+         || (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent ))
+          || (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        $('#model_scale').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#quick_rotation').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+
+        if (navigator.userAgent.indexOf('Chrome') !== -1 || navigator.userAgent.indexOf('Safari') !== -1 || isMobile === true) {
+          $('#model_scale').change( function() { $(this).children(':selected').click(); });
+          $('#quick_rotation').change( function() { $(this).children(':selected').click(); });
+        }
+
+        mouse_wheel = true;
+      }
+
+      function disabled_changed() {
+        $('button').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+
+        $('select').each( function() {
+          if (this.disabled === false) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+      }
+    </script>
+  </body>
+</html>
