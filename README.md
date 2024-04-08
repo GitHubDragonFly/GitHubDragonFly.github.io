@@ -6,13 +6,13 @@ Designed to serve as a hub with links to repositories, Number Type Converter and
 Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations:
   - See screenshots below for different appearances of the main menu page
   - As per the [PageSpeed Insights](https://pagespeed.web.dev/) basic tests, almost all the pages / code:
-    - Are highly performant:
-      - this is relative and depends on how busy and / or responsive the `github` and `cdn.jsdelivr.net` and `esm.sh` networks are at the time of testing
-    - Follow Best Practices
-    - Are Accessibility (AODA in Ontario) and SEO optimized
+    - **Are highly performant**:
+      - relatively scored depending on how busy and responsive `github` `cdn.jsdelivr.net` `esm.sh` networks are at the time of testing
+    - **Follow Best Practices**
+    - **Are Accessibility and SEO optimized** (AODA in Ontario)
       - keyboard users might be somewhat limited to what's implemented within three.js library
 
-The `M3D` button, which stands for `Mobile 3D`, will open a page to access stripped down and simplified version of mobile friendly 3D viewers:
+The `M3D` button, which stands for `Mobile 3D`, provides access to stripped down and simplified version of mobile friendly 3D viewers:
  - Almost all viewers are currently available and should work fine on desktop devices as well
  - Mobile `Quick Viewer`, `GM Viewer` and `GLTF Viewer` also include some export options and more features
  - All mobile testing was done on an Android mobile phone and an iPad
@@ -56,10 +56,11 @@ Number Type Converter
 
 # Notes about three.js based 3D Model Viewers
 
-- They are functional `AS THEY ARE` and intended for viewing a single 3D model or scene
-- Several different three.js revisions are being used and there is lots of customized code
+- They are functional `AS THEY ARE` and purely designed as an online convenience
+- Intended for viewing a single 3D model or scene
+- Different three.js revisions are used and with lots of customized code
 - Error handling narrows down to showing the `ERROR!` message so check the console output for details 
-- If you wish to modify or customize your 3D model then use either the official [three.js editor](https://threejs.org/editor/) or try its [customized version](https://github.com/GitHubDragonFly/Localized_3js)
+- To modify or customize your 3D model, use either the official [three.js editor](https://threejs.org/editor/) or try its [customized version](https://github.com/GitHubDragonFly/Localized_3js)
 - These would be the mouse controls:
   - Rotation = left-click + hold + drag
   - Move = right-click + hold + drag
@@ -69,7 +70,7 @@ Number Type Converter
   - It is using [A-Frame Library / Framework](https://aframe.io) which makes it A-Frame specific
   - It is currently highly experimental so not sure if everything works as it should be
   - It is supposed to be used mainly on mobile devices supporting AR / VR
-  - Supported formats (single model or scene only): BIM, DAE, FBX, GLB, GLTF, PLY, USDZ:
+  - Supported import formats (single model or scene only): BIM, DAE, FBX, GLB, GLTF, PLY, USDZ:
     - Local and remote URL loading is supported
     - Local model files should be self-contained (embedded or binary)
 
@@ -95,7 +96,7 @@ Number Type Converter
     - Local loading supports self-contained models (embedded GLTF or binary GLB) as well as GLTF + BIN + Textures
     - The viewer supports loading of multiple models at once, which will be switchable with the viewer's `M` button
     - Support for USDZ was also added but is untested
-  - `GLTF Viewer` is for v2.0 glTF files and is currently using r162 of three.js:
+  - `GLTF Viewer` is for v2.0 glTF files and is currently using r163 of three.js:
     - doesn't support obsolete `pbrSpecularGlossiness`
     - supports currently arbitrary `KHR_animation_pointer`
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js:
@@ -105,7 +106,8 @@ Number Type Converter
 
 - Special notes about `ASSIMP Viewer` which is using [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and [ASSIMP](https://github.com/assimp/assimp) library:
   - This is a revamped version of my GLTF Viewer and is a sort of ASSIMP(JS) / three.js hybrid
-  - It can be used instead of both GLTF v1.0 and v2.0 viewers and also provides more export options, here is an example URLs for GLTF v1.0 of the [Barramundi Fish](https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/1.0/BarramundiFish) so just pay attention to the special case of the `glTF + BIN + textures` formatting:
+  - It can be used instead of both GLTF v1.0 and v2.0 viewers and also provides more export options
+  - Here are example URLs for GLTF v1.0 of the [Barramundi Fish](https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/1.0/BarramundiFish) so just pay attention to the special case of the `glTF + BIN + textures` formatting:
     - `https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF-Binary/BarramundiFish.glb`
     - `https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF-Embedded/BarramundiFish.gltf`
     - `https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish.gltf, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish.bin, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0001.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0002.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0003.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0004.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish0FS.glsl, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish0VS.glsl`
@@ -144,11 +146,11 @@ Number Type Converter
   - Most of the following notes do not apply to Quick Viewer in general
 
 - Special notes about `USDZ Viewer`:
-  - Currently, it only supports USDZ files with USDA (ascii) model packed in
-  - USDZ files with USDC (binary) model packed in can be viewed with the following:
+  - Currently, it only supports USDZ files with USDA (ascii model packed in)
+  - USDZ files with USDC (binary model packed in) can be viewed with the following:
     - [USDZ Online Viewer](https://www.usdz-viewer.net/)
     - [USD Viewer](https://usd-viewer.glitch.me/?file=)
-      - this viewer can also be used as a workaround to export the model to GLB format and then use my [GLTF Viewer](https://githubdragonfly.github.io/viewers/templates/GLTF%20Viewer.html) or [three.js editor](https://threejs.org/editor/) to export it to USDZ with USDA packed in
+      - this viewer can also be used as a workaround to export some models to GLB format and then either use my [GLTF Viewer](https://githubdragonfly.github.io/viewers/templates/GLTF%20Viewer.html) or [three.js editor](https://threejs.org/editor/) to export it to USDZ with USDA packed in
 
 - Special notes about `GLTF Legacy` viewer which is using modified version of mrdoob's [model-tag](https://github.com/mrdoob/model-tag):
   - Set in 500 x 500 viewport and seems to have a good fit on mobile devices
@@ -302,7 +304,7 @@ Number Type Converter
       - `blurriness`
       - `intensity`
 - JSON viewers support three.js and assimp JS / JSON formats with limitations:
-  - JSON Viewer is currently using r162 of three.js and cannot open legacy formats
+  - JSON Viewer is currently using r163 of three.js and cannot open legacy formats
   - JSON Legacy viewer is using r111 of three.js to support legacy THREE.Geometry:
     - It is using 4 loaders: ObjectLoader, BufferGeometryLoader, LegacyJSONLoader and AssimpJSONLoader
     - It could possibly open and export current three.js JSON format, with limitations of r111
