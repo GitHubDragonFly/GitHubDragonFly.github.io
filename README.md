@@ -253,7 +253,7 @@ Number Type Converter
     - If applicable, will support exporting THREE.InstancedMesh to OBJ + MTL / DAE / USDZ as well
     - If applicable, will support exporting morph animations but will not export other animations
   - Some viewers also offer setting the exported textures resolution (128, 256, 512, 768, 1k, 1.2k, 1.5k, 1.7k, 2k, 3k, 4k) and Y-flip (intended for 3DM / DAE / OBJ / USDZ exports)
-  - GLTFS Viewer seems to do OK job in exporting still models with `pbrSpecularGlossiness`
+  - GLTFS Viewer seems to do OK job in exporting still models with `pbrSpecularGlossiness` but would suggest that you use [gltf.report](https://gltf.report/) instead
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
