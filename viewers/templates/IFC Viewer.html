@@ -14,11 +14,12 @@
           "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/",
           "three/examples/jsm/utils/BufferGeometryUtils": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/utils/BufferGeometryUtils.min.js",
-          "web-ifc": "https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/web-ifc-api.min.js",
+          "web-ifc": "https://cdn.jsdelivr.net/npm/web-ifc@0.0.53/web-ifc-api.min.js",
           "web-ifc-three": "https://cdn.jsdelivr.net/npm/web-ifc-three@0.0.126/IFCLoader.min.js",
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions",
-          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions"
+          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions",
+          "meshoptimizer": "https://esm.sh/meshoptimizer"
         }
       }
     </script>
@@ -28,9 +29,6 @@
 
     <!-- For encoding GLB with draco compression -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
-
-    <!-- For encoding GLB with meshopt compression -->
-    <script src="https://cdn.jsdelivr.net/npm/meshoptimizer/meshopt_encoder.min.js" defer></script>
 
     <script type="module">
       import * as three_js from "three";
@@ -49,7 +47,7 @@
       manager.onLoad = function() { mouse_wheel = true; }
 
       ifc_loader = new IFCLoader( manager );
-      await ifc_loader.ifcManager.setWasmPath( 'https://cdn.jsdelivr.net/npm/web-ifc@0.0.51/', true );
+      await ifc_loader.ifcManager.setWasmPath( 'https://cdn.jsdelivr.net/npm/web-ifc@0.0.53/', true );
       await ifc_loader.ifcManager.parser.setupOptionalCategories( { [ IFCSPACE ]: false } );
       await ifc_loader.ifcManager.applyWebIfcConfig( { USE_FAST_BOOLS: true } );
 
@@ -2007,6 +2005,8 @@
 
       async function draco_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer" );
+        const { dedup, flatten, instance, join, palette, prune, simplify, unpartition, weld } = await import( "@gltf-transform/functions" );
         const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression } = await import( "@gltf-transform/extensions" );
 
         const io = new WebIO()
@@ -2017,6 +2017,18 @@
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
+        await doc.transform(
+          unpartition(),
+          palette({ min: 5 }),
+          dedup(),
+          prune(),
+          instance( { min: 2 } ),
+          flatten(),
+          join(),
+          weld( { tolerance: 0, toleranceNormal: 0.1 } ),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+        );
+
         doc.createExtension( KHRDracoMeshCompression )
         .setRequired( true )
         .setEncoderOptions({
@@ -2026,6 +2038,9 @@
 
         const compressedArrayBuffer = io.writeBinary( doc );
 
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
         return compressedArrayBuffer;
       }
 
@@ -2033,7 +2048,8 @@
 
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { meshopt } = await import( "@gltf-transform/functions" );
+        const { MeshoptEncoder, MeshoptSimplifier } = await import( "meshoptimizer" );
+        const { dedup, flatten, instance, join, meshopt, palette, prune, simplify, unpartition, weld } = await import( "@gltf-transform/functions" );
         const { KHRONOS_EXTENSIONS, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
 
         await MeshoptEncoder.ready;
@@ -2046,7 +2062,18 @@
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
-        await doc.transform( meshopt( { encoder: MeshoptEncoder, level: 'high' } ) );
+        await doc.transform(
+          unpartition(),
+          palette({ min: 5 }),
+          dedup(),
+          prune(),
+          instance( { min: 2 } ),
+          flatten(),
+          join(),
+          weld( { tolerance: 0, toleranceNormal: 0.1 } ),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } ),
+          meshopt( { encoder: MeshoptEncoder, level: 'high' } )
+        );
 
         doc.createExtension( EXTMeshoptCompression )
         .setRequired( true )
@@ -2057,6 +2084,9 @@
         io.registerExtensions( [ EXTMeshoptCompression ] );
 
         const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
 
         return compressedArrayBuffer;
       }
