@@ -1,6 +1,8 @@
 # GitHubDragonFly.github.io
 GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 
+As the time passes by and additional updates are applied, some pictures might not reflect the current looks of any GUI.
+
 Designed to serve as a hub with links to repositories, Number Type Converter and FREE online in-browser [three.js](https://threejs.org) based `3D Model` and `Texture` viewers.
 
 Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations:
@@ -9,7 +11,8 @@ Originally designed for a desktop but has been adapted to also show properly on 
     - **Are highly performant**:
       - relatively scored depending on how busy and responsive `github` `cdn.jsdelivr.net` `esm.sh` networks are at the time of testing
     - **Follow Best Practices**
-    - **Are Accessibility and SEO optimized** (AODA in Ontario)
+    - **Are SEO optimized**
+    - **Are Accessibility optimized** (AODA in Ontario)
       - keyboard users might be somewhat limited to what's implemented within three.js library
 
 The `M3D` button, which stands for `Mobile 3D`, provides access to stripped down and simplified version of mobile friendly 3D viewers:
@@ -22,6 +25,7 @@ The `M3D` button, which stands for `Mobile 3D`, provides access to stripped down
 GitHub servers are providing correct access to all files:
   - cloning or downloading this repository and using it offline will have a somewhat reduced functionality if run locally without some server
   - these GitHub servers are also setting `CacheControl` to last only for 10 minutes so you might need to refresh the current page as needed.
+  - No cookies will be served by my pages
 
 Repositories do contain projects in several different programming languages or a mix of: `Java` `VB.Net` `C#` `python` `JavaScript` `jQuery` `HTML/CSS` `shell`.
 
