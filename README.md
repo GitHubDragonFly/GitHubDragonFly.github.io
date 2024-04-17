@@ -62,7 +62,7 @@ Number Type Converter
 
 - They are functional `AS THEY ARE` and purely designed as an online convenience
 - Intended for viewing a single 3D model or scene
-- Different three.js revisions are used and with lots of customized code
+- Different [three.js](https://github.com/mrdoob/three.js) revisions are used and with lots of customized code
 - Error handling narrows down to showing the `ERROR!` message so check the console output for details 
 - To modify or customize your 3D model, use either the official [three.js editor](https://threejs.org/editor/) or try its [customized version](https://github.com/GitHubDragonFly/Localized_3js)
 - These would be the mouse controls:
