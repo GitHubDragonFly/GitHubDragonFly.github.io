@@ -24,6 +24,8 @@ Else, copy any of the following links and then paste it within the `URL` option 
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.mtl, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.obj`
 - some of the links above might become invalid as three.js revisions progress so try using still available older version:
   - `https://raw.githubusercontent.com/KodyJKing/three.js/master/examples/models/prwm/smooth-suzanne.le.prwm`
+- access to some LDRAW example files:
+  - `https://github.com/gkjohnson/ldraw-parts-library/tree/master/models`
 - access to some MMD (Miku Miku Dance) example files:
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_v2.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_camera.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/audios/wavefile_short.mp3`
   - `https://raw.githubusercontent.com/oecax2208/PyMikuMikuDance/master/example/vdproject_peach_v1/小桃初代女仆v1.pmx`
