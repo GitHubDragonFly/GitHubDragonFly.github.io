@@ -7,7 +7,7 @@ import {
 	Vector3
 } from "three";
 
-import { deinterleaveAttribute, mergeVertices } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/BufferGeometryUtils.js";
+import { deinterleaveAttribute, mergeVertices } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/utils/BufferGeometryUtils.min.js";
 
 /** Simple BIM (dotbim) Exporter
 *
@@ -174,7 +174,7 @@ class BIMExporter {
 
 						}
 
-						for ( let i = group.start; i < ( group.start + group.count ); i += 3 ) {
+						for ( let i = group.start; i < ( group.start + ( group.count === Infinity ? 0 : group.count ) ); i += 3 ) {
 
 							face_colors.push( Math.round( mtl_color.r * 255.0 ) );
 							face_colors.push( Math.round( mtl_color.g * 255.0 ) );
