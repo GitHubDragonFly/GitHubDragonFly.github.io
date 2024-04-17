@@ -1613,6 +1613,8 @@
 			const nameConversion = {
 				uv: 'TEXCOORD_0',
 				uv1: 'TEXCOORD_1',
+				uv2: 'TEXCOORD_2',
+				uv3: 'TEXCOORD_3',
 				color: 'COLOR_0',
 				skinWeight: 'WEIGHTS_0',
 				skinIndex: 'JOINTS_0'
@@ -2499,7 +2501,7 @@
 
 		writeMaterial( material, materialDef ) {
 
-			if ( ! material.isMeshPhysicalMaterial || material.clearcoat === 0 ) return;
+			if ( ! material.isMeshPhysicalMaterial || ! material.clearcoat || material.clearcoat === 0 ) return;
 
 			const writer = this.writer;
 			const extensionsUsed = writer.extensionsUsed;
@@ -2571,7 +2573,7 @@
 
 		writeMaterial( material, materialDef ) {
 
-			if ( ! material.isMeshPhysicalMaterial || material.iridescence === 0 ) return;
+			if ( ! material.isMeshPhysicalMaterial || ! material.iridescence || material.iridescence === 0 ) return;
 
 			const writer = this.writer;
 			const extensionsUsed = writer.extensionsUsed;
@@ -2592,9 +2594,14 @@
 
 			}
 
-			extensionDef.iridescenceIor = material.iridescenceIOR;
-			extensionDef.iridescenceThicknessMinimum = material.iridescenceThicknessRange[ 0 ];
-			extensionDef.iridescenceThicknessMaximum = material.iridescenceThicknessRange[ 1 ];
+			if ( material.iridescenceIOR ) extensionDef.iridescenceIor = material.iridescenceIOR;
+
+			if ( material.iridescenceThicknessRange ) {
+
+				extensionDef.iridescenceThicknessMinimum = material.iridescenceThicknessRange[ 0 ];
+				extensionDef.iridescenceThicknessMaximum = material.iridescenceThicknessRange[ 1 ];
+
+			}
 
 			if ( material.iridescenceThicknessMap ) {
 
@@ -2633,7 +2640,7 @@
 
 		writeMaterial( material, materialDef ) {
 
-			if ( ! material.isMeshPhysicalMaterial || material.transmission === 0 ) return;
+			if ( ! material.isMeshPhysicalMaterial || ! material.transmission || material.transmission === 0 ) return;
 
 			const writer = this.writer;
 			const extensionsUsed = writer.extensionsUsed;
@@ -2679,7 +2686,7 @@
 
 		writeMaterial( material, materialDef ) {
 
-			if ( ! material.isMeshPhysicalMaterial || material.transmission === 0 ) return;
+			if ( ! material.isMeshPhysicalMaterial || ! material.transmission || material.transmission === 0 ) return;
 
 			const writer = this.writer;
 			const extensionsUsed = writer.extensionsUsed;
@@ -2700,8 +2707,8 @@
 
 			}
 
-			extensionDef.attenuationDistance = material.attenuationDistance;
-			extensionDef.attenuationColor = material.attenuationColor.toArray();
+			if ( material.attenuationDistance ) extensionDef.attenuationDistance = material.attenuationDistance;
+			if ( material.attenuationColor ) extensionDef.attenuationColor = material.attenuationColor.toArray();
 
 			materialDef.extensions = materialDef.extensions || {};
 			materialDef.extensions[ this.name ] = extensionDef;
@@ -2728,14 +2735,14 @@
 
 		writeMaterial( material, materialDef ) {
 
-			if ( ! material.isMeshPhysicalMaterial || material.ior === 1.5 ) return;
+			if ( ! material.isMeshPhysicalMaterial || ! material.ior || material.ior === 1.5 ) return;
 
 			const writer = this.writer;
 			const extensionsUsed = writer.extensionsUsed;
 
 			const extensionDef = {};
 
-			extensionDef.ior = material.ior;
+			if ( material.ior ) extensionDef.ior = material.ior;
 
 			materialDef.extensions = materialDef.extensions || {};
 			materialDef.extensions[ this.name ] = extensionDef;
@@ -2762,10 +2769,9 @@
 
 		writeMaterial( material, materialDef ) {
 
-			if ( ! material.isMeshPhysicalMaterial || ( material.specularIntensity === 1.0 &&
-				material.specularColor.equals( DEFAULT_SPECULAR_COLOR ) &&
-				! material.specularIntensityMap && ! material.specularColorTexture ) ) return;
-
+			if ( ! material.isMeshPhysicalMaterial || ! material.specularIntensity || ! material.specularColor
+				|| ( material.specularIntensity === 1.0 && material.specularColor.equals( DEFAULT_SPECULAR_COLOR )
+				&& ! material.specularIntensityMap && ! material.specularColorTexture ) ) return;
 
 			const writer = this.writer;
 			const extensionsUsed = writer.extensionsUsed;
@@ -2796,8 +2802,8 @@
 
 			}
 
-			extensionDef.specularFactor = material.specularIntensity;
-			extensionDef.specularColorFactor = material.specularColor.toArray();
+			if ( material.specularIntensity ) extensionDef.specularFactor = material.specularIntensity;
+			if ( material.specularColor ) extensionDef.specularColorFactor = material.specularColor.toArray();
 
 			materialDef.extensions = materialDef.extensions || {};
 			materialDef.extensions[ this.name ] = extensionDef;
@@ -2855,8 +2861,8 @@
 
 			}
 
-			extensionDef.sheenRoughnessFactor = material.sheenRoughness;
-			extensionDef.sheenColorFactor = material.sheenColor.toArray();
+			if ( material.sheenRoughness ) extensionDef.sheenRoughnessFactor = material.sheenRoughness;
+			if ( material.sheenColor ) extensionDef.sheenColorFactor = material.sheenColor.toArray();
 
 			materialDef.extensions = materialDef.extensions || {};
 			materialDef.extensions[ this.name ] = extensionDef;
@@ -2898,8 +2904,8 @@
 
 			}
 
-			extensionDef.anisotropyStrength = material.anisotropy;
-			extensionDef.anisotropyRotation = material.anisotropyRotation;
+			if ( material.anisotropy ) extensionDef.anisotropyStrength = material.anisotropy;
+			if ( material.anisotropyRotation ) extensionDef.anisotropyRotation = material.anisotropyRotation;
 
 			materialDef.extensions = materialDef.extensions || {};
 			materialDef.extensions[ this.name ] = extensionDef;
@@ -2933,7 +2939,7 @@
 
 			const extensionDef = {};
 
-			extensionDef.emissiveStrength = material.emissiveIntensity;
+			if ( material.emissiveIntensity ) extensionDef.emissiveStrength = material.emissiveIntensity;
 
 			materialDef.extensions = materialDef.extensions || {};
 			materialDef.extensions[ this.name ] = extensionDef;
@@ -3003,7 +3009,7 @@
 			if ( hasRotation ) attributes.ROTATION = writer.processAccessor( new THREE.BufferAttribute( rotationAttr, 4 ) );
 			if ( hasScale ) attributes.SCALE = writer.processAccessor( new THREE.BufferAttribute( scaleAttr, 3 ) );
 
-			if ( mesh.instanceColor ) attributes._COLOR_0 = writer.processAccessor( mesh.instanceColor );
+			if ( mesh.instanceColor ) attributes.COLOR_0 = writer.processAccessor( mesh.instanceColor );
 
 			nodeDef.extensions = nodeDef.extensions || {};
 			nodeDef.extensions[ this.name ] = { attributes };
