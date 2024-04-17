@@ -175,7 +175,7 @@ class BIMExporter {
 						}
 
 						const position_count = child_geometry_clone.attributes.position.count;
-						const count = group.count === Infinity ? position_count - group.start : group.start + group.count;
+						const count = group.count === Infinity ? position_count : group.start + group.count;
 
 						for ( let i = group.start; i < count; i += 3 ) {
 
