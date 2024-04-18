@@ -837,8 +837,11 @@
           filename = selected_vtk_url_file.substring( selected_vtk_url_file.lastIndexOf('/') + 1, selected_vtk_url_file.lastIndexOf('.') );
         }
 
-        if (!filename || filename === '') filename = 'Model';
-        filename = filename.replaceAll( '%20', ' ' );
+        if (!filename || filename === '') {
+          filename = 'Model';
+        } else {
+          filename = filename.replaceAll( '%20', ' ' );
+        }
       }
 
       async function process_zip( ext = '' ) {
@@ -2258,7 +2261,9 @@
 
       async function draco_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression } = await import( "@gltf-transform/extensions" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer" );
+        const { compressTexture, dedup, flatten, join, palette, prune, simplify, unpartition, weld } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTTextureWebP, KHRDracoMeshCompression } = await import( "@gltf-transform/extensions" );
 
         const io = new WebIO()
         .registerExtensions( KHRONOS_EXTENSIONS )
@@ -2267,6 +2272,27 @@
         });
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          unpartition(),
+          palette({ min: 5 }),
+          dedup(),
+          prune(),
+          flatten(),
+          join(),
+          weld( { tolerance: 0, toleranceNormal: 0.1 } ),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+        );
+
+        if (textures.length > 0 && current_texture !== -1) {
+          const textures = doc.getRoot().listTextures();
+
+          for (const texture of textures) {
+            await compressTexture( texture, { targetFormat: 'webp' } );
+            doc.createExtension( EXTTextureWebP ).setRequired( true );
+            io.registerExtensions( [ EXTTextureWebP ] );
+          }
+        }
 
         doc.createExtension( KHRDracoMeshCompression )
         .setRequired( true )
@@ -2277,6 +2303,10 @@
 
         const compressedArrayBuffer = io.writeBinary( doc );
 
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
         return compressedArrayBuffer;
       }
 
@@ -2285,8 +2315,8 @@
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
         const { MeshoptEncoder } = await import( "meshoptimizer" );
-        const { meshopt } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
+        const { compressTexture, dedup, flatten, join, meshopt, palette, prune, unpartition } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTTextureWebP, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
 
         await MeshoptEncoder.ready;
 
@@ -2298,7 +2328,25 @@
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
-        await doc.transform( meshopt( { encoder: MeshoptEncoder, level: 'high' } ) );
+        await doc.transform(
+          unpartition(),
+          palette({ min: 5 }),
+          dedup(),
+          prune(),
+          flatten(),
+          join(),
+          meshopt( { encoder: MeshoptEncoder, level: 'high' } )
+        );
+
+        if (textures.length > 0 && current_texture !== -1) {
+          const textures = doc.getRoot().listTextures();
+
+          for (const texture of textures) {
+            await compressTexture( texture, { targetFormat: 'webp' } );
+            doc.createExtension( EXTTextureWebP ).setRequired( true );
+            io.registerExtensions( [ EXTTextureWebP ] );
+          }
+        }
 
         doc.createExtension( EXTMeshoptCompression )
         .setRequired( true )
@@ -2309,6 +2357,10 @@
         io.registerExtensions( [ EXTMeshoptCompression ] );
 
         const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
 
         return compressedArrayBuffer;
       }
