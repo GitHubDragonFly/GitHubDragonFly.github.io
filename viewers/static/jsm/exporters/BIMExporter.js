@@ -164,12 +164,12 @@ class BIMExporter {
 
 						if ( Array.isArray( child.material ) && child.material[ group.materialIndex ] ) {
 
-							mtl_color = child.material[ group.materialIndex ].color.clone().convertLinearToSRGB();
+							mtl_color = child.material[ group.materialIndex ].color.clone();
 							mtl_opacity = child.material[ group.materialIndex ].opacity;
 
 						} else {
 
-							mtl_color = child.material.color.clone().convertLinearToSRGB();
+							mtl_color = child.material.color.clone();
 							mtl_opacity = child.material.opacity;
 
 						}
@@ -202,12 +202,12 @@ class BIMExporter {
 
 						if ( Array.isArray( child.material ) === true ) {
 
-							mtl_color = child.material[ 0 ].color.clone().convertLinearToSRGB();
+							mtl_color = child.material[ 0 ].color.clone();
 							mtl_opacity = child.material[ 0 ].opacity;
 
 						} else {
 
-							mtl_color = child.material.color.clone().convertLinearToSRGB();
+							mtl_color = child.material.color.clone();
 							mtl_opacity = child.material.opacity;
 
 						}
