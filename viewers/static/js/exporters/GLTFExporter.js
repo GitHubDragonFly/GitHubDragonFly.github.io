@@ -3154,7 +3154,8 @@
 
 				if ( targetIndex === undefined ) {
 
-					throw new Error( 'THREE.GLTFExporter: Morph target name not found: ' + sourceTrackBinding.propertyIndex );
+					console.warn( 'THREE.GLTFExporter: Morph target name not found: ' + sourceTrackBinding.propertyIndex );
+					continue;
 
 				}
 
