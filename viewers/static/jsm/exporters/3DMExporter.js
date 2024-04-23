@@ -5,8 +5,8 @@ import {
 	Matrix4
 } from "three";
 
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/TextureUtils.js";
-import { deinterleaveAttribute } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/BufferGeometryUtils.js";
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/utils/TextureUtils.min.js";
+import { deinterleaveAttribute } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/utils/BufferGeometryUtils.min.js";
 
 import * as rhino3dm from "https://cdn.jsdelivr.net/npm/rhino3dm@8.4.0/rhino3dm.module.min.js";
 
@@ -44,7 +44,7 @@ import * as rhino3dm from "https://cdn.jsdelivr.net/npm/rhino3dm@8.4.0/rhino3dm.
 *
 *			exportLineSegments	[ default = true ]	-	mainly intended for exporting from LDRAW format
 *
-*			maxTextureSize		[ default = Infinity ]	-	scale exported textures down / up
+*			maxTextureSize		[ default = Infinity ]	-	maximum exported texture resolution
 *
 *			map_flip_required	[ default = false ]	-	Y-flip exported textures
 *										compressed textures seem to require this flip
@@ -784,8 +784,8 @@ class Rhino3dmExporter {
 
 			const _canvas = document.createElementNS( 'http://www.w3.org/1999/xhtml', 'canvas' );
 
-			_canvas.width = Math.min( image.width, maxTextureSize );
-			_canvas.height = Math.min( image.height, maxTextureSize );
+			_canvas.width = Math.min( image.width, Math.min( 2560, maxTextureSize ) );
+			_canvas.height = Math.min( image.height, Math.min( 2560, maxTextureSize ) );
 	
 			const ctx = _canvas.getContext( '2d' );
 
