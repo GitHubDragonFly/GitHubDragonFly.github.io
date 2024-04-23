@@ -39,7 +39,7 @@
 	*
 	*			exportLineSegments	[ default = true ]	-	mainly intended for exporting from LDRAW format
 	*
-	*			maxTextureSize	[ default = Infinity ]		-	scale exported textures down / up
+	*			maxTextureSize	[ default = Infinity ]		-	maximum exported texture resolution
 	*
 	*			map_flip_required	[ default = false ]	-	Y-flip exported textures
 	*										compressed textures seem to require this flip
@@ -922,9 +922,9 @@
 
 				const _canvas = document.createElementNS( 'http://www.w3.org/1999/xhtml', 'canvas' );
 
-				_canvas.width = Math.min( image.width, maxTextureSize );
-				_canvas.height = Math.min( image.height, maxTextureSize );
-
+				_canvas.width = Math.min( image.width, Math.min( 2560, maxTextureSize ) );
+				_canvas.height = Math.min( image.height, Math.min( 2560, maxTextureSize ) );
+	
 				const ctx = _canvas.getContext( '2d' );
 
 				if ( map_flip_required === true ) {
