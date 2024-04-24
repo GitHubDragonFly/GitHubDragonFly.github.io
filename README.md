@@ -302,12 +302,12 @@ Number Type Converter
 - Other controls, where applicable:
   - `B` or `BG` - background color
   - `C` - object or points color
-  - `Eq` - equirectangular background
+  - `Eq` - button or checkbox for equirectangular background:
     - `setEnvMap` for setting envMap + metalness
-    - `toneMapping` with `exposure`
+    - `toneMapping` with `exposure` and `envIntensity`
     - scene background controls:
-      - `blurriness`
-      - `intensity`
+      - `backBlurriness`
+      - `backIntensity`
 - JSON viewers support three.js and assimp JS / JSON formats with limitations:
   - JSON Viewer is currently using r163 of three.js and cannot open legacy formats
   - JSON Legacy viewer is using r111 of three.js to support legacy THREE.Geometry:
@@ -316,12 +316,13 @@ Number Type Converter
     - Some animations and/or skeletons might be off or missing
 - GLTF / FBX / DAE viewers will also include animations to exported JSON format
 - 3DS viewer is using MeshPhysicalMaterial instead of MeshPhongMaterial
-- 3DM Viewer will try mapping any valid background image as equirectangular when checked:
+- 3DM Viewer will try mapping any valid background image as equirectangular when `Eq` is checked:
   - Maybe download the following three.js examples and load either of them locally via the `BGND` file input:
     - [land_ocean_ice_cloud_2048.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/land_ocean_ice_cloud_2048.jpg)
     - [2294472375_24a3b8ef46_o.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/2294472375_24a3b8ef46_o.jpg)
     - [equirectangular.png](https://github.com/mrdoob/three.js/blob/dev/examples/textures/equirectangular.png)
     - [kandao3.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/kandao3.jpg)
+  - It is also using [gainmap-js](https://github.com/MONOGRID/gainmap-js) decoder which currently supports gainmaps integrated into a JPEG HDR image
 - PLY+STL, PRWM and VTK viewers can also show a points version of the loaded model and export it as such (if the model is not rather large):
   - Tip: export this points model into PLY format and then drop it into [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) to get SPLAT file
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
