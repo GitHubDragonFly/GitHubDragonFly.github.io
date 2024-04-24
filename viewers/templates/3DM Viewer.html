@@ -13,6 +13,7 @@
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/",
+          "@monogrid/gainmap-js": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.5/dist/decode.js",
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@3.10.1",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@3.10.1",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@3.10.1",
@@ -25,7 +26,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
-    <!-- For encoding GLB with draco compression -->
+    <!-- For encoding GLB exports with draco compression -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script type="module">
@@ -305,6 +306,7 @@
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- Using glTF Transform for DRACO / MESHOPT compression: https://gltf-transform.dev -->
+    <!-- Using gainmap-js decoder: https://github.com/MONOGRID/gainmap-js -->
     <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/ThreeOrbitControlsGizmo -->
     <!-- Animated GIF export is based on the following example and library: -->
     <!--   https://github.com/mrdoob/omggif-example  -->
@@ -325,7 +327,7 @@
         <button title="URL of the remote 3DM model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".3dm, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
         <label for="file_image_input" title="Background Image" style="color: #553801;">BGND</label>
-        <input type="file" title="Background Image" id="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image()" disabled />
+        <input type="file" title="Background Image" id="file_image_input" accept=".hdr, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image()" disabled />
         <button title="Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
         <button title="Model Opacity - double click to enable/disable" id="btn_dc_opacity" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" ondblclick="set_opacity();" onclick="show_hide_dropdown_opacity();">O
           <div id="dc_opacity" class="dropdown-content" style="display: none;" onfocusout="if (enable_opacity === true) hide_dropdown_opacity();">
@@ -375,7 +377,7 @@
           <option title="2k (2048x2048)" value="2k" onclick="tex_res = 2048; tex_flip = false;">2k</option>
           <option title="3k (3072x3072)" value="3k" onclick="tex_res = 3072; tex_flip = false;">3k</option>
           <option title="4k (4096x4096)" value="4k" onclick="tex_res = 4096; tex_flip = false;">4k</option>
-          <option title="Original Y flipped" value="original_flipped" onclick="tex_res = Infinity; tex_flip = true;">Flip Y</option>
+          <option title="Original Y flipped" value="original_flipped" onclick="tex_res = Infinity; tex_flip = true;">Flip</option>
           <option title="128 (128x128) Y flipped" value="128_flipped" onclick="tex_res = 128; tex_flip = true;">128 Y</option>
           <option title="256 (256x256) Y flipped" value="256_flipped" onclick="tex_res = 256; tex_flip = true;">256 Y</option>
           <option title="512 (512x512) Y flipped" value="512_flipped" onclick="tex_res = 512; tex_flip = true;">512 Y</option>
@@ -427,7 +429,6 @@
           </div>
         </button>
         <button title="Quick -90deg X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="background-color: transparent; min-width: 15px;">&#x2191</button>
-        <label title="Equirectangular Background">Eq<input type="checkbox" id="equi" onchange="set_equi();" disabled /></label>
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
             <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="20" step="0.05" value="4" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
@@ -440,6 +441,7 @@
             <span id="ali_val">0</span>
           </div>
         </button>
+        <label title="Equirectangular Background">Eq<input type="checkbox" id="equi" onchange="set_equi();" disabled /></label>
         <label for="ambient_light_color" title="Ambient Light Color">AL</label>
         <input type="color" title="Ambient Light Color" id="ambient_light_color" onchange="set_ambient_light_color();" disabled />
         <label for="directional_light_color" title="Directional Light Color">DL</label>
@@ -728,11 +730,12 @@
     </script>
 
     <script>
-      var THREE, manager, texture_loader, rhino_loader, object_is_mesh, object_is_points, link;
-      var renderer, scene, camera, rhino_obj, render_requested, edges, edges_visible;
+      var THREE, manager, rhino_obj, object_is_mesh, object_is_points;
+      var rhino_loader, hdrJPGLoader, texture_loader, rgbe_loader;
+      var renderer, scene, camera, render_requested, edges, edges_visible;
       var lil_gui, gui, gui_set = false, gui_multi_layers, params, toneMappingOptions;
-      var guiExposure = null, guiToneMapping, guiBlurriness, guiIntensity;
-      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
+      var mouse_down, mouse_wheel, reset_rotation, events_initialized, link;
+      var guiExposure, guiToneMapping, guiBlurriness, guiEnvIntensity, guiIntensity;
       var controls, orb_controls, gizmo, orb_controls_gizmo;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
@@ -775,12 +778,6 @@
           filename = selected_rhino_file.name.substring( 0, selected_rhino_file.name.lastIndexOf('.') );
         } else {
           filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') );
-        }
-
-        if (!filename || filename === '') {
-          filename = 'Model';
-        } else {
-          filename = filename.replaceAll( '%20', ' ' );
         }
       }
 
@@ -1095,16 +1092,15 @@
 
           let options = { maxTextureSize: tex_res, map_flip_required: tex_flip };
 
-          await usdz_exporter.parse( rhino_obj.clone(), async function( arraybuffer ) {
-            let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
+          let arraybuffer = await usdz_exporter.parse( rhino_obj.clone(), options );
+          let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
 
-            zip.file( filename + '.usdz', blob );
+          zip.file( filename + '.usdz', blob );
 
-            let str = '_USDZ';
-            if (tex_flip === true) str += '_Y';
-            if (tex_res !== Infinity) str += ' (' + tex_res + ')';
-            await process_zip( str );
-          }, function( error ) { handle_export_error( error ); }, options );
+          let str = '_USDZ';
+          if (tex_flip === true) str += '_Y';
+          if (tex_res !== Infinity) str += ' (' + tex_res + ')';
+          await process_zip( str );
         }
       }
 
@@ -1499,23 +1495,6 @@
         }
       }
 
-      function updateGUI() {
-        if (guiExposure) {
-          guiExposure.destroy();
-          guiExposure = null;
-        }
-
-        if ( params.toneMapping !== 'None' ) {
-          guiExposure = gui.add( params, 'exposure', 0, 5 )
-          .onChange( function () {
-            renderer.toneMappingExposure = params.exposure;
-            mouse_wheel = true;
-          });
-        }
-
-        mouse_wheel = true;
-      }
-
       async function set_equi() {
         if (document.getElementById('equi').checked) {
           if (document.getElementById('file_image_input').value !== '') {
@@ -1537,13 +1516,30 @@
           }
 
           scene.backgroundBlurriness = 0;
-          scene.backgroundIntensity = 0.75;
+          scene.backgroundIntensity = 1.0;
 
           document.getElementById('back_color').disabled = false;
           document.getElementById('btn_bgnd_linear_gradient').disabled = false;
         }
 
         equi_checked_changed();
+
+        mouse_wheel = true;
+      }
+
+      function updateGUI() {
+        if (guiExposure) {
+          guiExposure.destroy();
+          guiExposure = null;
+        }
+
+        if ( params.toneMapping !== 'None' ) {
+          guiExposure = gui.add( params, 'exposure', 0, 5 )
+          .onChange( function () {
+            renderer.toneMappingExposure = params.exposure;
+            mouse_wheel = true;
+          });
+        }
 
         mouse_wheel = true;
       }
@@ -1557,13 +1553,19 @@
             mouse_wheel = true;
           });
 
-          guiBlurriness = gui.add( params, 'blurriness', 0, 1 )
+          guiEnvIntensity = gui.add( params, 'envIntensity', 0, 5 )
+          .onChange( function ( value ) {
+            scene.environmentIntensity = value;
+            mouse_wheel = true;
+          });
+
+          guiBlurriness = gui.add( params, 'backBlurriness', 0, 1 )
           .onChange( function ( value ) {
             scene.backgroundBlurriness = value;
             mouse_wheel = true;
           });
 
-          guiIntensity = gui.add( params, 'intensity', 0, 2 )
+          guiIntensity = gui.add( params, 'backIntensity', 0, 5 )
           .onChange( function ( value ) {
             scene.backgroundIntensity = value;
             mouse_wheel = true;
@@ -1574,8 +1576,9 @@
           gui_set = true;
         }
 
-        scene.backgroundBlurriness = params.blurriness;
-        scene.backgroundIntensity = params.intensity;
+        scene.environmentIntensity = params.envIntensity;
+        scene.backgroundBlurriness = params.backBlurriness;
+        scene.backgroundIntensity = params.backIntensity;
 
         document.getElementById('gui_position').style.display = 'block';
 
@@ -1594,14 +1597,16 @@
       function gui_reset() {
         params.toneMapping = 'Neutral';
         renderer.toneMapping = THREE.NeutralToneMapping;
-        renderer.toneMappingExposure = params.exposure = 1;
-        params.blurriness = 0.25;
-        params.intensity = 0.25;
+        renderer.toneMappingExposure = params.exposure = 1.0;
+        params.envIntensity = 1.0;
+        params.backBlurriness = 0.0;
+        params.backIntensity = 1.0;
 
         mouse_wheel = true;
 
         if (guiExposure) { guiExposure.destroy(); guiExposure = null; }
         if (guiToneMapping) { guiToneMapping.destroy(); guiToneMapping = null; }
+        if (guiEnvIntensity) { guiEnvIntensity.destroy(); guiEnvIntensity = null; }
         if (guiBlurriness) { guiBlurriness.destroy(); guiBlurriness = null; }
         if (guiIntensity) { guiIntensity.destroy(); guiIntensity = null; }
 
@@ -1617,7 +1622,7 @@
         mouse_wheel = true;
       }
 
-      function set_scene_image() {
+      async function set_scene_image() {
         fii = document.getElementById('file_image_input');
 
         if (fii.files[ 0 ]) {
@@ -1630,7 +1635,42 @@
           scene.background = null;
           scene.environment = null;
 
-          if (fii.files[ 0 ].type.startsWith('image/')) {
+          let fn_uc = fii.files[ 0 ].name.toUpperCase();
+
+          if (fii.files[ 0 ].type.startsWith('image/') && ! (fii.files[ 0 ].type.startsWith('image/svg') || fn_uc.endsWith('.HDR'))) {
+            hdrJPGLoader.load( URL.createObjectURL( fii.files[ 0 ] ) , function( texture ) {
+              URL.revokeObjectURL( fii.files[ 0 ] );
+
+              let hdrJpgEquirectangularMap = texture.renderTarget.texture;
+              hdrJpgEquirectangularMap.needsUpdate = true;
+
+              if (document.getElementById('equi').checked) {
+                hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = hdrJpgEquirectangularMap;
+                scene.environment = hdrJpgEquirectangularMap;
+              } else {
+                scene.background = hdrJpgEquirectangularMap;
+              }
+
+              mouse_wheel = true;
+
+              texture.dispose();
+            }, function ( xhr ) {
+              let today = new Date();
+              let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
+
+              if (xhr.loaded === 0 && xhr.total === 0) {
+                console.log( 'Background Image File 0% loaded - ' + time );
+              } else {
+                console.log( 'Background Image File ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
+              }
+            }, function ( error ) {
+              console.log( 'Error loading Background Image File!' );
+              console.log( error );
+
+              URL.revokeObjectURL( fii.files[ 0 ] );
+            });
+          } else if (fii.files[ 0 ].type.startsWith('image/svg')) {
             texture_loader.load( URL.createObjectURL( fii.files[ 0 ] ) , function( texture ) {
               URL.revokeObjectURL( fii.files[ 0 ] );
 
@@ -1641,6 +1681,45 @@
               } else {
                 scene.background = texture;
               }
+
+              mouse_wheel = true;
+
+              texture.dispose();
+            }, function ( xhr ) {
+              let today = new Date();
+              let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
+
+              if (xhr.loaded === 0 && xhr.total === 0) {
+                console.log( 'Background Image File 0% loaded - ' + time );
+              } else {
+                console.log( 'Background Image File ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
+              }
+            }, function ( error ) {
+              console.log( 'Error loading Background Image File!' );
+              console.log( error );
+
+              URL.revokeObjectURL( fii.files[ 0 ] );
+            });
+          } else if (fn_uc.endsWith('.HDR')) {
+            if (rgbe_loader === undefined) {
+              const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
+
+              rgbe_loader = new RGBELoader();
+              rgbe_loader.setDataType( THREE.HalfFloatType );
+            }
+
+            rgbe_loader.load( URL.createObjectURL( fii.files[ 0 ] ) , function( texture ) {
+              URL.revokeObjectURL( fii.files[ 0 ] );
+
+              if (document.getElementById('equi').checked) {
+                texture.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = texture;
+                scene.environment = texture;
+              } else {
+                scene.background = texture;
+              }
+
+              mouse_wheel = true;
 
               texture.dispose();
             }, function ( xhr ) {
@@ -1689,6 +1768,7 @@
           context.fillStyle = gradient;
           context.fillRect( 0, 0, ww, wh );
           let texture = new THREE.Texture( canvas );
+          texture.mapping = THREE.EquirectangularReflectionMapping;
           scene.background = texture;
           texture.needsUpdate = true;
 
@@ -1885,7 +1965,7 @@
         mouse_wheel = true;
       }
 
-      function init() {
+      async function init() {
         if (scene && controls) {
           if (polar_grid_visible === true) show_polar_grid();
           if (grid_visible === true) show_grid();
@@ -1930,7 +2010,7 @@
 
         if (gui === undefined) gui = new lil_gui( { autoPlace: false, container: document.getElementById('gui_position') } );
 
-        if (params === undefined) params = { exposure: 1, toneMapping: 'Neutral', blurriness: 0.25, intensity: 0.25 };
+        if (params === undefined) params = { exposure: 1, toneMapping: 'Neutral', envIntensity: 1.0, backBlurriness: 0.0, backIntensity: 1.0 };
 
         if (toneMappingOptions === undefined) toneMappingOptions = {
           None: THREE.NoToneMapping,
@@ -1949,8 +2029,10 @@
         object_is_points = false;
         object_is_mesh = false;
         guiToneMapping = null;
+        guiEnvIntensity = null;
         guiBlurriness = null;
         guiIntensity = null;
+        guiExposure = null;
         mouse_down = false;
         mouse_wheel = true;
         tex_fmt = '';
@@ -2030,10 +2112,15 @@
           document.body.appendChild( renderer.domElement );
         }
 
+        if (hdrJPGLoader === undefined) {
+          const { HDRJPGLoader } = await import( "@monogrid/gainmap-js" );
+          hdrJPGLoader = new HDRJPGLoader( renderer );
+        }
+
         if (scene === undefined) scene = new THREE.Scene();
 
         scene.backgroundBlurriness = 0;
-        scene.backgroundIntensity = 0.75;
+        scene.backgroundIntensity = 1.0;
 
         if (rhino_obj === undefined) rhino_obj = new THREE.Object3D();
 
@@ -2084,17 +2171,18 @@
           //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.rotateSpeed = 0.2;
           //controls.minDistance = 2;
           //controls.maxDistance = 500;
         }
 
         if (tex === undefined) {
-          let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/envmap.png';
+          let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/opengameart/smoke1.png';
 
-          texture_loader.load( url, function( texture ) {
-            texture.mapping = THREE.EquirectangularReflectionMapping;
-            tex = texture;
+          hdrJPGLoader.load( url, function( texture ) {
+            tex = texture.renderTarget.texture;
+            tex.mapping = THREE.EquirectangularReflectionMapping;
+            tex.needsUpdate = true;
+
             texture.dispose();
           });
         }
@@ -3234,7 +3322,9 @@
           if (render_requested === true) requestAnimationFrame( render );
         }
 
-        if (first_run || mouse_down || mouse_wheel || reset_rotation || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
+        if (first_run === true || mouse_down === true || mouse_wheel === true || reset_rotation === true
+           || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
+
           if (rhino_obj) {
             // Reset rhino_obj rotational values
             if (reset_rotation === true) {
@@ -3258,18 +3348,18 @@
 
             // If it might be slow to render initially
             if (first_run === true) {
-              fr_count += 1;
+              fr_count ++;
               if (fr_count > 45) {
                 first_run = false;
                 load_gizmo();
               }
             } else {
               if (mouse_wheel === true) {
-                if (count > 3) {
+                if (count > 10) {
                   mouse_wheel = false;
                   count = 0;
                 } else {
-                  count += 1;
+                  count ++;
                 }
               }
             }
