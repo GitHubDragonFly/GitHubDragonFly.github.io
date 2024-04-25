@@ -595,8 +595,6 @@ class GLTFLightsExtension {
 
 		const range = lightDef.range !== undefined ? lightDef.range : 0;
 
-		console.log('lightDef ', lightDef);
-
 		switch ( lightDef.type ) {
 
 			case 'directional':
