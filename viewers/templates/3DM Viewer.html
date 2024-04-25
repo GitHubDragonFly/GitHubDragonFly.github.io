@@ -13,7 +13,7 @@
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/",
-          "@monogrid/gainmap-js": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.5/dist/decode.js",
+          "@monogrid/gainmap-js": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.5/dist/decode.min.js",
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@3.10.1",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@3.10.1",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@3.10.1",
@@ -1637,7 +1637,7 @@
 
           let fn_uc = fii.files[ 0 ].name.toUpperCase();
 
-          if (fii.files[ 0 ].type.startsWith('image/') && ! (fii.files[ 0 ].type.startsWith('image/svg') || fn_uc.endsWith('.HDR'))) {
+          if (fii.files[ 0 ].type.startsWith('image/') && ! (fii.files[ 0 ].type.startsWith('image/svg') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
             hdrJPGLoader.load( URL.createObjectURL( fii.files[ 0 ] ) , function( texture ) {
               URL.revokeObjectURL( fii.files[ 0 ] );
 
@@ -1700,42 +1700,106 @@
 
               URL.revokeObjectURL( fii.files[ 0 ] );
             });
-          } else if (fn_uc.endsWith('.HDR')) {
-            if (rgbe_loader === undefined) {
-              const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
+          } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
+            const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
+            const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
 
-              rgbe_loader = new RGBELoader();
-              rgbe_loader.setDataType( THREE.HalfFloatType );
+            // Encode a Gain map from EXR or HDR file
+            // See the code example at: https://github.com/MONOGRID/gainmap-js
+
+            let loader;
+
+            if (fn_uc.endsWith('.EXR')) {
+              if (exr_loader === undefined) {
+                const { EXRLoader } = await import( "three/addons/loaders/EXRLoader.min.js" );
+                exr_loader = new EXRLoader( manager );
+                exr_loader.setDataType( THREE.FloatType );
+                manager.addHandler( /\.exr$/i, exr_loader );
+              }
+
+              loader = exr_loader;
+            } else {
+              if (rgbe_loader === undefined) {
+                const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
+                rgbe_loader = new RGBELoader();
+                rgbe_loader.setDataType( THREE.HalfFloatType );
+              }
+
+              loader = rgbe_loader;
             }
 
-            rgbe_loader.load( URL.createObjectURL( fii.files[ 0 ] ) , function( texture ) {
-              URL.revokeObjectURL( fii.files[ 0 ] );
+            const image = await loader.loadAsync( URL.createObjectURL( fii.files[ 0 ] ) );
+            URL.revokeObjectURL( fii.files[ 0 ] );
+
+            const textureMax = findTextureMinMax( image );
+
+            // Encode the gainmap
+            const encodingResult = encode({
+              image,
+              maxContentBoost: Math.max.apply( this, textureMax ) // this will encode the full HDR range
+            });
+
+            // obtain the RAW RGBA SDR buffer and create an ImageData
+            const sdrImageData = new ImageData( encodingResult.sdr.toArray(), encodingResult.sdr.width, encodingResult.sdr.height );
+            // obtain the RAW RGBA Gain map buffer and create an ImageData
+            const gainMapImageData = new ImageData( encodingResult.gainMap.toArray(), encodingResult.gainMap.width, encodingResult.gainMap.height );
+
+            // parallel compress the RAW buffers into the specified mimeType
+            const mimeType = 'image/jpeg';
+            const quality = 1.0;
+
+            const [sdr, gainMap] = await Promise.all([
+              compress({
+                source: sdrImageData,
+                mimeType,
+                quality,
+                flipY: true // output needs to be flipped
+              }),
+              compress({
+                source: gainMapImageData,
+                mimeType,
+                quality,
+                flipY: true // output needs to be flipped
+              })
+            ]);
+
+            // obtain the metadata which will be embedded into and XMP tag inside the final JPEG file
+            const metadata = encodingResult.getMetadata();
+
+            // embed the compressed images + metadata into a single JPEG file
+            const jpeg = await encodeJPEGMetadata({
+              ...encodingResult,
+              ...metadata,
+              sdr,
+              gainMap
+            });
+
+            // jpeg will be a Uint8Array
+            const jpeg_file = new File( [ jpeg ], 'file.jpg' );
+
+            // load the encoded jpeg with HDRJPGLoader
+
+            hdrJPGLoader.load( URL.createObjectURL( jpeg_file ), function( texture ) {
+              URL.revokeObjectURL( jpeg_file );
+
+              let hdrJpgEquirectangularMap = texture.renderTarget.texture;
+              hdrJpgEquirectangularMap.needsUpdate = true;
 
               if (document.getElementById('equi').checked) {
-                texture.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = texture;
-                scene.environment = texture;
+                hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = hdrJpgEquirectangularMap;
+                scene.environment = hdrJpgEquirectangularMap;
               } else {
-                scene.background = texture;
+                scene.background = hdrJpgEquirectangularMap;
               }
 
               mouse_wheel = true;
 
               texture.dispose();
-            }, function ( xhr ) {
-              let today = new Date();
-              let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
 
-              if (xhr.loaded === 0 && xhr.total === 0) {
-                console.log( 'Background Image File 0% loaded - ' + time );
-              } else {
-                console.log( 'Background Image File ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-              }
-            }, function ( error ) {
-              console.log( 'Error loading Background Image File!' );
-              console.log( error );
-
-              URL.revokeObjectURL( fii.files[ 0 ] );
+              // encoder must be manually disposed when no longer needed
+              encodingResult.gainMap.dispose();
+              encodingResult.sdr.dispose();
             });
           } else {
             fii.value = '';
