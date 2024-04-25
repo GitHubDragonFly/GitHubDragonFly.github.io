@@ -322,7 +322,9 @@ Number Type Converter
     - [2294472375_24a3b8ef46_o.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/2294472375_24a3b8ef46_o.jpg)
     - [equirectangular.png](https://github.com/mrdoob/three.js/blob/dev/examples/textures/equirectangular.png)
     - [kandao3.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/kandao3.jpg)
-  - It is also using [gainmap-js](https://github.com/MONOGRID/gainmap-js) decoder which currently supports gainmaps integrated into a JPEG HDR image
+  - It is also using [gainmap-js](https://github.com/MONOGRID/gainmap-js) encoder and decoder:
+    - Supports loading a single JPEG file with integrated gainmaps
+    - Supports loading EXR and HDR files which will be encoded on-the-fly into a single JPEG file with integrated gainmaps
 - PLY+STL, PRWM and VTK viewers can also show a points version of the loaded model and export it as such (if the model is not rather large):
   - Tip: export this points model into PLY format and then drop it into [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) to get SPLAT file
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
