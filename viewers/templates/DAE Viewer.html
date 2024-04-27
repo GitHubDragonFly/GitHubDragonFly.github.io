@@ -11,8 +11,11 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/",
+          "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.5/dist/decode.min.js",
+          "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.5/dist/encode.min.js",
+          "@monogrid/gainmap-js/libultrahdr": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.5/dist/libultrahdr.min.js",
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@3.10.1",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@3.10.1",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@3.10.1",
@@ -27,15 +30,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/23.1.1/tween.umd.js"></script>
 
     <!-- For encoding GLB with draco compression -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script type="module">
       import * as three_js from "three";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { DDSLoader } from "three/addons/loaders/DDSLoader.min.js";
-      import { TGALoader } from "three/addons/loaders/TGALoader.min.js";
       import { KTX2Loader } from "three/addons/loaders/KTX2Loader.min.js";
-      import { RGBELoader } from "three/addons/loaders/RGBELoader.min.js";
       import { ColladaLoader } from "../static/jsm/loaders/ColladaLoader.js";
       import { BasisTextureLoader } from "../static/jsm/loaders/BasisTextureLoader.js";
       import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
@@ -58,15 +58,7 @@
 
       manager.addHandler( /\.basis$/i, basis_loader );
 
-      rgbe_loader = new RGBELoader( manager );
-      rgbe_loader.setDataType( THREE.HalfFloatType );
-
       texture_loader = new THREE.TextureLoader( manager );
-      tga_loader = new TGALoader( manager );
-      dds_loader = new DDSLoader( manager );
-
-      manager.addHandler( /\.tga$/i, tga_loader );
-      manager.addHandler( /\.dds$/i, dds_loader );
 
       gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
 
@@ -326,6 +318,7 @@
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- Using glTF Transform for DRACO / MESHOPT compression: https://gltf-transform.dev -->
+    <!-- Using gainmap-js encoder & decoder: https://github.com/MONOGRID/gainmap-js -->
     <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/ThreeOrbitControlsGizmo -->
     <!-- Animated GIF export is based on the following example and library: -->
     <!--   https://github.com/mrdoob/omggif-example  -->
@@ -754,10 +747,10 @@
     </script>
 
     <script>
-      var THREE, manager, ktx2_loader, texture_loader, rgbe_loader, dae_loader, basis_loader, tga_loader, dds_loader;
+      var THREE, manager, ktx2_loader, texture_loader, dae_loader, basis_loader, tga_loader, dds_loader, exr_loader, rgbe_loader, hdrJPGLoader;
       var animations, animation_mixer, animation_running, current_animation, mesh_included, points_included;
       var renderer, render_requested, scene, camera, dae_obj, object_is_points, clock, duration, link;
-      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions, count = 0, isMobile;
+      var gui, gui_set = false, guiExposure, params, toneMappingOptions, count = 0, isMobile;
       var controls, orb_controls, gizmo, orb_controls_gizmo, tex, tex_res, tex_flip, tex_fmt;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
@@ -1448,6 +1441,7 @@
 
       function set_back_color() {
         scene.background = null;
+        scene.environment = null;
         bgnd_linear_gradient = false;
         document.body.style.backgroundImage = 'none';
         document.getElementById('file_image_input').value = '';
@@ -1578,13 +1572,13 @@
               mouse_wheel = true;
             });
 
-            gui.add( params, 'blurriness', 0, 1 )
+            gui.add( params, 'backBlurriness', 0, 1 )
             .onChange( function ( value ) {
               scene.backgroundBlurriness = value;
               mouse_wheel = true;
             });
 
-            gui.add( params, 'intensity', 0, 2 )
+            gui.add( params, 'backIntensity', 0, 5 )
             .onChange( function ( value ) {
               scene.backgroundIntensity = value;
               mouse_wheel = true;
@@ -1597,30 +1591,37 @@
 
           document.getElementById('gui_position').style.display = 'block';
 
-          document.getElementById('file_image_input').value = '';
-          document.getElementById('file_image_input').disabled = true;
+          bgnd_linear_gradient = false;
+          document.body.style.backgroundColor = '#000000';
+
           document.getElementById('back_color').disabled = true;
           document.getElementById('back_color').value = '#000000';
-          document.body.style.backgroundColor = document.getElementById('back_color').value;
-          bgnd_linear_gradient = false;
+
           document.getElementById('btn_bgnd_linear_gradient').disabled = true;
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
 
-          scene.background = env_tex;
-          scene.environment = env_tex;
+          if (document.getElementById('file_image_input').value !== '') {
+            set_scene_image();
+          } else {
+            scene.background = env_tex;
+            scene.environment = env_tex;
+          }
 
-          scene.backgroundBlurriness = params.blurriness;
-          scene.backgroundIntensity = params.intensity;
+          scene.backgroundBlurriness = params.backBlurriness;
+          scene.backgroundIntensity = params.backIntensity;
         } else {
           if (gui) gui_reset();
 
-          scene.background = null;
-          scene.environment = null;
+          if (document.getElementById('file_image_input').value !== '') {
+            set_scene_image();
+          } else {
+            scene.background = null;
+            scene.environment = null;
+          }
 
           scene.backgroundBlurriness = 0;
-          scene.backgroundIntensity = 0.75;
+          scene.backgroundIntensity = 1.1;
 
-          document.getElementById('file_image_input').disabled = false;
           document.getElementById('back_color').disabled = false;
           document.getElementById('btn_bgnd_linear_gradient').disabled = false;
         }
@@ -1638,7 +1639,6 @@
                 child.material.forEach( mtl => {
                   if (set_env_map === true) {
                     mtl.envMap = scene.environment;
-                    mtl.envMap.colorSpace = THREE.SRGBColorSpace;
                   } else {
                     mtl.envMap = null;
                   }
@@ -1648,7 +1648,6 @@
               } else {
                 if (set_env_map === true) {
                   child.material.envMap = scene.environment;
-                  child.material.envMap.colorSpace = THREE.SRGBColorSpace;
                 } else {
                   child.material.envMap = null;
                 }
@@ -1665,12 +1664,14 @@
       function gui_reset() {
         params.toneMapping = 'Neutral';
         renderer.toneMapping = THREE.NeutralToneMapping;
-        renderer.toneMappingExposure = params.exposure = 1.3;
-        params.blurriness = 1.0;
-        params.intensity = 0.5;
+        renderer.toneMappingExposure = params.exposure = 1.0;
+        params.backBlurriness = 0.0;
+        params.backIntensity = 1.0;
         params.setEnvMap = false;
 
         mouse_wheel = true;
+
+        if (guiExposure) { guiExposure.destroy(); guiExposure = null; }
 
         gui.reset();
 
@@ -1681,21 +1682,40 @@
         mouse_wheel = true;
       }
 
-      function set_scene_image() {
+      async function set_scene_image() {
         fii = document.getElementById('file_image_input');
 
         if (fii.files[ 0 ]) {
           bgnd_linear_gradient = false;
           document.body.style.backgroundImage = 'none';
           document.getElementById('back_color').value = '#000000';
-          document.body.style.backgroundColor = document.getElementById('back_color').value;
+          document.body.style.backgroundColor = '#000000';
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
 
-          if (fii.files[ 0 ].type.startsWith('image/')) {
-            texture_loader.load( URL.createObjectURL( fii.files[ 0 ] ) , function( texture ) {
+          scene.background = null;
+          scene.environment = null;
+
+          let fn_uc = fii.files[ 0 ].name.toUpperCase();
+
+          if (fii.files[ 0 ].type.startsWith('image/') && ! (fn_uc.endsWith('.SVG') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
+            hdrJPGLoader.load( URL.createObjectURL( fii.files[ 0 ] ) , function( texture ) {
               URL.revokeObjectURL( fii.files[ 0 ] );
 
-              scene.background = texture;
+              let hdrJpgEquirectangularMap = texture.renderTarget.texture;
+              hdrJpgEquirectangularMap.needsUpdate = true;
+
+              if (document.getElementById('equi').checked) {
+                hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = hdrJpgEquirectangularMap;
+                scene.environment = hdrJpgEquirectangularMap;
+                if (params.setEnvMap === true) set_envMap( true );
+              } else {
+                scene.background = hdrJpgEquirectangularMap;
+              }
+
+              mouse_wheel = true;
+
+              texture.dispose();
             }, function ( xhr ) {
               let today = new Date();
               let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
@@ -1711,9 +1731,141 @@
 
               URL.revokeObjectURL( fii.files[ 0 ] );
             });
+          } else if (fn_uc.endsWith('.SVG')) {
+            texture_loader.load( URL.createObjectURL( fii.files[ 0 ] ) , function( texture ) {
+              URL.revokeObjectURL( fii.files[ 0 ] );
+
+              if (document.getElementById('equi').checked) {
+                texture.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = texture.clone();
+                scene.environment = texture.clone();
+                if (params.setEnvMap === true) set_envMap( true );
+              } else {
+                scene.background = texture;
+              }
+
+              mouse_wheel = true;
+
+              texture.dispose();
+            }, function ( xhr ) {
+              let today = new Date();
+              let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
+
+              if (xhr.loaded === 0 && xhr.total === 0) {
+                console.log( 'Background Image File 0% loaded - ' + time );
+              } else {
+                console.log( 'Background Image File ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
+              }
+            }, function ( error ) {
+              console.log( 'Error loading Background Image File!' );
+              console.log( error );
+
+              URL.revokeObjectURL( fii.files[ 0 ] );
+            });
+          } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
+            const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
+            const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
+
+            // Encode a Gain map from EXR or HDR file
+            // See the code example at: https://github.com/MONOGRID/gainmap-js
+
+            let loader;
+
+            if (fn_uc.endsWith('.EXR')) {
+              if (exr_loader === undefined) {
+                const { EXRLoader } = await import( "three/addons/loaders/EXRLoader.min.js" );
+                exr_loader = new EXRLoader( manager );
+                exr_loader.setDataType( THREE.FloatType );
+                manager.addHandler( /\.exr$/i, exr_loader );
+              }
+
+              loader = exr_loader;
+            } else {
+              if (rgbe_loader === undefined) {
+                const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
+                rgbe_loader = new RGBELoader();
+                rgbe_loader.setDataType( THREE.HalfFloatType );
+              }
+
+              loader = rgbe_loader;
+            }
+
+            const image = await loader.loadAsync( URL.createObjectURL( fii.files[ 0 ] ) );
+            URL.revokeObjectURL( fii.files[ 0 ] );
+
+            const textureMax = findTextureMinMax( image );
+
+            // Encode the gainmap
+            const encodingResult = encode({
+              image,
+              maxContentBoost: Math.max.apply( this, textureMax ) // this will encode the full HDR range
+            });
+
+            // obtain the RAW RGBA SDR buffer and create an ImageData
+            const sdrImageData = new ImageData( encodingResult.sdr.toArray(), encodingResult.sdr.width, encodingResult.sdr.height );
+            // obtain the RAW RGBA Gain map buffer and create an ImageData
+            const gainMapImageData = new ImageData( encodingResult.gainMap.toArray(), encodingResult.gainMap.width, encodingResult.gainMap.height );
+
+            // parallel compress the RAW buffers into the specified mimeType
+            const mimeType = 'image/jpeg';
+            const quality = 1.0;
+
+            const [sdr, gainMap] = await Promise.all([
+              compress({
+                source: sdrImageData,
+                mimeType,
+                quality,
+                flipY: true // output needs to be flipped
+              }),
+              compress({
+                source: gainMapImageData,
+                mimeType,
+                quality,
+                flipY: true // output needs to be flipped
+              })
+            ]);
+
+            // obtain the metadata which will be embedded into and XMP tag inside the final JPEG file
+            const metadata = encodingResult.getMetadata();
+
+            // embed the compressed images + metadata into a single JPEG file
+            const jpeg = await encodeJPEGMetadata({
+              ...encodingResult,
+              ...metadata,
+              sdr,
+              gainMap
+            });
+
+            // jpeg will be a Uint8Array
+            const jpeg_file = new File( [ jpeg ], 'file.jpg' );
+
+            // load the encoded jpeg with HDRJPGLoader
+
+            hdrJPGLoader.load( URL.createObjectURL( jpeg_file ), function( texture ) {
+              URL.revokeObjectURL( jpeg_file );
+
+              let hdrJpgEquirectangularMap = texture.renderTarget.texture;
+              hdrJpgEquirectangularMap.needsUpdate = true;
+
+              if (document.getElementById('equi').checked) {
+                hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = hdrJpgEquirectangularMap;
+                scene.environment = hdrJpgEquirectangularMap;
+                if (params.setEnvMap === true) set_envMap( true );
+              } else {
+                scene.background = hdrJpgEquirectangularMap;
+              }
+
+              mouse_wheel = true;
+
+              texture.dispose();
+
+              // encoder must be manually disposed when no longer needed
+              encodingResult.gainMap.dispose();
+              encodingResult.sdr.dispose();
+            });
           } else {
             fii.value = '';
-            scene.background = null;
             console.log( 'Not a valid image file!' );
           }
         } else {
@@ -1726,6 +1878,7 @@
       function set_bgnd_linear_gradient() {
         if (bgnd_linear_gradient === true) {
           scene.background = null;
+          scene.environment = null;
           bgnd_linear_gradient = false;
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
         } else {
@@ -1743,8 +1896,10 @@
           context.fillStyle = gradient;
           context.fillRect( 0, 0, ww, wh );
           let texture = new THREE.Texture( canvas );
-          scene.background = texture;
+          texture.mapping = THREE.EquirectangularReflectionMapping;
           texture.needsUpdate = true;
+          scene.background = texture;
+          scene.environment = texture;
 
           document.getElementById('file_image_input').value = '';
           document.getElementById('back_color').value = '#000000';
@@ -1939,7 +2094,7 @@
         mouse_wheel = true;
       }
 
-      function init() {
+      async function init() {
         if (scene) {
           if (polar_grid_visible === true) show_polar_grid();
           if (grid_visible === true) show_grid();
@@ -1976,15 +2131,35 @@
 
         if (zip === undefined) zip = new JSZip();
 
-        if (params === undefined) params = { setEnvMap: false, exposure: 1.3, toneMapping: 'Neutral', blurriness: 1.0, intensity: 0.5 };
+        if (tga_loader === undefined) {
+          const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
+          tga_loader = new TGALoader( manager );
+          manager.addHandler( /\.tga$/i, tga_loader );
+        }
+
+        if (dds_loader === undefined) {
+          const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
+          dds_loader = new DDSLoader( manager );
+          manager.addHandler( /\.dds$/i, dds_loader );
+        }
+
+        if (params === undefined) {
+          params = {
+            toneMapping: 'Neutral',
+            backBlurriness: 0.0,
+            backIntensity: 1.0,
+            setEnvMap: false,
+            exposure: 1.0
+          };
+        }
 
         if (toneMappingOptions === undefined) toneMappingOptions = {
           None: THREE.NoToneMapping,
           AgX: THREE.AgXToneMapping,
+          Cineon: THREE.CineonToneMapping,
           Linear: THREE.LinearToneMapping,
           Neutral: THREE.NeutralToneMapping,
           Reinhard: THREE.ReinhardToneMapping,
-          Cineon: THREE.CineonToneMapping,
           ACESFilmic: THREE.ACESFilmicToneMapping
         };
 
@@ -1998,6 +2173,7 @@
         points_included = false;
         mouse_down = false;
         mouse_wheel = true;
+        guiExposure = null;
         tex_fmt = '';
         tex_flip = false;
         tex_res = Infinity;
@@ -2082,10 +2258,10 @@
         }
 
         if (renderer === undefined) {
-          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true, logarithmicDepthBuffer: true } );
+          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
           renderer.toneMapping = THREE.NeutralToneMapping;
-          renderer.toneMappingExposure = 1.3;
+          renderer.toneMappingExposure = 1.0;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
@@ -2097,12 +2273,17 @@
           if (ktx2_loader !== undefined) ktx2_loader.detectSupport( renderer );
         }
 
+        if (hdrJPGLoader === undefined) {
+          const { HDRJPGLoader } = await import( "@monogrid/gainmap-js/decode" );
+          hdrJPGLoader = new HDRJPGLoader( renderer );
+        }
+
         if (clock === undefined) clock = new THREE.Clock();
 
         if (scene === undefined) scene = new THREE.Scene();
 
         scene.backgroundBlurriness = 0;
-        scene.backgroundIntensity = 0.75;
+        scene.backgroundIntensity = 1.1;
 
         if (dae_obj === undefined) dae_obj = new THREE.Object3D();
 
@@ -2148,7 +2329,7 @@
           controls.enableZoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
-          controls.keyPanSpeed = 0.8; 
+          controls.keyPanSpeed = 0.8;
           controls.panSpeed = 0.8;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.05;
@@ -2156,17 +2337,18 @@
           //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.rotateSpeed = 0.2;
           //controls.minDistance = 2;
           //controls.maxDistance = 500;
         }
 
         if (env_tex === undefined) {
-          let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/venice_sunset_1k.hdr';
+          let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/opengameart/smoke1.png';
 
-          rgbe_loader.load( url, function( texture ) {
-            texture.mapping = THREE.EquirectangularReflectionMapping;
-            env_tex = texture;
+          hdrJPGLoader.load( url, function( texture ) {
+            env_tex = texture.renderTarget.texture;
+            env_tex.mapping = THREE.EquirectangularReflectionMapping;
+            env_tex.needsUpdate = true;
+
             texture.dispose();
           });
         }
@@ -2581,7 +2763,7 @@
                 } else if (texture_files_png.length > 0 || texture_files_jpg.length > 0 || texture_files_bmp.length > 0
                    || texture_files_gif.length > 0 || texture_files_svg.length > 0 || texture_files_webp.length > 0) {
 
-                  let files = (texture_files_png.length > 0) ? texture_files_png : ((texture_files_jpg.length > 0) ? texture_files_jpg : ((texture_files_bmp.length > 0) ? texture_files_bmp : ((texture_files_gif.length > 0) ? texture_files_gif : ((texture_files_svg.length > 0) ? texture_files_svg : texture_files_webp))));
+                  let files = texture_check();
 
                   files.forEach( file => {
                     texture_loader.load( URL.createObjectURL( file ) , function( texture ) {
@@ -2859,6 +3041,26 @@
         console.log( 'Render: ', renderer.info.render );
       }
 
+      function texture_check() {
+        let tex_files;
+
+        if (texture_files_png.length > 0) {
+          tex_files = texture_files_png;
+        } else if (texture_files_jpg.length > 0) {
+          tex_files = texture_files_jpg;
+        } else if (texture_files_bmp.length > 0) {
+          tex_files = texture_files_bmp;
+        } else if (texture_files_gif.length > 0) {
+          tex_files = texture_files_gif;
+        } else if (texture_files_svg.length > 0) {
+          tex_files = texture_files_svg;
+        } else {
+          tex_files = texture_files_webp;
+        }
+
+        return tex_files;
+      }
+
       // Alternative exports: logic from three.js SceneUtils.js function createMeshesFromInstancedMesh( instancedMesh )
 
       async function create_meshes( alternative = false ) {
@@ -2871,7 +3073,14 @@
 
         m_meshes.traverse( function( child ) {
           if (child.isMesh) {
-            const material = new THREE.MeshStandardMaterial( { name: 'Default', side: THREE.DoubleSide, opacity: 1, metalness: 0.1, roughness: 0.6, envMapIntensity: 1.0 } );
+            const material = new THREE.MeshStandardMaterial({
+              name: 'Default',
+              side: THREE.DoubleSide,
+              opacity: 1,
+              metalness: 0.1,
+              roughness: 0.6,
+              envMapIntensity: 1.0
+            });
 
             // Alternative GLB export includes DRACO compression on indexed geometries
             if (alternative === true && !child.geometry.index) {
@@ -3654,7 +3863,9 @@
           if (render_requested === true) requestAnimationFrame( render );
         }
 
-        if (animation_running || kinematics_running || mouse_down || mouse_wheel || reset_rotation || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
+        if (animation_running === true || kinematics_running === true || mouse_down === true || mouse_wheel === true
+           || reset_rotation === true || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
+
           if (dae_obj) {
             // Reset dae_obj rotational values
             if (reset_rotation === true) {
@@ -3685,11 +3896,11 @@
             if (animation_running === true) animation_mixer.update( clock.getDelta() );
 
             if (mouse_wheel === true) {
-              if (count > 3) {
+              if (count > 10) {
                 mouse_wheel = false;
                 count = 0;
               } else {
-                count += 1;
+                count ++;
               }
             }
 
