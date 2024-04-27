@@ -316,7 +316,7 @@ Number Type Converter
     - Some animations and/or skeletons might be off or missing
 - GLTF / FBX / DAE viewers will also include animations to exported JSON format
 - 3DS viewer is using MeshPhysicalMaterial instead of MeshPhongMaterial
-- 3DM, 3DS, ASSIMP, GLTF and GLTFS viewers will also try mapping any valid background image as equirectangular when `Eq` is checked:
+- 3DM, 3DS, ASSIMP, GLTF and GLTFS viewers will also try mapping any valid `BGND` image as equirectangular when `Eq` is enabled:
   - Maybe download the following three.js examples and load either of them locally via the `BGND` file input:
     - [land_ocean_ice_cloud_2048.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/land_ocean_ice_cloud_2048.jpg)
     - [2294472375_24a3b8ef46_o.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/2294472375_24a3b8ef46_o.jpg)
