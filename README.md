@@ -302,12 +302,12 @@ Number Type Converter
 - Other controls, where applicable:
   - `B` or `BG` - background color
   - `C` - object or points color
-  - `Eq` - button or checkbox for equirectangular background:
+  - `Eq` - button or checkbox for equirectangular background with additional controls where applicable:
     - `setEnvMap` for setting envMap + metalness
-    - `toneMapping` with `exposure` and `envIntensity`
+    - `toneMapping` with `exposure` and `envMapIntensity`
     - scene background controls:
-      - `backBlurriness`
-      - `backIntensity`
+      - `blurriness` or `backBlurriness`
+      - `intensity` or `backIntensity`
 - JSON viewers support three.js and assimp JS / JSON formats with limitations:
   - JSON Viewer is currently using r163 of three.js and cannot open legacy formats
   - JSON Legacy viewer is using r111 of three.js to support legacy THREE.Geometry:
