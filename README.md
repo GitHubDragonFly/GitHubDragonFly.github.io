@@ -316,7 +316,7 @@ Number Type Converter
     - Some animations and/or skeletons might be off or missing
 - GLTF / FBX / DAE viewers will also include animations to exported JSON format
 - 3DS viewer is using MeshPhysicalMaterial instead of MeshPhongMaterial
-- 3DM, 3DS, ASSIMP, GLTF and GLTFS viewers will also try mapping any valid `BGND` image as equirectangular when `Eq` is enabled:
+- Multiple viewers will also try mapping any valid `BGND` image as equirectangular when `Eq` is enabled:
   - Maybe download the following three.js examples and load either of them locally via the `BGND` file input:
     - [land_ocean_ice_cloud_2048.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/land_ocean_ice_cloud_2048.jpg)
     - [2294472375_24a3b8ef46_o.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/2294472375_24a3b8ef46_o.jpg)
@@ -325,6 +325,7 @@ Number Type Converter
   - These viewers are also using [gainmap-js](https://github.com/MONOGRID/gainmap-js) encoder and decoder:
     - Support loading a single JPEG file with integrated gainmaps
     - Support loading EXR and HDR files which will be encoded on-the-fly into a single JPEG file with integrated gainmaps
+    - You could find some texture examples in the official three.js [equirectangular](https://github.com/mrdoob/three.js/tree/dev/examples/textures/equirectangular) folder
 - PLY+STL, PRWM and VTK viewers can also show a points version of the loaded model and export it as such (if the model is not rather large):
   - Tip: export this points model into PLY format and then drop it into [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) to get SPLAT file
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
