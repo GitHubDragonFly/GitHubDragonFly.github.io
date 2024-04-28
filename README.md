@@ -71,7 +71,7 @@ Number Type Converter
   - Move = right-click + hold + drag
   - Zoom In / Out = mouse scroll wheel
 
-- Notes about A-FRAME Viewer:
+- Special notes about A-FRAME Viewer:
   - It is using [A-Frame Library / Framework](https://aframe.io) which makes it A-Frame specific
   - It is currently highly experimental so not sure if everything works as it should be
   - It is supposed to be used mainly on mobile devices supporting AR / VR
@@ -79,7 +79,7 @@ Number Type Converter
     - Local and remote URL loading is supported
     - Local model files should be self-contained (embedded or binary)
 
-- Notes about SPLAT Viewer:
+- Special notes about SPLAT Viewer:
   - It is using [@pmndrs/drei-vanilla](https://github.com/pmndrs/drei-vanilla#splat) splat loader built around [antimatter15/splat](https://github.com/antimatter15/splat)
   - Supports both local blob and remote URL loading
   - It requires a good and fast graphics hardware
@@ -95,13 +95,13 @@ Number Type Converter
     - More info on [Luma WebGL Library](https://github.com/lumalabs/luma-web-examples)
     - [Luma AI](https://lumalabs.ai/) website appears to have an iOS App available for capturing luma splats
 
-- Notes about GLTF viewers:
+- Special notes about GLTF viewers:
   - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component:
     - Supports both local (blob) and remote URL loading
     - Local loading supports self-contained models (embedded GLTF or binary GLB) as well as GLTF + BIN + Textures
     - The viewer supports loading of multiple models at once, which will be switchable with the viewer's `M` button
     - Support for USDZ was also added but is untested
-  - `GLTF Viewer` is for v2.0 glTF files and is currently using r163 of three.js:
+  - `GLTF Viewer` is for v2.0 glTF files and is currently using r164 of three.js:
     - doesn't support obsolete `pbrSpecularGlossiness`
     - supports currently arbitrary `KHR_animation_pointer`
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js:
@@ -139,11 +139,11 @@ Number Type Converter
       - `https://raw.githubusercontent.com/SaschaWillems/VulkanSponza/master/data/sponza.dae, https://raw.githubusercontent.com/SaschaWillems/VulkanSponza/master/data/sponza/`
       - `https://raw.githubusercontent.com/oecax2208/PyMikuMikuDance/master/example/vdproject_peach_v1/小桃初代女仆v1.pmx, https://raw.githubusercontent.com/oecax2208/PyMikuMikuDance/master/example/vdproject_peach_v1/Texture/`
 
-- Special notes about mobile `Quick Viewer` which is using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) engine:
+- Special notes about mobile `Quick Viewer` which is using [Online 3D Viewer](https://github.com/kovacsv/Online3DViewer) engine:
   - It is purely online based and can be used as standalone HTML file (just delete `favicon.ico` import)
-  - It can currently export to BIM, PLY, STL, OBJ, OFF, GLB and GLTF v2.0 formats even on a mobile phone (as tested on an Android device)
   - Supported import formats: 3DS, 3DM, 3MF, AMF, BIM, BREP, BRP, DAE, FBX, GLB, GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
   - Unsupported import format: FCSTD (requires accessing a remote worker)
+  - Supported export formats: BIM, PLY, STL, OBJ, OFF, GLB and GLTF v2.0 (even on a mobile phone as tested on an Android device)
   - Loading via URL currently requires all model files URLs and comma separated (no files will be fetched automatically), here is an example for Khronos [CesiumMilkTruck](https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/CesiumMilkTruck):
     - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck.gltf, https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck_data.bin, https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck.jpg`
   - For proper viewing and additional features try using the actual [Online 3D Viewer](https://3dviewer.net/) website
