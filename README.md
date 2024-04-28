@@ -139,7 +139,7 @@ Number Type Converter
       - `https://raw.githubusercontent.com/SaschaWillems/VulkanSponza/master/data/sponza.dae, https://raw.githubusercontent.com/SaschaWillems/VulkanSponza/master/data/sponza/`
       - `https://raw.githubusercontent.com/oecax2208/PyMikuMikuDance/master/example/vdproject_peach_v1/小桃初代女仆v1.pmx, https://raw.githubusercontent.com/oecax2208/PyMikuMikuDance/master/example/vdproject_peach_v1/Texture/`
 
-- Special notes about mobile `Quick Viewer` which is using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) and [occt-import-js](https://github.com/kovacsv/occt-import-js) library:
+- Special notes about mobile `Quick Viewer` which is using [Online 3D Viewer engine](https://github.com/kovacsv/Online3DViewer) engine:
   - It is purely online based and can be used as standalone HTML file (just delete `favicon.ico` import)
   - It can currently export to BIM, PLY, STL, OBJ, OFF, GLB and GLTF v2.0 formats even on a mobile phone (as tested on an Android device)
   - Supported import formats: 3DS, 3DM, 3MF, AMF, BIM, BREP, BRP, DAE, FBX, GLB, GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
@@ -165,6 +165,8 @@ Number Type Converter
   - It can export to GLTF / GLB v2.0 and OBJ formats (animations are not currently supported)
   - Use ASSIMP Viewer instead since it has less limitations and more export options
   - Most of the following notes do not apply to GLTF Legacy viewer in general
+
+## Applicable to most viewers
 
 - Menu with controls can be located either on top or on the bottom of the page
 - Almost all viewers include the interactive [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
