@@ -11,8 +11,11 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.163.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/",
+          "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.5/dist/decode.min.js",
+          "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.5/dist/encode.min.js",
+          "@monogrid/gainmap-js/libultrahdr": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.5/dist/libultrahdr.min.js",
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@3.10.1",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@3.10.1",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@3.10.1",
@@ -23,15 +26,14 @@
 
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/occt-import-js@0.0.21/dist/occt-import-js.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/occt-import-js@0.0.22/dist/occt-import-js.min.js" defer></script>
 
-    <!-- For encoding GLB with draco compression -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
+    <!-- For encoding GLB exports with draco compression -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script type="module">
       import * as three_js from "three";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { RGBELoader } from "three/addons/loaders/RGBELoader.min.js";
       import { BIMLoader } from "../static/dotbim/loader/module/BIMLoader.js";
       import { mergeVertices } from "../static/jsm/utils/BufferGeometryUtils.js";
       import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
@@ -47,9 +49,6 @@
       file_loader.setResponseType( 'text' );
 
       bim_loader = new BIMLoader();
-
-      rgbe_loader = new RGBELoader();
-      rgbe_loader.setDataType( THREE.HalfFloatType );
 
       texture_loader = new THREE.TextureLoader();
 
@@ -318,6 +317,7 @@
     <!-- Using occt-import-js library: https://github.com/kovacsv/occt-import-js -->
     <!-- Using dotbim library: https://github.com/ricaun/dotbim.three.js -->
     <!-- Using glTF Transform for DRACO compression: https://gltf-transform.dev -->
+    <!-- Using gainmap-js encoder & decoder: https://github.com/MONOGRID/gainmap-js -->
     <!-- PRWM export powered by: https://github.com/kchapelier/PRWM -->
     <!-- Animated GIF export is based on the following example and library: -->
     <!--   https://github.com/mrdoob/omggif-example  -->
@@ -338,7 +338,8 @@
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".stp, .step, .igs, .iges, .brp, .brep, .bim" />
         <label for="file_image_input" title="Background Image" style="color: #553801;">BGND</label>
-        <input type="file" id="file_image_input" accept="image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
+        <input type="file" title="Background Image" id="file_image_input" accept=".exr, .hdr, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
+        <button title="Equirectangular Background" id="btn_equi" onclick="set_equi();" style="background-color: transparent; color: blue; min-width: 25px;" disabled>Eq</button>
         <button title="Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
         <button title="Model Opacity - double click to enable/disable" id="btn_dc_opacity" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" ondblclick="set_opacity();" onclick="show_hide_dropdown_opacity();">O
           <div id="dc_opacity" class="dropdown-content" style="display: none;" onfocusout="if (enable_opacity === true) hide_dropdown_opacity();">
@@ -357,7 +358,6 @@
           <option title="Scale 50x" value="50x" onclick="set_model_scale( '50x' );">50x</option>
           <option title="Scale 100x" value="100x" onclick="set_model_scale( '100x' );">100x</option>
         </select>
-        <label title="Equirectangular Background">Eq<input type="checkbox" id="equi" onchange="set_equi();" disabled /></label>
         <select title="Export" id="export_names" style="min-width: 90px;" disabled>
           <option title="Export Formats" value="export" selected disabled>Export</option>
           <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
@@ -715,11 +715,11 @@
     </script>
 
     <script>
-      var THREE, manager, file_loader, bim_loader, texture_loader, rgbe_loader;
-      var merge_vertices, renderer, scene, camera, mesh, render_requested, clock;
-      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
+      var THREE, file_loader, bim_loader, texture_loader, exr_loader, rgbe_loader, hdrJPGLoader;
+      var merge_vertices, manager, renderer, scene, camera, mesh, render_requested;
+      var gui, gui_set = false, guiExposure, params, toneMappingOptions, clock;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, isMobile;
-      var controls, orb_controls, gizmo, orb_controls_gizmo, link;
+      var controls, orb_controls, gizmo, orb_controls_gizmo, link, equi_enabled;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
@@ -731,7 +731,7 @@
       var edges, edges_visible, bim_edges_created;
       var initial_transparency, initial_transparency_array;
       var iges, brep, bim, tex, defaultMaterial, outline_material, wireframe_enabled;
-      var selected_step_file, selected_url_file = '', filename, response, buffer, fileBuffer;
+      var selected_step_file, selected_url_file = '', filename, response, buff, fileBuffer;
       var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
       var vertex_colors_enabled, original_vertex_color_array, random_vertex_colors_enabled, random_vertex_color_array;
 
@@ -747,7 +747,7 @@
         document.getElementById('fixed_menu').style.display = 'none';
         document.getElementById('div_loading').innerHTML = 'Please wait ...';
         document.getElementById('div_loading').style.display = 'block';
-        if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
+        if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'none';
 
         set_filename();
       }
@@ -776,7 +776,7 @@
           document.getElementById('div_loading').innerHTML = '';
           document.getElementById('div_loading').style.display = 'none';
           document.getElementById('fixed_menu').style.display = 'block';
-          if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
+          if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'block';
           render_requested = true;
           mouse_wheel = true;
           render();
@@ -794,7 +794,7 @@
         document.getElementById('div_loading').innerHTML = '';
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('fixed_menu').style.display = 'block';
-        if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
+        if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'block';
         render_requested = true;
         mouse_wheel = true;
         render();
@@ -1205,7 +1205,7 @@
               document.getElementById('fixed_menu').style.display = 'none';
               document.getElementById('animation_progress').style.display = 'block';
               document.getElementById('div_gif_rectangle').style.display = 'block';
-              if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
+              if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'none';
 
               setTimeout( addFrame, 100 );
             }
@@ -1227,7 +1227,7 @@
             document.getElementById('fixed_menu').style.display = 'block';
             document.getElementById('animation_progress').style.display = 'none';
             document.getElementById('div_gif_rectangle').style.display = 'none';
-            if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
+            if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'block';
 
             gif_export = false;
 
@@ -1353,7 +1353,7 @@
               document.getElementById('fixed_menu').style.display = 'none';
               document.getElementById('animation_progress').style.display = 'block';
               document.getElementById('div_gif_rectangle').style.display = 'block';
-              if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
+              if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'none';
 
               setTimeout( addFrame, 100 );
             }
@@ -1378,7 +1378,7 @@
             document.getElementById('fixed_menu').style.display = 'block';
             document.getElementById('animation_progress').style.display = 'none';
             document.getElementById('div_gif_rectangle').style.display = 'none';
-            if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
+            if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'block';
 
             if (render_requested === true) render();
 
@@ -1498,7 +1498,7 @@
       }
 
       async function set_equi() {
-        if (document.getElementById('equi').checked) {
+        if (equi_enabled === false) {
           if (gui_set === false) {
             gui.add( params, 'setEnvMap' )
             .onChange( function ( value ) {
@@ -1513,13 +1513,13 @@
               mouse_wheel = true;
             });
 
-            gui.add( params, 'blurriness', 0, 1 )
+            gui.add( params, 'backBlurriness', 0, 1 )
             .onChange( function ( value ) {
               scene.backgroundBlurriness = value;
               mouse_wheel = true;
             });
 
-            gui.add( params, 'intensity', 0, 2 )
+            gui.add( params, 'backIntensity', 0, 5 )
             .onChange( function ( value ) {
               scene.backgroundIntensity = value;
               mouse_wheel = true;
@@ -1532,35 +1532,48 @@
 
           document.getElementById('gui_position').style.display = 'block';
 
-          document.getElementById('file_image_input').value = '';
-          document.getElementById('file_image_input').disabled = true;
+          bgnd_linear_gradient = false;
+          document.body.style.backgroundColor = '#000000';
+
           document.getElementById('back_color').disabled = true;
           document.getElementById('back_color').value = '#000000';
-          document.body.style.backgroundColor = document.getElementById('back_color').value;
-          bgnd_linear_gradient = false;
+
           document.getElementById('btn_bgnd_linear_gradient').disabled = true;
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
 
-          scene.background = tex;
-          scene.environment = tex;
+          equi_enabled = true;
+          document.getElementById('btn_equi').style.backgroundColor = 'lightgreen';
 
-          scene.backgroundBlurriness = params.blurriness;
-          scene.backgroundIntensity = params.intensity;
+          if (document.getElementById('file_image_input').value !== '') {
+            set_scene_image();
+          } else {
+            scene.background = tex;
+            scene.environment = tex;
+          }
+
+          scene.backgroundBlurriness = params.backBlurriness;
+          scene.backgroundIntensity = params.backIntensity;
         } else {
           if (gui) gui_reset();
 
-          scene.background = null;
-          scene.environment = null;
+          if (document.getElementById('file_image_input').value !== '') {
+            set_scene_image();
+          } else {
+            scene.background = null;
+            scene.environment = null;
+          }
 
           scene.backgroundBlurriness = 0;
-          scene.backgroundIntensity = 0.75;
+          scene.backgroundIntensity = 1.1;
 
-          document.getElementById('file_image_input').disabled = false;
           document.getElementById('back_color').disabled = false;
           document.getElementById('btn_bgnd_linear_gradient').disabled = false;
+
+          equi_enabled = false;
+          document.getElementById('btn_equi').style.backgroundColor = 'transparent';
         }
 
-        equi_checked_changed();
+        equi_changed();
 
         mouse_wheel = true;
       }
@@ -1573,7 +1586,6 @@
                 child.material.forEach( mtl => {
                   if (set_env_map === true) {
                     mtl.envMap = scene.environment;
-                    mtl.envMap.colorSpace = THREE.SRGBColorSpace;
                   } else {
                     mtl.envMap = null;
                   }
@@ -1583,7 +1595,6 @@
               } else {
                 if (set_env_map === true) {
                   child.material.envMap = scene.environment;
-                  child.material.envMap.colorSpace = THREE.SRGBColorSpace;
                 } else {
                   child.material.envMap = null;
                 }
@@ -1600,12 +1611,14 @@
       function gui_reset() {
         params.toneMapping = 'Neutral';
         renderer.toneMapping = THREE.NeutralToneMapping;
-        renderer.toneMappingExposure = params.exposure = 1;
-        params.blurriness = 1.0;
-        params.intensity = 0.5;
+        renderer.toneMappingExposure = params.exposure = 1.0;
+        params.backBlurriness = 0.0;
+        params.backIntensity = 1.0;
         params.setEnvMap = false;
 
         mouse_wheel = true;
+
+        if (guiExposure) { guiExposure.destroy(); guiExposure = null; }
 
         gui.reset();
 
@@ -1616,20 +1629,40 @@
         mouse_wheel = true;
       }
 
-      function set_scene_image() {
+      async function set_scene_image() {
         fii = document.getElementById('file_image_input');
 
         if (fii.files[ 0 ]) {
+          bgnd_linear_gradient = false;
           document.body.style.backgroundImage = 'none';
           document.getElementById('back_color').value = '#000000';
-          document.body.style.backgroundColor = document.getElementById('back_color').value;
+          document.body.style.backgroundColor = '#000000';
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
 
-          if (fii.files[ 0 ].type.startsWith('image/')) {
-            texture_loader.load( URL.createObjectURL( fii.files[ 0 ] ) , function( texture ) {
+          scene.background = null;
+          scene.environment = null;
+
+          let fn_uc = fii.files[ 0 ].name.toUpperCase();
+
+          if (fii.files[ 0 ].type.startsWith('image/') && ! (fii.files[ 0 ].type.startsWith('image/svg') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
+            hdrJPGLoader.load( URL.createObjectURL( fii.files[ 0 ] ) , function( texture ) {
               URL.revokeObjectURL( fii.files[ 0 ] );
 
-              scene.background = texture;
+              let hdrJpgEquirectangularMap = texture.renderTarget.texture;
+              hdrJpgEquirectangularMap.needsUpdate = true;
+
+              if (equi_enabled === true) {
+                hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = hdrJpgEquirectangularMap;
+                scene.environment = hdrJpgEquirectangularMap;
+                if (params.setEnvMap === true) set_envMap( true );
+              } else {
+                scene.background = hdrJpgEquirectangularMap;
+              }
+
+              mouse_wheel = true;
+
+              texture.dispose();
             }, function ( xhr ) {
               let today = new Date();
               let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
@@ -1645,9 +1678,141 @@
 
               URL.revokeObjectURL( fii.files[ 0 ] );
             });
+          } else if (fii.files[ 0 ].type.startsWith('image/svg')) {
+            texture_loader.load( URL.createObjectURL( fii.files[ 0 ] ) , function( texture ) {
+              URL.revokeObjectURL( fii.files[ 0 ] );
+
+              if (equi_enabled === true) {
+                texture.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = texture.clone();
+                scene.environment = texture.clone();
+                if (params.setEnvMap === true) set_envMap( true );
+              } else {
+                scene.background = texture.clone();
+              }
+
+              mouse_wheel = true;
+
+              texture.dispose();
+            }, function ( xhr ) {
+              let today = new Date();
+              let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
+
+              if (xhr.loaded === 0 && xhr.total === 0) {
+                console.log( 'Background Image File 0% loaded - ' + time );
+              } else {
+                console.log( 'Background Image File ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
+              }
+            }, function ( error ) {
+              console.log( 'Error loading Background Image File!' );
+              console.log( error );
+
+              URL.revokeObjectURL( fii.files[ 0 ] );
+            });
+          } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
+            const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
+            const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
+
+            // Encode a Gain map from EXR or HDR file
+            // See the code example at: https://github.com/MONOGRID/gainmap-js
+
+            let loader;
+
+            if (fn_uc.endsWith('.EXR')) {
+              if (exr_loader === undefined) {
+                const { EXRLoader } = await import( "three/addons/loaders/EXRLoader.min.js" );
+                exr_loader = new EXRLoader( manager );
+                exr_loader.setDataType( THREE.FloatType );
+                manager.addHandler( /\.exr$/i, exr_loader );
+              }
+
+              loader = exr_loader;
+            } else {
+              if (rgbe_loader === undefined) {
+                const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
+                rgbe_loader = new RGBELoader();
+                rgbe_loader.setDataType( THREE.HalfFloatType );
+              }
+
+              loader = rgbe_loader;
+            }
+
+            const image = await loader.loadAsync( URL.createObjectURL( fii.files[ 0 ] ) );
+            URL.revokeObjectURL( fii.files[ 0 ] );
+
+            const textureMax = findTextureMinMax( image );
+
+            // Encode the gainmap
+            const encodingResult = encode({
+              image,
+              maxContentBoost: Math.max.apply( this, textureMax ) // this will encode the full HDR range
+            });
+
+            // obtain the RAW RGBA SDR buffer and create an ImageData
+            const sdrImageData = new ImageData( encodingResult.sdr.toArray(), encodingResult.sdr.width, encodingResult.sdr.height );
+            // obtain the RAW RGBA Gain map buffer and create an ImageData
+            const gainMapImageData = new ImageData( encodingResult.gainMap.toArray(), encodingResult.gainMap.width, encodingResult.gainMap.height );
+
+            // parallel compress the RAW buffers into the specified mimeType
+            const mimeType = 'image/jpeg';
+            const quality = 1.0;
+
+            const [sdr, gainMap] = await Promise.all([
+              compress({
+                source: sdrImageData,
+                mimeType,
+                quality,
+                flipY: true // output needs to be flipped
+              }),
+              compress({
+                source: gainMapImageData,
+                mimeType,
+                quality,
+                flipY: true // output needs to be flipped
+              })
+            ]);
+
+            // obtain the metadata which will be embedded into and XMP tag inside the final JPEG file
+            const metadata = encodingResult.getMetadata();
+
+            // embed the compressed images + metadata into a single JPEG file
+            const jpeg = await encodeJPEGMetadata({
+              ...encodingResult,
+              ...metadata,
+              sdr,
+              gainMap
+            });
+
+            // jpeg will be a Uint8Array
+            const jpeg_file = new File( [ jpeg ], 'file.jpg' );
+
+            // load the encoded jpeg with HDRJPGLoader
+
+            hdrJPGLoader.load( URL.createObjectURL( jpeg_file ), function( texture ) {
+              URL.revokeObjectURL( jpeg_file );
+
+              let hdrJpgEquirectangularMap = texture.renderTarget.texture;
+              hdrJpgEquirectangularMap.needsUpdate = true;
+
+              if (equi_enabled === true) {
+                hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = hdrJpgEquirectangularMap;
+                scene.environment = hdrJpgEquirectangularMap;
+                if (params.setEnvMap === true) set_envMap( true );
+              } else {
+                scene.background = hdrJpgEquirectangularMap;
+              }
+
+              mouse_wheel = true;
+
+              texture.dispose();
+
+              // encoder must be manually disposed when no longer needed
+              encodingResult.gainMap.dispose();
+              encodingResult.sdr.dispose();
+            });
           } else {
             fii.value = '';
-            scene.background = null;
             console.log( 'Not a valid image file!' );
           }
         } else {
@@ -1660,6 +1825,7 @@
       function set_bgnd_linear_gradient() {
         if (bgnd_linear_gradient === true) {
           scene.background = null;
+          scene.environment = null;
           bgnd_linear_gradient = false;
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
         } else {
@@ -1677,8 +1843,11 @@
           context.fillStyle = gradient;
           context.fillRect( 0, 0, ww, wh );
           let texture = new THREE.Texture( canvas );
-          scene.background = texture;
+          texture.mapping = THREE.EquirectangularReflectionMapping;
           texture.needsUpdate = true;
+          scene.background = texture.clone();
+          scene.environment = texture.clone();
+          texture.dispose();
 
           document.getElementById('file_image_input').value = '';
           document.getElementById('back_color').value = '#000000';
@@ -1899,26 +2068,35 @@
 
         if (zip === undefined) zip = new JSZip();
 
-        if (params === undefined) params = { setEnvMap: false, exposure: 1, toneMapping: 'Neutral', blurriness: 1.0, intensity: 0.5 };
+        if (params === undefined) {
+          params = {
+            toneMapping: 'Neutral',
+            backBlurriness: 0.0,
+            backIntensity: 1.0,
+            setEnvMap: false,
+            exposure: 1.0
+          };
+        }
 
         if (toneMappingOptions === undefined) toneMappingOptions = {
           None: THREE.NoToneMapping,
           AgX: THREE.AgXToneMapping,
+          Cineon: THREE.CineonToneMapping,
           Linear: THREE.LinearToneMapping,
           Neutral: THREE.NeutralToneMapping,
           Reinhard: THREE.ReinhardToneMapping,
-          Cineon: THREE.CineonToneMapping,
           ACESFilmic: THREE.ACESFilmicToneMapping
         };
 
         selected_step_file = null;
         mouse_down = false;
         mouse_wheel = true;
+        guiExposure = null;
         bim = false;
         iges = false;
         brep = false;
         response = null;
-        buffer = null;
+        buff = null;
         fileBuffer = null;
         edges = new THREE.Group();
         edges_visible = false;
@@ -1932,6 +2110,7 @@
         polar_grid_visible = false;
         gif_export = false;
         render_requested = false;
+        equi_enabled = false;
         wireframe_enabled = false;
         flat_shading_enabled = false;
         bgnd_linear_gradient = false;
@@ -1997,12 +2176,17 @@
           document.body.appendChild( renderer.domElement );
         }
 
+        if (hdrJPGLoader === undefined) {
+          const { HDRJPGLoader } = await import( "@monogrid/gainmap-js/decode" );
+          hdrJPGLoader = new HDRJPGLoader( renderer );
+        }
+
         if (clock === undefined) clock = new THREE.Clock();
 
         if (scene === undefined) scene = new THREE.Scene();
 
         scene.backgroundBlurriness = 0;
-        scene.backgroundIntensity = 0.75;
+        scene.backgroundIntensity = 1.1;
 
         if (mesh === undefined) mesh = new THREE.Group();
 
@@ -2053,17 +2237,18 @@
           //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.rotateSpeed = 0.2;
           //controls.minDistance = 2;
           //controls.maxDistance = 500;
         }
 
         if (tex === undefined) {
-          let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/equirectangular/venice_sunset_1k.hdr';
+          let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/opengameart/smoke1.png';
 
-          rgbe_loader.load( url, function( texture ) {
-            texture.mapping = THREE.EquirectangularReflectionMapping;
-            tex = texture;
+          hdrJPGLoader.load( url, function( texture ) {
+            tex = texture.renderTarget.texture;
+            tex.mapping = THREE.EquirectangularReflectionMapping;
+            tex.needsUpdate = true;
+
             texture.dispose();
           });
         }
@@ -2219,9 +2404,9 @@
             response = await fetch( URL.createObjectURL( selected_step_file ) );
             URL.revokeObjectURL( selected_step_file );
 
-            buffer = await response.arrayBuffer();
-            fileBuffer = new Uint8Array( buffer );
-            buffer = null;
+            buff = await response.arrayBuffer();
+            fileBuffer = new Uint8Array( buff );
+            buff.length = 0;
 
             let result;
 
@@ -2345,9 +2530,9 @@
             occtimportjs().then( async function( occt ) {
               response = await fetch( selected_url_file );
 
-              buffer = await response.arrayBuffer();
-              fileBuffer = new Uint8Array( buffer );
-              buffer.length = 0;
+              buff = await response.arrayBuffer();
+              fileBuffer = new Uint8Array( buff );
+              buff.length = 0;
 
               let result;
 
@@ -3060,7 +3245,9 @@
           if (render_requested === true) requestAnimationFrame( render );
         }
 
-        if (mouse_down || mouse_wheel || reset_rotation || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
+        if (first_run === true || mouse_down === true || mouse_wheel === true || reset_rotation === true
+           || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
+
           if (mesh) {
             // Reset mesh rotational values
             if (reset_rotation === true) {
@@ -3089,7 +3276,7 @@
 
             // If it might be slow to render initially
             if (first_run === true) {
-              fr_count += 1;
+              fr_count ++;
 
               if (fr_count > 5) {
                 first_run = false;
@@ -3123,11 +3310,11 @@
               }
             } else {
               if (mouse_wheel === true) {
-                if (count > 3) {
+                if (count > 10) {
                   mouse_wheel = false;
                   count = 0;
                 } else {
-                  count += 1;
+                  count ++;
                 }
               }
             }
@@ -3227,16 +3414,15 @@
         document.getElementById('dlight').checked = false;
         radio_changed();
 
-        // Reset the equi checkbox
-        document.getElementById('equi').checked = false;
-
         // Reset the opacity values
         enable_opacity = false;
         document.getElementById('model_opacity').value = 1;
         document.getElementById('model_opacity').disabled = true;
         document.getElementById('btn_dc_opacity').style.backgroundColor = 'transparent';
 
-        // Reset wireframe, flat, edges and material related values
+        // Reset equi, wireframe, flat, edges and material related values
+        equi_enabled = false;
+        document.getElementById('btn_equi').style.backgroundColor = 'transparent';
         wireframe_enabled = false;
         document.getElementById('btn_wireframe').style.backgroundColor = '#d1cefc';
         flat_shading_enabled = false;
@@ -3339,7 +3525,6 @@
         document.getElementById('rotation_x').disabled = disable;
         document.getElementById('rotation_y').disabled = disable;
         document.getElementById('rotation_z').disabled = disable;
-        document.getElementById('equi').disabled = disable;
         document.getElementById('model_scale').disabled = disable;
         document.getElementById('ambient_light_color').disabled = disable;
         document.getElementById('hemisphere_light_color').disabled = disable;
@@ -3354,6 +3539,7 @@
         document.getElementById('btn_dc_z').disabled = disable;
         document.getElementById('btn_dc_ali').disabled = disable;
         document.getElementById('btn_dc_dli').disabled = disable;
+        document.getElementById('btn_equi').disabled = disable;
         document.getElementById('btn_quick_x').disabled = disable;
         document.getElementById('btn_wireframe').disabled = disable;
         document.getElementById('btn_dc_opacity').disabled = disable;
@@ -3454,8 +3640,8 @@
         mouse_wheel = true;
       }
 
-      function equi_checked_changed() {
-        if ($('#equi')[ 0 ].checked === true) {
+      function equi_changed() {
+        if (equi_enabled === true) {
           $('#btn_bgnd_linear_gradient').unbind('mouseenter mouseleave');
           $('#back_color').unbind('mouseenter mouseleave');
         } else {
