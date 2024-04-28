@@ -1078,8 +1078,8 @@
             else if (fn_uc.endsWith('.BASIS')) { texture_files.push( { flip: true, tex: basis_loader.load( URL.createObjectURL( fi.files[ i ] ) ) }); URL.revokeObjectURL( fi.files[ i ] ); }
             else if (fn_uc.endsWith('.DDS')) { texture_files.push( { flip: true, tex: dds_loader.load( URL.createObjectURL( fi.files[ i ] ) ) }); URL.revokeObjectURL( fi.files[ i ] ); }
             else if (fn_uc.endsWith('.TGA')) { texture_files.push( tga_loader.load( URL.createObjectURL( fi.files[ i ] ), function( tex ) { tex.generateMipmaps = true; tex.flipY = true; } )); URL.revokeObjectURL( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.EXR')) { texture_files.push( { isHDR: true, tex: exr_loader.load( URL.createObjectURL( fi.files[ i ] ) ) } ); URL.revokeObjectURL( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.HDR')) { texture_files.push( { isHDR: true, tex: rgbe_loader.load( URL.createObjectURL( fi.files[ i ] ) ) } ); URL.revokeObjectURL( fi.files[ i ] ); }
+            else if (fn_uc.endsWith('.EXR')) { await exr_loader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) { texture_files.push( { isHDR: true, tex: texture } ); URL.revokeObjectURL( fi.files[ i ] ); } ) }
+            else if (fn_uc.endsWith('.HDR')) { await rgbe_loader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) { texture_files.push( { isHDR: true, tex: texture } ); URL.revokeObjectURL( fi.files[ i ] ); } ) }
             else if (fn_uc.endsWith('.GIF')) {
               file_loader.setMimeType( 'arraybuffer' );
               file_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( file_data ) {
@@ -2573,84 +2573,82 @@
                 mouse_wheel = true;
 
                 enable_usable_controls( true );
+              } else {
+                const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
+                const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
 
-                return;
-              }
+                // Encode a Gain map from EXR or HDR file
+                // See the code example at: https://github.com/MONOGRID/gainmap-js
 
-              const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
-              const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
+                const image = texture_files[ current_texture ].tex;
+                const textureMax = findTextureMinMax( image );
 
-              // Encode a Gain map from EXR or HDR file
-              // See the code example at: https://github.com/MONOGRID/gainmap-js
+                // Encode the gainmap
+                const encodingResult = encode({
+                  image,
+                  maxContentBoost: Math.max.apply( this, textureMax ) // this will encode the full HDR range
+                });
 
-              const image = texture_files[ current_texture ].tex;
-              const textureMax = findTextureMinMax( image );
+                // obtain the RAW RGBA SDR buffer and create an ImageData
+                const sdrImageData = new ImageData( encodingResult.sdr.toArray(), encodingResult.sdr.width, encodingResult.sdr.height );
+                // obtain the RAW RGBA Gain map buffer and create an ImageData
+                const gainMapImageData = new ImageData( encodingResult.gainMap.toArray(), encodingResult.gainMap.width, encodingResult.gainMap.height );
 
-              // Encode the gainmap
-              const encodingResult = encode({
-                image,
-                maxContentBoost: Math.max.apply( this, textureMax ) // this will encode the full HDR range
-              });
+                // parallel compress the RAW buffers into the specified mimeType
+                const mimeType = 'image/jpeg';
+                const quality = 1.0;
 
-              // obtain the RAW RGBA SDR buffer and create an ImageData
-              const sdrImageData = new ImageData( encodingResult.sdr.toArray(), encodingResult.sdr.width, encodingResult.sdr.height );
-              // obtain the RAW RGBA Gain map buffer and create an ImageData
-              const gainMapImageData = new ImageData( encodingResult.gainMap.toArray(), encodingResult.gainMap.width, encodingResult.gainMap.height );
+                const [sdr, gainMap] = await Promise.all([
+                  compress({
+                    source: sdrImageData,
+                    mimeType,
+                    quality,
+                    flipY: true // output needs to be flipped
+                  }),
+                  compress({
+                    source: gainMapImageData,
+                    mimeType,
+                    quality,
+                    flipY: true // output needs to be flipped
+                  })
+                ]);
 
-              // parallel compress the RAW buffers into the specified mimeType
-              const mimeType = 'image/jpeg';
-              const quality = 1.0;
+                // obtain the metadata which will be embedded into and XMP tag inside the final JPEG file
+                const metadata = encodingResult.getMetadata();
 
-              const [sdr, gainMap] = await Promise.all([
-                compress({
-                  source: sdrImageData,
-                  mimeType,
-                  quality,
-                  flipY: true // output needs to be flipped
-                }),
-                compress({
-                  source: gainMapImageData,
-                  mimeType,
-                  quality,
-                  flipY: true // output needs to be flipped
-                })
-              ]);
+                // embed the compressed images + metadata into a single JPEG file
+                const jpeg = await encodeJPEGMetadata({
+                  ...encodingResult,
+                  ...metadata,
+                  sdr,
+                  gainMap
+                });
 
-              // obtain the metadata which will be embedded into and XMP tag inside the final JPEG file
-              const metadata = encodingResult.getMetadata();
-
-              // embed the compressed images + metadata into a single JPEG file
-              const jpeg = await encodeJPEGMetadata({
-                ...encodingResult,
-                ...metadata,
-                sdr,
-                gainMap
-              });
-
-              // jpeg will be a Uint8Array
-              const jpeg_file = new File( [ jpeg ], 'file.jpg' );
-
-              // load the encoded jpeg with HDRJPGLoader
-
-              hdrJPGLoader.load( URL.createObjectURL( jpeg_file ), function( texture ) {
-                URL.revokeObjectURL( jpeg_file );
-
-                let hdrJpgEquirectangularMap = texture.renderTarget.texture;
-
-                hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = hdrJpgEquirectangularMap;
-                hdrJpgEquirectangularMap.needsUpdate = true;
-
-                mouse_wheel = true;
-
-                texture.dispose();
+                // jpeg will be a Uint8Array
+                const jpeg_file = new File( [ jpeg ], 'file.jpg' );
 
                 // encoder must be manually disposed when no longer needed
                 encodingResult.gainMap.dispose();
                 encodingResult.sdr.dispose();
 
-                enable_usable_controls( true );
-              });
+                // load the encoded jpeg with HDRJPGLoader
+                hdrJPGLoader.load( URL.createObjectURL( jpeg_file ), function( texture ) {
+                  URL.revokeObjectURL( jpeg_file );
+
+                  let hdrJpgEquirectangularMap = texture.renderTarget.texture;
+
+                  hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
+                  scene.background = hdrJpgEquirectangularMap;
+
+                  texture.dispose();
+
+                  hdrJpgEquirectangularMap.needsUpdate = true;
+
+                  mouse_wheel = true;
+
+                  enable_usable_controls( true );
+                });
+              }
             } else {
               if (isMobile === false) document.getElementById('gizmo').style.display = '';
 
