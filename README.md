@@ -360,13 +360,13 @@ PLY+STL Viewer
 - All of the above animated files are "view only" so most viewer controls will not have any effect and will be disabled
 - TIF / TIFF image file support is powered by [UTIF.js](https://github.com/photopea/UTIF.js)
 - Use the `T` button to switch between textures
-- Texture is displayed on a rotatable plane which can also be moved and zoomed in / out
-- Rotation / Move / Zoom are not applicable to Animated GIF - PNG - WEBP and / or video files (gizmo will disappear)
+- Texture is displayed on a rotatable plane which can also be moved and zoomed in / out:
+  - This is not applicable to Animated GIF - PNG - WEBP and / or video files (gizmo will disappear)
 - Video player has its own controls for playback and full-screen switching
 - URL text box also allows entering a single base64 string of the image data, see the `URLS4MODELS.md` file for an example
 - For certain formats and their manipulation an easy alternative to this viewer would be `https://ezgif.com`
 - Most of these files can easily be viewed with some operating system applications or by the browsers themselves (like animated GIF / PNG / WEBP or MP4 / WEBM / OGV videos):
-  - all it takes in Windows, for example, is to right-click the file itself then choose `Open With` and select `Firefox` browser
+  - In Windows, for example, right-click the file itself then choose `Open With` and select `Firefox` browser
   - Windows users could also consider getting the [QuickLook](https://apps.microsoft.com/store/detail/quicklook/9NV4BS3L1H4S) app
 
 ![Texture Viewer](images/Texture%20Viewer.png?raw=true)
