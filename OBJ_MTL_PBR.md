@@ -8,7 +8,8 @@ All the entries have been set as such so they are compatible with `three.js` as 
 
 Most, if not all, of the available viewers do include the OBJ Exporter, thus can try to export their models to `OBJ + MTL + textures` format with whatever limitations there might be (like animations for example).
 
-As for the textures, any of the following image formats should work with OBJ models: BMP, GIF, JPEG, PNG, TGA, WEBP.
+As for the textures, any of the following image formats should work with OBJ models when specified in the MTL file:
+  - BMP, DDS, GIF, JPEG, PNG, TGA, WEBP
 
 This document would represent a summary of PBR entries that can be found in the exported MTL file, with mentioning of some possibly utilized standard entries whose description can be seen online [here](https://paulbourke.net/dataformats/mtl/).
 
