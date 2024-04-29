@@ -141,8 +141,7 @@ Number Type Converter
 
 - Special notes about mobile `Quick Viewer` which is using [Online 3D Viewer](https://github.com/kovacsv/Online3DViewer) engine:
   - It is purely online based and can be used as standalone HTML file (just delete `favicon.ico` import)
-  - Supported import formats: 3DS, 3DM, 3MF, AMF, BIM, BREP, BRP, DAE, FBX, GLB, GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
-  - Unsupported import format: FCSTD (requires accessing a remote worker)
+  - Supported import formats: 3DS, 3DM, 3MF, AMF, BIM, BREP, BRP, DAE, FBX, FCSTD, GLB, GLTF + BIN, IFC, IGES, IGS, OBJ + MTL, OFF, PLY, STL, STEP, STP, WRL
   - Supported export formats: BIM, PLY, STL, OBJ, OFF, GLB and GLTF v2.0 (even on a mobile phone as tested on an Android device)
   - Loading via URL currently requires all model files URLs and comma separated (no files will be fetched automatically), here is an example for Khronos [CesiumMilkTruck](https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/CesiumMilkTruck):
     - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck.gltf, https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck_data.bin, https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck.jpg`
