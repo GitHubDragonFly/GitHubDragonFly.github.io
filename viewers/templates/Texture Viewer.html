@@ -29,7 +29,6 @@
       import { WorkerPool } from "three/addons/utils/WorkerPool.min.js";
       import { KTXLoader } from "three/addons/loaders/KTXLoader.min.js";
       import { KTX2Loader } from "three/addons/loaders/KTX2Loader.min.js";
-      import { LottieLoader } from "three/addons/loaders/LottieLoader.min.js";
       import { BasisTextureLoader } from "../static/jsm/loaders/BasisTextureLoader.js";
       import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
       import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
@@ -53,9 +52,6 @@
       basis_loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/libs/basis/' );
 
       manager.addHandler(/\.basis$/i, basis_loader);
-
-      lottie_loader = new LottieLoader( manager );
-      lottie_loader.setQuality( 2 );
 
       texture_loader = new THREE.TextureLoader( manager );
 
@@ -636,7 +632,7 @@
       var ww = window.innerWidth,	wh = window.innerHeight;
       var enable_opacity, mesh_flipped, slider_height = 0;
       var previous_scale = '1', bounding_box, bgnd_linear_gradient;
-      var texture_files, current_texture, previous_texture, tiff_loaded, css_object_in_scene;
+      var texture_files, current_texture, previous_texture, css_object_in_scene;
       var selected_url_file = '', url_loading = false, url_displayed = false, menu_location_bottom = false;
 
       function set_back_color() {
@@ -696,14 +692,6 @@
               scene.background = texture;
               mouse_wheel = true;
             }, function ( xhr ) {
-              let today = new Date();
-              let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-              if (xhr.loaded === 0 && xhr.total === 0) {
-                console.log( 'Background Image File 0% loaded - ' + time );
-              } else {
-                console.log( 'Background Image File ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-              }
             }, function ( error ) {
               console.log( 'Error loading Background Image File!' );
               console.log( error );
@@ -970,6 +958,13 @@
 
         document.body.style.backgroundImage = 'none';
         document.getElementById('div_spinner').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+        document.getElementById('div_error').style.color = 'lightgreen';
+        document.getElementById('div_error').innerText = 'Loading...';
+
+        document.getElementById('btn_textures').disabled = true;
+        document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
+        document.getElementById('btn_polar_grid').style.backgroundColor = '#d1cefc';
 
         if (tga_loader === undefined) {
           const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
@@ -995,6 +990,12 @@
           rgbe_loader.setDataType( THREE.HalfFloatType );
         }
 
+        if (lottie_loader === undefined) {
+          const { LottieLoader } = await import( "three/addons/loaders/LottieLoader.min.js" );
+          lottie_loader = new LottieLoader( manager );
+          lottie_loader.setQuality( 2 );
+        }
+
         if (css2d_renderer === undefined) {
           const { CSS2DObject, CSS2DRenderer } = await import( "three/addons/renderers/CSS2DRenderer.min.js" );
 
@@ -1006,7 +1007,6 @@
         lottie = false;
         mouse_down = false;
         mouse_wheel = true;
-        tiff_loaded = false;
         texture_files = [];
         current_texture = -1;
         previous_texture = -1;
@@ -1018,10 +1018,6 @@
         css_object_in_scene = false;
         bounding_box = new THREE.Box3();
 
-        document.getElementById('btn_textures').disabled = true;
-        document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
-        document.getElementById('btn_polar_grid').style.backgroundColor = '#d1cefc';
-
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
@@ -1032,6 +1028,9 @@
           renderer.autoClear = false;
 
           document.body.appendChild( renderer.domElement );
+
+          ktx2_loader.detectSupport( renderer );
+          basis_loader.detectSupport( renderer );
         }
 
         if (hdrJPGLoader === undefined) {
@@ -1052,9 +1051,6 @@
           css_renderer.domElement.style.pointerEvents = 'none';
         }
 
-        ktx2_loader.detectSupport( renderer );
-        basis_loader.detectSupport( renderer );
-
         if (url_loading === false) {
           var fi = document.getElementById('file_input');
 
@@ -1062,206 +1058,369 @@
             let fn_uc = fi.files[ i ].name.toUpperCase();
 
             if (fi.files[ i ].type === 'image/jpeg') {
-              await hdrJPGLoader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) {
-                URL.revokeObjectURL( fi.files[ i ] );
+              await new Promise( resolve => {
+                hdrJPGLoader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
 
-                if (texture.material.hdrCapacityMax === 1 && texture.material.hdrCapacityMin === 0) {
-                  texture_files.push( texture.renderTarget.texture );
-                } else {
-                  texture_files.push( { isHDR: true, isJPEG: true, tex: texture.renderTarget.texture } );
-                }
+                  if (texture.material.hdrCapacityMax === 1 && texture.material.hdrCapacityMin === 0) {
+                    resolve( texture_files.push( texture.renderTarget.texture ) );
+                  } else {
+                    resolve( texture_files.push( { isHDR: true, tex: texture.renderTarget.texture } ) );
+                  }
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  URL.revokeObjectURL( fi.files[ i ] );
+                  handle_error( error );
+                });
               });
             }
-            else if (fn_uc.endsWith('.BMP') || fn_uc.endsWith('.DIB')) { texture_files.push( hdrJPGLoader.load( URL.createObjectURL( fi.files[ i ] ) ).renderTarget.texture ); URL.revokeObjectURL( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.SVG')) { texture_files.push( texture_loader.load( URL.createObjectURL( fi.files[ i ] ) )); URL.revokeObjectURL( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.JSON')) { texture_files.push( { isLottie: true, lottie_tex: lottie_loader.load( URL.createObjectURL( fi.files[ i ] ) ) }); URL.revokeObjectURL( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.KTX')) { texture_files.push( { flip: true, tex: ktx_loader.load( URL.createObjectURL( fi.files[ i ] ) ) }); URL.revokeObjectURL( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.KTX2')) { await ktx2_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( texture ) { URL.revokeObjectURL( fi.files[ i ] ); texture_files.push( { flip: true, tex: texture } ); });}
-            else if (fn_uc.endsWith('.BASIS')) { texture_files.push( { flip: true, tex: basis_loader.load( URL.createObjectURL( fi.files[ i ] ) ) }); URL.revokeObjectURL( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.DDS')) { texture_files.push( { flip: true, tex: dds_loader.load( URL.createObjectURL( fi.files[ i ] ) ) }); URL.revokeObjectURL( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.TGA')) { texture_files.push( tga_loader.load( URL.createObjectURL( fi.files[ i ] ), function( tex ) { tex.generateMipmaps = true; tex.flipY = true; } )); URL.revokeObjectURL( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.EXR')) { await exr_loader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) { texture_files.push( { isHDR: true, tex: texture } ); URL.revokeObjectURL( fi.files[ i ] ); } ) }
-            else if (fn_uc.endsWith('.HDR')) { await rgbe_loader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) { texture_files.push( { isHDR: true, tex: texture } ); URL.revokeObjectURL( fi.files[ i ] ); } ) }
-            else if (fn_uc.endsWith('.GIF')) {
-              file_loader.setMimeType( 'arraybuffer' );
-              file_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( file_data ) {
-                URL.revokeObjectURL( fi.files[ i ] );
-
-                let num_frames = new GifReader( new Uint8Array( file_data ) ).numFrames();
-
-                if (num_frames > 1) {
-                  let img_element = document.createElement( 'img' );
-
-                  img_element.onload = () => {
-                    // Scale large image down so it fits better on the screen
-                    let x = 0.85 * ww, y = 0.85 * wh;
-
-                    if (img_element.width > x || img_element.height > y) {
-                      while (img_element.width > x || img_element.height > y) {
-                        img_element.width = img_element.width * 0.85;
-                        img_element.height = img_element.height * 0.85;
-                      }
-                    }
-                  }
-
-                  img_element.src = URL.createObjectURL( fi.files[ i ] );
+            else if (fn_uc.endsWith('.BMP') || fn_uc.endsWith('.DIB')) {
+              await new Promise( resolve => {
+                hdrJPGLoader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) {
                   URL.revokeObjectURL( fi.files[ i ] );
 
-                  let css_object = new css2d_object( img_element );
-                  css_object.position.set( 0, 0, 0 );
-
-                  texture_files.push( { isAnimation: true, tex: css_object } );
-                } else {
-                  texture_files.push( hdrJPGLoader.load( URL.createObjectURL( fi.files[ i ] ) ).renderTarget.texture );
+                  resolve( texture_files.push( texture.renderTarget.texture ) );
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
                   URL.revokeObjectURL( fi.files[ i ] );
-                }
+                  handle_error( error );
+                });
               });
+            }
+            else if (fn_uc.endsWith('.SVG')) {
+              await new Promise( resolve => {
+                texture_loader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
 
-              document.getElementById('btn_textures').disabled = false;
+                  resolve( texture_files.push( texture ) );
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  URL.revokeObjectURL( fi.files[ i ] );
+                  handle_error( error );
+                });
+              });
+            }
+            else if (fn_uc.endsWith('.JSON')) {
+              await new Promise( resolve => {
+                lottie_loader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
+
+                  resolve( texture_files.push( { isLottie: true, lottie_tex: texture } ) );
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  URL.revokeObjectURL( fi.files[ i ] );
+                  handle_error( error );
+                });
+              });
+            }
+            else if (fn_uc.endsWith('.BASIS')) {
+              await new Promise( resolve => {
+                basis_loader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
+
+                  resolve( texture_files.push( { flip: true, tex: texture } ) );
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  URL.revokeObjectURL( fi.files[ i ] );
+                  handle_error( error );
+                });
+              });
+            }
+            else if (fn_uc.endsWith('.DDS')) {
+              await new Promise( resolve => {
+                dds_loader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
+
+                  resolve( texture_files.push( { flip: true, tex: texture } ) );
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  URL.revokeObjectURL( fi.files[ i ] );
+                  handle_error( error );
+                });
+              });
+            }
+            else if (fn_uc.endsWith('.TGA')) {
+              await new Promise( resolve => {
+                tga_loader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
+
+                  texture.generateMipmaps = true;
+                  texture.flipY = true;
+
+                  resolve( texture_files.push( texture ) );
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  URL.revokeObjectURL( fi.files[ i ] );
+                  handle_error( error );
+                });
+              });
+            }
+            else if (fn_uc.endsWith('.KTX')) {
+              await new Promise( resolve => {
+                ktx_loader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
+
+                  resolve( texture_files.push( { flip: true, tex: texture } ) );
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  URL.revokeObjectURL( fi.files[ i ] );
+                  handle_error( error );
+                });
+              });
+            }
+            else if (fn_uc.endsWith('.KTX2')) {
+              await new Promise( resolve => {
+                ktx2_loader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
+
+                  resolve( texture_files.push( { flip: true, tex: texture } ) );
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  URL.revokeObjectURL( fi.files[ i ] );
+                  handle_error( error );
+                });
+              });
+            }
+            else if (fn_uc.endsWith('.EXR')) {
+              await new Promise( resolve => {
+                exr_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( texture ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
+
+                  resolve( await new Promise( res => {
+                    load_hdrjpg( texture )
+                    .then( tex => {
+                      res( texture_files.push( { isHDR: true, tex: tex } ));
+                    });
+                  }));
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  URL.revokeObjectURL( fi.files[ i ] );
+                  handle_error( error );
+                });
+              });
+            }
+            else if (fn_uc.endsWith('.HDR')) {
+              await new Promise( resolve => {
+                rgbe_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( texture ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
+
+                  resolve( await new Promise( res => {
+                    load_hdrjpg( texture )
+                    .then( tex => {
+                      res( texture_files.push( { isHDR: true, tex: tex } ));
+                    });
+                  }));
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  URL.revokeObjectURL( fi.files[ i ] );
+                  handle_error( error );
+                });
+              });
+            }
+            else if (fn_uc.endsWith('.GIF')) {
+              await new Promise( resolve => {
+                file_loader.setMimeType( 'arraybuffer' );
+                file_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( file_data ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
+
+                  let num_frames = new GifReader( new Uint8Array( file_data ) ).numFrames();
+
+                  if (num_frames > 1) {
+                    let img_element = document.createElement( 'img' );
+
+                    img_element.onload = () => {
+                      URL.revokeObjectURL( fi.files[ i ] );
+
+                      // Scale large image down so it fits better on the screen
+                      let x = 0.85 * ww, y = 0.85 * wh;
+
+                      if (img_element.width > x || img_element.height > y) {
+                        while (img_element.width > x || img_element.height > y) {
+                          img_element.width = img_element.width * 0.85;
+                          img_element.height = img_element.height * 0.85;
+                        }
+                      }
+
+                      let css_object = new css2d_object( img_element );
+                      css_object.position.set( 0, 0, 0 );
+
+                      resolve( texture_files.push( { isAnimation: true, tex: css_object } ) );
+                    }
+
+                    img_element.src = URL.createObjectURL( fi.files[ i ] );
+                  } else {
+                    hdrJPGLoader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) {
+                      URL.revokeObjectURL( fi.files[ i ] );
+
+                      resolve( texture_files.push( texture.renderTarget.texture ) );
+                    }, function ( xhr ) { // onProgress
+                    }, function ( error ) { // onError
+                      URL.revokeObjectURL( fi.files[ i ] );
+                      handle_error( error );
+                    });
+                  }
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  URL.revokeObjectURL( fi.files[ i ] );
+                  handle_error( error );
+                });
+              });
             }
             else if (fn_uc.endsWith('.WEBP')) {
-              file_loader.setMimeType( 'image/webp' );
-              file_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( file_data ) {
-                URL.revokeObjectURL( fi.files[ i ] );
+              await new Promise( resolve => {
+                file_loader.setMimeType( 'image/webp' );
+                file_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( file_data ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
 
-                // get the first lines of the file to check if there are keywords defining animated WEBP
-                let strings = await THREE.LoaderUtils.decodeText( new Uint8Array( file_data, 0, 250 ) ).split( '\n' );
-                let animated_webp = ( strings[ 1 ] && ( strings[ 1 ].indexOf( 'ANIM' ) !== - 1 || strings[ 1 ].indexOf( 'ANMF' ) !== - 1 ));
+                  // get the first lines of the file to check if there are keywords defining animated WEBP
+                  let strings = await THREE.LoaderUtils.decodeText( new Uint8Array( file_data, 0, 250 ) ).split( '\n' );
+                  let animated_webp = ( strings[ 1 ] && ( strings[ 1 ].indexOf( 'ANIM' ) !== - 1 || strings[ 1 ].indexOf( 'ANMF' ) !== - 1 ));
 
-                if (animated_webp === true) {
-                  let img_element = document.createElement( 'img' );
+                  if (animated_webp === true) {
+                    let img_element = document.createElement( 'img' );
 
-                  img_element.onload = () => {
-                    // Scale large image down so it fits better on the screen
-                    let x = 0.85 * ww, y = 0.85 * wh;
+                    img_element.onload = () => {
+                      URL.revokeObjectURL( fi.files[ i ] );
 
-                    if (img_element.width > x || img_element.height > y) {
-                      while (img_element.width > x || img_element.height > y) {
-                        img_element.width = img_element.width * 0.85;
-                        img_element.height = img_element.height * 0.85;
+                      // Scale large image down so it fits better on the screen
+                      let x = 0.85 * ww, y = 0.85 * wh;
+
+                      if (img_element.width > x || img_element.height > y) {
+                        while (img_element.width > x || img_element.height > y) {
+                          img_element.width = img_element.width * 0.85;
+                          img_element.height = img_element.height * 0.85;
+                        }
                       }
+
+                      let css_object = new css2d_object( img_element );
+                      css_object.position.set( 0, 0, 0 );
+
+                      resolve( texture_files.push( { isAnimation: true, tex: css_object } ) );
                     }
+
+                    img_element.src = URL.createObjectURL( fi.files[ i ] );
+                  } else {
+                    hdrJPGLoader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) {
+                      URL.revokeObjectURL( fi.files[ i ] );
+
+                      resolve( texture_files.push( texture.renderTarget.texture ) );
+                    }, function ( xhr ) { // onProgress
+                    }, function ( error ) { // onError
+                      URL.revokeObjectURL( fi.files[ i ] );
+                      handle_error( error );
+                    });
                   }
-
-                  img_element.src = URL.createObjectURL( fi.files[ i ] );
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
                   URL.revokeObjectURL( fi.files[ i ] );
-
-                  let css_object = new css2d_object( img_element );
-                  css_object.position.set( 0, 0, 0 );
-
-                  texture_files.push( { isAnimation: true, tex: css_object } );
-                } else {
-                  texture_files.push( hdrJPGLoader.load( URL.createObjectURL( fi.files[ i ] ) ).renderTarget.texture );
-                  URL.revokeObjectURL( fi.files[ i ] );
-                }
+                  handle_error( error );
+                });
               });
             }
             else if (fn_uc.endsWith('.PNG') || fn_uc.endsWith('.APNG')) {
-              file_loader.setMimeType( 'image/png' );
-              file_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( file_data ) {
-                URL.revokeObjectURL( fi.files[ i ] );
+              await new Promise( resolve => {
+                file_loader.setMimeType( 'image/png' );
+                file_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( file_data ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
 
-                // Use UPNG to detect number of frames - multiple frames reflect APNG
-                let apng = await UPNG.decode( file_data );
+                  // Use UPNG to detect number of frames - multiple frames reflect APNG
+                  let apng = await UPNG.decode( file_data );
 
-                if (apng.frames.length > 1) {
-                  let img_element = document.createElement( 'img' );
+                  if (apng.frames.length > 1) {
+                    let img_element = document.createElement( 'img' );
 
-                  img_element.onload = () => {
-                    // Scale large image down so it fits better on the screen
-                    let x = 0.85 * ww, y = 0.85 * wh;
+                    img_element.onload = () => {
+                      URL.revokeObjectURL( fi.files[ i ] );
 
-                    if (img_element.width > x || img_element.height > y) {
-                      while (img_element.width > x || img_element.height > y) {
-                        img_element.width = img_element.width * 0.85;
-                        img_element.height = img_element.height * 0.85;
+                      // Scale large image down so it fits better on the screen
+                      let x = 0.85 * ww, y = 0.85 * wh;
+
+                      if (img_element.width > x || img_element.height > y) {
+                        while (img_element.width > x || img_element.height > y) {
+                          img_element.width = img_element.width * 0.85;
+                          img_element.height = img_element.height * 0.85;
+                        }
                       }
+
+                      let css_object = new css2d_object( img_element );
+                      css_object.position.set( 0, 0, 0 );
+
+                      resolve( texture_files.push( { isAnimation: true, tex: css_object } ) );
                     }
+
+                    img_element.src = URL.createObjectURL( fi.files[ i ] );
+                  } else {
+                    hdrJPGLoader.load( URL.createObjectURL( fi.files[ i ] ), function( texture ) {
+                      URL.revokeObjectURL( fi.files[ i ] );
+
+                      resolve( texture_files.push( texture.renderTarget.texture ) );
+                    }, function ( xhr ) { // onProgress
+                    }, function ( error ) { // onError
+                      URL.revokeObjectURL( fi.files[ i ] );
+                      handle_error( error );
+                    });
                   }
-
-                  img_element.src = URL.createObjectURL( fi.files[ i ] );
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
                   URL.revokeObjectURL( fi.files[ i ] );
-
-                  let css_object = new css2d_object( img_element );
-                  css_object.position.set( 0, 0, 0 );
-
-                  texture_files.push( { isAnimation: true, tex: css_object } );
-                } else {
-                  // Option 1 - use hdrJPGLoader to load the file directly
-
-                  texture_files.push( hdrJPGLoader.load( URL.createObjectURL( fi.files[ i ] ) ).renderTarget.texture );
-                  URL.revokeObjectURL( fi.files[ i ] );
-
-                  // Option 2 - 'apng.data' is a Uint8Array with RGBA pixels so use canvas and texture_loader to load it
-                  // Functional but is a long way around for this viewer
-
-                  //let canvas = document.createElement('canvas');
-                  //canvas.width = apng.width;
-                  //canvas.height = apng.height;
-                  //let context = canvas.getContext( '2d' );
-                  //let data = context.getImageData( 0, 0, apng.width, apng.height );
-
-                  //for (let i = 0; i < apng.data.length; i += 4) {
-                  //  data.data[ i ] = apng.data[ i ];
-                  //  data.data[ i + 1 ] = apng.data[ i + 1 ];
-                  //  data.data[ i + 2 ] = apng.data[ i + 2 ];
-                  //  data.data[ i + 3 ] = apng.data[ i + 3 ];
-                  //}
-
-                  //context.putImageData( data, 0, 0 );
-
-                  //texture_files.push( texture_loader.load( canvas.toDataURL() ) );
-                }
+                  handle_error( error );
+                });
               });
             }
             else if (fi.files[ i ].type === 'image/tiff') {
-              tiff_loaded = true;
+              await new Promise( resolve => {
+                file_loader.setMimeType( 'image/tiff' );
+                file_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( file_data ) {
+                  URL.revokeObjectURL( fi.files[ i ] );
 
-              file_loader.setMimeType( 'image/tiff' );
-              file_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( file_data ) {
-                URL.revokeObjectURL( fi.files[ i ] );
+                  let tiff = await UTIF.decode( file_data );
+                  await UTIF.decodeImage( file_data, tiff[ 0 ] )
 
-                let tiff = await UTIF.decode( file_data );
-                await UTIF.decodeImage( file_data, tiff[ 0 ] )
+                  let canvas = document.createElement('canvas');
+                  canvas.width = tiff[ 0 ].width;
+                  canvas.height = tiff[ 0 ].height;
+                  let context = canvas.getContext( '2d' );
+                  let data = context.getImageData( 0, 0, tiff[ 0 ].width, tiff[ 0 ].height );
 
-                let canvas = document.createElement('canvas');
-                canvas.width = tiff[ 0 ].width;
-                canvas.height = tiff[ 0 ].height;
-                let context = canvas.getContext( '2d' );
-                let data = context.getImageData( 0, 0, tiff[ 0 ].width, tiff[ 0 ].height );
+                  let rgba  = UTIF.toRGBA8( tiff[ 0 ] );  // Uint8Array with RGBA pixels
 
-                let rgba  = UTIF.toRGBA8( tiff[ 0 ] );  // Uint8Array with RGBA pixels
+                  for (let i = 0; i < rgba.length; i += 4) {
+                    data.data[ i ] = rgba[ i ];
+                    data.data[ i + 1 ] = rgba[ i + 1 ];
+                    data.data[ i + 2 ] = rgba[ i + 2 ];
+                    data.data[ i + 3 ] = rgba[ i + 3 ];
+                  }
 
-                for (let i = 0; i < rgba.length; i += 4) {
-                  data.data[ i ] = rgba[ i ];
-                  data.data[ i + 1 ] = rgba[ i + 1 ];
-                  data.data[ i + 2 ] = rgba[ i + 2 ];
-                  data.data[ i + 3 ] = rgba[ i + 3 ];
-                }
+                  context.putImageData( data, 0, 0 );
 
-                context.putImageData( data, 0, 0 );
-
-                texture_files.push( texture_loader.load( canvas.toDataURL() ) );
+                  texture_loader.load( canvas.toDataURL(), function( texture ) {
+                    resolve( texture_files.push( texture ) );
+                  }, function ( xhr ) { // onProgress
+                  }, function ( error ) { // onError
+                    URL.revokeObjectURL( fi.files[ i ] );
+                    handle_error( error );
+                  });
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  URL.revokeObjectURL( fi.files[ i ] );
+                  handle_error( error );
+                });
               });
             }
             else if (fi.files[ i ].type === 'video/mp4' || fi.files[ i ].type === 'audio/mp4' || fi.files[ i ].type === 'video/webm'
-             || fi.files[ i ].type === 'video/ogg' || fi.files[ i ].type === 'audio/ogg') {
+               || fi.files[ i ].type === 'video/ogg' || fi.files[ i ].type === 'audio/ogg') {
 
-              texture_files.push( { isVideo: true, tex: URL.createObjectURL( fi.files[ i ] ) } );
-              document.getElementById('btn_textures').disabled = false;
+              await new Promise( resolve => {
+                resolve( texture_files.push( { isVideo: true, tex: URL.createObjectURL( fi.files[ i ] ) } ) );
+              });
             }
           };
 
-          await new Promise(resolve => setTimeout( resolve, 1000 )); // adjust timing if necessary
-
-          if (texture_files.length > 0 || tiff_loaded) {
+          if (texture_files.length > 0) {
             document.getElementById('btn_textures').disabled = false;
             selected_url_file = '';
           } else {
-            console.log( 'No valid Image file!' );
-            document.body.style.backgroundImage = 'none';
-            document.getElementById('div_spinner').style.display = 'none';
-            document.getElementById('div_error').style.display = 'block';
+            handle_error( 'No valid Image file!' );
             return;
           }
         } else {
@@ -1269,12 +1428,6 @@
           document.getElementById('file_input').value = '';
           url_loading = false;
         }
-
-        document.body.style.backgroundImage = 'none';
-        document.getElementById('div_spinner').style.display = 'none';
-        document.getElementById('div_error').style.display = 'none';
-
-        enable_disable( false );
 
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
@@ -1346,14 +1499,7 @@
         if (selected_url_file !== '') {
           loadURLFile();
         } else {
-          document.getElementById('btn_textures').style.backgroundColor = 'lightgreen';
-
-          disabled_changed();
-
-          set_texture();
-
-          render_requested = true;
-          render();
+          finish_loading();
         }
       }
 
@@ -1385,79 +1531,32 @@
 
             // TGA
             case 'AA':
-              tga_loader.load( ( 'data:image/tga;base64,' + selected_url_file ), function( texture ) {
-                texture.generateMipmaps = true;
-                texture.flipY = true;
-                texture_files.push( texture );
-                document.getElementById('btn_textures').disabled = false;
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'base64 TGA 0% loaded - ' + time );
-                } else {
-                  console.log( 'base64 TGA ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Error loading base64 TGA!' );
-                console.log( error );
-                render_requested = false;
+              await new Promise( resolve => {
+                tga_loader.load( ( 'data:image/tga;base64,' + selected_url_file ), function( texture ) {
+                  texture.generateMipmaps = true;
+                  texture.flipY = true;
+                  resolve( texture_files.push( texture ) );
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  handle_error( error );
+                });
               });
               break;
 
             // PNG
             case 'iV':
-              b64_string = atob( selected_url_file );
-              b64_bytes = new Uint8Array( b64_string.length );
+              await new Promise( async resolve => {
+                b64_string = atob( selected_url_file );
+                b64_bytes = new Uint8Array( b64_string.length );
 
-              for ( let i = 0; i < b64_string.length; i++ ) {
-                b64_bytes[ i ] = b64_string.charCodeAt( i );
-              }
-
-              // Use UPNG to detect number of frames - multiple frames reflect APNG
-              let apng = await UPNG.decode( b64_bytes.buffer );
-
-              if (apng.frames.length > 1) {
-                let img_element = document.createElement( 'img' );
-
-                img_element.onload = () => {
-                  // Scale large image down so it fits better on the screen
-                  let x = 0.85 * ww, y = 0.85 * wh;
-
-                  if (img_element.width > x || img_element.height > y) {
-                    while (img_element.width > x || img_element.height > y) {
-                      img_element.width = img_element.width * 0.85;
-                      img_element.height = img_element.height * 0.85;
-                    }
-                  }
+                for ( let i = 0; i < b64_string.length; i++ ) {
+                  b64_bytes[ i ] = b64_string.charCodeAt( i );
                 }
 
-                img_element.src = 'data:image/png;base64,' + selected_url_file;
+                // Use UPNG to detect number of frames - multiple frames reflect APNG
+                let apng = await UPNG.decode( b64_bytes.buffer );
 
-                let css_object = new css2d_object( img_element );
-                css_object.position.set( 0, 0, 0 );
-
-                texture_files.push( { isAnimation: true, tex: css_object } );
-                document.getElementById('btn_textures').disabled = false;
-              } else {
-                texture_files.push( hdrJPGLoader.load( 'data:image/png;base64,' + selected_url_file ).renderTarget.texture );
-                document.getElementById('btn_textures').disabled = false;
-              }
-              break;
-
-            // BMP or DIB
-            case 'Qk':
-              texture_files.push( hdrJPGLoader.load( 'data:image/bmp;base64,' + selected_url_file ).renderTarget.texture );
-              break;
-
-            // GIF
-            case 'R0':
-              file_loader.setMimeType( 'arraybuffer' );
-              file_loader.load( 'data:image/gif;base64,' + selected_url_file, async function( file_data ) {
-                let num_frames = new GifReader( new Uint8Array( file_data ) ).numFrames();
-
-                if (num_frames > 1) {
+                if (apng.frames.length > 1) {
                   let img_element = document.createElement( 'img' );
 
                   img_element.onload = () => {
@@ -1470,187 +1569,262 @@
                         img_element.height = img_element.height * 0.85;
                       }
                     }
+
+                    let css_object = new css2d_object( img_element );
+                    css_object.position.set( 0, 0, 0 );
+
+                    resolve( texture_files.push( { isAnimation: true, tex: css_object } ) );
                   }
 
-                  img_element.src = 'data:image/gif;base64,' + selected_url_file;
-
-                  let css_object = new css2d_object( img_element );
-                  css_object.position.set( 0, 0, 0 );
-
-                  texture_files.push( { isAnimation: true, tex: css_object } );
+                  img_element.src = 'data:image/png;base64,' + selected_url_file;
                 } else {
-                  texture_files.push( hdrJPGLoader.load( 'data:image/gif;base64,' + selected_url_file ).renderTarget.texture );
+                  hdrJPGLoader.load( 'data:image/png;base64,' + selected_url_file, function( texture ) {
+                    resolve( texture_files.push( texture.renderTarget.texture ) );
+                  }, function ( xhr ) { // onProgress
+                  }, function ( error ) { // onError
+                    handle_error( error );
+                  });
                 }
               });
+              break;
 
-              document.getElementById('btn_textures').disabled = false;
+            // BMP or DIB
+            case 'Qk':
+              await new Promise( resolve => {
+                hdrJPGLoader.load( 'data:image/bmp;base64,' + selected_url_file, function( texture ) {
+                  resolve( texture_files.push( texture.renderTarget.texture ) );
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  handle_error( error );
+                });
+              });
+              break;
+
+            // GIF
+            case 'R0':
+              await new Promise( resolve => {
+                file_loader.setMimeType( 'arraybuffer' );
+                file_loader.load( 'data:image/gif;base64,' + selected_url_file, async function( file_data ) {
+                  let num_frames = new GifReader( new Uint8Array( file_data ) ).numFrames();
+
+                  if (num_frames > 1) {
+                    let img_element = document.createElement( 'img' );
+
+                    img_element.onload = () => {
+                      // Scale large image down so it fits better on the screen
+                      let x = 0.85 * ww, y = 0.85 * wh;
+
+                      if (img_element.width > x || img_element.height > y) {
+                        while (img_element.width > x || img_element.height > y) {
+                          img_element.width = img_element.width * 0.85;
+                          img_element.height = img_element.height * 0.85;
+                        }
+                      }
+
+                      let css_object = new css2d_object( img_element );
+                      css_object.position.set( 0, 0, 0 );
+
+                      resolve( texture_files.push( { isAnimation: true, tex: css_object } ) );
+                    }
+
+                    img_element.src = 'data:image/gif;base64,' + selected_url_file;
+                  } else {
+                    hdrJPGLoader.load( 'data:image/gif;base64,' + selected_url_file, function( texture ) {
+                      resolve( texture_files.push( texture.renderTarget.texture ) );
+                    }, function ( xhr ) { // onProgress
+                    }, function ( error ) { // onError
+                      handle_error( error );
+                    });
+                  }
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  handle_error( error );
+                });
+              });
               break;
 
             // JPEG
             case '/9':
-              await hdrJPGLoader.load( 'data:image/jpeg;base64,' + selected_url_file, function( texture ) {
-                if (texture.material.hdrCapacityMax === 1 && texture.material.hdrCapacityMin === 0) {
-                  texture_files.push( texture.renderTarget.texture );
-                } else {
-                  texture_files.push( { isHDR: true, isJPEG: true, tex: texture.renderTarget.texture } );
-                }
+              await new Promise( resolve => {
+                hdrJPGLoader.load( 'data:image/jpeg;base64,' + selected_url_file, function( texture ) {
+                  if (texture.material.hdrCapacityMax === 1 && texture.material.hdrCapacityMin === 0) {
+                    resolve( texture_files.push( texture.renderTarget.texture ) );
+                  } else {
+                    resolve( texture_files.push( { isHDR: true, tex: texture.renderTarget.texture } ) );
+                  }
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { // onError
+                  handle_error( error );
+                });
               });
               break;
 
             // WEBP
             case 'Uk':
-              b64_string = atob( selected_url_file );
+              await new Promise( resolve => {
+                b64_string = atob( selected_url_file );
 
-              let animated_webp = ( b64_string.indexOf( 'ANIM' ) !== - 1 || b64_string.indexOf( 'ANMF' ) !== - 1 );
+                let animated_webp = ( b64_string.indexOf( 'ANIM' ) !== - 1 || b64_string.indexOf( 'ANMF' ) !== - 1 );
 
-              if (animated_webp === true) {
-                let img_element = document.createElement( 'img' );
+                if (animated_webp === true) {
+                  let img_element = document.createElement( 'img' );
 
-                img_element.onload = () => {
-                  // Scale large image down so it fits better on the screen
-                  let x = 0.85 * ww, y = 0.85 * wh;
+                  img_element.onload = () => {
+                    // Scale large image down so it fits better on the screen
+                    let x = 0.85 * ww, y = 0.85 * wh;
 
-                  if (img_element.width > x || img_element.height > y) {
-                    while (img_element.width > x || img_element.height > y) {
-                      img_element.width = img_element.width * 0.85;
-                      img_element.height = img_element.height * 0.85;
+                    if (img_element.width > x || img_element.height > y) {
+                      while (img_element.width > x || img_element.height > y) {
+                        img_element.width = img_element.width * 0.85;
+                        img_element.height = img_element.height * 0.85;
+                      }
                     }
+
+                    let css_object = new css2d_object( img_element );
+                    css_object.position.set( 0, 0, 0 );
+
+                    resolve( texture_files.push( { isAnimation: true, tex: css_object } ) );
                   }
+
+                  img_element.src = 'data:image/webp;base64,' + selected_url_file;
+                } else {
+                  hdrJPGLoader.load( 'data:image/webp;base64,' + selected_url_file, function( texture ) {
+                    resolve( texture_files.push( texture.renderTarget.texture ) );
+                  }, function ( xhr ) { // onProgress
+                  }, function ( error ) { // onError
+                    handle_error( error );
+                  });
                 }
-
-                img_element.src = 'data:image/webp;base64,' + selected_url_file;
-
-                let css_object = new css2d_object( img_element );
-                css_object.position.set( 0, 0, 0 );
-
-                texture_files.push( { isAnimation: true, tex: css_object } );
-                document.getElementById('btn_textures').disabled = false;
-              } else {
-                texture_files.push( hdrJPGLoader.load( 'data:image/webp;base64,' + selected_url_file ).renderTarget.texture );
-                document.getElementById('btn_textures').disabled = false;
-              }
+              });
               break;
 
             // TIFF
             case 'TU':
             case 'SU':
-              b64_string = atob( selected_url_file );
-              b64_bytes = new Uint8Array( b64_string.length );
+              await new Promise( async resolve => {
+                b64_string = atob( selected_url_file );
+                b64_bytes = new Uint8Array( b64_string.length );
 
-              for ( let i = 0; i < b64_string.length; i++ ) {
-                b64_bytes[ i ] = b64_string.charCodeAt( i );
-              }
+                for ( let i = 0; i < b64_string.length; i++ ) {
+                  b64_bytes[ i ] = b64_string.charCodeAt( i );
+                }
 
-              let tiff = await UTIF.decode( b64_bytes.buffer );
-              await UTIF.decodeImage( b64_bytes.buffer, tiff[ 0 ] )
+                let tiff = await UTIF.decode( b64_bytes.buffer );
+                await UTIF.decodeImage( b64_bytes.buffer, tiff[ 0 ] )
 
-              let canvas = document.createElement('canvas');
-              canvas.width = tiff[ 0 ].width;
-              canvas.height = tiff[ 0 ].height;
-              let context = canvas.getContext( '2d' );
-              let data = context.getImageData( 0, 0, tiff[ 0 ].width, tiff[ 0 ].height );
+                let canvas = document.createElement('canvas');
+                canvas.width = tiff[ 0 ].width;
+                canvas.height = tiff[ 0 ].height;
+                let context = canvas.getContext( '2d' );
+                let data = context.getImageData( 0, 0, tiff[ 0 ].width, tiff[ 0 ].height );
 
-              let rgba  = UTIF.toRGBA8( tiff[ 0 ] );  // Uint8Array with RGBA pixels
+                let rgba = UTIF.toRGBA8( tiff[ 0 ] );  // Uint8Array with RGBA pixels
 
-              for (let i = 0; i < rgba.length; i += 4) {
-                data.data[ i ] = rgba[ i ];
-                data.data[ i + 1 ] = rgba[ i + 1 ];
-                data.data[ i + 2 ] = rgba[ i + 2 ];
-                data.data[ i + 3 ] = rgba[ i + 3 ];
-              }
+                for (let i = 0; i < rgba.length; i += 4) {
+                  data.data[ i ] = rgba[ i ];
+                  data.data[ i + 1 ] = rgba[ i + 1 ];
+                  data.data[ i + 2 ] = rgba[ i + 2 ];
+                  data.data[ i + 3 ] = rgba[ i + 3 ];
+                }
 
-              context.putImageData( data, 0, 0 );
+                context.putImageData( data, 0, 0 );
 
-              texture_files.push( texture_loader.load( canvas.toDataURL() ) );
-              document.getElementById('btn_textures').disabled = false;
+                texture_loader.load( canvas.toDataURL(), function( texture ) {
+                  resolve( texture_files.push( texture ) );
+                });
+              });
               break;
 
             // KTX2 or KTX
             case 'q0':
-              ktx2_loader.load( 'data:image/ktx2;base64,' + selected_url_file, function( texture ) {
-                texture_files.push( { flip: true, tex: texture } );
-                document.getElementById('btn_textures').disabled = false;
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'base64 KTX2 0% loaded - ' + time );
-                } else {
-                  console.log( 'base64 KTX2 ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Not a base64 KTX2 texture, trying to load base64 KTX instead...' );
-
-                ktx_loader.load( 'data:image/ktx;base64,' + selected_url_file, function( texture ) {
-                  texture_files.push( { flip: true, tex: texture } );
-                  document.getElementById('btn_textures').disabled = false;
+              await new Promise( resolve => {
+                ktx2_loader.load( 'data:image/ktx2;base64,' + selected_url_file, function( texture ) {
+                  resolve( texture_files.push( { flip: true, tex: texture } ) );
                 }, function ( xhr ) {
-                  let today = new Date();
-                  let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                  if (xhr.loaded === 0 && xhr.total === 0) {
-                    console.log( 'base64 KTX 0% loaded - ' + time );
-                  } else {
-                    console.log( 'base64 KTX ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                  }
                 }, function ( error ) {
-                  console.log( 'Error loading base64 KTX!' );
-                  console.log( error );
-                  render_requested = false;
+                  console.log( 'Not a base64 KTX2 texture, trying to load base64 KTX instead...' );
+
+                  ktx_loader.load( 'data:image/ktx;base64,' + selected_url_file, function( texture ) {
+                    resolve( texture_files.push( { flip: true, tex: texture } ) );
+                  }, function ( xhr ) {
+                  }, function ( error ) {
+                    handle_error( error );
+                  });
                 });
               });
               break;
 
             // BASIS
             case 'c0':
-              basis_loader.load( 'data:image/x.basis;base64,' + selected_url_file, function( texture ) {
-                texture_files.push( { flip: true, tex: texture } );
-                document.getElementById('btn_textures').disabled = false;
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'base64 BASIS 0% loaded - ' + time );
-                } else {
-                  console.log( 'base64 BASIS ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Error loading base64 BASIS!' );
-                console.log( error );
-                render_requested = false;
+              await new Promise( resolve => {
+                basis_loader.load( 'data:image/x.basis;base64,' + selected_url_file, function( texture ) {
+                  resolve( texture_files.push( { flip: true, tex: texture } ) );
+                }, function ( xhr ) {
+                }, function ( error ) {
+                  handle_error( error );
+                });
               });
               break;
 
             // EXR
             case 'di':
-              exr_loader.load( 'data:image/x.exr;base64,' + selected_url_file, function( texture ) {
-                texture_files.push( { isHDR: true, tex: texture } );
+              await new Promise( resolve => {
+                exr_loader.load( 'data:image/x.exr;base64,' + selected_url_file, async function( texture ) {
+                  resolve( await new Promise( res => {
+                    load_hdrjpg( texture )
+                    .then( tex => {
+                      res( texture_files.push( { isHDR: true, tex: tex } ));
+                    });
+                  }));
+                }, function ( xhr ) {
+                }, function ( error ) {
+                  handle_error( error );
+                });
               });
               break;
 
             // HDR
             case '#?':
             case '㼣':
-              rgbe_loader.load( 'data:image/x.hdr;base64,' + selected_url_file, function( texture ) {
-                texture_files.push( { isHDR: true, tex: texture } );
+              await new Promise( resolve => {
+                rgbe_loader.load( 'data:image/x.hdr;base64,' + selected_url_file, async function( texture ) {
+                  resolve( await new Promise( res => {
+                    load_hdrjpg( texture )
+                    .then( tex => {
+                      res( texture_files.push( { isHDR: true, tex: tex } ));
+                    });
+                  }));
+                }, function ( xhr ) {
+                }, function ( error ) {
+                  handle_error( error );
+                });
               });
               break;
 
             // DDS
             case 'RE':
-              texture_files.push( dds_loader.load( 'data:image/vnd.ms-dds;base64,' + selected_url_file ) );
+              await new Promise( resolve => {
+                dds_loader.load( 'data:image/vnd.ms-dds;base64,' + selected_url_file, function( texture ) {
+                  resolve( texture_files.push( texture ) );
+                }, function ( xhr ) {
+                }, function ( error ) {
+                  handle_error( error );
+                });
+              });
               break;
           
             default:
-              console.log( 'Unknown base64 image type' )
+              // Unknown base64 image type
               break;
           }
 
-          document.getElementById('btn_textures').disabled = false;
-
-          finish_loading();
+          if (texture_files.length > 0) {
+            document.getElementById('btn_textures').disabled = false;
+            finish_loading();
+          } else {
+            handle_error( 'Unknown base64 image type' );
+            return;
+          }
         } else {
           if (selected_url_file.indexOf( ',' ) > -1) {
             let urls = selected_url_file.split( ',' );
@@ -1665,10 +1839,298 @@
               let url_uc = url.toUpperCase();
 
               if (url_uc.endsWith('.TIF') || url_uc.endsWith('.TIFF')) {
-                tiff_loaded = true;
+                await new Promise( resolve => {
+                  file_loader.setMimeType( 'image/tiff' );
+                  file_loader.load( url, async function( file_data ) {
+                    let tiff = await UTIF.decode( file_data );
+                    await UTIF.decodeImage( file_data, tiff[ 0 ] )
 
+                    let canvas = document.createElement('canvas');
+                    canvas.width = tiff[ 0 ].width;
+                    canvas.height = tiff[ 0 ].height;
+                    let context = canvas.getContext( '2d' );
+                    let data = context.getImageData( 0, 0, tiff[ 0 ].width, tiff[ 0 ].height );
+
+                    let rgba  = UTIF.toRGBA8( tiff[ 0 ] );  // Uint8Array with RGBA pixels
+
+                    for (let i = 0; i < rgba.length; i += 4) {
+                      data.data[ i ] = rgba[ i ];
+                      data.data[ i + 1 ] = rgba[ i + 1 ];
+                      data.data[ i + 2 ] = rgba[ i + 2 ];
+                      data.data[ i + 3 ] = rgba[ i + 3 ];
+                    }
+
+                    context.putImageData( data, 0, 0 );
+
+                    texture_loader.load( canvas.toDataURL(), function( texture ) {
+                      resolve( texture_files.push( texture ) );
+                    }, function ( xhr ) {
+                    }, function ( error ) {
+                      handle_error( error );
+                    });
+                  }, function ( xhr ) {
+                  }, function ( error ) {
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.WEBP')) {
+                await new Promise( resolve => {
+                  file_loader.setMimeType( 'image/webp' );
+                  file_loader.load( url, async function( file_data ) {
+                    // get the first lines of the file to check if there are keywords defining animated WEBP
+                    let strings = await THREE.LoaderUtils.decodeText( new Uint8Array( file_data, 0, 250 ) ).split( '\n' );
+                    let animated_webp = ( strings[ 1 ] && ( strings[ 1 ].indexOf( 'ANIM' ) !== - 1 || strings[ 1 ].indexOf( 'ANMF' ) !== - 1 ));
+
+                    if (animated_webp === true) {
+                      let img_element = document.createElement( 'img' );
+
+                      img_element.onload = () => {
+                        // Scale large image down so it fits better on the screen
+                        let x = 0.85 * ww, y = 0.85 * wh;
+
+                        if (img_element.width > x || img_element.height > y) {
+                          while (img_element.width > x || img_element.height > y) {
+                            img_element.width = img_element.width * 0.85;
+                            img_element.height = img_element.height * 0.85;
+                          }
+                        }
+
+                        let css_object = new css2d_object( img_element );
+                        css_object.position.set( 0, 0, 0 );
+
+                        resolve( texture_files.push( { isAnimation: true, tex: css_object } ) );
+                      }
+
+                      img_element.src = url;
+                    } else {
+                      hdrJPGLoader.load( url, function( texture ) {
+                        resolve( texture_files.push( texture.renderTarget.texture ) );
+                      }, function ( xhr ) {
+                      }, function ( error ) {
+                        handle_error( error );
+                      });
+                    }
+                  }, function ( xhr ) {
+                  }, function ( error ) {
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.PNG') || url_uc.endsWith('.APNG')) {
+                await new Promise( resolve => {
+                  file_loader.setMimeType( 'image/png' );
+                  file_loader.load( url, async function( file_data ) {
+                    // Use UPNG to detect number of frames - multiple frames reflect APNG
+                    let apng = await UPNG.decode( file_data );
+
+                    if (apng.frames.length > 1) {
+                      let img_element = document.createElement( 'img' );
+
+                      img_element.onload = () => {
+                        // Scale large image down so it fits better on the screen
+                        let x = 0.85 * ww, y = 0.85 * wh;
+
+                        if (img_element.width > x || img_element.height > y) {
+                          while (img_element.width > x || img_element.height > y) {
+                            img_element.width = img_element.width * 0.85;
+                            img_element.height = img_element.height * 0.85;
+                          }
+                        }
+
+                        let css_object = new css2d_object( img_element );
+                        css_object.position.set( 0, 0, 0 );
+
+                        resolve( texture_files.push( { isAnimation: true, tex: css_object } ) );
+                      }
+
+                      img_element.src = url;
+                    } else {
+                      hdrJPGLoader.load( url, function( texture ) {
+                        resolve( texture_files.push( texture.renderTarget.texture ) );
+                      }, function ( xhr ) {
+                      }, function ( error ) {
+                        handle_error( error );
+                      });
+                    }
+                  }, function ( xhr ) {
+                  }, function ( error ) {
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.KTX')) {
+                await new Promise( resolve => {
+                  ktx_loader.load( url, function( texture ) {
+                    resolve( texture_files.push( { flip: true, tex: texture } ) );
+                  }, function ( xhr ) {
+                  }, function ( error ) {
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.KTX2')) {
+                await new Promise( resolve => {
+                  ktx2_loader.load( url, function( texture ) {
+                    resolve( texture_files.push( { flip: true, tex: texture } ) );
+                  }, function ( xhr ) {
+                  }, function ( error ) {
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.BASIS')) {
+                await new Promise( resolve => {
+                  basis_loader.load( url, function( texture ) {
+                    resolve( texture_files.push( { flip: true, tex: texture } ) );
+                  }, function ( xhr ) {
+                  }, function ( error ) {
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.EXR')) {
+                await new Promise( resolve => {
+                  exr_loader.load( url, async function( texture ) {
+                    resolve( await new Promise( res => {
+                      load_hdrjpg( texture )
+                      .then( tex => {
+                        res( texture_files.push( { isHDR: true, tex: tex } ));
+                      });
+                    }));
+                  }, function ( xhr ) { // onProgress
+                  }, function ( error ) { // onError
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.HDR')) {
+                await new Promise( resolve => {
+                  rgbe_loader.load( url, async function( texture ) {
+                    resolve( await new Promise( res => {
+                      load_hdrjpg( texture )
+                      .then( tex => {
+                        res( texture_files.push( { isHDR: true, tex: tex } ));
+                      });
+                    }));
+                  }, function ( xhr ) { // onProgress
+                  }, function ( error ) { // onError
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.JSON')) {
+                await new Promise( resolve => {
+                  lottie_loader.load( url, function( texture ) {
+                    resolve( texture_files.push( { isLottie: true, lottie_tex: texture } ) );
+                  }, function ( xhr ) {
+                  }, function ( error ) {
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.TGA')) {
+                await new Promise( resolve => {
+                  tga_loader.load( url, function( texture ) {
+                    texture.generateMipmaps = true;
+                    texture.flipY = true;
+                    resolve( texture_files.push( texture ) );
+                  }, function ( xhr ) {
+                  }, function ( error ) {
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.DDS')) {
+                await new Promise( resolve => {
+                  dds_loader.load( url, function( texture ) {
+                    resolve( texture_files.push( { flip: true, tex: texture } ) );
+                  }, function ( xhr ) {
+                  }, function ( error ) {
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.GIF')) {
+                await new Promise( resolve => {
+                  file_loader.setMimeType( 'arraybuffer' );
+                  file_loader.load( url, async function( file_data ) {
+                    let num_frames = new GifReader( new Uint8Array( file_data ) ).numFrames();
+
+                    if (num_frames > 1) {
+                      let img_element = document.createElement( 'img' );
+
+                      img_element.onload = () => {
+                        // Scale large image down so it fits better on the screen
+                        let x = 0.85 * ww, y = 0.85 * wh;
+
+                        if (img_element.width > x || img_element.height > y) {
+                          while (img_element.width > x || img_element.height > y) {
+                            img_element.width = img_element.width * 0.85;
+                            img_element.height = img_element.height * 0.85;
+                          }
+                        }
+
+                        let css_object = new css2d_object( img_element );
+                        css_object.position.set( 0, 0, 0 );
+
+                        resolve( texture_files.push( { isAnimation: true, tex: css_object } ) );
+                      }
+
+                      img_element.src = url;
+                    } else {
+                      hdrJPGLoader.load( url, function( texture ) {
+                        resolve( texture_files.push( texture.renderTarget.texture ) );
+                      }, function ( xhr ) {
+                      }, function ( error ) {
+                        handle_error( error );
+                      });
+                    }
+                  }, function ( xhr ) {
+                  }, function ( error ) {
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.JPG') || url_uc.endsWith('.JPEG') || url_uc.endsWith('.JFIF')
+                 || url_uc.endsWith('.PJPEG') || url_uc.endsWith('.PJP') || url_uc.endsWith('.BMP') || url_uc.endsWith('.DIB')) {
+
+                await new Promise( resolve => {
+                  hdrJPGLoader.load( url, function( texture ) {
+                    if (texture.material.hdrCapacityMax === 1 && texture.material.hdrCapacityMin === 0) {
+                      resolve( texture_files.push( texture.renderTarget.texture ) );
+                    } else {
+                      resolve( texture_files.push( { isHDR: true, tex: texture.renderTarget.texture } ) );
+                    }
+                  }, function ( xhr ) {
+                  }, function ( error ) {
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.SVG')) {
+                await new Promise( resolve => {
+                  texture_loader.load( url, function( texture ) {
+                    resolve( texture_files.push( texture ) );
+                  }, function ( xhr ) {
+                  }, function ( error ) {
+                    handle_error( error );
+                  });
+                });
+              } else if (url_uc.endsWith('.MP4') || url_uc.endsWith('.M4A') || url_uc.endsWith('.M4B') || url_uc.endsWith('.WEBM')
+                 || url_uc.endsWith('.OGG') || url_uc.endsWith('.OGV')) {
+
+                await new Promise( resolve => {
+                  resolve( texture_files.push( { isVideo: true, tex: url } ) );
+                });
+              }
+            }
+
+            if (texture_files.length > 0) {
+              document.getElementById('btn_textures').disabled = false;
+              finish_loading();
+            } else {
+              handle_error( 'Unknown base64 image type' );
+              return;
+            }
+          } else {
+            if (selected_url_file.startsWith('https://github.com') === true) {
+              selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+            }
+
+            let url_uc = selected_url_file.toUpperCase();
+
+            if (url_uc.endsWith('.TIF') || url_uc.endsWith('.TIFF')) {
+              await new Promise( resolve => {
                 file_loader.setMimeType( 'image/tiff' );
-                file_loader.load( url, async function( file_data ) {
+                file_loader.load( selected_url_file, async function( file_data ) {
                   let tiff = await UTIF.decode( file_data );
                   await UTIF.decodeImage( file_data, tiff[ 0 ] )
 
@@ -1689,25 +2151,18 @@
 
                   context.putImageData( data, 0, 0 );
 
-                  texture_files.push( texture_loader.load( canvas.toDataURL() ) );
-                  document.getElementById('btn_textures').disabled = false;
+                  texture_loader.load( canvas.toDataURL(), function( texture ) {
+                    resolve( texture_files.push( texture ) );
+                  });
                 }, function ( xhr ) {
-                  let today = new Date();
-                  let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                  if (xhr.loaded === 0 && xhr.total === 0) {
-                    console.log( 'URL TIF 0% loaded - ' + time );
-                  } else {
-                    console.log( 'URL TIF ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                  }
                 }, function ( error ) {
-                  console.log( 'Error loading URL TIF!' );
-                  console.log( error );
-                  render_requested = false;
+                  handle_error( error );
                 });
-              } else if (url_uc.endsWith('.WEBP')) {
+              });
+            } else if (url_uc.endsWith('.WEBP')) {
+              await new Promise( resolve => {
                 file_loader.setMimeType( 'image/webp' );
-                file_loader.load( url, async function( file_data ) {
+                file_loader.load( selected_url_file, async function( file_data ) {
                   // get the first lines of the file to check if there are keywords defining animated WEBP
                   let strings = await THREE.LoaderUtils.decodeText( new Uint8Array( file_data, 0, 250 ) ).split( '\n' );
                   let animated_webp = ( strings[ 1 ] && ( strings[ 1 ].indexOf( 'ANIM' ) !== - 1 || strings[ 1 ].indexOf( 'ANMF' ) !== - 1 ));
@@ -1725,21 +2180,31 @@
                           img_element.height = img_element.height * 0.85;
                         }
                       }
+
+                      let css_object = new css2d_object( img_element );
+                      css_object.position.set( 0, 0, 0 );
+
+                      resolve( texture_files.push( { isAnimation: true, tex: css_object } ) );
                     }
 
-                    img_element.src = url;
-
-                    let css_object = new css2d_object( img_element );
-                    css_object.position.set( 0, 0, 0 );
-
-                    texture_files.push( { isAnimation: true, tex: css_object } );
+                    img_element.src = selected_url_file;
                   } else {
-                    texture_files.push( hdrJPGLoader.load( url ).renderTarget.texture );
+                    hdrJPGLoader.load( selected_url_file, function( texture ) {
+                      resolve( texture_files.push( texture.renderTarget.texture ) );
+                    }, function ( xhr ) {
+                    }, function ( error ) {
+                      handle_error( error );
+                    });
                   }
+                }, function ( xhr ) {
+                }, function ( error ) {
+                  handle_error( error );
                 });
-              } else if (url_uc.endsWith('.PNG') || url_uc.endsWith('.APNG')) {
+              });
+            } else if (url_uc.endsWith('.PNG') || url_uc.endsWith('.APNG')) {
+              await new Promise( resolve => {
                 file_loader.setMimeType( 'image/png' );
-                file_loader.load( url, async function( file_data ) {
+                file_loader.load( selected_url_file, async function( file_data ) {
                   // Use UPNG to detect number of frames - multiple frames reflect APNG
                   let apng = await UPNG.decode( file_data );
 
@@ -1756,192 +2221,115 @@
                           img_element.height = img_element.height * 0.85;
                         }
                       }
+
+                      let css_object = new css2d_object( img_element );
+                      css_object.position.set( 0, 0, 0 );
+
+                      resolve( texture_files.push( { isAnimation: true, tex: css_object } ) );
                     }
 
-                    img_element.src = url;
-
-                    let css_object = new css2d_object( img_element );
-                    css_object.position.set( 0, 0, 0 );
-
-                    texture_files.push( { isAnimation: true, tex: css_object } );
-                    document.getElementById('btn_textures').disabled = false;
+                    img_element.src = selected_url_file;
                   } else {
-                    // Option 1 - use hdrJPGLoader to load the PNG file directly
-
-                    texture_files.push( hdrJPGLoader.load( url ).renderTarget.texture );
-                    document.getElementById('btn_textures').disabled = false;
-
-                    // Option 2 - 'apng.data' is a Uint8Array with RGBA pixels so use canvas and texture_loader to load it
-                    // Functional but is a long way around for this viewer
-
-                    //let canvas = document.createElement('canvas');
-                    //canvas.width = apng.width;
-                    //canvas.height = apng.height;
-                    //let context = canvas.getContext( '2d' );
-                    //let data = context.getImageData( 0, 0, apng.width, apng.height );
-
-                    //for (let i = 0; i < apng.data.length; i += 4) {
-                    //  data.data[ i ] = apng.data[ i ];
-                    //  data.data[ i + 1 ] = apng.data[ i + 1 ];
-                    //  data.data[ i + 2 ] = apng.data[ i + 2 ];
-                    //  data.data[ i + 3 ] = apng.data[ i + 3 ];
-                    //}
-
-                    //context.putImageData( data, 0, 0 );
-
-                    //texture_files.push( texture_loader.load( canvas.toDataURL() ) );
-                    //document.getElementById('btn_textures').disabled = false;
+                    hdrJPGLoader.load( selected_url_file, function( texture ) {
+                      resolve( texture_files.push( texture.renderTarget.texture ) );
+                    }, function ( xhr ) {
+                    }, function ( error ) {
+                      handle_error( error );
+                    });
                   }
-                });
-              } else if (url_uc.endsWith('.KTX')) {
-                ktx_loader.load( url, function( texture ) {
-                  texture_files.push( { flip: true, tex: texture } );
-                  document.getElementById('btn_textures').disabled = false;
                 }, function ( xhr ) {
-                  let today = new Date();
-                  let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                  if (xhr.loaded === 0 && xhr.total === 0) {
-                    console.log( 'URL KTX 0% loaded - ' + time );
-                  } else {
-                    console.log( 'URL KTX ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                  }
                 }, function ( error ) {
-                  console.log( 'Error loading URL KTX!' );
-                  console.log( error );
-                  render_requested = false;
+                  handle_error( error );
                 });
-              } else if (url_uc.endsWith('.KTX2')) {
-                ktx2_loader.load( url, function( texture ) {
-                  texture_files.push( { flip: true, tex: texture } );
-                  document.getElementById('btn_textures').disabled = false;
+              });
+            } else if (url_uc.endsWith('.KTX')) {
+              await new Promise( resolve => {
+                ktx_loader.load( selected_url_file, function( texture ) {
+                  resolve( texture_files.push( { flip: true, tex: texture } ) );
                 }, function ( xhr ) {
-                  let today = new Date();
-                  let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                  if (xhr.loaded === 0 && xhr.total === 0) {
-                    console.log( 'URL KTX2 0% loaded - ' + time );
-                  } else {
-                    console.log( 'URL KTX2 ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                  }
                 }, function ( error ) {
-                  console.log( 'Error loading URL KTX2!' );
-                  console.log( error );
-                  render_requested = false;
+                  handle_error( error );
                 });
-              } else if (url_uc.endsWith('.BASIS')) {
-                basis_loader.load( url, function( texture ) {
-                  texture_files.push( { flip: true, tex: texture } );
-                  document.getElementById('btn_textures').disabled = false;
+              });
+            } else if (url_uc.endsWith('.KTX2')) {
+              await new Promise( resolve => {
+                ktx2_loader.load( selected_url_file, function( texture ) {
+                  resolve( texture_files.push( { flip: true, tex: texture } ) );
                 }, function ( xhr ) {
-                  let today = new Date();
-                  let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                  if (xhr.loaded === 0 && xhr.total === 0) {
-                    console.log( 'URL BASIS 0% loaded - ' + time );
-                  } else {
-                    console.log( 'URL BASIS ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                  }
                 }, function ( error ) {
-                  console.log( 'Error loading URL BASIS!' );
-                  console.log( error );
-                  render_requested = false;
+                  handle_error( error );
                 });
-              } else if (url_uc.endsWith('.EXR')) {
-                exr_loader.load( url, function( texture ) {
-                  texture_files.push( { isHDR: true, tex: texture } );
-                  document.getElementById('btn_textures').disabled = false;
+              });
+            } else if (url_uc.endsWith('.BASIS')) {
+              await new Promise( resolve => {
+                basis_loader.load( selected_url_file, function( texture ) {
+                  resolve( texture_files.push( { flip: true, tex: texture } ) );
                 }, function ( xhr ) {
-                  let today = new Date();
-                  let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                  if (xhr.loaded === 0 && xhr.total === 0) {
-                    console.log( 'URL EXR 0% loaded - ' + time );
-                  } else {
-                    console.log( 'URL EXR ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                  }
                 }, function ( error ) {
-                  console.log( 'Error loading URL EXR!' );
-                  console.log( error );
-                  render_requested = false;
+                  handle_error( error );
                 });
-              } else if (url_uc.endsWith('.HDR')) {
-                rgbe_loader.load( url, function( texture ) {
-                  texture_files.push( { isHDR: true, tex: texture } );
-                  document.getElementById('btn_textures').disabled = false;
+              });
+            } else if (url_uc.endsWith('.EXR')) {
+              await new Promise( resolve => {
+                exr_loader.load( selected_url_file, async function( texture ) {
+                  resolve( await new Promise( res => {
+                    load_hdrjpg( texture )
+                    .then( tex => {
+                      res( texture_files.push( { isHDR: true, tex: tex } ));
+                    });
+                  }));
                 }, function ( xhr ) {
-                  let today = new Date();
-                  let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                  if (xhr.loaded === 0 && xhr.total === 0) {
-                    console.log( 'URL HDR 0% loaded - ' + time );
-                  } else {
-                    console.log( 'URL HDR ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                  }
                 }, function ( error ) {
-                  console.log( 'Error loading URL HDR!' );
-                  console.log( error );
-                  render_requested = false;
+                  handle_error( error );
                 });
-              } else if (url_uc.endsWith('.JSON')) {
-                lottie_loader.load( url, function( texture ) {
-                  texture_files.push( { isLottie: true, lottie_tex: texture } );
-                  document.getElementById('btn_textures').disabled = false;
+              });
+            } else if (url_uc.endsWith('.HDR')) {
+              await new Promise( resolve => {
+                rgbe_loader.load( selected_url_file, async function( texture ) {
+                  resolve( await new Promise( res => {
+                    load_hdrjpg( texture )
+                    .then( tex => {
+                      res( texture_files.push( { isHDR: true, tex: tex } ));
+                    });
+                  }));
                 }, function ( xhr ) {
-                  let today = new Date();
-                  let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                  if (xhr.loaded === 0 && xhr.total === 0) {
-                    console.log( 'URL LOTTIE 0% loaded - ' + time );
-                  } else {
-                    console.log( 'URL LOTTIE ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                  }
                 }, function ( error ) {
-                  console.log( 'Error loading URL LOTTIE!' );
-                  console.log( error );
-                  render_requested = false;
+                  handle_error( error );
                 });
-              } else if (url_uc.endsWith('.TGA')) {
-                tga_loader.load( url, function( texture ) {
+              });
+            } else if (url_uc.endsWith('.JSON')) {
+              await new Promise( resolve => {
+                lottie_loader.load( selected_url_file, function( texture ) {
+                  resolve( texture_files.push( { isLottie: true, lottie_tex: texture } ) );
+                }, function ( xhr ) {
+                }, function ( error ) {
+                  handle_error( error );
+                });
+              });
+            } else if (url_uc.endsWith('.TGA')) {
+              await new Promise( resolve => {
+                tga_loader.load( selected_url_file, function( texture ) {
                   texture.generateMipmaps = true;
                   texture.flipY = true;
-                  texture_files.push( texture );
-                  document.getElementById('btn_textures').disabled = false;
+                  resolve( texture_files.push( texture ) );
                 }, function ( xhr ) {
-                  let today = new Date();
-                  let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                  if (xhr.loaded === 0 && xhr.total === 0) {
-                    console.log( 'URL TGA 0% loaded - ' + time );
-                  } else {
-                    console.log( 'URL TGA ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                  }
                 }, function ( error ) {
-                  console.log( 'Error loading URL TGA!' );
-                  console.log( error );
-                  render_requested = false;
+                  handle_error( error );
                 });
-              } else if (url_uc.endsWith('.DDS')) {
-                dds_loader.load( url, function( texture ) {
-                  texture_files.push( { flip: true, tex: texture } );
-                  document.getElementById('btn_textures').disabled = false;
+              });
+            } else if (url_uc.endsWith('.DDS')) {
+              await new Promise( resolve => {
+                dds_loader.load( selected_url_file, function( texture ) {
+                  resolve( texture_files.push( { flip: true, tex: texture } ) );
                 }, function ( xhr ) {
-                  let today = new Date();
-                  let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                  if (xhr.loaded === 0 && xhr.total === 0) {
-                    console.log( 'URL DDS 0% loaded - ' + time );
-                  } else {
-                    console.log( 'URL DDS ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                  }
                 }, function ( error ) {
-                  console.log( 'Error loading URL DDS!' );
-                  console.log( error );
-                  render_requested = false;
+                  handle_error( error );
                 });
-              } else if (url_uc.endsWith('.GIF')) {
+              });
+            } else if (url_uc.endsWith('.GIF')) {
+              await new Promise( resolve => {
                 file_loader.setMimeType( 'arraybuffer' );
-                file_loader.load( url, async function( file_data ) {
+                file_loader.load( selected_url_file, async function( file_data ) {
                   let num_frames = new GifReader( new Uint8Array( file_data ) ).numFrames();
 
                   if (num_frames > 1) {
@@ -1957,470 +2345,65 @@
                           img_element.height = img_element.height * 0.85;
                         }
                       }
+
+                      let css_object = new css2d_object( img_element );
+                      css_object.position.set( 0, 0, 0 );
+
+                      resolve( texture_files.push( { isAnimation: true, tex: css_object } ) );
                     }
 
-                    img_element.src = url;
-
-                    let css_object = new css2d_object( img_element );
-                    css_object.position.set( 0, 0, 0 );
-
-                    texture_files.push( { isAnimation: true, tex: css_object } );
+                    img_element.src = selected_url_file;
                   } else {
-                    texture_files.push( hdrJPGLoader.load( url ).renderTarget.texture );
+                    hdrJPGLoader.load( selected_url_file, function( texture ) {
+                      resolve( texture_files.push( texture.renderTarget.texture ) );
+                    }, function ( xhr ) {
+                    }, function ( error ) {
+                      handle_error( error );
+                    });
                   }
-                });
-
-                document.getElementById('btn_textures').disabled = false;
-              } else if (url_uc.endsWith('.JPG') || url_uc.endsWith('.JPEG') || url_uc.endsWith('.JFIF')
-                 || url_uc.endsWith('.PJPEG') || url_uc.endsWith('.PJP') || url_uc.endsWith('.BMP') || url_uc.endsWith('.DIB')) {
-
-                hdrJPGLoader.load( url, function( texture ) {
-                  if (texture.material.hdrCapacityMax === 1 && texture.material.hdrCapacityMin === 0) {
-                    texture_files.push( texture.renderTarget.texture );
-                  } else {
-                    texture_files.push( { isHDR: true, isJPEG: true, tex: texture.renderTarget.texture } );
-                  }
-
-                  document.getElementById('btn_textures').disabled = false;
                 }, function ( xhr ) {
-                  let today = new Date();
-                  let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                  if (xhr.loaded === 0 && xhr.total === 0) {
-                    console.log( 'URL Image 0% loaded - ' + time );
-                  } else {
-                    console.log( 'URL Image ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                  }
                 }, function ( error ) {
-                  console.log( 'Error loading URL Image!' );
-                  console.log( error );
-                  render_requested = false;
+                  handle_error( error );
                 });
-              } else if (url_uc.endsWith('.SVG')) {
-                texture_loader.load( url, function( texture ) {
-                  texture_files.push( texture );
-                  document.getElementById('btn_textures').disabled = false;
-                }, function ( xhr ) {
-                  let today = new Date();
-                  let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                  if (xhr.loaded === 0 && xhr.total === 0) {
-                    console.log( 'URL Image 0% loaded - ' + time );
-                  } else {
-                    console.log( 'URL Image ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                  }
-                }, function ( error ) {
-                  console.log( 'Error loading URL Image!' );
-                  console.log( error );
-                  render_requested = false;
-                });
-              } else if (url_uc.endsWith('.MP4') || url_uc.endsWith('.M4A') || url_uc.endsWith('.M4B') || url_uc.endsWith('.WEBM')
-                 || url_uc.endsWith('.OGG') || url_uc.endsWith('.OGV')) {
-
-                texture_files.push( { isVideo: true, tex: url } );
-                document.getElementById('btn_textures').disabled = false;
-              }
-            }
-
-            finish_loading();
-          } else {
-            if (selected_url_file.startsWith('https://github.com') === true) {
-              selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
-            }
-
-            let url_uc = selected_url_file.toUpperCase();
-
-            if (url_uc.endsWith('.TIF') || url_uc.endsWith('.TIFF')) {
-              tiff_loaded = true;
-
-              file_loader.setMimeType( 'image/tiff' );
-              file_loader.load( selected_url_file, async function( file_data ) {
-                let tiff = await UTIF.decode( file_data );
-                await UTIF.decodeImage( file_data, tiff[ 0 ] )
-
-                let canvas = document.createElement('canvas');
-                canvas.width = tiff[ 0 ].width;
-                canvas.height = tiff[ 0 ].height;
-                let context = canvas.getContext( '2d' );
-                let data = context.getImageData( 0, 0, tiff[ 0 ].width, tiff[ 0 ].height );
-
-                let rgba  = UTIF.toRGBA8( tiff[ 0 ] );  // Uint8Array with RGBA pixels
-
-                for (let i = 0; i < rgba.length; i += 4) {
-                  data.data[ i ] = rgba[ i ];
-                  data.data[ i + 1 ] = rgba[ i + 1 ];
-                  data.data[ i + 2 ] = rgba[ i + 2 ];
-                  data.data[ i + 3 ] = rgba[ i + 3 ];
-                }
-
-                context.putImageData( data, 0, 0 );
-
-                texture_files.push( texture_loader.load( canvas.toDataURL() ) );
-                document.getElementById('btn_textures').disabled = false;
-
-                finish_loading();
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'URL TIF 0% loaded - ' + time );
-                } else {
-                  console.log( 'URL TIF ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Error loading URL TIF!' );
-                console.log( error );
-                render_requested = false;
-              });
-            } else if (url_uc.endsWith('.WEBP')) {
-              file_loader.setMimeType( 'image/webp' );
-              file_loader.load( selected_url_file, async function( file_data ) {
-                // get the first lines of the file to check if there are keywords defining animated WEBP
-                let strings = await THREE.LoaderUtils.decodeText( new Uint8Array( file_data, 0, 250 ) ).split( '\n' );
-                let animated_webp = ( strings[ 1 ] && ( strings[ 1 ].indexOf( 'ANIM' ) !== - 1 || strings[ 1 ].indexOf( 'ANMF' ) !== - 1 ));
-
-                if (animated_webp === true) {
-                  let img_element = document.createElement( 'img' );
-
-                  img_element.onload = () => {
-                    // Scale large image down so it fits better on the screen
-                    let x = 0.85 * ww, y = 0.85 * wh;
-
-                    if (img_element.width > x || img_element.height > y) {
-                      while (img_element.width > x || img_element.height > y) {
-                        img_element.width = img_element.width * 0.85;
-                        img_element.height = img_element.height * 0.85;
-                      }
-                    }
-                  }
-
-                  img_element.src = selected_url_file;
-
-                  let css_object = new css2d_object( img_element );
-                  css_object.position.set( 0, 0, 0 );
-
-                  texture_files.push( { isAnimation: true, tex: css_object } );
-                } else {
-                  texture_files.push( hdrJPGLoader.load( selected_url_file ).renderTarget.texture);
-                }
-
-                finish_loading();
-              });
-            } else if (url_uc.endsWith('.PNG') || url_uc.endsWith('.APNG')) {
-              file_loader.setMimeType( 'image/png' );
-              file_loader.load( selected_url_file, async function( file_data ) {
-                // Use UPNG to detect number of frames - multiple frames reflect APNG
-                let apng = await UPNG.decode( file_data );
-
-                if (apng.frames.length > 1) {
-                  let img_element = document.createElement( 'img' );
-
-                  img_element.onload = () => {
-                    // Scale large image down so it fits better on the screen
-                    let x = 0.85 * ww, y = 0.85 * wh;
-
-                    if (img_element.width > x || img_element.height > y) {
-                      while (img_element.width > x || img_element.height > y) {
-                        img_element.width = img_element.width * 0.85;
-                        img_element.height = img_element.height * 0.85;
-                      }
-                    }
-                  }
-
-                  img_element.src = selected_url_file;
-
-                  let css_object = new css2d_object( img_element );
-                  css_object.position.set( 0, 0, 0 );
-
-                  texture_files.push( { isAnimation: true, tex: css_object } );
-                  document.getElementById('btn_textures').disabled = false;
-                } else {
-                  // Option 1 - use hdrJPGLoader to load the file directly
-
-                  texture_files.push( hdrJPGLoader.load( selected_url_file ).renderTarget.texture );
-                  document.getElementById('btn_textures').disabled = false;
-
-                  // Option 2 - 'apng.data' is a Uint8Array with RGBA pixels so use canvas and texture_loader to load it
-                  // Functional but is a long way around for this viewer
-
-                  //let canvas = document.createElement('canvas');
-                  //canvas.width = apng.width;
-                  //canvas.height = apng.height;
-                  //let context = canvas.getContext( '2d' );
-                  //let data = context.getImageData( 0, 0, apng.width, apng.height );
-
-                  //for (let i = 0; i < apng.data.length; i += 4) {
-                  //  data.data[ i ] = apng.data[ i ];
-                  //  data.data[ i + 1 ] = apng.data[ i + 1 ];
-                  //  data.data[ i + 2 ] = apng.data[ i + 2 ];
-                  //  data.data[ i + 3 ] = apng.data[ i + 3 ];
-                  //}
-
-                  //context.putImageData( data, 0, 0 );
-
-                  //texture_files.push( texture_loader.load( canvas.toDataURL() ) );
-                  //document.getElementById('btn_textures').disabled = false;
-                }
-
-                finish_loading();
-              });
-            } else if (url_uc.endsWith('.KTX')) {
-              ktx_loader.load( selected_url_file, function( texture ) {
-                texture_files.push( { flip: true, tex: texture } );
-                document.getElementById('btn_textures').disabled = false;
-
-                finish_loading();
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'URL KTX 0% loaded - ' + time );
-                } else {
-                  console.log( 'URL KTX ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Error loading URL KTX!' );
-                console.log( error );
-                render_requested = false;
-              });
-            } else if (url_uc.endsWith('.KTX2')) {
-              ktx2_loader.load( selected_url_file, function( texture ) {
-                texture_files.push( { flip: true, tex: texture } );
-                document.getElementById('btn_textures').disabled = false;
-
-                finish_loading();
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'URL KTX2 0% loaded - ' + time );
-                } else {
-                  console.log( 'URL KTX2 ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Error loading URL KTX2!' );
-                console.log( error );
-                render_requested = false;
-              });
-            } else if (url_uc.endsWith('.BASIS')) {
-              basis_loader.load( selected_url_file, function( texture ) {
-                texture_files.push( { flip: true, tex: texture } );
-                document.getElementById('btn_textures').disabled = false;
-
-                finish_loading();
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'URL BASIS 0% loaded - ' + time );
-                } else {
-                  console.log( 'URL BASIS ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Error loading URL BASIS!' );
-                console.log( error );
-                render_requested = false;
-              });
-            } else if (url_uc.endsWith('.EXR')) {
-              exr_loader.load( selected_url_file, function( texture ) {
-                texture_files.push( { isHDR: true, tex: texture } );
-                document.getElementById('btn_textures').disabled = false;
-
-                finish_loading();
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'URL EXR 0% loaded - ' + time );
-                } else {
-                  console.log( 'URL EXR ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Error loading URL EXR!' );
-                console.log( error );
-                render_requested = false;
-              });
-            } else if (url_uc.endsWith('.HDR')) {
-              rgbe_loader.load( selected_url_file, function( texture ) {
-                texture_files.push( { isHDR: true, tex: texture } );
-                document.getElementById('btn_textures').disabled = false;
-
-                finish_loading();
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'URL HDR 0% loaded - ' + time );
-                } else {
-                  console.log( 'URL HDR ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Error loading URL HDR!' );
-                console.log( error );
-                render_requested = false;
-              });
-            } else if (url_uc.endsWith('.JSON')) {
-              lottie_loader.load( selected_url_file, function( texture ) {
-                texture_files.push( { isLottie: true, lottie_tex: texture } );
-                document.getElementById('btn_textures').disabled = false;
-
-                finish_loading();
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'URL LOTTIE 0% loaded - ' + time );
-                } else {
-                  console.log( 'URL LOTTIE ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Error loading URL LOTTIE!' );
-                console.log( error );
-                render_requested = false;
-              });
-            } else if (url_uc.endsWith('.TGA')) {
-              tga_loader.load( selected_url_file, function ( texture ) {
-                texture.generateMipmaps = true;
-                texture.flipY = true;
-                texture_files.push( texture );
-                document.getElementById('btn_textures').disabled = false;
-
-                finish_loading();
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'URL TGA 0% loaded - ' + time );
-                } else {
-                  console.log( 'URL TGA ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Error loading URL TGA!' );
-                console.log( error );
-                render_requested = false;
-              });
-            } else if (url_uc.endsWith('.DDS')) {
-              dds_loader.load( selected_url_file, function( texture ) {
-                texture_files.push( { flip: true, tex: texture } );
-                document.getElementById('btn_textures').disabled = false;
-
-                finish_loading();
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'URL DDS 0% loaded - ' + time );
-                } else {
-                  console.log( 'URL DDS ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Error loading URL DDS!' );
-                console.log( error );
-                render_requested = false;
-              });
-            } else if (url_uc.endsWith('.GIF')) {
-              file_loader.setMimeType( 'arraybuffer' );
-              file_loader.load( selected_url_file, async function( file_data ) {
-                let num_frames = new GifReader( new Uint8Array( file_data ) ).numFrames();
-
-                if (num_frames > 1) {
-                  let img_element = document.createElement( 'img' );
-
-                  img_element.onload = () => {
-                    // Scale large image down so it fits better on the screen
-                    let x = 0.85 * ww, y = 0.85 * wh;
-
-                    if (img_element.width > x || img_element.height > y) {
-                      while (img_element.width > x || img_element.height > y) {
-                        img_element.width = img_element.width * 0.85;
-                        img_element.height = img_element.height * 0.85;
-                      }
-                    }
-                  }
-
-                  img_element.src = selected_url_file;
-
-                  let css_object = new css2d_object( img_element );
-                  css_object.position.set( 0, 0, 0 );
-
-                  texture_files.push( { isAnimation: true, tex: css_object } );
-                } else {
-                  texture_files.push( hdrJPGLoader.load( selected_url_file ).renderTarget.texture );
-                }
-
-                document.getElementById('btn_textures').disabled = false;
-
-                finish_loading();
               });
             } else if (url_uc.endsWith('.JPG') || url_uc.endsWith('.JPEG') || url_uc.endsWith('.JFIF')
                || url_uc.endsWith('.PJPEG') || url_uc.endsWith('.PJP') || url_uc.endsWith('.BMP') || url_uc.endsWith('.DIB')) {
 
-              await hdrJPGLoader.load( selected_url_file, function( texture ) {
-                if (texture.material.hdrCapacityMax === 1 && texture.material.hdrCapacityMin === 0) {
-                  texture_files.push( texture.renderTarget.texture );
-                } else {
-                  texture_files.push( { isHDR: true, isJPEG: true, tex: texture.renderTarget.texture } );
-                }
-
-                document.getElementById('btn_textures').disabled = false;
-
-                finish_loading();
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'URL Image 0% loaded - ' + time );
-                } else {
-                  console.log( 'URL Image ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Error loading URL Image!' );
-                console.log( error );
-                render_requested = false;
+              await new Promise( resolve => {
+                hdrJPGLoader.load( selected_url_file, function( texture ) {
+                  if (texture.material.hdrCapacityMax === 1 && texture.material.hdrCapacityMin === 0) {
+                    resolve( texture_files.push( texture.renderTarget.texture ) );
+                  } else {
+                    resolve( texture_files.push( { isHDR: true, tex: texture.renderTarget.texture } ) );
+                  }
+                }, function ( xhr ) {
+                }, function ( error ) {
+                  handle_error( error );
+                });
               });
             } else if (url_uc.endsWith('.SVG')) {
-
-              texture_loader.load( selected_url_file, function( texture ) {
-                texture_files.push( texture );
-                document.getElementById('btn_textures').disabled = false;
-
-                finish_loading();
-              }, function ( xhr ) {
-                let today = new Date();
-                let time = today.getHours() + ':' + today.getMinutes() + ':' + today.getSeconds() + '.' + today.getMilliseconds();
-
-                if (xhr.loaded === 0 && xhr.total === 0) {
-                  console.log( 'URL Image 0% loaded - ' + time );
-                } else {
-                  console.log( 'URL Image ' + parseInt( ( xhr.loaded / xhr.total ) * 100 ) + '% loaded - ' + time );
-                }
-              }, function ( error ) {
-                console.log( 'Error loading URL Image!' );
-                console.log( error );
-                render_requested = false;
+              await new Promise( resolve => {
+                texture_loader.load( selected_url_file, function( texture ) {
+                  resolve( texture_files.push( texture ) );
+                }, function ( xhr ) {
+                }, function ( error ) {
+                  handle_error( error );
+                });
               });
             } else if (url_uc.endsWith('.MP4') || url_uc.endsWith('.M4A') || url_uc.endsWith('.M4B') || url_uc.endsWith('.WEBM')
                || url_uc.endsWith('.OGG') || url_uc.endsWith('.OGV')) {
 
-              texture_files.push( { isVideo: true, tex: selected_url_file } );
-              document.getElementById('btn_textures').disabled = false;
+              await new Promise( resolve => {
+                resolve( texture_files.push( { isVideo: true, tex: selected_url_file } ) );
+              });
+            }
 
+            if (texture_files.length > 0) {
+              document.getElementById('btn_textures').disabled = false;
               finish_loading();
             } else {
-              console.log( 'Not a valid Image URL!' );
-              enable_disable( true );
-              if (gizmo) gizmo.dispose();
-              document.getElementById('div_error').style.display = 'block';
+              handle_error( 'Not a valid Image URL!' );
+              return;
             }
           }
         }
@@ -2429,14 +2412,33 @@
       function finish_loading() {
         if (document.getElementById('btn_textures').disabled === false) {
           document.getElementById('btn_textures').style.backgroundColor = 'lightgreen';
+          document.getElementById('div_error').style.display = 'none';
 
-          disabled_changed();
+          enable_disable( false );
 
           set_texture();
 
           render_requested = true;
           render();
         }
+      }
+
+      function handle_error( error ) {
+        console.log( 'Error loading model!' );
+        console.log( error );
+        mouse_wheel = true;
+        render_requested = false;
+        enable_disable( true );
+
+        if (gizmo) {
+          document.getElementById('gizmo').removeChild( gizmo.domElement );
+          gizmo.dispose();
+        }
+
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_error').style.display = 'block';
+        document.getElementById('div_error').style.color = 'red';
+        document.getElementById('div_error').innerText = 'E R R O R !';
       }
 
       function show_polar_grid() {
@@ -2563,93 +2565,14 @@
               await reset_only( false, true );
               enable_disable( true );
 
-              if (texture_files[ current_texture ].isJPEG === true) {
-                let hdrJpgEquirectangularMap = texture_files[ current_texture ].tex;
+              let hdrJpgEquirectangularMap = texture_files[ current_texture ].tex;
 
-                hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = hdrJpgEquirectangularMap;
-                hdrJpgEquirectangularMap.needsUpdate = true;
+              hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
+              scene.background = hdrJpgEquirectangularMap;
+              hdrJpgEquirectangularMap.needsUpdate = true;
 
-                mouse_wheel = true;
-
-                enable_usable_controls( true );
-              } else {
-                const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
-                const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
-
-                // Encode a Gain map from EXR or HDR file
-                // See the code example at: https://github.com/MONOGRID/gainmap-js
-
-                const image = texture_files[ current_texture ].tex;
-                const textureMax = findTextureMinMax( image );
-
-                // Encode the gainmap
-                const encodingResult = encode({
-                  image,
-                  maxContentBoost: Math.max.apply( this, textureMax ) // this will encode the full HDR range
-                });
-
-                // obtain the RAW RGBA SDR buffer and create an ImageData
-                const sdrImageData = new ImageData( encodingResult.sdr.toArray(), encodingResult.sdr.width, encodingResult.sdr.height );
-                // obtain the RAW RGBA Gain map buffer and create an ImageData
-                const gainMapImageData = new ImageData( encodingResult.gainMap.toArray(), encodingResult.gainMap.width, encodingResult.gainMap.height );
-
-                // parallel compress the RAW buffers into the specified mimeType
-                const mimeType = 'image/jpeg';
-                const quality = 1.0;
-
-                const [sdr, gainMap] = await Promise.all([
-                  compress({
-                    source: sdrImageData,
-                    mimeType,
-                    quality,
-                    flipY: true // output needs to be flipped
-                  }),
-                  compress({
-                    source: gainMapImageData,
-                    mimeType,
-                    quality,
-                    flipY: true // output needs to be flipped
-                  })
-                ]);
-
-                // obtain the metadata which will be embedded into and XMP tag inside the final JPEG file
-                const metadata = encodingResult.getMetadata();
-
-                // embed the compressed images + metadata into a single JPEG file
-                const jpeg = await encodeJPEGMetadata({
-                  ...encodingResult,
-                  ...metadata,
-                  sdr,
-                  gainMap
-                });
-
-                // jpeg will be a Uint8Array
-                const jpeg_file = new File( [ jpeg ], 'file.jpg' );
-
-                // encoder must be manually disposed when no longer needed
-                encodingResult.gainMap.dispose();
-                encodingResult.sdr.dispose();
-
-                // load the encoded jpeg with HDRJPGLoader
-
-                hdrJPGLoader.load( URL.createObjectURL( jpeg_file ), function( texture ) {
-                  URL.revokeObjectURL( jpeg_file );
-
-                  let hdrJpgEquirectangularMap = texture.renderTarget.texture;
-
-                  hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
-                  scene.background = hdrJpgEquirectangularMap;
-
-                  texture.dispose();
-
-                  hdrJpgEquirectangularMap.needsUpdate = true;
-
-                  mouse_wheel = true;
-
-                  enable_usable_controls( true );
-                });
-              }
+              controls.enabled = true;
+              enable_usable_controls( true );
             } else {
               if (isMobile === false) document.getElementById('gizmo').style.display = '';
 
@@ -2721,6 +2644,81 @@
 
           mouse_wheel = true;
         }
+      }
+
+      async function load_hdrjpg( tex ) {
+        const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
+        const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
+
+        // Encode a Gain map from EXR or HDR file
+        // See the code example at: https://github.com/MONOGRID/gainmap-js
+
+        const image = tex;
+        const textureMax = findTextureMinMax( image );
+
+        // Encode the gainmap
+        const encodingResult = encode({
+          image,
+          maxContentBoost: Math.max.apply( this, textureMax ) // this will encode the full HDR range
+        });
+
+        // obtain the RAW RGBA SDR buffer and create an ImageData
+        const sdrImageData = new ImageData( encodingResult.sdr.toArray(), encodingResult.sdr.width, encodingResult.sdr.height );
+        // obtain the RAW RGBA Gain map buffer and create an ImageData
+        const gainMapImageData = new ImageData( encodingResult.gainMap.toArray(), encodingResult.gainMap.width, encodingResult.gainMap.height );
+
+        // parallel compress the RAW buffers into the specified mimeType
+        const mimeType = 'image/jpeg';
+        const quality = 1.0;
+
+        const [sdr, gainMap] = await Promise.all([
+          compress({
+            source: sdrImageData,
+            mimeType,
+            quality,
+            flipY: true // output needs to be flipped
+          }),
+          compress({
+            source: gainMapImageData,
+            mimeType,
+            quality,
+            flipY: true // output needs to be flipped
+          })
+        ]);
+
+        // obtain the metadata which will be embedded into and XMP tag inside the final JPEG file
+        const metadata = encodingResult.getMetadata();
+
+        // embed the compressed images + metadata into a single JPEG file
+        const jpeg = await encodeJPEGMetadata({
+          ...encodingResult,
+          ...metadata,
+          sdr,
+          gainMap
+        });
+
+        // jpeg will be a Uint8Array
+        const jpeg_file = new File( [ jpeg ], 'file.jpg' );
+
+        // encoder must be manually disposed when no longer needed
+        encodingResult.gainMap.dispose();
+        encodingResult.sdr.dispose();
+
+        // load the encoded jpeg with HDRJPGLoader
+
+        return new Promise( resolve => {
+          hdrJPGLoader.load( URL.createObjectURL( jpeg_file ), function( texture ) {
+            URL.revokeObjectURL( jpeg_file );
+
+            resolve( texture.renderTarget.texture );
+
+            texture.dispose();
+          }, function ( xhr ) { // onProgress
+          }, function ( error ) { // onError
+            URL.revokeObjectURL( jpeg_file );
+            handle_error( error );
+          });
+        });
       }
 
       function set_plane_scale( map ) {
