@@ -209,11 +209,12 @@ Number Type Converter
       - Currently supports exporting textured meshes, points and line segments:
         - Mesh geometry could be either of: Buffer, Sphere, Box, Cylinder, Cone, Icosahedron and maybe other
         - Textures and additional MeshPhysicalMaterial properties are passed via user strings
+        - Maximum texture resolution is limited to 2.5k (2560 x 2560)
       - GLTFS Viewer might produce richer colors in exported 3DM models than GLTF Viewer
       - USDZ Viewer appears to produce more accurate output than other viewers
       - Exported 3dm files might not show properly in any other 3rd party 3DM viewer
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
-    - ASSJSON / FBX / M3D / X3D / X exports are powered by [ASSIMPJS](https://github.com/kovacsv/assimpjs) / [ASSIMP](https://github.com/assimp/assimp)
+    - ASSJSON / FBX / M3D / X3D / X exports are powered by [ASSIMPJS](https://github.com/kovacsv/assimpjs) and [ASSIMP](https://github.com/assimp/assimp)
     - Animated GIF export is based on mrdoob's [example](https://github.com/mrdoob/omggif-example) using [omggif](https://github.com/deanm/omggif) library:
       - currently set to 500 x 500 size in the centre of the window
       - the approximate GIF area rectangle will be shown during the GIF generation
@@ -252,17 +253,21 @@ Number Type Converter
     - These exports are marked as either of: `GLB_d` `GLB_dw` `GLB_m` `GLB_mw` (for regular exports) `GLBx_d` `GLBx_dw` `GLBx_m` `GLBx_mw` (for alternative exports)
     - WEBP exported texture resolution will retain original size in mobile GLTF Viewer but is selectable in desktop viewers (128, 256, 512, 768, 1k, 1.2k, 1.5k, 1.7k, 2k, 3k, 4k)
     - KTX2 texture compression is additionally available by using [ktx2-encoder](https://www.npmjs.com/package/ktx2-encoder) and marked as following:
-      - `KTX2` offers ETC1S + UASTC compression as per specific type of texture
+      - `KTX2` offers ETC1S + UASTC compression, automatically selected as per specific type of texture
       - `KTX2e` offers ETC1S only compression applicable to all textures
       - `KTX2u` offers UASTC only compression applicable to all textures
-    - Seem to work fine in general but might not be good for some rare models
+    - These exports seem to work fine in general but might not be good for some rare models
   - Some viewers also offer alternative exports marked as `OBJx` `DAEx` `GLTFx` `USDZx`:
     - Should be tried either out of curiosity or if their regular export counterparts don't produce good results
     - Might even produce smaller exported file size than regular export
     - If applicable, will support exporting THREE.InstancedMesh to OBJ + MTL / DAE / USDZ as well
     - If applicable, will support exporting morph animations but will not export other animations
-  - Some viewers also offer setting the exported textures resolution (128, 256, 512, 768, 1k, 1.2k, 1.5k, 1.7k, 2k, 3k, 4k) and Y-flip (intended for 3DM / DAE / OBJ / USDZ exports)
+  - Some viewers also offer setting the following exported textures features:
+    - Resolution: 128, 256, 512, 768, 1k, 1.2k, 1.5k, 1.7k, 2k, 3k, 4k
+    - Y-flip, which is intended for 3DM / DAE / OBJ / USDZ exports
   - GLTFS Viewer seems to do OK job in exporting still models with `pbrSpecularGlossiness` but would suggest that you use [gltf.report](https://gltf.report/) instead
+  - Experiment with all exporters available by exporting the original model as well as its exported versions:
+    - Considering how many export options are available in any viewer, a certain combination might just work properly
 - Buttons, where applicable:
   - `A` - animations
   - `E` - edges
@@ -342,7 +347,6 @@ Number Type Converter
     - change `ambient light` to white
     - change `background color` to white
     - try anything else not mentioned above
-  - experiment with all exporters available by exporting the original model as well as its exported versions
   - large resolution textures should be scaled down before loading, as an example download [`Bedroom`](https://casual-effects.com/data/index.html) with 8k images and try it AS IS, then scale them down to 1k or 2k (which will speed up loading in browsers)
   - you could also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) and [Online 3D Viewer](https://3dviewer.net) exporters / converters
 
