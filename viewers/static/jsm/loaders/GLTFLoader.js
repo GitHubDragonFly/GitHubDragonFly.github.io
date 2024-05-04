@@ -65,10 +65,9 @@ import {
 	VectorKeyframeTrack
 } from "three";
 
-import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/loaders/DDSLoader.min.js";
-import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/loaders/TGALoader.min.js";
-import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/loaders/EXRLoader.min.js";
-import { toTrianglesDrawMode } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/utils/BufferGeometryUtils.min.js";
+import { toTrianglesDrawMode } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/utils/BufferGeometryUtils.min.js";
+
+var ddsTextureFlip = true;
 
 class GLTFLoader extends Loader {
 
@@ -286,6 +285,12 @@ class GLTFLoader extends Loader {
 			'THREE.GLTFLoader: "MSFT_texture_dds" no longer supported. Please update to "KHR_texture_basisu".'
 
 		);
+
+	}
+
+	setDDSTextureFlip( flip = true ) {
+
+		ddsTextureFlip = flip;
 
 	}
 
@@ -1754,7 +1759,7 @@ class GLTFMaterialsVolumeExtension {
 
 		if ( extension.thicknessTexture ) {
 
-			pending.push( parser.assignTexture( materialParams, 'thicknessMap', extension.thicknessTexture ) );
+			pending.push( parser.assignTexture( materialParams, 'thicknessMap', extension.thicknessTexture, LinearSRGBColorSpace ) );
 
 		}
 
@@ -3828,7 +3833,7 @@ class GLTFParser {
 	 * @param {number} textureIndex
 	 * @return {Promise<THREE.Texture|null>}
 	 */
-	loadTexture( textureIndex ) {
+	async loadTexture( textureIndex ) {
 
 		const json = this.json;
 		const options = this.options;
@@ -3836,7 +3841,7 @@ class GLTFParser {
 		const sourceIndex = textureDef.source;
 		const source = json.images[ sourceIndex ];
 
-		let loader = this.textureLoader;
+		let loader;
 
 		if ( options.resourcePath.includes( ',' ) === true ) {
 
@@ -3875,7 +3880,7 @@ class GLTFParser {
 
 				} else if ( source.uri[ 2 ] && source.uri[ 2 ] === '\\' ) {
 
-					let delimiter = ( ( source.uri.includes( '/') === true ) && ( source.uri.lastIndexOf( '/' ) > source.uri.lastIndexOf( '\\' ) ) ) ? '/' : '\\';
+					let delimiter = ( ( source.uri.includes( '/' ) === true ) && ( source.uri.lastIndexOf( '/' ) > source.uri.lastIndexOf( '\\' ) ) ) ? '/' : '\\';
 					source.uri = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
 					( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
 
@@ -3884,20 +3889,44 @@ class GLTFParser {
 			}
 
 		}
-
+		
 		if ( source.uri && source.uri.toLowerCase().endsWith( '.tga' ) || ( source.name && source.name.toLowerCase().endsWith( '.tga' ) ) ) {
 
-			loader = new TGALoader( options.manager );
+			loader = options.manager.getHandler( '.tga' ); 
+
+			if ( ! loader ) {
+
+				const { TGALoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/loaders/TGALoader.min.js" );
+				loader = new TGALoader( options.manager );
+
+			}
+
 			source.mimeType = 'image/tga';
 
 		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.dds' ) || ( source.name && source.name.toLowerCase().endsWith( '.dds' ) ) ) {
 
-			loader = new DDSLoader( options.manager );
-			source.mimeType = 'image/dds';
+			loader = options.manager.getHandler( '.dds' ); 
+
+			if ( ! loader ) {
+
+				const { DDSLoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/loaders/DDSLoader.min.js" );
+				loader = new DDSLoader( options.manager );
+
+			}
+
+			source.mimeType = 'image/vnd-ms.dds';
 
 		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.exr' ) || ( source.name && source.name.toLowerCase().endsWith( '.exr' ) ) ) {
 
-			loader = new EXRLoader( options.manager );
+			loader = options.manager.getHandler( '.exr' ); 
+
+			if ( ! loader ) {
+
+				const { EXRLoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/loaders/EXRLoader.min.js" );
+				loader = new EXRLoader( options.manager );
+
+			}
+
 			source.mimeType = 'image/exr';
 
 		} else if ( source.uri ) {
@@ -3906,6 +3935,8 @@ class GLTFParser {
 			if ( handler !== null ) loader = handler;
 
 		}
+
+		if ( ! loader ) loader = this.textureLoader;
 
 		return this.loadTextureImage( textureIndex, source, sourceIndex, loader );
 
@@ -4054,11 +4085,17 @@ class GLTFParser {
 
 			texture.flipY = false;
 
-			texture.name = textureDef.name || sourceDef.name || '';
+			texture.name = source.name || textureDef.name || sourceDef.name || '';
 
 			if ( texture.name === '' && typeof sourceDef.uri === 'string' && sourceDef.uri.startsWith( 'data:image/' ) === false ) {
 
 				texture.name = sourceDef.uri;
+
+			}
+
+			if ( texture.name !== '' && texture.name.toLowerCase().endsWith( '.dds' ) === true ) {
+
+				texture.repeat.y = ddsTextureFlip === true ? -1 : 1;
 
 			}
 
@@ -4143,7 +4180,7 @@ class GLTFParser {
 
 				}
 
-				loader.load( LoaderUtils.resolveURL( sourceURI, options.path ), onLoad, undefined, reject );
+				loader.load( LoaderUtils.resolveURL( sourceURI, options.resourcePath || options.path ), onLoad, undefined, reject );
 
 			} );
 
@@ -4314,6 +4351,14 @@ class GLTFParser {
 			}
 
 			material = cachedMaterial;
+
+		}
+
+		// workarounds for mesh and geometry, intended for ASSIMP use
+
+		if ( material.aoMap && geometry.attributes.uv1 === undefined && geometry.attributes.uv !== undefined ) {
+
+			geometry.setAttribute( 'uv1', geometry.attributes.uv );
 
 		}
 
