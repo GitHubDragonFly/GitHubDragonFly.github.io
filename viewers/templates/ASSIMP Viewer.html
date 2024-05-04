@@ -39,7 +39,6 @@
       import { KTX2Loader } from "three/addons/loaders/KTX2Loader.min.js";
       import { DRACOLoader } from "three/addons/loaders/DRACOLoader.min.js";
       import { GLTFLoader } from "../static/jsm/loaders/GLTFLoader.js";
-      import { mergeVertices } from "../static/jsm/utils/BufferGeometryUtils.js";
       import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
       import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
       import GLTFVideoTextureExtension from "../static/jsm/extensions/loaders/EXT_texture_video/EXT_texture_video.js";
@@ -47,7 +46,6 @@
       THREE = three_js;
       fflate = fflate_js;
       skeletonUtils = SkeletonUtils;
-      merge_vertices = mergeVertices;
 
       default_camera = new THREE.Object3D();
 
@@ -348,6 +346,7 @@
         <label for="file_input" title="3D Model Formats: 3D, 3DS, 3MF, A3D, AC, AC3D, ACC, AMF, AMJ, ASE, ASK, B3D, BLEND, BVH, BSP, COB, CSM, DAE, DRC, DXF, ENFF, FBX, GLB, GLTF + BIN, HMP, IFC, IFCZIP, IQM, IRR, IRRMESH, JT, KMZ, LWO, LWS, LXO, M3, M3D, MD2, MD3, MD5MESH, MDC, MDL, MESH, MS3D, NDO, NFF, OBJ + MTL, OFF, OGEX, PK3, PLY, PMX, PRJ, Q3O, Q3S, RAW, SCN, SIB, SMD, STL, STP, TER, UC, WRL, X, X3D, XGL, XML, ZAE, ZGL" style="color: #553801; margin-left: 3px;">3D</label>
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".3d, .3ds, .3mf, .a3d, .ac, .ac3d, .acc, .amf, .amj, .ase, .ask, .b3d, .bin, .blend, .bvh, .bsp, .cob, .csm, .dae, .drc, .dxf, .enff, .fbx, .gltf, .glb, .glsl, .hmp, .ifc, .ifczip, .iqm, .irr, .irrmesh, .jt, .kmz, .lwo, .lws, .lxo, .m3, .material, .md2, .md3, .md5anim, .md5camera, .md5mesh, .mdc, .mdl, .mesh, .ms3d, .mtl, .ndo, .nff, .obj, .off, .ogex, .pk3, .ply, .pmx, .prj, .q3o, .q3s, .raw, .scn, .sib, .skeleton, .smd, .stl, .step, .stp, .ter, .uc, .wrl, .x, .x3d, .xgl, .xml, .zae, .zgl, .dib, .dds, .ktx2, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
+        <button title="Y-Flip DDS Textures if present. This will reset the model when loaded." id="btn_dds_flip" onclick="set_dds_flip();" style="background-color: lightgreen; color: blue;">f</button>
         <label for="file_image_input" title="Background Image" style="color: #553801;">BGND</label>
         <input type="file" title="Background Image" id="file_image_input" accept=".exr, .hdr, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
         <button title="Equirectangular Background" id="btn_equi" onclick="set_equi();" style="background-color: transparent; color: blue; min-width: 25px;" disabled>Eq</button>
@@ -738,6 +737,21 @@
         }
       }
 
+      function set_dds_flip() {
+        dds_flip = !dds_flip;
+
+        if (gltf_obj) {
+          gltf_loader.setDDSTextureFlip( dds_flip );
+          reset_only();
+        }
+
+        if (dds_flip === true) {
+          document.getElementById('btn_dds_flip').style.backgroundColor = 'lightgreen';
+        } else {
+          document.getElementById('btn_dds_flip').style.backgroundColor = 'transparent';
+        }
+      }
+
       function change_menu_location() {
         if (menu_location_bottom === true) {
           menu_location_bottom = false;
@@ -770,10 +784,10 @@
       var controls, orb_controls, gizmo, orb_controls_gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var animations, animation_mixer, current_animation, extras, current_extra, clock, outline_material;
       var gltf_obj, gltfVideoTextureExtension, assimp_load, current_side, resource_path, edges, edges_visible;
-      var gui, gui_set = false, guiExposure, params, toneMappingOptions, merge_vertices, count = 0;
+      var gui, gui_set = false, guiExposure, params, toneMappingOptions, merge_vertices, count = 0, link;
       var variants, variant_materials, current_variant, variants_available, tex, tex_res, tex_flip, tex_fmt;
-      var mouse_down, mouse_wheel, reset_rotation, events_initialized, wireframe_enabled, link;
-      var ambientLight, hemisphereLight, directionalLight, draco_material, isMobile;
+      var mouse_down, mouse_wheel, reset_rotation, events_initialized, wireframe_enabled, dds_flip = true;
+      var ambientLight, hemisphereLight, directionalLight, draco_material, isMobile, texture_maps;
       var ww = window.innerWidth, wh = window.innerHeight, skeletonUtils;
       var animation_running, extra_running, gif_export, equi_enabled;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
@@ -2326,14 +2340,32 @@
             animation_mixer.uncacheRoot( animation_mixer.getRoot() );
           }
 
+          scene.remove( gltf_obj );
+
           gltf_obj.traverse( ( child ) => {
             if (child.isMesh || child.isPoints || child.isLineSegments) {
               if (child.material) {
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
+                    for (const prop in mtl) {
+                      texture_maps.forEach( tex_map => {
+                        if (prop === tex_map) {
+                          if (mtl[ prop ]) mtl[ prop ].dispose();
+                        }
+                      });
+                    };
+
                     mtl.dispose();
                   });
                 } else {
+                  for (const prop in child.material) {
+                    texture_maps.forEach( tex_map => {
+                      if (prop === tex_map) {
+                        if (child.material[ prop ]) child.material[ prop ].dispose();
+                      }
+                    });
+                  };
+
                   child.material.dispose();
                 }
               }
@@ -2342,14 +2374,15 @@
             }
           });
 
-          scene.remove( gltf_obj );
-
           if (gui) gui_reset();
 
           if (gizmo) {
             document.getElementById('gizmo').removeChild( gizmo.domElement );
             gizmo = undefined;
           }
+
+          renderer.info.reset();
+          renderer.resetState();
 
           reset_all( true );
         }
@@ -2368,6 +2401,11 @@
           const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
           dds_loader = new DDSLoader( manager );
           manager.addHandler( /\.dds$/i, dds_loader );
+        }
+
+        if (merge_vertices === undefined) {
+          const { mergeVertices } = await import( "../static/jsm/utils/BufferGeometryUtils.js" );
+          merge_vertices = mergeVertices;
         }
 
         if (params === undefined) {
@@ -2506,7 +2544,6 @@
             load_with_assimp( fi.files, false );
           } else {
             selected_url_file = '';
-
             load_components( false );
           }
         } else {
@@ -2530,27 +2567,24 @@
           file_url = file; // remote
         }
 
-        loader.load( file_url, function( data ) {
-          // Revoke URL if local file was loaded
-          if (from_url === false) URL.revokeObjectURL( file );
+        await new Promise( resolve => {
+          loader.load( file_url, function( data ) {
+            // Revoke URL if local file was loaded
+            if (from_url === false) URL.revokeObjectURL( file );
 
-          if (data.startsWith( 'glTF' )) {
-            let u8array = new TextEncoder().encode( data );
-            version = parseFloat( new Uint32Array( u8array.slice( 4, 8) )[ 0 ] ).toFixed( 1 );
-          } else {
-            let json = JSON.parse( data );
-            if ( json.asset !== undefined ) version = parseFloat( json.asset.version[ 0 ] ).toFixed( 1 );
-          }
+            if (data.startsWith( 'glTF' )) {
+              let u8array = new TextEncoder().encode( data );
+              version = parseFloat( new Uint32Array( u8array.slice( 4, 8) )[ 0 ] ).toFixed( 1 );
+            } else {
+              let json = JSON.parse( data );
+              if ( json.asset !== undefined ) version = parseFloat( json.asset.version[ 0 ] ).toFixed( 1 );
+            }
 
-          if (version > 0) console.log( 'GLTF v' + version + ' Model' );
+            if (version > 0) console.log( 'GLTF v' + version + ' Model' );
 
-          unresolved = false;
+            resolve( unresolved = false );
+          });
         });
-
-        // Wait for resolution
-        while (unresolved === true) {
-          await new Promise( resolve => setTimeout( resolve, 20 ) ); // adjust timing if necessary
-        }
 
         if (version > 1) {
           return true;
@@ -2711,6 +2745,7 @@
           renderer.toneMapping = THREE.NeutralToneMapping;
           renderer.toneMappingExposure = 1;
           renderer.setSize( ww, wh );
+          renderer.info.autoReset = false;
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
           renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
@@ -2733,6 +2768,7 @@
           gltf_loader.setKTX2Loader( ktx2_loader );
           gltf_loader.setDRACOLoader( draco_loader );
           gltf_loader.setMeshoptDecoder( MeshoptDecoder );
+          gltf_loader.setDDSTextureFlip( dds_flip );
           gltf_loader.register( parser => new gltfVideoTextureExtension( parser, THREE ) );
         }
 
@@ -4688,14 +4724,35 @@
         if (grid_visible === true) show_grid();
         if (wireframe_enabled === true) show_wireframe();
 
+        if (animation_mixer) animation_mixer.stopAllAction();
+
+        scene.environment = null;
+        scene.remove( gltf_obj );
+
         gltf_obj.traverse( ( child ) => {
           if (child.isMesh || child.isPoints || child.isLineSegments) {
             if (child.material) {
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
+                  for (const prop in mtl) {
+                    texture_maps.forEach( tex_map => {
+                      if (prop === tex_map) {
+                        if (mtl[ prop ]) mtl[ prop ].dispose();
+                      }
+                    });
+                  };
+
                   mtl.dispose();
                 });
               } else {
+                for (const prop in child.material) {
+                  texture_maps.forEach( tex_map => {
+                    if (prop === tex_map) {
+                      if (child.material[ prop ]) child.material[ prop ].dispose();
+                    }
+                  });
+                };
+
                 child.material.dispose();
               }
             }
@@ -4704,8 +4761,8 @@
           }
         });
 
-        scene.environment = null;
-        scene.remove( gltf_obj );
+        renderer.info.reset();
+        renderer.resetState();
 
         if (gui) gui_reset();
 
@@ -4722,6 +4779,8 @@
       }
 
       function reset_all( reset = false ) {
+        if (dds_flip === false && reset === false) set_dds_flip();
+
         // Reset all current rotational values
         document.getElementById('rotation_x').value = 0;
         document.getElementById('rotation_y').value = 0;
@@ -4858,14 +4917,32 @@
                 animation_mixer.uncacheRoot( animation_mixer.getRoot() );
               }
 
+              scene.remove( gltf_obj );
+
               gltf_obj.traverse( ( child ) => {
                 if (child.isMesh || child.isPoints || child.isLineSegments) {
                   if (child.material) {
                     if (Array.isArray( child.material )) {
                       child.material.forEach( mtl => {
+                        for (const prop in mtl) {
+                          texture_maps.forEach( tex_map => {
+                            if (prop === tex_map) {
+                              if (mtl[ prop ]) mtl[ prop ].dispose();
+                            }
+                          });
+                        };
+
                         mtl.dispose();
                       });
                     } else {
+                      for (const prop in child.material) {
+                        texture_maps.forEach( tex_map => {
+                          if (prop === tex_map) {
+                            if (child.material[ prop ]) child.material[ prop ].dispose();
+                          }
+                        });
+                      };
+
                       child.material.dispose();
                     }
                   }
@@ -4880,8 +4957,6 @@
 
               gltf_obj.children.length = 0;
               extras.length = 0;
-
-              scene.remove( gltf_obj );
             }
 
             scene.environment = null;
@@ -4961,6 +5036,11 @@
         isMobile = (/iPad|iPhone|iPod/.test( navigator.platform ))
          || (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent ))
           || (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        texture_maps = [ 'map', 'aoMap', 'alphaMap', 'bumpMap', 'lightMap', 'emissiveMap', 'normalMap',
+         'specularMap', 'metalnessMap', 'roughnessMap', 'anisotropyMap', 'clearcoatMap', 'clearcoatNormalMap',
+          'clearcoatRoughnessMap', 'iridescenceMap', 'iridescenceThicknessMap', 'sheenColorMap', 'sheenRoughnessMap',
+           'specularColorMap', 'specularIntensityMap', 'thicknessMap', 'transmissionMap' ];
 
         $('#export_tex_fmt').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#export_tex_res').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
