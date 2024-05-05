@@ -36,13 +36,11 @@
       import * as fflate_js from "three/addons/libs/fflate.module.min.js";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
       import { ThreeMFLoader } from "three/addons/loaders/3MFLoader.min.js";
-      import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.min.js";
       import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
       import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
 
       THREE = three_js;
       fflate = fflate_js;
-      merge_vertices = mergeVertices;
 
       manager = new THREE.LoadingManager();
 
@@ -76,7 +74,7 @@
           mouse_wheel = true;
           render();
 
-          await new Promise( resolve => setTimeout( log_info(), 20 ) );
+          await new Promise( resolve => setTimeout( log_info(), 100 ) );
         }
       }
 
@@ -773,7 +771,7 @@
 
     <script>
       var THREE, fflate, manager, texture_loader, tmf_loader, tmf_obj, exr_loader, rgbe_loader, hdrJPGLoader;
-      var merge_vertices, renderer, scene, camera, render_requested, edges, edges_visible;
+      var renderer, scene, camera, render_requested, edges, edges_visible, texture_maps;
       var controls, orb_controls, gizmo, orb_controls_gizmo, flat_shading_enabled, count = 0;
       var gui, gui_set = false, guiExposure, params, toneMappingOptions;
       var grid, polar_grid, grid_visible, polar_grid_visible, link, isMobile;
@@ -1397,8 +1395,16 @@
       }
 
       function set_back_color() {
-        scene.background = null;
-        scene.environment = null;
+        if (scene.environment) {
+          scene.environment.dispose();
+          scene.environment = null;
+        }
+
+        if (scene.background) {
+          scene.background.dispose();
+          scene.background = null;
+        }
+
         bgnd_linear_gradient = false;
         document.body.style.backgroundImage = 'none';
         document.getElementById('file_image_input').value = '';
@@ -1559,11 +1565,13 @@
         } else {
           if (gui) gui_reset();
 
+          scene.background.dispose();
+          scene.background = null;
+          scene.environment.dispose();
+          scene.environment = null;
+
           if (document.getElementById('file_image_input').value !== '') {
             set_scene_image();
-          } else {
-            scene.background = null;
-            scene.environment = null;
           }
 
           scene.backgroundBlurriness = 0;
@@ -1632,15 +1640,22 @@
       async function set_scene_image() {
         fii = document.getElementById('file_image_input');
 
+        if (scene.environment) {
+          scene.environment.dispose();
+          scene.environment = null;
+        }
+
+        if (scene.background) {
+          scene.background.dispose();
+          scene.background = null;
+        }
+
         if (fii.files[ 0 ]) {
           bgnd_linear_gradient = false;
           document.body.style.backgroundImage = 'none';
           document.getElementById('back_color').value = '#000000';
           document.body.style.backgroundColor = '#000000';
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
-
-          scene.background = null;
-          scene.environment = null;
 
           let fn_uc = fii.files[ 0 ].name.toUpperCase();
 
@@ -1815,17 +1830,23 @@
             fii.value = '';
             console.log( 'Not a valid image file!' );
           }
-        } else {
-          scene.background = null;
         }
 
         mouse_wheel = true;
       }
 
       function set_bgnd_linear_gradient() {
-        if (bgnd_linear_gradient === true) {
-          scene.background = null;
+        if (scene.environment) {
+          scene.environment.dispose();
           scene.environment = null;
+        }
+
+        if (scene.background) {
+          scene.background.dispose();
+          scene.background = null;
+        }
+
+        if (bgnd_linear_gradient === true) {
           bgnd_linear_gradient = false;
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
         } else {
@@ -2041,14 +2062,46 @@
           if (polar_grid_visible === true) show_polar_grid();
           if (grid_visible === true) show_grid();
 
+          if (edges && Object.entries( edges ).length !== 0) {
+            if (edges_visible === true) show_edges();
+            if (document.getElementById('edge_color').value !== '#FF0000') {
+              document.getElementById('edge_color').value = '#FF0000';
+              set_edge_color();
+            }
+
+            Object.keys( edges ).forEach( ( key ) => {
+              edges[ key ].material.dispose();
+              edges[ key ].geometry.dispose();
+              delete edges[ key ];
+            });
+          }
+
+          scene.remove( tmf_obj );
+
           tmf_obj.traverse( ( child ) => {
             if (child.isMesh) {
               if (child.material) {
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
+                    for (const prop in mtl) {
+                      texture_maps.forEach( tex_map => {
+                        if (prop === tex_map) {
+                          if (mtl[ prop ]) mtl[ prop ].dispose();
+                        }
+                      });
+                    };
+
                     mtl.dispose();
                   });
                 } else {
+                  for (const prop in child.material) {
+                    texture_maps.forEach( tex_map => {
+                      if (prop === tex_map) {
+                        if (child.material[ prop ]) child.material[ prop ].dispose();
+                      }
+                    });
+                  };
+
                   child.material.dispose();
                 }
               }
@@ -2057,14 +2110,15 @@
             }
           });
 
-          scene.remove( tmf_obj );
-
           if (gui) gui_reset();
 
           if (gizmo) {
             document.getElementById('gizmo').removeChild( gizmo.domElement );
             gizmo = undefined;
           }
+
+          renderer.info.reset();
+          renderer.resetState();
 
           reset_all( true );
         }
@@ -2151,6 +2205,7 @@
           renderer.toneMapping = THREE.NeutralToneMapping;
           renderer.toneMappingExposure = 1.0;
           renderer.setSize( ww, wh );
+          renderer.info.autoReset = false;
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
           renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
@@ -2247,8 +2302,10 @@
         });
       }
 
-      function addFileInScene( object ) {
+      async function addFileInScene( object ) {
         if (selected_tmf_file) URL.revokeObjectURL( selected_tmf_file );
+
+        const { mergeVertices } = await import( "three/addons/utils/BufferGeometryUtils.min.js" );
 
         tmf_obj = object.clone();
 
@@ -2265,7 +2322,7 @@
             child.geometry.computeBoundingSphere();
 
             child.geometry.deleteAttribute('normal');
-            child.geometry = merge_vertices( child.geometry, 1e-6 );
+            child.geometry = mergeVertices( child.geometry, 1e-6 );
             child.geometry.computeVertexNormals();
             child.geometry.normalizeNormals();
 
@@ -2986,14 +3043,46 @@
         if (polar_grid_visible === true) show_polar_grid();
         if (grid_visible === true) show_grid();
 
+        if (edges && Object.entries( edges ).length !== 0) {
+          if (edges_visible === true) show_edges();
+          if (document.getElementById('edge_color').value !== '#FF0000') {
+            document.getElementById('edge_color').value = '#FF0000';
+            set_edge_color();
+          }
+
+          Object.keys( edges ).forEach( ( key ) => {
+            edges[ key ].material.dispose();
+            edges[ key ].geometry.dispose();
+            delete edges[ key ];
+          });
+        }
+
+        scene.remove( tmf_obj );
+
         tmf_obj.traverse( ( child ) => {
           if (child.isMesh) {
             if (child.material) {
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
+                  for (const prop in mtl) {
+                    texture_maps.forEach( tex_map => {
+                      if (prop === tex_map) {
+                        if (mtl[ prop ]) mtl[ prop ].dispose();
+                      }
+                    });
+                  };
+
                   mtl.dispose();
                 });
               } else {
+                for (const prop in child.material) {
+                  texture_maps.forEach( tex_map => {
+                    if (prop === tex_map) {
+                      if (child.material[ prop ]) child.material[ prop ].dispose();
+                    }
+                  });
+                };
+
                 child.material.dispose();
               }
             }
@@ -3002,7 +3091,8 @@
           }
         });
 
-        scene.remove( tmf_obj );
+        renderer.info.reset();
+        renderer.resetState();
 
         if (gui) gui_reset();
 
@@ -3078,13 +3168,20 @@
         document.getElementById('export_tex_res').selectedIndex = 0;
         document.getElementById('export_tex_fmt').selectedIndex = 0;
 
-        if (gui_set === true) {
-          document.getElementById('gui_position').style.display = 'none';
-
-          if (scene) {
-            scene.background = null;
+        if (scene) {
+          if (scene.environment) {
+            scene.environment.dispose();
             scene.environment = null;
           }
+
+          if (scene.background) {
+            scene.background.dispose();
+            scene.background = null;
+          }
+        }
+
+        if (gui_set === true) {
+          document.getElementById('gui_position').style.display = 'none';
         }
 
         gif_export = false;
@@ -3107,16 +3204,32 @@
           // Page (re)loading
           if (scene) {
             if (tmf_obj) {
+              scene.remove( tmf_obj );
+
               tmf_obj.traverse( ( child ) => {
                 if (child.isMesh) {
                   if (child.material) {
                     if (Array.isArray( child.material )) {
                       child.material.forEach( mtl => {
-                        if (mtl.map) mtl.map.dispose();
+                        for (const prop in mtl) {
+                          texture_maps.forEach( tex_map => {
+                            if (prop === tex_map) {
+                              if (mtl[ prop ]) mtl[ prop ].dispose();
+                            }
+                          });
+                        };
+
                         mtl.dispose();
                       });
                     } else {
-                      if (child.material.map) child.material.map.dispose();
+                      for (const prop in child.material) {
+                        texture_maps.forEach( tex_map => {
+                          if (prop === tex_map) {
+                            if (child.material[ prop ]) child.material[ prop ].dispose();
+                          }
+                        });
+                      };
+
                       child.material.dispose();
                     }
                   }
@@ -3194,6 +3307,11 @@
         isMobile = (/iPad|iPhone|iPod/.test( navigator.platform ))
          || (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent ))
           || (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        texture_maps = [ 'map', 'aoMap', 'alphaMap', 'bumpMap', 'displacementMap', 'envMap', 'lightMap', 'emissiveMap', 'normalMap',
+         'metalnessMap', 'roughnessMap', 'anisotropyMap', 'clearcoatMap', 'clearcoatNormalMap', 'clearcoatRoughnessMap',
+          'iridescenceMap', 'iridescenceThicknessMap', 'sheenColorMap', 'sheenRoughnessMap', 'specularMap',
+           'specularColorMap', 'specularIntensityMap', 'thicknessMap', 'transmissionMap' ];
 
         $('#export_tex_fmt').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#export_tex_res').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
