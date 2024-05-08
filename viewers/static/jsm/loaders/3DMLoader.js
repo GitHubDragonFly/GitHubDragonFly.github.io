@@ -28,7 +28,7 @@ import {
 	Vector2
 } from "three";
 
-import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/loaders/EXRLoader.min.js";
+import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/loaders/EXRLoader.min.js";
 
 const _taskCache = new WeakMap();
 
@@ -407,6 +407,7 @@ class Rhino3dmLoader extends Loader {
 					}
 
 					mat.side = params.side;
+					mat.depthTest = params.depthTest;
 
 					if ( params.alphaTest !== undefined ) mat.alphaTest = params.alphaTest;
 					if ( params.bumpScale !== undefined ) mat.bumpScale = params.bumpScale;
