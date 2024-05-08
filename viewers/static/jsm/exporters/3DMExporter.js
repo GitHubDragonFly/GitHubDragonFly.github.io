@@ -5,8 +5,8 @@ import {
 	Matrix4
 } from "three";
 
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/utils/TextureUtils.min.js";
-import { deinterleaveAttribute } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/utils/BufferGeometryUtils.min.js";
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/utils/TextureUtils.min.js";
+import { deinterleaveAttribute } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/utils/BufferGeometryUtils.min.js";
 
 import * as rhino3dm from "https://cdn.jsdelivr.net/npm/rhino3dm@8.4.0/rhino3dm.module.min.js";
 
@@ -243,6 +243,7 @@ class Rhino3dmExporter {
 			if ( isArrayMember === true ) params.isArrayMember = true;
 
 			params.side = material.side;
+			params.depthTest = material.depthTest;
 
 			if ( material.alphaTest !== undefined && material.alphaTest > 0 )
 				params.alphaTest = material.alphaTest;
