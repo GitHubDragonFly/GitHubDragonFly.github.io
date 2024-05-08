@@ -407,10 +407,10 @@ class Rhino3dmLoader extends Loader {
 					}
 
 					mat.side = params.side;
-					mat.depthTest = params.depthTest;
 
 					if ( params.alphaTest !== undefined ) mat.alphaTest = params.alphaTest;
 					if ( params.bumpScale !== undefined ) mat.bumpScale = params.bumpScale;
+					if ( params.depthTest !== undefined ) mat.depthTest = params.depthTest;
 					if ( params.normalMapType !== undefined ) mat.normalMapType = params.normalMapType;
 					if ( params.emissiveIntensity !== undefined ) mat.emissiveIntensity = params.emissiveIntensity;
 
