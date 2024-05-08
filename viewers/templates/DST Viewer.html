@@ -28,9 +28,6 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
-    <!-- For encoding GLB exports with draco compression -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
-
     <script type="module">
       import * as three_js from "three";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
@@ -350,11 +347,9 @@
         <select title="Export" id="export_names" style="min-width: 90px;" disabled>
           <option title="Export Formats" value="export" selected disabled>Export</option>
           <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
-          <option title="BIM - Dotbim File Format" value="bim" onclick="export_bim()">BIM</option>
           <option title="DAE - Collada Format" value="dae" onclick="export_dae();">DAE</option>
           <option title="GLB - GL Transmission Format binary regular export with optional texture compression" value="glb" onclick="export_gltf( true );">GLB</option>
-          <option title="GLB - GL Transmission Format binary regular export with DRACO and optional texture compression" value="glbdraco" onclick="export_gltf( true, true );">GLB_d</option>
-          <option title="GLB - GL Transmission Format binary regular export with Meshopt and optional texture compression" value="glbmeshopt" onclick="export_gltf( true, false, true );">GLB_m</option>
+          <option title="GLB - GL Transmission Format binary regular export with Meshopt and optional texture compression" value="glbmeshopt" onclick="export_gltf( true, true );">GLB_m</option>
           <option title="GLTF - GL Transmission Format ascii regular export" value="gltf" onclick="export_gltf();">GLTF</option>
           <option title="JSON - Three.js Format" value="json" onclick="export_json();">JSON</option>
           <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
@@ -776,23 +771,6 @@
         link = undefined;
       }
 
-      async function export_bim() {
-        if (embroidery.mesh) {
-          start_export();
-
-          await new Promise( resolve => setTimeout( resolve, 20 ) );
-
-          const { BIMExporter } = await import( "../static/jsm/exporters/BIMExporter.js" );
-
-          let bim_exporter = new BIMExporter( manager );
-
-          await bim_exporter.parse( embroidery.mesh.clone(), async function( dotbim ) {
-            zip.file( filename + '.bim', dotbim );
-            await process_zip( '_BIM' );
-          }, function( error ) { handle_export_error( error ); } );
-        }
-      }
-
       async function export_obj() {
         if (embroidery.mesh) {
           start_export();
@@ -894,7 +872,7 @@
         }
       }
 
-      async function export_gltf( binary = false, draco = false, meshopt = false ) {
+      async function export_gltf( binary = false, meshopt = false ) {
         if (embroidery.mesh) {
           start_export();
 
@@ -911,9 +889,7 @@
 
             if (binary === true) {
               try {
-                if (draco === true) {
-                  blob = new Blob( [ await draco_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
-                } else if (meshopt === true) {
+                if (meshopt === true) {
                   blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
                 } else if (tex_fmt !== '') {
                   blob = new Blob( [ await texture_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
@@ -927,11 +903,7 @@
 
               zip.file( filename + '.glb', blob );
               let str = '_GLB';
-              if (draco === true) {
-                str += '_DRACO';
-              } else if (meshopt === true) {
-                str += '_MESHOPT';
-              }
+              if (meshopt === true) str += '_MESHOPT';
               if (tex_fmt !== '') str += ' ' + tex_fmt;
 
               await process_zip( str );
@@ -2207,131 +2179,6 @@
         await new Promise( resolve => setTimeout( log_info(), 100 ) );
       }
 
-      /* Encode with draco compression - geometry */
-
-      async function draco_compress( arrayBuffer ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { dedup, flatten, instance, join, palette, prune, unpartition } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
-
-        const io = new WebIO();
-
-        io.registerExtensions( KHRONOS_EXTENSIONS );
-        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
-        io.registerDependencies({
-          'draco3d.encoder': DracoEncoderModule(),
-        });
-
-        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
-
-        await doc.transform(
-          unpartition(),
-          palette({ min: 5 }),
-          dedup(),
-          prune(),
-          instance( { min: 2 } ),
-          flatten(),
-          join()
-        );
-
-        if (tex_fmt !== '') {
-          const textures = doc.getRoot().listTextures();
-
-          if (tex_fmt.startsWith( 'ktx' )) {
-            const { listTextureSlots } = await import( "@gltf-transform/functions" );
-            const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
-            const { encodeToKTX2 } = await import( "ktx2-encoder" );
-
-            const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
-
-            for (const texture of textures) {
-              const slots = await listTextureSlots( texture );
-              const size = await texture.getSize();
-
-              const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
-
-              // check if texture dimensions are multiples of 4
-              const width_p2 = size[ 0 ] % 4 === 0;
-              const height_p2 = size[ 1 ] % 4 === 0;
-
-              if (!width_p2 || !height_p2) {
-                // this should produce minimal scale down
-                const width = width_p2 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
-                const height = height_p2 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
-
-                const file_reader = new FileReader();
-
-                await new Promise( resolve => {
-                  file_reader.onload = function( e ) {
-                    const img = new Image();
-
-                    img.onload = async function() {
-                      const canvas = document.createElement('canvas');
-
-                      canvas.width = width;
-                      canvas.height = height;
-
-                      const ctx = canvas.getContext('2d');
-                      ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
-
-                      const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
-                      const a2b = atob( base64data );
-                      const buff = new Uint8Array( a2b.length );
-
-                      for ( let i = 0, l = buff.length; i < l; i ++ ) {
-                        buff[ i ] = a2b.charCodeAt( i );
-                      }
-
-                      await encodeToKTX2( buff, { isUASTC: uastc } )
-                      .then( ktx_texture => {
-                        texture.setImage( ktx_texture );
-                        texture.setMimeType( 'image/ktx2' );
-                        resolve( doc.createExtension( KHRTextureBasisu ).setRequired( true ) );
-                      });
-                    }
-
-                    img.src = e.target.result;
-                  }
-
-                  file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
-                });
-              } else {
-                await encodeToKTX2( texture.getImage(), { isUASTC: uastc } )
-                .then( ktx_texture => {
-                  texture.setImage( ktx_texture );
-                  texture.setMimeType( 'image/ktx2' );
-                  doc.createExtension( KHRTextureBasisu ).setRequired( true );
-                });
-              }
-            }
-          } else {
-            const { compressTexture } = await import( "@gltf-transform/functions" );
-            const { EXTTextureWebP } = await import( "@gltf-transform/extensions" );
-
-            for (const texture of textures) {
-              await compressTexture( texture, { targetFormat: tex_fmt } );
-              doc.createExtension( EXTTextureWebP ).setRequired( true );
-              io.registerExtensions( [ EXTTextureWebP ] );
-            }
-          }
-        }
-
-        doc.createExtension( KHRDracoMeshCompression )
-        .setRequired( true )
-        .setEncoderOptions({
-          method: KHRDracoMeshCompression.EncoderMethod.EDGEBREAKER,
-          encodeSpeed: 5,
-        });
-
-        const compressedArrayBuffer = io.writeBinary( doc );
-
-        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
-        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
-        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
-
-        return compressedArrayBuffer;
-      }
-
       /* Encode with meshopt compression - geometry, morphs, animations */
 
       async function meshopt_compress( arrayBuffer ) {
@@ -2653,7 +2500,7 @@
            || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
 
           if (embroidery.mesh) {
-            // Reset tmf_obj rotational values
+            // Reset rotational values
             if (reset_rotation === true) {
               embroidery.mesh.rotation.set( initial_rotation.x, initial_rotation.y, initial_rotation.z );
               reset_rotation = false;
