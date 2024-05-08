@@ -291,6 +291,7 @@ Number Type Converter
   - `Bs` - and / or `bonds` button (available in PDB viewers only)
   - `C0` - camera index, with 0 being default (GLTF viewer) (`CAM` + Index in GLTF Legacy viewer)
   - `CS` - construction step (LDRAW Viewer)
+  - `DT` - material's depthTest switching (ASSIMP, GLTF, GLTFS viewers)
   - `Ls` - and / or `labels` button (available in PDB viewers only)
   - `MP` - material switching - Phong (MP), Standard (MS), Lambert (ML)
   - `OL` - outline effect (MMD Viewer)
