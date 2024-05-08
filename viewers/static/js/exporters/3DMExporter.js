@@ -244,6 +244,7 @@
 				if ( isArrayMember === true ) params.isArrayMember = true;
 
 				params.side = material.side;
+				params.depthTest = material.depthTest;
 
 				if ( material.alphaTest !== undefined && material.alphaTest > 0 )
 					params.alphaTest = material.alphaTest;
