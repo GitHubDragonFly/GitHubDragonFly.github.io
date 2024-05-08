@@ -190,6 +190,9 @@ Number Type Converter
   - GCODE supported formats: GCODE, NCC, NGC
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
+  - Embroidery supported formats: DST
+    - This is using customized [DST Embroidery File Loader](https://github.com/manthrax/dst-format)
+    - The `images` folder also includes `threadNormal` and `threadTexture` images from the same website
   - OCCT supported formats: STEP, STP, IGES, IGS, BREP, BRP, BIM
     - STEP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js) and a modified version of [dotbim.three.js](https://github.com/ricaun/dotbim.three.js):
       - Custom BIM Loader is also available
