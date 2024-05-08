@@ -645,6 +645,7 @@
 
 						if ( mat.reflectivity !== undefined && mat.reflectivity > 0 ) mtlOutput += 'Prf ' + mat.reflectivity + '\n';
 						if ( mat.alphaTest > 0 ) mtlOutput += 'a ' + mat.alphaTest + '\n';
+						if ( mat.depthTest ) mtlOutput += 'Pdt ' + ( mat.depthTest === true ? 1 : 0 ) + '\n';
 						mtlOutput += 's ' + mat.side + '\n';
 
 						if ( mat.map && mat.map.type === 1009 && mat.map.image ) {
