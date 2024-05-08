@@ -535,6 +535,11 @@ class MaterialCreator {
 					use_phong = false;
 					break;
 
+				case 'pdt':
+					// Material depthTest
+					params.depthTest = parseFloat( value ) === 1.0;
+					break;
+
 				case 'ni':
 					// Index-of-refraction for non-metallic materials
 					refraction_present = true;
