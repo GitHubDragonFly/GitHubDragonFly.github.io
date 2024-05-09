@@ -466,42 +466,30 @@ class DSTLoader extends Loader {
         },
         toTexture( renderer, scene, camera ) {
 
-          // Export PNG image data
-
           if ( ! opts.map ) {
 
-            let width = renderer.domElement.width;
-            let height = renderer.domElement.height;
+          // Export renderer's screen as PNG image
 
-            // Create a canvas
+          renderer.render( scene, camera );
 
-            let canvas = document.createElement( 'canvas' );
-            canvas.width = width;
-            canvas.height = height;
+          const image = renderer.domElement.toDataURL( 'image/png' );
 
-            let context = canvas.getContext( '2d' );
-            context.clearRect( 0, 0, width, height );
+          // Get the base64 encoded data
 
-            renderer.render( scene, camera );
+          const base64data = image.replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
 
-            context.drawImage( renderer.domElement, 0, 0, width, height, 0, 0, width, height );
+          // Convert PNG data to Uint8Array
 
-            // Get the base64 encoded data
+          const b = atob( base64data );
+          const data = new Uint8Array( b.length );
 
-            const base64data = canvas.toDataURL( `image/png`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+          for ( let i = 0, l = data.length; i < l; i ++ ) {
 
-            // Convert to Uint8Array PNG data
+            data[ i ] = b.charCodeAt( i );
 
-            const b = atob( base64data );
-            const data = new Uint8Array( b.length );
+          }
 
-            for ( let i = 0, l = data.length; i < l; i ++ ) {
-
-              data[ i ] = b.charCodeAt( i );
-
-            }
-
-            return data;
+          return data;
 
           }
 
