@@ -470,9 +470,16 @@ class DSTLoader extends Loader {
 
           // Export renderer's screen as PNG image
 
+          // DST Viewer is set for on-demand rendering and not to auto clear
+          // but preserveDrawingBuffer code should be enabled in other apps
+
+          //renderer.preserveDrawingBuffer = true;
+
           renderer.render( scene, camera );
 
           const image = renderer.domElement.toDataURL( 'image/png' );
+
+          //renderer.preserveDrawingBuffer = false;
 
           // Get the base64 encoded data
 
