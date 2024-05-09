@@ -464,105 +464,44 @@ class DSTLoader extends Loader {
           opts.palette = arry;
           params.meshNeedsUpdate = true;
         },
-        toTexture( renderer, scene, maxDim, padding = 10 ) {
+        toTexture( renderer, scene, camera ) {
+
+          // Export PNG image data
 
           if ( ! opts.map ) {
 
-            let bounds = new Box3();
-            bounds.setFromObject( params.mesh );
+            let width = renderer.domElement.width;
+            let height = renderer.domElement.height;
 
-            let bsz = bounds.getSize( new Vector3() );
+            // Create a canvas
 
-            let aspect = bsz.x / bsz.y;
+            let canvas = document.createElement( 'canvas' );
+            canvas.width = width;
+            canvas.height = height;
 
-            let pad = bsz.x / maxDim + ( padding * 2 ) / maxDim;
+            let context = canvas.getContext( '2d' );
+            context.clearRect( 0, 0, width, height );
 
-            let szx = ( bsz.x + pad ) / 2;
-            let szy = ( bsz.y + pad / aspect ) / 2;
+            renderer.render( scene, camera );
 
-            const camera = new OrthographicCamera(
-              -szx,
-              szx,
-              szy,
-              -szy,
-              1,
-              1000
-            );
+            context.drawImage( renderer.domElement, 0, 0, width, height, 0, 0, width, height );
 
-            params.mesh.localToWorld( camera.position.set( 0, 0, 0 ) );
-            camera.position.z += 500; // adjust as needed
-            camera.lookAt( params.mesh.position );
+            // Get the base64 encoded data
 
-            if ( bsz.x > bsz.y ) {
+            const base64data = canvas.toDataURL( `image/png`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
 
-              bsz.y = maxDim * ( bsz.y / bsz.x );
-              bsz.x = maxDim;
+            // Convert to Uint8Array PNG data
 
-            } else {
+            const b = atob( base64data );
+            const data = new Uint8Array( b.length );
 
-              bsz.x = maxDim * ( bsz.x / bsz.y );
-              bsz.y = maxDim;
+            for ( let i = 0, l = data.length; i < l; i ++ ) {
+
+              data[ i ] = b.charCodeAt( i );
 
             }
 
-            const renderTarget = new WebGLRenderTarget(
-              bsz.x | 0,
-              bsz.y | 0,
-              {
-                generateMipmaps: true,
-                minFilter: LinearMipmapLinearFilter,
-                magFilter: LinearFilter,
-              }
-            );
- 
-            renderer.setRenderTarget( renderTarget );
-
-            let sv = scene.background;
-            scene.background = null;
-            renderer.setClearAlpha( 0 );
-            renderer.render( scene, camera );
-
-            const width = renderTarget.width;
-            const height = renderTarget.height;
-            const size = width * height * 4; // 4 components (RGBA) per pixel
-            const buffer = new Uint8Array( size );
-
-            // Read the pixels
-
-            renderer.readRenderTargetPixels(
-              renderTarget,
-              0,
-              0,
-              width,
-              height,
-              buffer
-            );
-
-            // Create a canvas to transfer the pixel data
-
-            const canvas = document.createElement("canvas");
-            canvas.width = width;
-            canvas.height = height;
-            const context = canvas.getContext("2d");
-
-            // Create ImageData and put the render target pixels into it
-
-            const imageData = new ImageData(
-              new Uint8ClampedArray( buffer ),
-              width,
-              height
-            );
-
-            context.putImageData( imageData, 0, 0 );
-
-            params.canvas = canvas;
-
-            scene.background = sv;
-
-            renderer.setClearAlpha( 1 );
-            renderer.setRenderTarget( null );
-
-            return renderTarget.texture;
+            return data;
 
           }
 
