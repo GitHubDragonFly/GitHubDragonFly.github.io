@@ -68,6 +68,7 @@ Entries currently not compatible with the `assimp` library but working fine in t
  - `-w` - texture wrapping parameters (`wrapS` and `wrapT`)
  - `Pns` - normalScale
  - `Pcn` - clearcoatNormalScale
+ - `Pdt` - depthTest
  - `Pli` - lightMapIntensity
  - `disp_b` - displacementBias
  - `disp_s` - displacementScale
