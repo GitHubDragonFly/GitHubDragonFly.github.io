@@ -468,35 +468,35 @@ class DSTLoader extends Loader {
 
           if ( ! opts.map ) {
 
-          // Export renderer's screen as PNG image
+            // Export renderer's screen as PNG image
 
-          // DST Viewer is set for on-demand rendering and not to auto clear
-          // but preserveDrawingBuffer code should be enabled in other apps
+            // DST Viewer is set for on-demand rendering and not to auto clear
+            // but preserveDrawingBuffer code should be enabled in other apps
 
-          //renderer.preserveDrawingBuffer = true;
+            //renderer.preserveDrawingBuffer = true;
 
-          renderer.render( scene, camera );
+            renderer.render( scene, camera );
 
-          const image = renderer.domElement.toDataURL( 'image/png' );
+            const image = renderer.domElement.toDataURL( 'image/png' );
 
-          //renderer.preserveDrawingBuffer = false;
+            //renderer.preserveDrawingBuffer = false;
 
-          // Get the base64 encoded data
+            // Get the base64 encoded data
 
-          const base64data = image.replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+            const base64data = image.replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
 
-          // Convert PNG data to Uint8Array
+            // Convert PNG data to Uint8Array
 
-          const b = atob( base64data );
-          const data = new Uint8Array( b.length );
+            const b = atob( base64data );
+            const data = new Uint8Array( b.length );
 
-          for ( let i = 0, l = data.length; i < l; i ++ ) {
+            for ( let i = 0, l = data.length; i < l; i ++ ) {
 
-            data[ i ] = b.charCodeAt( i );
+              data[ i ] = b.charCodeAt( i );
 
-          }
+            }
 
-          return data;
+            return data;
 
           }
 
