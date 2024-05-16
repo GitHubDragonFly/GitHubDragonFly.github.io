@@ -49,8 +49,9 @@ Else, copy any of the following links and then paste it within the `URL` option 
 - access to some PCD example files at [Point Cloud Library (PCL)](https://github.com/PointCloudLibrary):
   - `https://raw.githubusercontent.com/PointCloudLibrary/pcl/master/test/bunny.pcd`
   - `https://raw.githubusercontent.com/PointCloudLibrary/pcl/master/test/ism_train.pcd`
-- access to some XYZ example files, the pdf file includes a link to a repository on Page 4:
+- access to some XYZ example files:
   - `https://orbi.uliege.be/bitstream/2268/254933/1/TDS_generate_3D_meshes_with_python.pdf`
+    - this pdf file includes a link to a repository with examples on Page 4
   - `https://people.math.sc.edu/Burkardt/data/xyz/xyz.html`
 - access to some 3DM (Rhino3D) example files at [rview](https://github.com/mcneel/rview/tree/main/public/samples):
   - `https://raw.githubusercontent.com/mcneel/rview/main/public/samples/Drill.3dm`
