@@ -70,7 +70,7 @@ Else, copy any of the following links and then paste it within the `URL` option 
     - `https://raw.githubusercontent.com/GitHubDragonFly/GitHubDragonFly.github.io/main/viewers/examples/legacy_json/human_walk_0_female.js`
 - other examples:
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.obj`
-  - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/male02_dds.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/male02.obj`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/dds/male02.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/dds/male02.obj`
   - `https://raw.githubusercontent.com/robertlong/GLTFExporterTextureSizes/master/BlendToFBX/Atrium.fbx`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/three/scene.json`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/vrml/cow.wrl`
