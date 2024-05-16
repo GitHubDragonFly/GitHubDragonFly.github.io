@@ -3849,47 +3849,56 @@ class GLTFParser {
 
 		} else {
 
-			if ( source.uri && ( source.uri === '$texture_dummy.bmp' || source.uri === 'default.bmp' || source.uri === 'any_texture' ) && options.resourcePath !== '' ) {
+			if ( source.uri ) {
 
-				source.uri = options.resourcePath;
+				if ( source.uri.startsWith( '/' ) === true ) {
 
-			} else if ( source.uri && source.uri.includes( '/' ) === true && options.resourcePath !== '' ) {
+					source.uri = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
+					( source.name === undefined ) ? source[ 'name' ] = source.uri : source.name = source.uri;
 
-				source.uri = options.resourcePath + source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
-				( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
+				} else if ( ( source.uri === '$texture_dummy.bmp' || source.uri === 'default.bmp' || source.uri === 'any_texture' ) && options.resourcePath !== '' ) {
 
-			} else if ( source.uri && source.uri.includes( '\\' ) === true && options.resourcePath !== '' ) {
+					source.uri = options.resourcePath;
 
-				source.uri = options.resourcePath + source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
-				( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
+				} else if ( source.uri.includes( '/' ) === true && options.resourcePath !== '' ) {
 
-			} else if ( source.uri && options.resourcePath !== '' && source.uri.startsWith( options.resourcePath ) === false ) {
+					source.uri = options.resourcePath + source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
+					( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
 
-				source.uri = options.resourcePath + source.uri;
-				( source.name === undefined ) ? source[ 'name' ] = source.uri : source.name = source.uri;
+				} else if ( source.uri.includes( '\\' ) === true && options.resourcePath !== '' ) {
 
-			} else if ( source.uri && source.uri[ 1 ] && source.uri[ 1 ] === ':' ) {
+					source.uri = options.resourcePath + source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
+					( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 );
 
-				// Local drives, like C: or Z:
+				} else if ( options.resourcePath !== '' && source.uri.startsWith( options.resourcePath ) === false ) {
 
-				if ( source.uri[ 2 ] && source.uri[ 2 ] === '/' ) {
+					( source.name === undefined ) ? source[ 'name' ] = source.uri : source.name = source.uri;
+					source.uri = options.resourcePath.endsWith( source.uri ) ? options.resourcePath : options.resourcePath + source.uri;
 
-					let delimiter = ( ( source.uri.includes( '\\' ) === true ) && ( source.uri.lastIndexOf( '\\' ) > source.uri.lastIndexOf( '/' ) ) ) ? '\\' : '/';
-					source.uri = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
-					( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
+				} else if ( source.uri[ 1 ] && source.uri[ 1 ] === ':' ) {
 
-				} else if ( source.uri[ 2 ] && source.uri[ 2 ] === '\\' ) {
+					// Local drives, like C: or Z:
 
-					let delimiter = ( ( source.uri.includes( '/' ) === true ) && ( source.uri.lastIndexOf( '/' ) > source.uri.lastIndexOf( '\\' ) ) ) ? '/' : '\\';
-					source.uri = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
-					( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
+					if ( source.uri[ 2 ] && source.uri[ 2 ] === '/' ) {
+
+						let delimiter = ( ( source.uri.includes( '\\' ) === true ) && ( source.uri.lastIndexOf( '\\' ) > source.uri.lastIndexOf( '/' ) ) ) ? '\\' : '/';
+						source.uri = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
+						( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
+
+					} else if ( source.uri[ 2 ] && source.uri[ 2 ] === '\\' ) {
+
+						let delimiter = ( ( source.uri.includes( '/' ) === true ) && ( source.uri.lastIndexOf( '/' ) > source.uri.lastIndexOf( '\\' ) ) ) ? '/' : '\\';
+						source.uri = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
+						( source.name === undefined ) ? source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 ) : source.name = source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 );
+
+					}
 
 				}
 
 			}
 
 		}
-		
+
 		if ( source.uri && source.uri.toLowerCase().endsWith( '.tga' ) || ( source.name && source.name.toLowerCase().endsWith( '.tga' ) ) ) {
 
 			loader = options.manager.getHandler( '.tga' ); 
@@ -3929,6 +3938,31 @@ class GLTFParser {
 
 			source.mimeType = 'image/exr';
 
+		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.pcx' ) || ( source.name && source.name.toLowerCase().endsWith( '.pcx' ) ) ) {
+
+			if ( ! PCX ) {
+
+				console.warn( 'THREE.GLTFLoader: Loading PCX images requires the following browser import script:' );
+				console.warn( '<script src="https://cdn.jsdelivr.net/npm/pcx-js@1.1.0/js/pcx.min.js"></script>' );
+
+			} else {
+
+				if ( source.uri.includes( '/' ) === true ) {
+
+					source[ 'name' ] = source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 );
+
+				} else {
+
+					source[ 'name' ] = source.uri;
+
+				}
+
+				source.uri = await this.processPCXImage( source.uri );
+
+				source.mimeType = 'image/x-pcx';
+
+			}
+
 		} else if ( source.uri ) {
 
 			let handler = options.manager.getHandler( source.uri.toLowerCase().substring( source.uri.lastIndexOf( '.' ) ) );
@@ -3949,18 +3983,21 @@ class GLTFParser {
 		let any_texture = false;
 		let blobs = options.resourcePath.split( ',' );
 
-		if ( source.uri && source.uri.includes( '/' ) === true ) {
+		if ( source.uri ) {
 
-			let delimiter = ( ( source.uri.includes( '\\') === true ) && ( source.uri.lastIndexOf( '\\') > source.uri.lastIndexOf( '/') ) ) ? '\\' : '/';
-			temp_name = ( source.uri.substring( source.uri.lastIndexOf( delimiter ) + 1 ) ).toUpperCase();
+			if ( source.uri.includes( '/' ) === true ) {
 
-		} else if ( source.uri && source.uri.includes( '\\' ) === true ) {
+				temp_name = ( source.uri.substring( source.uri.lastIndexOf( '/' ) + 1 ) ).toUpperCase();
 
-			temp_name = ( source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 ) ).toUpperCase();
+			} else if ( source.uri.includes( '\\' ) === true ) {
 
-		} else if ( source.uri && ( source.uri === '$texture_dummy.bmp' || source.uri === 'default.bmp' || source.uri === 'any_texture' ) ) {
+				temp_name = ( source.uri.substring( source.uri.lastIndexOf( '\\' ) + 1 ) ).toUpperCase();
 
-			any_texture = true;
+			} else if ( source.uri === '$texture_dummy.bmp' || source.uri === 'default.bmp' || source.uri === 'any_texture' ) {
+
+				any_texture = true;
+
+			}
 
 		}
 
@@ -4049,6 +4086,45 @@ class GLTFParser {
 
 	}
 
+	async processPCXImage( pcx_file_url ) {
+
+		let response = await fetch( pcx_file_url );
+		let buffer = await response.arrayBuffer();
+
+		// Use pcx-js to decode image
+
+		let pcx = new PCX( buffer );
+
+		// Create canvas and convert image to PNG
+
+		let canvas = document.createElement( 'canvas' );
+		let context = canvas.getContext( '2d' );
+
+		let pcx_data = pcx.decode( context );
+
+		// Resize canvas
+
+		context.canvas.width = pcx_data.width;
+		context.canvas.height = pcx_data.height;
+
+		let image_data = new ImageData( pcx_data.width, pcx_data.height );
+
+		image_data.data.set( pcx_data.pixelArray );
+
+		context.putImageData( image_data, 0, 0 );
+
+		let url;
+
+		await new Promise( resolve => {
+
+			resolve( url = canvas.toDataURL( 'image/png', 1 ) );
+
+		});
+
+		return url;
+
+	}
+
 	loadTextureImage( textureIndex, source, sourceIndex, loader ) {
 
 		const parser = this;
@@ -4063,7 +4139,8 @@ class GLTFParser {
 
 			}
 
-		} else if ( options.resourcePath.includes( ',' ) === true && source.uri && ( source.uri.toLowerCase().endsWith( '.ktx2' ) || source.uri.toLowerCase().endsWith( '.avif' ) ) ) {
+		} else if ( options.resourcePath.includes( ',' ) === true && source.uri &&
+			( source.uri.toLowerCase().endsWith( '.ktx2' ) || source.uri.toLowerCase().endsWith( '.avif' ) ) ) {
 
 			this.processLocalBlobs( source, options );
 
