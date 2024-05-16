@@ -186,7 +186,7 @@ Number Type Converter
   - URLs should have no CORS restrictions
 - Import formats, where applicable, with any optional or required textures:
   - 3DS, 3DM, 3MF, AMF, DAE, FBX, IFC, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, PRWM, USDZ, WRL, XYZ
-  - GLTF supported formats: GLB, GLTF + BIN, DRC
+  - GLTF supported formats: GLB, GLTF + BIN, DRC, VRM
   - GCODE supported formats: GCODE, NCC, NGC
   - LDRAW supported formats: DAT, L3B, LDR, MPD
   - MMD ( Miku Miku Dance ) supported formats: PMD, PMX, VMD, VPD, SPA, SPH, MP3, OGG
@@ -360,7 +360,10 @@ PLY+STL Viewer
 
 # Notes about three.js Texture Viewer
 
-- Supporting PNG, APNG, JPG, JPEG, JFIF, PJPEG, PJP, BMP, DIB, GIF, TIF, TIFF, WEBP, TGA, SVG, DDS, KTX, KTX2, EXR, HDR, BASIS and Lottie JSON texture files as well as MP4 / WEBM / OGV video files and M4A / M4B / OGG audio files
+- Supporting the following image formats:
+  - PNG, APNG, JPG, JPEG, JFIF, PJPEG, PJP, BMP, DIB, GIF, PCX, TIF, TIFF
+  - WEBP, TGA, SVG, DDS, KTX, KTX2, EXR, HDR, BASIS and Lottie JSON
+  - Also supported are: MP4 / WEBM / OGV video files and M4A / M4B / OGG audio files
 - It is using [gainmap-js](https://github.com/MONOGRID/gainmap-js) encoder and decoder:
   - Support loading a single JPEG file with integrated gainmaps
   - Support loading EXR and HDR files which will be encoded on-the-fly into a single JPEG file with integrated gainmaps
@@ -370,6 +373,7 @@ PLY+STL Viewer
 - Animated WEBP file is displayed with [THREE.CSS2DRenderer](https://threejs.org/docs/#examples/en/renderers/CSS2DRenderer)
 - All of the above animated files are "view only" so most viewer controls will not have any effect and will be disabled
 - TIF / TIFF image file support is powered by [UTIF.js](https://github.com/photopea/UTIF.js)
+- PCX image file support is powered by [pcx-js](https://github.com/warpdesign/pcx-js)
 - Use the `T` button to switch between textures
 - Texture is displayed on a rotatable plane which can also be moved and zoomed in / out:
   - This is not applicable to Animated GIF - PNG - WEBP and / or video files (gizmo will disappear)
