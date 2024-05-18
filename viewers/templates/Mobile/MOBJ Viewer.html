@@ -241,12 +241,10 @@
       var pmremGenerator, directionalLight, bounding_box, flat_shading_enabled;
       var controls, orb_controls, mouse_down, mouse_wheel, events_initialized;
       var ww = window.innerWidth, wh = window.innerHeight, isMobile;
-      var selected_url_file = '', selected_obj_url_file, texture_maps;
       var first_run, fr_count, wireframe_enabled, room_env, count = 0;
       var selected_mtl_file, selected_mtl_url_file, selected_obj_file;
       var url_displayed = false, url_loading = false, vertex_colors_enabled;
-      var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif;
-      var texture_files_svg, texture_files_dds, texture_files_tga, texture_files_webp;
+      var selected_url_file = '', selected_obj_url_file, textures, texture_maps;
 
       function set_back_color() {
         scene.background = null;
@@ -313,6 +311,8 @@
       }
 
       async function init() {
+        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+
         if (scene) {
           if (Obj) {
             if (wireframe_enabled === true) show_wireframe();
@@ -323,33 +323,38 @@
               if (child.isMesh || child.isPoints) {
                 if (child.material) {
                   if (Array.isArray( child.material )) {
-                  child.material.forEach( mtrl => {
-                    for (const prop in mtrl) {
+                    child.material.forEach( mtrl => {
+                      for (const prop in mtrl) {
+                        texture_maps.forEach( tex_map => {
+                          if (prop === tex_map) {
+                            if (mtrl[ prop ]) mtrl[ prop ].dispose();
+                          }
+                        });
+                      };
+
+                      mtrl.dispose();
+                    });
+                  } else {
+                    for (const prop in child.material) {
                       texture_maps.forEach( tex_map => {
                         if (prop === tex_map) {
-                          if (mtrl[ prop ]) mtrl[ prop ].dispose();
+                          if (child.material[ prop ]) child.material[ prop ].dispose();
                         }
                       });
                     };
 
-                    mtrl.dispose();
-                  });
-                } else {
-                  for (const prop in child.material) {
-                    texture_maps.forEach( tex_map => {
-                      if (prop === tex_map) {
-                        if (child.material[ prop ]) child.material[ prop ].dispose();
-                      }
-                    });
-                  };
-
-                  child.material.dispose();
-                }
+                    child.material.dispose();
+                  }
                 }
 
                 child.geometry.dispose();
               }
             });
+          }
+
+          if (isMobile === false) {
+            renderer.info.reset();
+            renderer.resetState();
           }
 
           mouse_wheel = true;
@@ -382,14 +387,7 @@
         object_is_points = false;
         mouse_down = false;
         mouse_wheel = true;
-        texture_files_jpg = [];
-        texture_files_png = [];
-        texture_files_bmp = [];
-        texture_files_gif = [];
-        texture_files_svg = [];
-        texture_files_webp = [];
-        texture_files_dds = [];
-        texture_files_tga = [];
+        textures = [];
         flat_shading_enabled = false;
         vertex_colors_enabled = false;
         wireframe_enabled = false;
@@ -404,24 +402,17 @@
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
         if (url_loading === false) {
+          let img_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
+
           // Loaded file(s)
           let fi = document.getElementById('file_input');
 
-          // Include check for JPG/PNG/BMP/GIF/TIF, SVG, TGA and DDS (DirectDraw Surface container file format)
           for (let i = 0; i < fi.files.length; i++) {
             let fn_uc = fi.files[ i ].name.toUpperCase();
 
             if (fn_uc.endsWith('.OBJ')) { selected_obj_file = fi.files[ i ]; }
             else if (fn_uc.endsWith('.MTL')) { selected_mtl_file = fi.files[ i ]; }
-            else if (fn_uc.endsWith('.TGA')) { texture_files_tga.push( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.DDS')) { texture_files_dds.push( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.DIB')) { texture_files_bmp.push( fi.files[ i ] ); }
-            else if (fi.files[ i ].type.startsWith('image/png')) { texture_files_png.push( fi.files[ i ] ); }
-            else if (fi.files[ i ].type.startsWith('image/jpeg')) { texture_files_jpg.push( fi.files[ i ] ); }
-            else if (fi.files[ i ].type.startsWith('image/bmp')) { texture_files_bmp.push( fi.files[ i ] ); }
-            else if (fi.files[ i ].type.startsWith('image/gif')) { texture_files_gif.push( fi.files[ i ] ); }
-            else if (fi.files[ i ].type.startsWith('image/svg+xml')) { texture_files_svg.push( fi.files[ i ] ); }
-            else if (fi.files[ i ].type.startsWith('image/webp')) { texture_files_webp.push( fi.files[ i ] ); }
+            else if (img_extensions.some( ext => fn_uc.endsWith( ext ) )) { textures.push( fi.files[ i ] ); }
           };
 
           if (selected_obj_file === null) {
@@ -488,7 +479,9 @@
 
         if (scene.environment === null) {
           pmremGenerator = new THREE.PMREMGenerator( renderer );
-          scene.environment = pmremGenerator.fromScene( new room_env(), .005 ).texture;
+          const tex = pmremGenerator.fromScene( new room_env(), .005 ).texture;
+          scene.environment = tex;
+          tex.dispose();
         }
 
         // Load the Obj file
@@ -500,57 +493,17 @@
           mtl_loader.load( URL.createObjectURL( selected_mtl_file ), ( mtl ) => {
             URL.revokeObjectURL( selected_mtl_file );
 
-            if (texture_files_png.length > 0 || texture_files_jpg.length > 0 || texture_files_bmp.length > 0 || texture_files_gif.length > 0 || texture_files_svg.length > 0 || texture_files_webp.length > 0 || texture_files_tga.length > 0 || texture_files_dds.length > 0) {
-              if (texture_files_png.length > 0) {
-                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
-                  texture_files_png.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
-                }
-              }
+            if (textures.length > 0) {
+              for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
+                textures.forEach( file => {
+                  let fn_uc = file.name.toUpperCase();
 
-              if (texture_files_jpg.length > 0) {
-                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
-                  texture_files_jpg.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
-                }
-              }
+                  if (fn_uc.endsWith('.DDS') === true || fn_uc.endsWith('.TGA') === true) {
+                    mtl.materialsInfo[ key ][ 'ext' ] = fn_uc.endsWith('.DDS') === true ? '.dds' : '.tga';
+                  }
 
-              if (texture_files_bmp.length > 0) {
-                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
-                  texture_files_bmp.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
-                }
-              }
-
-              if (texture_files_gif.length > 0) {
-                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
-                  texture_files_gif.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
-                }
-              }
-
-              if (texture_files_svg.length > 0) {
-                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
-                  texture_files_svg.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
-                }
-              }
-
-              if (texture_files_webp.length > 0) {
-                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
-                  texture_files_webp.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
-                }
-              }
-
-              if (texture_files_tga.length > 0) {
-                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
-                  mtl.materialsInfo[ key ][ 'ext' ] = '.tga';
-
-                  texture_files_tga.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
-                }
-              }
-
-              if (texture_files_dds.length > 0) {
-                for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
-                  mtl.materialsInfo[ key ][ 'ext' ] = '.dds';
-
-                  texture_files_dds.forEach( file => { set_mtl_materialsInfo( key, value, file, mtl ) });
-                }
+                  set_mtl_materialsInfo( key, value, file, mtl )
+                });
               }
             } else {
               mtl.preload();
@@ -596,7 +549,7 @@
                       set_texture_colorSpace( mtrl );
                       mtrl.vertexColors = vertex_colors_enabled;
 
-                      if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 0.5;
+                      if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 1.25;
 
                       mtrl.needsUpdate = true;
                     });
@@ -609,7 +562,7 @@
                     set_texture_colorSpace( child.material );
                     child.material.vertexColors = vertex_colors_enabled;
 
-                    if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 0.5;
+                    if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 1.25;
 
                     child.material.needsUpdate = true;
                   }
@@ -665,14 +618,14 @@
                   child.material.forEach( mtrl => {
                     mtrl.vertexColors = vertex_colors_enabled;
 
-                    if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 0.5;
+                    if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 1.25;
 
                     mtrl.needsUpdate = true;
                   });
                 } else {
                   child.material.vertexColors = vertex_colors_enabled;
 
-                  if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 0.5;
+                  if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 1.25;
 
                   child.material.needsUpdate = true;
                 }
@@ -786,7 +739,7 @@
 
                             mtrl.vertexColors = vertex_colors_enabled;
 
-                            if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 0.5;
+                            if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 1.25;
 
                             mtrl.needsUpdate = true;
                           });
@@ -801,7 +754,7 @@
 
                           child.material.vertexColors = vertex_colors_enabled;
 
-                          if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 0.5;
+                          if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 1.25;
 
                           child.material.needsUpdate = true;
                         }
@@ -850,7 +803,7 @@
 
                           mtrl.vertexColors = vertex_colors_enabled;
 
-                          if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 0.5;
+                          if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 1.25;
 
                           mtrl.needsUpdate = true;
                         });
@@ -859,7 +812,7 @@
 
                         child.material.vertexColors = vertex_colors_enabled;
 
-                        if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 0.5;
+                        if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 1.25;
 
                         child.material.needsUpdate = true;
                       }
@@ -916,14 +869,14 @@
                     child.material.forEach( mtrl => {
                       mtrl.vertexColors = vertex_colors_enabled;
 
-                      if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 0.5;
+                      if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 1.25;
 
                       mtrl.needsUpdate = true;
                     });
                   } else {
                     child.material.vertexColors = vertex_colors_enabled;
 
-                    if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 0.5;
+                    if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 1.25;
 
                     child.material.needsUpdate = true;
                   }
@@ -969,7 +922,7 @@
         if (material.transmissionMap) material.transmissionMap.colorSpace = THREE.LinearSRGBColorSpace;
       }
 
-      function finish_loading() {
+      async function finish_loading() {
         enable_disable( false );
 
         if (object_is_points === true) {
@@ -988,6 +941,13 @@
         render_requested = true;
         mouse_wheel = true;
         render();
+
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 100 ) );
+      }
+
+      function log_info() {
+        console.log( 'Memory: ', renderer.info.memory );
+        console.log( 'Render: ', renderer.info.render );
       }
 
       function handle_error( error ) {
@@ -1107,13 +1067,6 @@
         document.getElementById('btn_quick_x').style.backgroundColor = 'transparent';
         document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
 
-        if (scene) {
-          if (scene.environment) {
-            scene.environment.dispose();
-            scene.environment = null;
-          }
-        }
-
         // Reset the view
         if (reset === true) {
           controls.reset();
@@ -1121,6 +1074,11 @@
         } else {
           // Page (re)loading
           if (scene) {
+            if (scene.environment) {
+              scene.environment.dispose();
+              scene.environment = null;
+            }
+
             if (Obj) {
               scene.remove( Obj );
 
