@@ -4139,6 +4139,26 @@ class GLTFParser {
 
 			}
 
+		} else if ( source.uri && source.uri.startsWith( '*' ) && ! source.name && ! source.bufferView ) {
+
+			// Possibly some sort of a pointer from ASSIMP, like *4 or other
+
+			if ( json.images.some( img => img.name && img.name.startsWith( source.uri.substring( 1 ) ) ) ) {
+
+				json.images.forEach( image => {
+
+					if ( image.name && image.name.startsWith( source.uri.substring( 1 ) ) && image.bufferView ) {
+
+						source[ 'name' ] = image.name;
+						source[ 'bufferView' ] = image.bufferView;
+						if ( image.mimeType ) source[ 'mimeType' ] = image.mimeType;
+
+					}
+
+				});
+
+			}
+
 		} else if ( options.resourcePath.includes( ',' ) === true && source.uri &&
 			( source.uri.toLowerCase().endsWith( '.ktx2' ) || source.uri.toLowerCase().endsWith( '.avif' ) ) ) {
 
