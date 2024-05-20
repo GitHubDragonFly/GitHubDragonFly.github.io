@@ -21,6 +21,7 @@ The `M3D` button, which stands for `Mobile 3D`, provides access to stripped down
  - All mobile testing was done on an Android mobile phone and an iPad
  - Consider bookmarking the [mobile main page](https://githubdragonfly.github.io/viewers/templates/Mobile/index.html) for continuous access to all viewers
  - Consider bookmarking any single viewer's link for continuous access to that particular viewer
+ - Consider using WiFi connection, whenever possible, since the library files still need to be downloaded
 
 GitHub servers are providing correct access to all files:
   - cloning or downloading this repository and using it offline will have a somewhat reduced functionality if run locally without some server
