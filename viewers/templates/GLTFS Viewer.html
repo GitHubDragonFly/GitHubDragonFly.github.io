@@ -273,23 +273,6 @@
         height: 15px;
       }
 
-      .fm {
-        color: navy;
-        width: calc(100% - 86px);
-        border: 1px solid navy;
-        -webkit-border-radius: 2px;
-        border-radius: 2px;
-        padding: 4px;
-        margin: 1px;
-      }
-
-      .fm_gizmo {
-        width: 63px;
-        height: 63px;
-        padding: 4px;
-        margin: 2px;
-      }
-
       #gui_position {
         position: absolute;
         display: none;
@@ -299,6 +282,23 @@
         border-radius: 2px;
         min-height: 22px;
         margin-left: 2px;
+      }
+
+      .fm_gizmo {
+        width: 63px;
+        height: 63px;
+        padding: 4px;
+        margin: 2px;
+      }
+
+      .fm {
+        color: navy;
+        width: calc(100% - 86px);
+        border: 1px solid navy;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        padding: 4px;
+        margin: 1px;
       }
 
       .fixed-menu {
@@ -785,10 +785,9 @@
       var lines_present, lines_visible, bounding_box, zip, outline_material;
       var random_vertex_colors_enabled, random_vertex_color_array, current_colors;
       var vertex_colors_enabled, original_vertex_colors, original_vertex_color_array;
-      var texture_files_svg, texture_files_webp, texture_files_ktx2, texture_files_tga;
-      var texture_files_png, texture_files_jpg, texture_files_bmp, texture_files_gif, texture_files_dds;
-      var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
-      var selected_gltf_file, bin_buffer_files, selected_draco_file, selected_url_file = '', selected_gltf_url_file;
+      var local_files, local_files_indexes, local_bin_files, slider_height = 0;
+      var url_displayed = false, url_loading = false, menu_location_bottom = false;
+      var selected_gltf_file, selected_draco_file, selected_url_file = '', selected_gltf_url_file;
 
       function start_export() {
         if (!link) {
@@ -1583,6 +1582,16 @@
       }
 
       async function set_equi() {
+        if (scene.environment) {
+          scene.environment.dispose();
+          scene.environment = null;
+        }
+
+        if (scene.background) {
+          scene.background.dispose();
+          scene.background = null;
+        }
+
         if (equi_enabled === false) {
           if (gui_set === false) {
             gui.add( params, 'toneMapping', Object.keys( toneMappingOptions ) )
@@ -1662,19 +1671,13 @@
         } else {
           if (gui) gui_reset();
 
-          scene.background.dispose();
-          scene.background = null;
-          scene.environment.dispose();
-          scene.environment = null;
-
           if (document.getElementById('file_image_input').value !== '') {
             set_scene_image();
           }
 
           scene.backgroundBlurriness = 0.00001;
-          scene.backgroundIntensity = 0.95;
+          scene.backgroundIntensity = 1.0;
 
-          document.getElementById('file_image_input').disabled = false;
           document.getElementById('back_color').disabled = false;
           document.getElementById('btn_bgnd_linear_gradient').disabled = false;
 
@@ -1690,10 +1693,10 @@
       function gui_reset() {
         params.toneMapping = 'Linear';
         renderer.toneMapping = THREE.LinearToneMapping;
-        renderer.toneMappingExposure = params.exposure = 0.95;
+        renderer.toneMappingExposure = params.exposure = 1.0;
         params.backBlurriness = 0.0;
-        params.backIntensity = 0.95;
-        params.envMapIntensity = 0.95;
+        params.backIntensity = 1.0;
+        params.envMapIntensity = 1.0;
 
         mouse_wheel = true;
 
@@ -2399,6 +2402,12 @@
             }
           });
 
+          if (draco_material) {
+            if (draco_material.map) draco_material.map.dispose();
+            draco_material.dispose();
+            draco_material = null;
+          }
+
           if (gui) gui_reset();
 
           if (gizmo) {
@@ -2406,8 +2415,10 @@
             gizmo = undefined;
           }
 
-          renderer.info.reset();
-          renderer.resetState();
+          if (isMobile === false) {
+            renderer.info.reset();
+            renderer.resetState();
+          }
 
           reset_all( true );
         }
@@ -2431,10 +2442,10 @@
         if (params === undefined) {
           params = {
             toneMapping: 'Linear',
-            envMapIntensity: 0.95,
+            envMapIntensity: 1.0,
             backBlurriness: 0.0,
-            backIntensity: 0.95,
-            exposure: 0.95
+            backIntensity: 1.0,
+            exposure: 1.0
           };
         }
 
@@ -2446,7 +2457,7 @@
           ACESFilmic: THREE.ACESFilmicToneMapping
         };
 
-        outline_material = new THREE.LineBasicMaterial( { color: 0xFF0000 } );
+        if (outline_material === undefined) outline_material = new THREE.LineBasicMaterial( { color: 0xFF0000 } );
 
         selected_gltf_file = null;
         selected_gltf_url_file = null;
@@ -2459,16 +2470,9 @@
         tex_fmt = '';
         tex_flip = false;
         tex_res = Infinity;
-        bin_buffer_files = [];
-        texture_files_png = [];
-        texture_files_jpg = [];
-        texture_files_bmp = [];
-        texture_files_gif = [];
-        texture_files_svg = [];
-        texture_files_dds = [];
-        texture_files_tga = [];
-        texture_files_webp = [];
-        texture_files_ktx2 = [];
+        local_files = null;
+        local_bin_files = [];
+        local_files_indexes = [];
         current_side = 'OS';
         resource_path = '';
         variants = null;
@@ -2529,27 +2533,22 @@
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
         if (url_loading === false) {
-          // Loaded file(s)
-          let fi = document.getElementById('file_input');
+          let image_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF', '.KTX2',
+            '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
 
-          for (let i = 0; i < fi.files.length; i++) {
-            let fn_uc = fi.files[ i ].name.toUpperCase();
+          // Loaded file(s)
+          local_files = document.getElementById('file_input').files;
+
+          for (let i = 0; i < local_files.length; i++) {
+            let fn_uc = local_files[ i ].name.toUpperCase();
 
             if (fn_uc.endsWith('.GLB') || fn_uc.endsWith('.GLTF') || fn_uc.endsWith('.VRM')) {
-              selected_gltf_file = fi.files[ i ];
+              selected_gltf_file = i;
               if (fn_uc.endsWith('.VRM')) vrm = true;
             }
-            else if (fn_uc.endsWith('.DRC')) { selected_draco_file = fi.files[ i ]; }
-            else if (fn_uc.endsWith('.BIN')) { bin_buffer_files.push( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.DDS')) { texture_files_dds.push( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.TGA')) { texture_files_tga.push( fi.files[ i ] ); }
-            else if (fn_uc.endsWith('.KTX2')) { texture_files_ktx2.push( fi.files[ i ] ); }
-            else if (fi.files[ i ].type === 'image/jpeg') { texture_files_jpg.push( fi.files[ i ] ); }
-            else if (fi.files[ i ].type === 'image/png') { texture_files_png.push( fi.files[ i ] ); }
-            else if (fi.files[ i ].type === 'image/bmp') { texture_files_bmp.push( fi.files[ i ] ); }
-            else if (fi.files[ i ].type === 'image/gif') { texture_files_gif.push( fi.files[ i ] ); }
-            else if (fi.files[ i ].type === 'image/svg+xml') { texture_files_svg.push( fi.files[ i ] ); }
-            else if (fi.files[ i ].type === 'image/webp') { texture_files_webp.push( fi.files[ i ] ); }
+            else if (fn_uc.endsWith('.DRC')) { selected_draco_file = i; }
+            else if (fn_uc.endsWith('.BIN')) { local_bin_files.push( i ); }
+            else if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) { local_files_indexes.push( i ); }
           };
 
           if (selected_gltf_file === null && selected_draco_file === null) {
@@ -2557,73 +2556,17 @@
             return;
           }
 
-          if (bin_buffer_files.length > 0) {
-            bin_buffer_files.forEach( file => {
-              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
-              URL.revokeObjectURL( file );
+          if (local_bin_files.length > 0) {
+            local_bin_files.forEach( file_index => {
+              resource_path += local_files[ file_index ].name + ',' + URL.createObjectURL( local_files[ file_index ] ) + ',';
+              URL.revokeObjectURL( local_files[ file_index ] );
             });
           }
 
-          if (texture_files_png.length > 0) {
-            texture_files_png.forEach( file => {
-              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
-              URL.revokeObjectURL( file );
-            });
-          }
-
-          if (texture_files_jpg.length > 0) {
-            texture_files_jpg.forEach( file => {
-              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
-              URL.revokeObjectURL( file );
-            });
-          }
-
-          if (texture_files_bmp.length > 0) {
-            texture_files_bmp.forEach( file => {
-              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
-              URL.revokeObjectURL( file );
-            });
-          }
-
-          if (texture_files_gif.length > 0) {
-            texture_files_gif.forEach( file => {
-              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
-              URL.revokeObjectURL( file );
-            });
-          }
-
-          if (texture_files_svg.length > 0) {
-            texture_files_svg.forEach( file => {
-              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
-              URL.revokeObjectURL( file );
-            });
-          }
-
-          if (texture_files_dds.length > 0) {
-            texture_files_dds.forEach( file => {
-              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
-              URL.revokeObjectURL( file );
-            });
-          }
-
-          if (texture_files_tga.length > 0) {
-            texture_files_tga.forEach( file => {
-              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
-              URL.revokeObjectURL( file );
-            });
-          }
-
-          if (texture_files_ktx2.length > 0) {
-            texture_files_ktx2.forEach( file => {
-              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
-              URL.revokeObjectURL( file );
-            });
-          }
-
-          if (texture_files_webp.length > 0) {
-            texture_files_webp.forEach( file => {
-              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
-              URL.revokeObjectURL( file );
+          if (local_files_indexes.length > 0) {
+            local_files_indexes.forEach( file_index => {
+              resource_path += local_files[ file_index ].name + ',' + URL.createObjectURL( local_files[ file_index ] ) + ',';
+              URL.revokeObjectURL( local_files[ file_index ] );
             });
           }
 
@@ -2631,6 +2574,7 @@
         } else {
           // Reset the file input
           document.getElementById('file_input').value = '';
+          local_files_indexes.length = 0;
           url_loading = false;
         }
 
@@ -2763,8 +2707,8 @@
       }
 
       function loadFile() {
-        gltf_loader.load( URL.createObjectURL( selected_gltf_file ), async function( gltf ) {
-          URL.revokeObjectURL( selected_gltf_file );
+        gltf_loader.load( URL.createObjectURL( local_files[ selected_gltf_file ] ), async function( gltf ) {
+          URL.revokeObjectURL( local_files[ selected_gltf_file ] );
 
           parser = gltf.parser;
           scenes = gltf.scenes;
@@ -2897,67 +2841,44 @@
               }
 
               if (!gltf.parser.json.images) {
-                if (texture_files_ktx2.length > 0) {
-                  texture_files_ktx2.forEach( file => {
-                    ktx2_loader.load( URL.createObjectURL( file ) , function( texture ) {
-                      URL.revokeObjectURL( file );
+                // Use as a texture the first loaded image if any
 
-                      texture.colorSpace = THREE.SRGBColorSpace;
-                      texture.wrapS = THREE.RepeatWrapping;
-                      texture.wrapT = THREE.RepeatWrapping;
+                if (local_files_indexes.length > 0) {
+                  let loader;
 
-                      // Apply texture
-                      child.material.map = texture;
-                      child.material.needsUpdate = true;
-                    });
-                  });
-                } else if (texture_files_dds.length > 0) {
-                  texture_files_dds.forEach( file => {
-                    dds_loader.load( URL.createObjectURL( file ) , function( texture ) {
-                      URL.revokeObjectURL( file );
+                  let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
+                  let ext = uc_name.substring( uc_name.lastIndexOf( '.' ) + 1 );
 
-                      texture.colorSpace = THREE.SRGBColorSpace;
-                      texture.wrapS = THREE.RepeatWrapping;
-                      texture.wrapT = THREE.RepeatWrapping;
-                      texture.flipY = false;
+                  switch ( ext ) {
+                    case 'DDS':
+                      loader = dds_loader;
+                      break;
 
-                      // Apply texture
-                      child.material.map = texture;
-                      child.material.needsUpdate = true;
-                    });
-                  });
-                } else if (texture_files_tga.length > 0) {
-                  texture_files_tga.forEach( file => {
-                    tga_loader.load( URL.createObjectURL( file ) , function( texture ) {
-                      URL.revokeObjectURL( file );
+                    case 'TGA':
+                      loader = tga_loader;
+                      break;
 
-                      texture.colorSpace = THREE.SRGBColorSpace;
-                      texture.wrapS = THREE.RepeatWrapping;
-                      texture.wrapT = THREE.RepeatWrapping;
-                      texture.flipY = true;
+                    case 'KTX2':
+                      loader = ktx2_loader;
+                      break;
 
-                      // Apply texture
-                      child.material.map = texture;
-                      child.material.needsUpdate = true;
-                    });
-                  });
-                } else if (texture_files_png.length > 0 || texture_files_jpg.length > 0 || texture_files_bmp.length > 0
-                   || texture_files_gif.length > 0 || texture_files_svg.length > 0 || texture_files_webp.length > 0) {
+                    default:
+                      loader = texture_loader;
+                      break;
+                  }
 
-                  let files = texture_check();
+                  loader.load( URL.createObjectURL( local_files[ local_files_indexes[ 0 ] ] ), function( texture ) {
+                    URL.revokeObjectURL( local_files[ local_files_indexes[ 0 ] ] );
 
-                  files.forEach( file => {
-                    texture_loader.load( URL.createObjectURL( file ) , function( texture ) {
-                      URL.revokeObjectURL( file );
+                    texture.colorSpace = THREE.SRGBColorSpace;
+                    texture.wrapS = THREE.RepeatWrapping;
+                    texture.wrapT = THREE.RepeatWrapping;
 
-                      texture.colorSpace = THREE.SRGBColorSpace;
-                      texture.wrapS = THREE.RepeatWrapping;
-                      texture.wrapT = THREE.RepeatWrapping;
+                    // Apply texture
+                    child.material.map = texture;
+                    child.material.needsUpdate = true;
 
-                      // Apply texture
-                      child.material.map = texture;
-                      child.material.needsUpdate = true;
-                    });
+                    texture.dispose();
                   });
                 }
               }
@@ -2984,153 +2905,67 @@
       }
 
       function loadDRACO() {
-        draco_loader.load( URL.createObjectURL( selected_draco_file ), function( geometry ) {
-          URL.revokeObjectURL( selected_draco_file );
+        draco_loader.load( URL.createObjectURL( local_files[ selected_draco_file ] ), function( geometry ) {
+          URL.revokeObjectURL( local_files[ selected_draco_file ] );
 
           if (!geometry.attributes.normal) geometry.computeVertexNormals();
+          geometry.normalizeNormals();
 
-          if (geometry.hasAttribute( 'color' )) {
-            vertex_colors_enabled = true;
-            original_vertex_colors[ 'child_0' ] = geometry.attributes.color.array;
-            document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-            document.getElementById('btn_random_vertex_colors').disabled = false;
-            random_vertex_changed();
-          }
+          // Use as a texture either the first loaded image or default
 
-          if (texture_files_ktx2.length > 0) {
-            texture_files_ktx2.forEach( file => {
-              ktx2_loader.load( URL.createObjectURL( file ), function( texture ) {
-                URL.revokeObjectURL( file );
+          if (local_files_indexes.length > 0) {
+            let loader;
 
-                texture.colorSpace = THREE.SRGBColorSpace;
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
+            let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
+            let ext = uc_name.substring( uc_name.lastIndexOf( '.' ) + 1 );
 
-                // Apply texture
-                draco_material = new THREE.MeshPhongMaterial({
-                  side: THREE.DoubleSide,
-                  map: texture,
-                  opacity: 1,
-                  transparent: true,
-                  vertexColors: vertex_colors_enabled
-                });
+            switch ( ext ) {
+              case 'DDS':
+                loader = dds_loader;
+                break;
 
-                gltf_obj = new THREE.Mesh( geometry, draco_material );
+              case 'TGA':
+                loader = tga_loader;
+                break;
 
-                gltf_obj.name = 'child_0';
-                initial_opacity[ gltf_obj.name ] = 1;
-                initial_rotation = gltf_obj.rotation;
+              case 'KTX2':
+                loader = ktx2_loader;
+                break;
 
-                // Add DRACO model to scene
-                scene.add( gltf_obj );
-                gltf_obj.position.set( 0, 0, 0 );
-                default_camera.lookAt( gltf_obj.position );
+              default:
+                loader = texture_loader;
+                break;
+            }
 
-                finish_loading();
+            loader.load( URL.createObjectURL( local_files[ local_files_indexes[ 0 ] ] ), function( texture ) {
+              URL.revokeObjectURL( local_files[ local_files_indexes[ 0 ] ] );
+
+              texture.colorSpace = THREE.SRGBColorSpace;
+              texture.wrapS = THREE.RepeatWrapping;
+              texture.wrapT = THREE.RepeatWrapping;
+
+              // Apply texture
+              draco_material = new THREE.MeshPhongMaterial({
+                side: THREE.DoubleSide,
+                map: texture,
+                opacity: 1,
+                transparent: true,
+                vertexColors: geometry.hasAttribute( 'color' )
               });
-            });
-          } else if (texture_files_dds.length > 0) {
-            texture_files_dds.forEach( file => {
-              dds_loader.load( URL.createObjectURL( file ), function( texture ) {
-                URL.revokeObjectURL( file );
 
-                texture.colorSpace = THREE.SRGBColorSpace;
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
-                texture.flipY = false;
+              gltf_obj = new THREE.Mesh( geometry, draco_material );
+              gltf_obj.name = 'child_0';
 
-                // Apply texture
-                draco_material = new THREE.MeshPhongMaterial({
-                  side: THREE.DoubleSide,
-                  map: texture,
-                  opacity: 1,
-                  transparent: true,
-                  vertexColors: vertex_colors_enabled
-                });
+              texture.dispose();
 
-                gltf_obj = new THREE.Mesh( geometry, draco_material );
+              // Add DRACO model to scene
+              scene.add( gltf_obj );
+              gltf_obj.position.set( 0, 0, 0 );
+              default_camera.lookAt( gltf_obj.position );
 
-                gltf_obj.name = 'child_0';
-                initial_opacity[ gltf_obj.name ] = 1;
-                initial_rotation = gltf_obj.rotation;
+              mouse_wheel = true;
 
-                // Add DRACO model to scene
-                scene.add( gltf_obj );
-                gltf_obj.position.set( 0, 0, 0 );
-                default_camera.lookAt( gltf_obj.position );
-
-                finish_loading();
-              });
-            });
-          } else if (texture_files_tga.length > 0) {
-            texture_files_tga.forEach( file => {
-              tga_loader.load( URL.createObjectURL( file ), function( texture ) {
-                URL.revokeObjectURL( file );
-
-                texture.colorSpace = THREE.SRGBColorSpace;
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
-                texture.flipY = true;
-
-                // Apply texture
-                draco_material = new THREE.MeshPhongMaterial({
-                  side: THREE.DoubleSide,
-                  map: texture,
-                  opacity: 1,
-                  transparent: true,
-                  vertexColors: vertex_colors_enabled
-                });
-
-                gltf_obj = new THREE.Mesh( geometry, draco_material );
-
-                gltf_obj.name = 'child_0';
-                initial_opacity[ gltf_obj.name ] = 1;
-                initial_rotation = gltf_obj.rotation;
-
-                // Add DRACO model to scene
-                scene.add( gltf_obj );
-                gltf_obj.position.set( 0, 0, 0 );
-                default_camera.lookAt( gltf_obj.position );
-
-                finish_loading();
-              });
-            });
-          } else if (texture_files_png.length > 0 || texture_files_jpg.length > 0 || texture_files_bmp.length > 0
-             || texture_files_gif.length > 0 || texture_files_svg.length > 0 || texture_files_webp.length > 0) {
-
-            let tex_files = texture_check();
-
-            tex_files.forEach( file => {
-              texture_loader.load( URL.createObjectURL( file ), function( texture ) {
-                URL.revokeObjectURL( file );
-
-                texture.colorSpace = THREE.SRGBColorSpace;
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
-                texture.flipY = false;
-
-                // Apply texture
-                draco_material = new THREE.MeshPhongMaterial({
-                  side: THREE.DoubleSide,
-                  map: texture,
-                  opacity: 1,
-                  transparent: true,
-                  vertexColors: vertex_colors_enabled
-                });
-
-                gltf_obj = new THREE.Mesh( geometry, draco_material );
-
-                gltf_obj.name = 'child_0';
-                initial_opacity[ gltf_obj.name ] = 1;
-                initial_rotation = gltf_obj.rotation;
-
-                // Add DRACO model to scene
-                scene.add( gltf_obj );
-                gltf_obj.position.set( 0, 0, 0 );
-                default_camera.lookAt( gltf_obj.position );
-
-                finish_loading();
-              });
+              finish_loading();
             });
           } else {
             let draco_texture = texture_loader.load( 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAzSURBVBhXFYrJDQAxDAIHl5tG9pWOI8/aICGunO9qP0JRNZqwltgspltKdtmfihNMoc0PFNkQjHSfyTIAAAAASUVORK5CYII=' );
@@ -3140,19 +2975,20 @@
               map: draco_texture,
               opacity: 1,
               transparent: true,
-              vertexColors: vertex_colors_enabled
+              vertexColors: geometry.hasAttribute( 'color' )
             });
 
             gltf_obj = new THREE.Mesh( geometry, draco_material );
-
             gltf_obj.name = 'child_0';
-            initial_opacity[ gltf_obj.name ] = 1;
-            initial_rotation = gltf_obj.rotation;
+
+            draco_texture.dispose();
 
             // Add DRACO model to scene
             scene.add( gltf_obj );
             gltf_obj.position.set( 0, 0, 0 );
             default_camera.lookAt( gltf_obj.position );
+
+            mouse_wheel = true;
 
             finish_loading();
           }
@@ -3161,6 +2997,8 @@
           URL.revokeObjectURL( selected_draco_file );
           handle_error( error );
         });
+
+        mouse_wheel = true;
       }
 
       async function loadURLFile() {
@@ -3349,8 +3187,10 @@
               });
 
               gltf_obj = new THREE.Mesh( geometry, draco_material );
-
               gltf_obj.name = 'child_0';
+
+              draco_texture.dispose();
+
               initial_opacity[ gltf_obj.name ] = 1;
               initial_rotation = gltf_obj.rotation;
 
@@ -3992,26 +3832,6 @@
         document.getElementById('div_error').style.display = 'block';
       }
 
-      function texture_check() {
-        let tex_files;
-
-        if (texture_files_png.length > 0) {
-          tex_files = texture_files_png;
-        } else if (texture_files_jpg.length > 0) {
-          tex_files = texture_files_jpg;
-        } else if (texture_files_bmp.length > 0) {
-          tex_files = texture_files_bmp;
-        } else if (texture_files_gif.length > 0) {
-          tex_files = texture_files_gif;
-        } else if (texture_files_svg.length > 0) {
-          tex_files = texture_files_svg;
-        } else {
-          tex_files = texture_files_webp;
-        }
-
-        return tex_files;
-      }
-
       function update_line_visibility() {
         if (lines_visible === true) {
           lines_visible = false;
@@ -4556,8 +4376,16 @@
         gltf_obj.children.length = 0;
         extras.length = 0;
 
-        renderer.info.reset();
-        renderer.resetState();
+        if (draco_material) {
+          if (draco_material.map) draco_material.map.dispose();
+          draco_material.dispose();
+          draco_material = null;
+        }
+
+        if (isMobile === false) {
+          renderer.info.reset();
+          renderer.resetState();
+        }
 
         if (gui) gui_reset();
 
@@ -4785,6 +4613,12 @@
 
               gltf_obj.children.length = 0;
               extras.length = 0;
+            }
+
+            if (draco_material) {
+              if (draco_material.map) draco_material.map.dispose();
+              draco_material.dispose();
+              draco_material = null;
             }
 
             if (tex) tex.dispose();
