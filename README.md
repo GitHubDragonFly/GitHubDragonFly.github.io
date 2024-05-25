@@ -59,6 +59,13 @@ Main Menu Page (mobile)
 Number Type Converter
 ![Number Type Converter](images/Number%20Type%20Converter.png?raw=true)
 
+# Notes about nunuStudio Games and Experiences Examples
+
+- The [nunuStudio](https://github.com/tentone/nunuStudio) repository has not been updated in a while and appears to have some unresolved issues
+- This page is just an interface to nunuStudio games and experiences examples available in that repository
+- These examples are interesting and could keep you busy and entertained for a little while
+- The code of my page shows how to import and use the latest available version from CDN
+
 # Notes about three.js based 3D Model Viewers
 
 - They are functional `AS THEY ARE` and purely designed as an online convenience
