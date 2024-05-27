@@ -208,12 +208,6 @@ Number Type Converter
   - 3DM, BIM, DAE, APNG, FBX, STEP, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, OFF, PLY, STL, PRWM, USDZ
     - OFF exports are only available in the Quick Viewer, as stated further above
     - BIM exports are available in the Quick Viewer as well as some other viewers with custom BIM Exporter
-    - Try not to change file names when saving files during initial export
-    - Exporting some models might crash the browser when running out of memory 
-    - Exporting some models might be easier / better done with multiple viewers, examples:
-      - MMD -> OBJ and then OBJ -> JSON might be better than straight MMD -> JSON export
-      - IFC -> GLB and then GLB -> GLB_m (with MESHOPT compression) and then GLB_m -> GLB_d (with DRACO compression) might be easier than straight IFC -> GLB_d export
-    - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, USDZ modified exporters are [three.js](https://github.com/mrdoob/three.js) based
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm), with the following notes:
       - This is a custom exporter not officially available in the three.js library
       - It requires a modified version of the 3DM Loader, which is included in this repository
@@ -226,7 +220,7 @@ Number Type Converter
       - Exported 3dm files might not show properly in any other 3rd party 3DM viewer
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
     - ASSJSON, FBX, STEP, X3D and X exports are powered by [ASSIMPJS](https://github.com/kovacsv/assimpjs) and [ASSIMP](https://github.com/assimp/assimp):
-      - STEP exports don't appear to be optimizied in the assimp library so used only if needed
+      - STEP exports don't appear to be optimizied in the assimp library so use only if needed
     - Animated GIF export is based on mrdoob's [example](https://github.com/mrdoob/omggif-example) using [omggif](https://github.com/deanm/omggif) library:
       - currently set to 500 x 500 size in the centre of the window
       - the approximate GIF area rectangle will be shown during the GIF generation
@@ -245,6 +239,12 @@ Number Type Converter
       - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
       - currently set for full color PNG but can be changed to Lossy PNG to speed up processing (see the comment in the code)
     - JSON export is actually three.js created format
+    - Try not to change file names when saving files during initial export
+    - Exporting some models might crash the browser when running out of memory 
+    - Exporting some models might be easier / better done with multiple viewers, examples:
+      - MMD -> OBJ and then OBJ -> JSON might be better than straight MMD -> JSON export
+      - IFC -> GLB and then GLB -> GLB_m (with MESHOPT compression) and then GLB_m -> GLB_d (with DRACO compression) might be easier than straight IFC -> GLB_d export
+    - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, USDZ modified exporters are [three.js](https://github.com/mrdoob/three.js) based
     - USDZ exporter tips:
       - Handles GLTF / GLB formats the best due to their use of the THREE.MeshStandardMaterial
       - Optionally export your 3D model to GLB format first, including GLB files that might be using compressed textures, and then export it to USDZ format
