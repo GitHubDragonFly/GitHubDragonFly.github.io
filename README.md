@@ -61,10 +61,10 @@ Number Type Converter
 
 # Notes about nunuStudio Games and Experiences Examples
 
-- The [nunuStudio](https://github.com/tentone/nunuStudio) repository has not been updated in a while and appears to have some unresolved issues
-- This page is just an interface to nunuStudio games and experiences examples available in that repository
+- This page is just showcasing the [nunuStudio](https://github.com/tentone/nunuStudio) games and experiences examples
 - These examples are interesting and could keep you busy and entertained for a little while
-- The code of my page shows how to import and use the latest available version from CDN
+- The code of my page shows how to import and use the latest available nunuStudio version from CDN
+- The nunuStudio repository has not been updated in a while and appears to have some unresolved issues
 
 # Notes about three.js based 3D Model Viewers
 
@@ -205,7 +205,7 @@ Number Type Converter
     - STEP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js) and a modified version of [dotbim.three.js](https://github.com/ricaun/dotbim.three.js):
       - Custom BIM Loader is also available
 - Export formats, where applicable:
-  - 3DM, BIM, DAE, APNG, FBX, M3D, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, OFF, PLY, STL, PRWM, USDZ
+  - 3DM, BIM, DAE, APNG, FBX, STEP, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, OFF, PLY, STL, PRWM, USDZ
     - OFF exports are only available in the Quick Viewer, as stated further above
     - BIM exports are available in the Quick Viewer as well as some other viewers with custom BIM Exporter
     - Try not to change file names when saving files during initial export
@@ -225,7 +225,8 @@ Number Type Converter
       - USDZ Viewer appears to produce more accurate output than other viewers
       - Exported 3dm files might not show properly in any other 3rd party 3DM viewer
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
-    - ASSJSON / FBX / M3D / X3D / X exports are powered by [ASSIMPJS](https://github.com/kovacsv/assimpjs) and [ASSIMP](https://github.com/assimp/assimp)
+    - ASSJSON, FBX, STEP, X3D and X exports are powered by [ASSIMPJS](https://github.com/kovacsv/assimpjs) and [ASSIMP](https://github.com/assimp/assimp):
+      - STEP exports don't appear to be optimizied in the assimp library so used only if needed
     - Animated GIF export is based on mrdoob's [example](https://github.com/mrdoob/omggif-example) using [omggif](https://github.com/deanm/omggif) library:
       - currently set to 500 x 500 size in the centre of the window
       - the approximate GIF area rectangle will be shown during the GIF generation
