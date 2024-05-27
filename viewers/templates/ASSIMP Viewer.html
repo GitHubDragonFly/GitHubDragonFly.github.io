@@ -72,13 +72,7 @@
       texture_loader = new THREE.TextureLoader( manager );
 
       gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
-
-      if (menu_location_bottom === false) {
-        let fixed_menu_bottom = ( parseInt( $("#fixed_menu").outerHeight( true ) ) + 2 ).toString() + "px";
-        document.getElementById("gui_position").style.marginTop = fixed_menu_bottom;
-      } else {
-        document.getElementById("gui_position").style.marginTop = "2px";
-      }
+      set_gui_position();
 
       orb_controls = OrbitControls;
       orb_controls_gizmo = OrbitControlsGizmo;
@@ -391,6 +385,7 @@
           <option title="ASSIMP Export Formats" value="assimp" disabled>ASSIMP</option>
           <option title="FBX - Filmbox Format" value="fbx" onclick="export_assimp( 'fbx' );">FBX</option>
           <option title="ASSJSON - Assimp JSON Format" value="assjson" onclick="export_assimp( 'assjson' );">JSON</option>
+          <option title="STEP Format" value="stp" onclick="export_assimp( 'stp' );">STEP</option>
           <option title="X3D - Extensible 3D Graphics Format" value="x3d" onclick="export_assimp( 'x3d' );">X3D</option>
           <option title="Animated Graphics Formats" value="ani" disabled>- ANI -</option>
           <option title="GIF - Animated GIF" value="gif" onclick="export_animated_gif();">GIF</option>
@@ -1160,10 +1155,6 @@
         if (gltf_obj) {
           await start_export();
 
-          // Try to convert the scene to glb and then to fbx
-          // Seems to be fine for non-animated textured models
-          // Animations might get exported but might be poor
-
           const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.js" );
 
           let gltf_exporter = new GLTFExporter( manager );
@@ -1176,49 +1167,42 @@
             options = {	binary: true, maxTextureSize: tex_res };
           }
 
-          gltf_exporter.parse( gltf_obj.clone(), function( json ) {
-            let blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+          gltf_exporter.parse( (skeletonUtils.clone( gltf_obj )), async function( json ) {
+            let simplified = await simplify( new Uint8Array( json ) );
 
-            let loader = new THREE.FileLoader( manager );
-            loader.setResponseType( 'arraybuffer' );
+            // Use ASSIMPJS to export files
+            assimpjs().then( async function( ajs ) {
+              let result = ajs.ConvertFile( filename, format, simplified, undefined, undefined );
+              let fileCount = result.FileCount();
 
-            loader.load( URL.createObjectURL( blob ), function( data ) {
-              URL.revokeObjectURL( blob );
-
-              // Use ASSIMPJS to export files
-              assimpjs().then( async function( ajs ) {
-                let result = ajs.ConvertFile( filename, format, new Uint8Array( data ), undefined, undefined );
-                let fileCount = result.FileCount();
-
-                // check if the conversion succeeded
-                if (result.IsSuccess() === false || fileCount === 0) {
-                  handle_export_error( result.GetErrorCode() );
-                  ajs = null;
-                  result = null;
-                  return;
-                }
-
-                // get the first result file and convert it to blob
-                let resultFile = await result.GetFile( 0 );
-                let jsonContent = resultFile.GetContent();
-                let blob = new Blob( [ jsonContent ], { type: 'application/octet-stream' } );
-
-                // Possible ASSIMP export formats, some with binary / ascii options:
-                //   assjson, assbin, assxml, collada, x, stp, obj, objnomtl, 3ds, 3mf, pbrt
-                //   gltf, gltf2, glb, glb2, stl, stlb, ply, plyb, fbx, fbxa, x3d
-                //   m3d / m3da - disabled since no longer maintained within ASSIMP
-                // For proper file extension, shorten the format before zipping it up
-                let ext_to_change = { 'fbxa': 'fbx', 'assjson': 'json' }; // 'collada': 'dae', 'plyb': 'ply' ... etc
-                if (ext_to_change[ format ]) format = ext_to_change[ format ];
-
-                zip.file( filename + '.' + format, blob );
-
+              // check if the conversion succeeded
+              if (result.IsSuccess() === false || fileCount === 0) {
+                handle_export_error( result.GetErrorCode() );
                 ajs = null;
                 result = null;
-                resultFile = null;
+                return;
+              }
 
-                await process_zip( '_' + format.toUpperCase() );
-              });
+              // get the first result file and convert it to blob
+              let resultFile = await result.GetFile( 0 );
+              let jsonContent = resultFile.GetContent();
+              let blob = new Blob( [ jsonContent ], { type: 'application/octet-stream' } );
+
+              // Possible ASSIMP export formats, some with binary / ascii options:
+              //   assjson, assbin, assxml, collada, x, stp, obj, objnomtl, 3ds, 3mf, pbrt
+              //   gltf, gltf2, glb, glb2, stl, stlb, ply, plyb, fbx, fbxa, x3d
+              //   m3d / m3da - disabled since no longer maintained within ASSIMP
+              // For proper file extension, shorten the format before zipping it up
+              let ext_to_change = { 'fbxa': 'fbx', 'assjson': 'json', 'collada': 'dae' }; // 'plyb': 'ply' ... etc
+              if (ext_to_change[ format ]) format = ext_to_change[ format ];
+
+              zip.file( filename + '.' + format, blob );
+
+              ajs = null;
+              result = null;
+              resultFile = null;
+
+              await process_zip( '_' + format.toUpperCase() );
             });
           }, function( error ) { handle_export_error( error ); }, options);
         }
@@ -1230,7 +1214,7 @@
 
           if (animations.length > 0) gltf_obj.animations = animations;
 
-          let json = JSON.stringify( gltf_obj.clone().toJSON() );
+          let json = JSON.stringify( (skeletonUtils.clone( gltf_obj )).toJSON() );
           let blob = new Blob( [ json ], { type: 'text/plain' } );
 
           zip.file( filename + '.json', blob );
@@ -2487,8 +2471,10 @@
             gizmo = undefined;
           }
 
-          renderer.info.reset();
-          renderer.resetState();
+          if (isMobile === false) {
+            renderer.info.reset();
+            renderer.resetState();
+          }
 
           reset_all( true );
         }
@@ -3786,6 +3772,35 @@
         return meshes;
       }
 
+      /* Simplify */
+
+      async function simplify( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer" );
+        const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
+        const { dedup, flatten, join, prune, simplify, unpartition } = await import( "@gltf-transform/functions" );
+
+        const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          unpartition(),
+          dedup(),
+          prune(),
+          flatten(),
+          join(),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+        );
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
+      }
+
       /* Encode with draco compression - geometry */
 
       async function draco_compress( arrayBuffer ) {
@@ -4852,8 +4867,10 @@
           draco_material = null;
         }
 
-        renderer.info.reset();
-        renderer.resetState();
+        if (isMobile === false) {
+          renderer.info.reset();
+          renderer.resetState();
+        }
 
         if (gui) gui_reset();
 
@@ -5106,6 +5123,9 @@
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
             }
+
+            renderer.clear();
+            renderer.dispose();
           }
 
           document.getElementById('file_input').value = '';
