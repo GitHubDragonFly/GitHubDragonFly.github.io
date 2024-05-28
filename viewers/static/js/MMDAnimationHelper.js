@@ -298,7 +298,7 @@
 
 			}
 
-			if ( this.camera ) this.clearCamera( this.camera );
+			if ( this.camera ) this._clearCamera( this.camera );
 			this.camera = camera;
 			camera.add( this.cameraTarget );
 			this.objects.set( camera, {} );
@@ -321,7 +321,7 @@
 
 			}
 
-			if ( this.audio ) this.clearAudio( this.audio );
+			if ( this.audio ) this._clearAudio( this.audio );
 			this.audio = audio;
 			this.audioManager = new AudioManager( audio, params );
 			this.objects.set( this.audioManager, {
@@ -332,6 +332,15 @@
 		}
 
 		_removeMesh( mesh ) {
+
+			const mixer = this.objects.get( mesh ).mixer;
+
+			if ( mixer && this.enabled.animation ) {
+
+				mixer.stopAllAction();
+				mixer.uncacheRoot( mixer.getRoot() );
+
+			}
 
 			let found = false;
 			let writeIndex = 0;
@@ -366,6 +375,15 @@
 			if ( camera !== this.camera ) {
 
 				throw new Error( 'THREE.MMDAnimationHelper._clearCamera: ' + 'Camera \'' + camera.name + '\' has not been set yet.' );
+
+			}
+
+			const mixer = this.objects.get( camera ).mixer;
+
+			if ( mixer && this.enabled.cameraAnimation ) {
+
+				mixer.stopAllAction();
+				mixer.uncacheRoot( mixer.getRoot() );
 
 			}
 
