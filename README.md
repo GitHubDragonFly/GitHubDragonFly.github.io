@@ -1,9 +1,15 @@
 # GitHubDragonFly.github.io
 GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 
-As the time passes by and additional updates are applied, some pictures might not reflect the current looks of any GUI.
+Even though this is all usable, none of it is perfect so try to set your expectations accordingly.
 
-Designed to serve as a hub with links to repositories, [nunuStudio](https://github.com/tentone/nunuStudio/tree/master/source/page/src/examples) games and experiences examples, Number Type Converter and FREE online in-browser [three.js](https://threejs.org) based `3D Model` and `Texture` viewers.
+Some pictures might not reflect the current looks of any GUI.
+
+This website is designed to serve as a hub with links to:
+  - My repositories
+  - [nunuStudio](https://github.com/tentone/nunuStudio/tree/master/source/page/src/examples) games and experiences examples
+  - Number Type Converter
+  - FREE online in-browser [three.js](https://threejs.org) based `3D Model` and `Texture` viewers.
 
 Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations:
   - See screenshots below for different appearances of the main menu page
@@ -72,7 +78,7 @@ Number Type Converter
 - Intended for viewing a single 3D model or scene
 - Different [three.js](https://github.com/mrdoob/three.js) revisions are used and with lots of customized code
 - Error handling narrows down to showing the `ERROR!` message so check the console output for details
-- Desktop viewers will show some renderer info in the console after the model is loaded (like number of draw calls, triangles ... etc)
+- On a desktop computer, most viewers will show some renderer info in the console after the model is loaded (like number of draw calls, triangles ... etc)
 - To modify or customize your 3D model, use either the official [three.js editor](https://threejs.org/editor/) or try its [customized version](https://github.com/GitHubDragonFly/Localized_3js)
   - Additional tool for textures, requires an account and compatible hardware: [NVIDIA Texture Tools Exporter](https://developer.nvidia.com/texture-tools-exporter)
 - These would be the mouse controls:
@@ -180,8 +186,8 @@ Number Type Converter
 - Almost all viewers include the interactive [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
 - Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers
   - do note that mobile Safari browser might be finicky about certain features
-- See `URLS4MODELS.md` file for URL examples
-- Some loading instructions also available in [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) and [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repositories
+- For quick testing of any viewer, see the `URLS4MODELS.md` file for corresponding URL examples
+- Some loading instructions are also available in [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) and [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repositories
 - ZIP files and drag-and-drop are currently not supported
 - Import files locally from a file browser dialog:
   - All files have to be in the same folder
