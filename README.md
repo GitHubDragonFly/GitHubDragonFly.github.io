@@ -358,6 +358,9 @@ Number Type Converter
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
     - currently available only in `FBX` `OBJ` `PLY+STL` `PRWM` viewers and should be tried on simple models
     - see the Animated GIF of a cube using Animated GIF as a texture in the `images` folder
+- There is also a simple cube shading example available at the bottom of the menu:
+    - It is fully automatic and manipulates each of the RGBA components
+    - Ref: [The Book of Shaders](https://thebookofshaders.com/04/) by Patricio Gonzalez Vivo & Jen Lowe
 - Tips:
   - if the model is correctly loaded but you cannot see it then try any or all of the following:
     - apply `edges`
