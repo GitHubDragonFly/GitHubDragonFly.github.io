@@ -69,6 +69,7 @@ Number Type Converter
 
 - This page is just showcasing the [nunuStudio](https://github.com/tentone/nunuStudio) games and experiences examples
 - These examples are interesting and could keep you busy and entertained for a little while
+- Designed for a desktop, might not be as good on mobile devices but are available regardless
 - The code of my page shows how to import and use the latest available nunuStudio version from CDN
 - The nunuStudio repository has not been updated in a while and appears to have some unresolved issues
 
