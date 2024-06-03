@@ -11,8 +11,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.165.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.165.0/examples/jsm/",
           "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.5/dist/decode.min.js",
           "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.5/dist/encode.min.js",
           "@monogrid/gainmap-js/libultrahdr": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.5/dist/libultrahdr.min.js",
@@ -295,6 +295,7 @@
     </style>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- Using three.js library: https://github.com/mrdoob/three.js -->
     <!-- Using customized DST Embroidery File Loader by thrax: https://github.com/manthrax/dst-format -->
     <!-- Using threadNormal & threadTexture images from: https://github.com/manthrax/dst-format -->
     <!-- Using glTF Transform for DRACO / MESHOPT compression: https://gltf-transform.dev -->
@@ -309,7 +310,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>DST Viewer</title>
+    <title>DST Viewer (r165)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -658,13 +659,13 @@
         if (scene) {
           mouse_wheel = true;
 
-          renderer.setSize( window.innerWidth, window.innerHeight );
-
-          camera.aspect = window.innerWidth / window.innerHeight;
-          camera.updateProjectionMatrix();
-
           ww = window.innerWidth;
           wh = window.innerHeight;
+
+          renderer.setSize( ww, wh );
+
+          camera.aspect = ww / wh;
+          camera.updateProjectionMatrix();
 
           if (gui) set_gui_position();
 
@@ -709,16 +710,15 @@
 
     <script>
       var THREE, manager, texture_loader, dst_loader, exr_loader, rgbe_loader, hdrJPGLoader;
-      var renderer, scene, camera, render_requested, texture_maps;
-      var gui, gui_set = false, params, embroidery, toneMappingOptions;
+      var renderer, scene, camera, render_requested, texture_maps, tex_fmt, link;
+      var controls, orb_controls, gizmo, orb_controls_gizmo, bgnd_linear_gradient;
       var guiExposure, guiToneMapping, guiBlurriness, guiIntensity, guiColors;
-      var controls, orb_controls, gizmo, orb_controls_gizmo, count = 0;
-      var bgnd_linear_gradient, tex, tex_fmt, link;
+      var gui, gui_set = false, params, embroidery, toneMappingOptions;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var mouse_down, mouse_wheel, reset_rotation, isMobile;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
-      var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
+      var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation, count = 0;
       var bounding_box, filename, gif_export, zip, slider_height = 0;
       var events_initialized, enable_opacity, resetInProgress = false;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
@@ -743,7 +743,7 @@
       }
 
       function set_filename() {
-        if (selected_dst_file) {
+        if (selected_dst_file !== null) {
           filename = selected_dst_file.name.substring( 0, selected_dst_file.name.lastIndexOf('.') );
         } else {
           filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') );
@@ -918,12 +918,14 @@
 
             if (binary === true) {
               try {
+                let type = 'application/octet-stream';
+
                 if (meshopt === true) {
-                  blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
+                  blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: type } );
                 } else if (tex_fmt !== '') {
-                  blob = new Blob( [ await texture_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
+                  blob = new Blob( [ await texture_compress( new Uint8Array( json ) ) ], { type: type } );
                 } else {
-                  blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+                  blob = new Blob( [ json ], { type: type } );
                 }
               } catch (error) {
                 handle_export_error( error );
@@ -1228,16 +1230,22 @@
         addFrame();
       }
 
-      function set_back_color() {
-        if (scene.environment) {
-          scene.environment.dispose();
-          scene.environment = null;
-        }
+      function reset_scene_params() {
+        if (scene) {
+          if (scene.environment) {
+            scene.environment.dispose();
+            scene.environment = null;
+          }
 
-        if (scene.background) {
-          scene.background.dispose();
-          scene.background = null;
+          if (scene.background) {
+            scene.background.dispose();
+            scene.background = null;
+          }
         }
+      }
+
+      async function set_back_color() {
+        await reset_scene_params();
 
         scene.environmentIntensity = 0.5;
         bgnd_linear_gradient = false;
@@ -1326,6 +1334,8 @@
       }
 
       async function set_equi() {
+        await reset_scene_params();
+
         if (document.getElementById('equi').checked) {
           if (gui_set === false) {
             guiToneMapping = gui.add( params, 'toneMapping', Object.keys( toneMappingOptions ) )
@@ -1363,19 +1373,34 @@
           if (document.getElementById('file_image_input').value !== '') {
             set_scene_image();
           } else {
-            scene.background = tex;
-            scene.environment = tex;
+            let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/opengameart/smoke1.png';
+
+            hdrJPGLoader.load( url, async function( texture ) {
+              let tex = await texture.toDataTexture();
+              tex.mapping = THREE.EquirectangularReflectionMapping;
+              tex.needsUpdate = true;
+
+              scene.background = tex;
+              scene.environment = tex;
+
+              mouse_wheel = true;
+
+              texture.renderTarget.texture.dispose();
+              texture.renderTarget.dispose();
+              texture.dispose();
+              tex.dispose();
+            }, function ( xhr ) {
+            }, function ( error ) {
+              document.getElementById('div_message').innerText = 'Error loading image';
+              console.log( 'Error loading Background Image File!' );
+              console.log( error );
+            });
           }
 
           scene.backgroundBlurriness = params.blurriness;
           scene.backgroundIntensity = params.intensity;
         } else {
           if (gui) gui_reset( true );
-
-          scene.background.dispose();
-          scene.background = null;
-          scene.environment.dispose();
-          scene.environment = null;
 
           if (document.getElementById('file_image_input').value !== '') {
             set_scene_image();
@@ -1432,19 +1457,11 @@
       async function set_scene_image( reset = false ) {
         let fii = document.getElementById('file_image_input').files[ 0 ];
 
-        if (scene.environment) {
-          scene.environment.dispose();
-          scene.environment = null;
-        }
-
-        if (scene.background) {
-          scene.background.dispose();
-          scene.background = null;
-        }
+        await reset_scene_params();
 
         if (fii) {
           if (reset === false) {
-            document.getElementById('div_message').innerText = 'Background and environment changing ...';
+            document.getElementById('div_message').innerText = 'Background and environment changing ... Please Wait';
             document.getElementById('div_message').style.display = '';
             if (gui) set_gui_position();
           }
@@ -1654,16 +1671,8 @@
         mouse_wheel = true;
       }
 
-      function set_bgnd_linear_gradient() {
-        if (scene.environment) {
-          scene.environment.dispose();
-          scene.environment = null;
-        }
-
-        if (scene.background) {
-          scene.background.dispose();
-          scene.background = null;
-        }
+      async function set_bgnd_linear_gradient() {
+        await reset_scene_params();
 
         if (bgnd_linear_gradient === true) {
           scene.environmentIntensity = 0.5;
@@ -2099,28 +2108,6 @@
 
         if (diffuseMap === undefined) {
           diffuseMap = await texture_loader.load( '../../images/threadTexture.jpg' );
-        }
-
-        if (tex === undefined) {
-          let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/opengameart/smoke1.png';
-
-          hdrJPGLoader.load( url, async function( texture ) {
-            tex = await texture.toDataTexture();
-
-            if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
-              const repeat_x = tex.image.width / 2048;
-              const repeat_y = tex.image.height / 2048;
-
-              tex.repeat.set( repeat_x, repeat_y );
-            }
-
-            tex.mapping = THREE.EquirectangularReflectionMapping;
-            tex.needsUpdate = true;
-
-            texture.renderTarget.texture.dispose();
-            texture.renderTarget.dispose();
-            texture.dispose();
-          });
         }
 
         // Load DST file
@@ -2705,7 +2692,7 @@
         selected_dst_file !== null ? loadFile() : loadURLFile();
       }
 
-      function reset_all( reset = false ) {
+      async function reset_all( reset = false ) {
         // Reset all current rotational values
         document.getElementById('rotation_x').value = 0;
         document.getElementById('rotation_y').value = 0;
@@ -2752,17 +2739,7 @@
 
         document.getElementById('export_tex_fmt').selectedIndex = 0;
 
-        if (scene) {
-          if (scene.environment) {
-            scene.environment.dispose();
-            scene.environment = null;
-          }
-
-          if (scene.background) {
-            scene.background.dispose();
-            scene.background = null;
-          }
-        }
+        if (scene) await reset_scene_params();
 
         gif_export = false;
         reset_rotation = true;
@@ -2803,6 +2780,8 @@
                 }
               });
             }
+
+            if (gui) gui.dispose();
 
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
