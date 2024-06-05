@@ -7,13 +7,6 @@
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.111.0/build/three.min.js" defer></script>
-    <script src="../../static/js/utils/BufferGeometryUtils.js" defer></script>
-    <script src="../../static/js/legacy/LegacyJSONLoader.min.js" defer></script>
-    <script src="../../static/js/legacy/AssimpJSONLoader.min.js" defer></script>
-    <script src="../../static/js/legacy/OrbitControls.min.js" defer></script>
-    <script src="../../static/js/TGALoader.js" defer></script>
-    <script src="../../static/js/DDSLoader.js" defer></script>
 
     <style>
       body,html{
@@ -121,6 +114,7 @@
     </style>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- Using three.js library: https://github.com/mrdoob/three.js -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
@@ -194,13 +188,13 @@
         if (scene) {
           mouse_wheel = true;
 
-          renderer.setSize( window.innerWidth, window.innerHeight );
-
-          camera.aspect = window.innerWidth / window.innerHeight;
-          camera.updateProjectionMatrix();
-
           ww = window.innerWidth;
           wh = window.innerHeight;
+
+          renderer.setSize( ww, wh );
+
+          camera.aspect = ww / wh;
+          camera.updateProjectionMatrix();
 
           mouse_wheel = true;
         }
@@ -208,9 +202,11 @@
     </script>
 
     <script>
-      var manager, file_loader, texture_loader, loader, assimp_loader, json_loader, object_loader, bg_loader;
-      var controls, mouse_down, mouse_wheel, events_initialized, wireframe_enabled, object_is_points;
-      var renderer, scene, camera, mesh, model_is_object, model_is_assimp, buffer_geometry;
+      var loader, assimp_loader, json_loader, object_loader, bg_loader;
+      var manager, file_loader, texture_loader, dds_loader, tga_loader;
+      var model_is_assimp, buffer_geometry, object_is_points;
+      var controls, mouse_down, mouse_wheel, events_initialized;
+      var renderer, scene, camera, mesh, model_is_object;
       var animations, animation_mixer, animation_running, current_animation;
       var resource_path, texturePath, render_requested, clock, count = 0;
       var ambientLight, directionalLight, bounding_box, isMobile;
@@ -221,9 +217,11 @@
       var initial_opacity, initial_opacity_array, enable_opacity;
       var original_side, original_side_array, bgnd_linear_gradient, zip;
       var selected_json_file, selected_json_url_file, selected_url_file = '';
-      var url_displayed = false, url_loading = false, bones, bones_exist;
-      var skeleton, skeleton_helper, skeleton_visible, skeleton_demo_available, skeleton_demo_running, sk_count;
-      var vertex_colors_enabled, random_vertex_colors_enabled, original_vertex_color_array, random_vertex_color_array;
+      var url_displayed = false, url_loading = false, wireframe_enabled;
+      var bones, bones_exist, skeleton_demo_running, sk_count;
+      var skeleton, skeleton_helper, skeleton_visible, skeleton_demo_available;
+      var vertex_colors_enabled, random_vertex_colors_enabled;
+      var original_vertex_color_array, random_vertex_color_array;
 
       function set_back_color() {
         scene.background = null;
@@ -280,6 +278,8 @@
 
         if (scene) {
           if (mesh) {
+            scene.remove( mesh );
+
             if (wireframe_enabled === true) show_wireframe();
 
             if (skeleton_helper) {
@@ -329,8 +329,6 @@
             mesh.children.length = 0;
 
             material.dispose();
-
-            scene.remove( mesh );
           }
 
           mouse_wheel = true;
@@ -342,14 +340,35 @@
 
         enable_disable( true );
 
-        if (manager === undefined) manager = new THREE.LoadingManager();
+        if (!window.__THREE__) {
+          await import( "https://cdn.jsdelivr.net/npm/three@0.111.0/build/three.min.js" );
+          await import( "../../static/js/utils/BufferGeometryUtils.js" );
+          await import( "../../static/js/legacy/LegacyJSONLoader.min.js" );
+          await import( "../../static/js/legacy/AssimpJSONLoader.min.js" );
+          await import( "../../static/js/legacy/OrbitControls.min.js" );
+        }
 
-        manager.onLoad = function () { mouse_wheel = true; }
+        if (manager === undefined) {
+          manager = new THREE.LoadingManager();
+          manager.onLoad = function() { mouse_wheel = true };
+        }
 
         if (file_loader === undefined) {
           file_loader = new THREE.FileLoader( manager );
           file_loader.setMimeType( 'application/json' );
           file_loader.setResponseType( 'json' );
+        }
+
+        if (tga_loader === undefined) {
+          if (!THREE.TGALoader) await import( "../../static/js/TGALoader.js" );
+          tga_loader = new THREE.TGALoader( manager );
+          manager.addHandler( /\.tga$/i, tga_loader );
+        }
+
+        if (dds_loader === undefined) {
+          if (!THREE.DDSLoader) await import( "../../static/js/DDSLoader.js" );
+          dds_loader = new THREE.DDSLoader( manager );
+          manager.addHandler( /\.dds$/i, dds_loader );
         }
 
         if (texture_loader === undefined) texture_loader = new THREE.TextureLoader();
@@ -554,7 +573,10 @@
               fd.images.forEach( ( img, index ) => {
                 if (textures[ img.url ]) {
                   let url = textures[ img.url ];
-                  let uuid = (url.includes( '/' ) === true) ? url.substring( url.lastIndexOf( '/' ) + 1 ) : ((url.includes( '\\' ) === true) ? url.substring( url.lastIndexOf( '\\' ) + 1 ) : '');
+                  let uuid = '';
+
+                  if (url.includes( '/' ) === true) uuid = url.substring( url.lastIndexOf( '/' ) + 1 );
+                  else if (url.includes( '\\' ) === true) url.substring( url.lastIndexOf( '\\' ) + 1 );
 
                   if (fd.textures && fd.textures.length > 0) {
                     fd.textures.forEach( ( tex, index ) => {
@@ -712,6 +734,7 @@
 
             if (object.attributes && object.attributes[ 'normal' ]) delete object.attributes[ 'normal' ];
             if (object.attributes) object = THREE.BufferGeometryUtils.mergeVertices( object );
+
             object.computeVertexNormals();
             object.normalizeNormals();
             object.center();
@@ -955,8 +978,8 @@
             mesh.normalizeSkinWeights();
           }
 
-          if ((object.materials && object.materials.length > 0 && object.materials[ 0 ].vertexColors === true)
-           || (object.geometry.attributes.color && object.geometry.attributes.color.array.length > 0)) {
+          if ((object.materials && object.materials.length > 0 && object.materials[ 0 ].vertexColors === true) ||
+            (object.geometry.attributes.color && object.geometry.attributes.color.array.length > 0)) {
 
             vertex_colors_enabled = true;
           }
@@ -1029,7 +1052,13 @@
         if (animations && animations.length > 0) {
           animation_mixer = new THREE.AnimationMixer( mesh );
           current_animation = 0;
-          animations.forEach( clip => { clip.validate(); clip.optimize(); animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; });
+
+          animations.forEach( clip => {
+            clip.validate();
+            clip.optimize();
+            animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat;
+          });
+
           animation_mixer.clipAction( animations[ 0 ] ).play();
           document.getElementById('btn_animate').disabled = false;
           document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
