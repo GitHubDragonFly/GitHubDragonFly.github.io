@@ -12,6 +12,7 @@
  */
 
 var blobs = null;
+var scope;
 var root;
 var bones = [];
 var bone_id;
