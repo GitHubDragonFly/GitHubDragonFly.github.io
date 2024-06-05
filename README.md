@@ -362,6 +362,7 @@ Number Type Converter
 - There is also a simple cube shading example available at the bottom of the menu:
     - It is fully automatic and manipulates each of the RGBA components
     - Ref: [The Book of Shaders](https://thebookofshaders.com/04/) by Patricio Gonzalez Vivo & Jen Lowe
+    - It also has a little bit of [Proton](https://github.com/drawcall/three.proton) mouse flare thanks to [threejs-mesh-modifiers](https://github.com/drawcall/threejs-mesh-modifiers) example
 - Tips:
   - if the model is correctly loaded but you cannot see it then try any or all of the following:
     - apply `edges`
