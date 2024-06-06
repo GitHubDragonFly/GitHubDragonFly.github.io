@@ -338,7 +338,7 @@ THREE.AssimpJSONLoader.prototype = {
 		scope = this;
 
 		let mat = null;
-		let i, e, prop, has_textures = [],
+		let i, e, prop, has_textures = [];
 
 		init_props = { color: 0xFFFFFF, flatShading: false };
 
