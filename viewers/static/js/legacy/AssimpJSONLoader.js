@@ -45,18 +45,18 @@ THREE.AssimpJSONLoader.prototype = {
 	
 			} else {
 
-				this.texturePath = texturePath;
+				scope.texturePath = texturePath;
 
 			}
 
 		} else {
 
-			this.texturePath = this.extractUrlBase( url );
+			scope.texturePath = scope.extractUrlBase( url );
 
 		}
 
-		var loader = new THREE.FileLoader( this.manager );
-		loader.setCrossOrigin( this.crossOrigin );
+		var loader = new THREE.FileLoader( scope.manager );
+		loader.setCrossOrigin( scope.crossOrigin );
 
 		loader.load( url, function ( text ) {
 
@@ -335,8 +335,10 @@ THREE.AssimpJSONLoader.prototype = {
 
 	parseMaterial : function( material, textures ) {
 
-		let mat = null, 
-		scope = this, i, prop, has_textures = [],
+		scope = this;
+
+		let mat = null;
+		let i, e, prop, has_textures = [],
 
 		init_props = { color: 0xFFFFFF, flatShading: false };
 
@@ -372,7 +374,10 @@ THREE.AssimpJSONLoader.prototype = {
 				data[ stride + 3 ] = 255;
 			}
 
-			return new THREE.DataTexture( data, width, height );
+			let tex = new THREE.DataTexture( data, width, height );
+			tex.encoding = THREE.sRGBEncoding;
+
+			return tex;
 
 		}
 
@@ -475,7 +480,7 @@ THREE.AssimpJSONLoader.prototype = {
 
 						}
 
-						loader.setCrossOrigin( this.crossOrigin );
+						loader.setCrossOrigin( scope.crossOrigin );
 
 						if ( blobs !== null ) {
 
@@ -506,6 +511,8 @@ THREE.AssimpJSONLoader.prototype = {
 									// TODO: read texture settings from assimp.
 									// Wrapping is the default, though.
 									tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+									tex.encoding = THREE.sRGBEncoding;
+									tex.format = THREE.RGBAFormat;
 
 									mat[ keyname ] = tex;
 									mat.needsUpdate = true;

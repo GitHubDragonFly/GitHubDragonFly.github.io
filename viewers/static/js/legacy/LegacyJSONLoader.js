@@ -414,6 +414,9 @@ THREE.LegacyJSONLoader = ( function () {
 
 				}
 
+				texture.format = THREE.RGBAFormat;
+				texture.encoding = THREE.sRGBEncoding;
+
 				var uuid = THREE.Math.generateUUID();
 
 				textures[ uuid ] = texture;
