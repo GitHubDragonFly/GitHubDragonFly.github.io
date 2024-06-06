@@ -3,6 +3,8 @@ GitHubDragonFly's Website - access it [here](https://githubdragonfly.github.io).
 
 Even though this is all usable, none of it is perfect so try to set your expectations accordingly.
 
+The description below is a bit lengthy but should provide pertinent information.
+
 Pictures or intro video might not reflect the current looks of any GUI.
 
 This website is designed to serve as a hub with links to:
@@ -83,13 +85,15 @@ Number Type Converter
 - This page is just showcasing the [nunuStudio](https://github.com/tentone/nunuStudio) games and experiences examples
 - These examples are interesting and could keep you busy and entertained for a little while
 - Designed for a desktop, might not be as good on mobile devices but are available regardless:
-  - As for the AR / VR experience, AR and/or VR button should remain visible if your device supports it (got at least VR working on Android phone with Chrome Cardboard)
+  - As for the AR / VR experience, `AR` and/or `VR` button should remain visible if your device supports it:
+    - got at least VR working on an Android phone with Chrome + Cardboard
 - The code of my page shows how to import and use the latest available nunuStudio version from CDN
 - The nunuStudio repository has not been updated in a while and appears to have some unresolved issues
 
 # Notes about three.js based 3D Model Viewers
 
-- They are functional `AS THEY ARE` and purely designed as an online convenience
+- They are functional `AS THEY ARE`
+- Purely designed as an online convenience
 - Intended for viewing a single 3D model or scene
 - Different [three.js](https://github.com/mrdoob/three.js) revisions are used and with lots of customized code
 - Error handling narrows down to showing the `ERROR!` message so check the console output for details
@@ -133,15 +137,15 @@ Number Type Converter
     - Support for USDZ was also added but is untested:
       - Purely logical approach, not sure if it is correct
   - `GLTF Viewer` is for v2.0 glTF files and is currently using r164 of three.js:
-    - doesn't support obsolete `pbrSpecularGlossiness`
+    - does not support obsolete `pbrSpecularGlossiness`
     - supports currently arbitrary `KHR_animation_pointer`
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js:
     - supports obsolete `pbrSpecularGlossiness`
-    - doesn't support either `Anisotropy` or currently arbitrary `KHR_animation_pointer`
+    - does not support either `Anisotropy` or currently arbitrary `KHR_animation_pointer`
   - `GLTF Legacy` viewer is for v1.0 glTF files and is purely experimental and rather limited (see notes further below)
 
 - Special notes about `ASSIMP Viewer` which is using [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and [ASSIMP](https://github.com/assimp/assimp) library:
-  - This is a revamped version of my GLTF Viewer and is a sort of ASSIMP(JS) / three.js hybrid
+  - This is a revamped version of my GLTF Viewer and is a sort of ASSIMP(JS) + three.js hybrid
   - It can be used instead of both GLTF v1.0 and v2.0 viewers and also provides more export options
   - Here are example URLs for GLTF v1.0 of the [Barramundi Fish](https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/1.0/BarramundiFish) so just pay attention to the special case of the `glTF + BIN + textures` formatting:
     - `https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF-Binary/BarramundiFish.glb`
