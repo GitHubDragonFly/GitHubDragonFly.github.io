@@ -7,8 +7,8 @@ Pictures or intro video might not reflect the current looks of any GUI.
 
 This website is designed to serve as a hub with links to:
   - My repositories
-  - [nunuStudio](https://github.com/tentone/nunuStudio/tree/master/source/page/src/examples) games and experiences examples
   - Number Type Converter
+  - [nunuStudio](https://github.com/tentone/nunuStudio/tree/master/source/page/src/examples) games and experiences examples
   - FREE online in-browser [three.js](https://threejs.org) based `3D Model` and `Texture` viewers.
 
 Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations:
@@ -21,26 +21,39 @@ Originally designed for a desktop but has been adapted to also show properly on 
     - **Are Accessibility optimized** (AODA in Ontario)
       - keyboard users might be somewhat limited to what's implemented within three.js library
 
-The `M3D` button, which stands for `Mobile 3D`, provides access to stripped down and simplified version of mobile friendly 3D viewers:
- - Almost all viewers are currently available and should work fine on desktop devices as well
- - Mobile `Quick Viewer`, `GM Viewer` and `GLTF Viewer` also include some export options and more features
- - All mobile testing was done on an Android mobile phone and an iPad
- - Consider bookmarking the [mobile main page](https://githubdragonfly.github.io/viewers/templates/Mobile/index.html) for continuous access to all viewers
- - Consider bookmarking any single viewer's link for continuous access to that particular viewer
- - Consider using WiFi connection, whenever possible, since the library files still need to be downloaded
+The `M3D` button, which stands for `Mobile 3D`, provides access to:
+ - Simple Cube Shading example
+ - nunuStudio Games and Experiences examples
+   - not as functional and visually appealing as on a desktop but made available regardless
+ - Stripped down and simplified version of mobile friendly 3D viewers:
+   - Almost all viewers are currently available and should work fine on desktop devices as well
+   - Mobile `Quick Viewer`, `GM Viewer` and `GLTF Viewer` also include some export options and more features
+   - Consider bookmarking the [mobile main page](https://githubdragonfly.github.io/viewers/templates/Mobile/index.html) for continuous access to all viewers
+   - Consider bookmarking any single viewer's link for continuous access to that particular viewer
+   - Consider using WiFi connection, whenever possible, since the library files still need to be downloaded
+   - All mobile testing was done on an Android mobile phone and an iPad
 
 GitHub servers are providing correct access to all files:
-  - cloning or downloading this repository and using it offline will have a somewhat reduced functionality if run locally without some server
-  - these GitHub servers are also setting `CacheControl` to last only for 10 minutes so you might need to refresh the current page as needed.
+  - Cloning or downloading this repository and using it offline will have a somewhat reduced functionality if run locally without some server
+  - These GitHub servers are also setting `CacheControl` to last only for 10 minutes so you might need to refresh the current page as needed
   - No cookies will be served by my pages
 
-Repositories do contain projects in several different programming languages or a mix of: `Java` `VB.Net` `C#` `python` `JavaScript` `jQuery` `HTML/CSS` `shell`.
+Repositories do contain projects in several different programming languages, or a mix of: 
+ - `HTML / CSS / JavaScript / jQuery`
+ - `Java`
+ - `VB.Net`
+ - `C#`
+ - `python`
+ - `shell`
 
 There is a lot of information and descriptions, some intended for Industrial Automation and some for general or personal use. All is good as an educational resource as well.
 
-For those who either deal with or are just learning about Programmable Logic Controllers (PLC), use whatever you can from my repositories and then make the [AdvancedHMI](https://www.advancedhmi.com/) website your next stop for highly functional FREE software.
+For those who either deal with or are just learning about Programmable Logic Controllers (PLC):
+ - Use whatever you can from my repositories
+ - Make the [AdvancedHMI](https://www.advancedhmi.com/) website your next stop for highly functional FREE software.
 
-Intro video shows how to start using 3D viewers by loading model files from a hard drive. It was captured by using the free and open source [OBS Studio](https://github.com/obsproject/obs-studio) software.
+Intro video shows how to start using 3D viewers by loading model files from a hard drive:
+ - It was captured by using the free and open source [OBS Studio](https://github.com/obsproject/obs-studio) software.
 
 # Mozilla Firefox screenshots
 
@@ -117,7 +130,8 @@ Number Type Converter
     - Supports both local (blob) and remote URL loading
     - Local loading supports self-contained models (embedded GLTF or binary GLB) as well as GLTF + BIN + Textures
     - The viewer supports loading of multiple models at once, which will be switchable with the viewer's `M` button
-    - Support for USDZ was also added but is untested
+    - Support for USDZ was also added but is untested:
+      - Purely logical approach, not sure if it is correct
   - `GLTF Viewer` is for v2.0 glTF files and is currently using r164 of three.js:
     - doesn't support obsolete `pbrSpecularGlossiness`
     - supports currently arbitrary `KHR_animation_pointer`
