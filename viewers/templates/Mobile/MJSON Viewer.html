@@ -22,11 +22,8 @@
     <script type="module">
       import * as three_js from "three";
       import { OrbitControls } from "three/addons/controls/OrbitControls.min.js";
-      import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.min.js";
-      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.min.js";
 
       THREE = three_js;
-      merge_vertices = mergeVertices;
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
@@ -40,7 +37,6 @@
       bg_loader = new THREE.BufferGeometryLoader( manager );
 
       orb_controls = OrbitControls;
-      room_env = RoomEnvironment;
     </script>
 
     <style>
@@ -149,10 +145,11 @@
     </style>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- Using three.js library: https://github.com/mrdoob/three.js -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>JSON Viewer</title>
+    <title>JSON Viewer (r164)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -222,13 +219,13 @@
         if (scene) {
           mouse_wheel = true;
 
-          renderer.setSize( window.innerWidth, window.innerHeight );
-
-          camera.aspect = window.innerWidth / window.innerHeight;
-          camera.updateProjectionMatrix();
-
           ww = window.innerWidth;
           wh = window.innerHeight;
+
+          renderer.setSize( ww, wh );
+
+          camera.aspect = ww / wh;
+          camera.updateProjectionMatrix();
 
           mouse_wheel = true;
         }
@@ -243,7 +240,7 @@
       var pmremGenerator, merge_vertices, ambientLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight, count = 0;
       var loader, fd, material, textures, buffer_geometry, bounding_box, isMobile;
-      var selected_json_file, selected_url_file = '', flat_shading_enabled, room_env;
+      var selected_json_file, selected_url_file = '', flat_shading_enabled, texture_maps;
       var url_displayed = false, url_loading = false, vertex_colors_enabled, object_is_points, clock;
       var bones, bones_exist, skeleton_helper, skeleton_visible, skeleton_demo, skeleton_demo_running, sk_count;
 
@@ -334,6 +331,8 @@
 
         if (scene) {
           if (mesh) {
+            scene.remove( mesh );
+
             if (wireframe_enabled === true) show_wireframe();
 
             if (skeleton_helper) {
@@ -358,16 +357,68 @@
               animation_mixer.uncacheRoot( animation_mixer.getRoot() );
             }
 
+            if (mesh.skeleton && mesh.skeleton.boneTexture)
+              mesh.skeleton.boneTexture.dispose();
+
             mesh.traverse( ( child ) => {
               if (child.isMesh || child.isPoints) {
+                if (child.skeleton && child.skeleton.boneTexture)
+                  child.skeleton.boneTexture.dispose();
+
                 if (child.material) {
                   if (Array.isArray( child.material )) {
                     child.material.forEach( mtl => {
-                      if (mtl.map) mtl.map.dispose();
+                      if (mtl.uniforms) {
+                        Object.keys( mtl.uniforms ).forEach( ( key ) => {
+                          if (mtl.uniforms[ key ].value) {
+                            if (Array.isArray( mtl.uniforms[ key ].value ) && mtl.uniforms[ key ].value.length > 0) {
+                              mtl.uniforms[ key ].value.forEach( val => {
+                                if (val.type && val.type === 1009)
+                                  val.dispose();
+                              });
+                            } else {
+                              if (mtl.uniforms[ key ].value.type && mtl.uniforms[ key ].value.type === 1009)
+                                mtl.uniforms[ key ].value.dispose();
+                            }
+                          }
+                        });
+                      } else {
+                        for (const prop in mtl) {
+                          texture_maps.forEach( tex_map => {
+                            if (prop === tex_map) {
+                              if (mtl[ prop ]) mtl[ prop ].dispose();
+                            }
+                          });
+                        };
+                      }
+
                       mtl.dispose();
                     });
                   } else {
-                    if (child.material.map) child.material.map.dispose();
+                    if (child.material.uniforms) {
+                      Object.keys( child.material.uniforms ).forEach( ( key ) => {
+                        if (child.material.uniforms[ key ].value) {
+                          if (Array.isArray( child.material.uniforms[ key ].value ) && child.material.uniforms[ key ].value.length > 0) {
+                            child.material.uniforms[ key ].value.forEach( val => {
+                              if (val.type && val.type === 1009)
+                                val.dispose();
+                            });
+                          } else {
+                            if (child.material.uniforms[ key ].value.type && child.material.uniforms[ key ].value.type === 1009)
+                              child.material.uniforms[ key ].value.dispose();
+                          }
+                        }
+                      });
+                    } else {
+                      for (const prop in child.material) {
+                        texture_maps.forEach( tex_map => {
+                          if (prop === tex_map) {
+                            if (child.material[ prop ]) child.material[ prop ].dispose();
+                          }
+                        });
+                      };
+                    }
+
                     child.material.dispose();
                   }
                 }
@@ -377,11 +428,14 @@
             });
 
             material.dispose();
-
-            scene.remove( mesh );
           }
 
           mouse_wheel = true;
+
+          if (isMobile === false) {
+            renderer.info.reset();
+            renderer.resetState();
+          }
 
           reset_all( true );
         }
@@ -389,6 +443,11 @@
         enable_disable( true );
 
         THREE.DefaultLoadingManager.onLoad = function() { pmremGenerator.dispose(); }
+
+        if (merge_vertices === undefined) {
+          const { mergeVertices } = await import( "three/addons/utils/BufferGeometryUtils.min.js" );
+          merge_vertices = mergeVertices;
+        }
 
         selected_json_file = null;
         object_is_points = false;
@@ -473,6 +532,7 @@
           renderer.toneMapping = THREE.NeutralToneMapping;
           renderer.toneMappingExposure = 1;
           renderer.setSize( ww, wh );
+          renderer.info.autoReset = false;
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
           renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
@@ -541,8 +601,11 @@
         }
 
         if (scene.environment === null) {
+          const { RoomEnvironment } = await import( "three/addons/environments/RoomEnvironment.min.js" );
+
           pmremGenerator = new THREE.PMREMGenerator( renderer );
-          scene.environment = pmremGenerator.fromScene( new room_env(), .005 ).texture;
+          scene.environment = pmremGenerator.fromScene( new RoomEnvironment(), .005 ).texture;
+          scene.environmentIntensity = 1.25;
         }
 
         // Load the json file
@@ -587,14 +650,18 @@
 
           if (Object.getOwnPropertyNames( textures ).length !== 0) {
             mesh.material.forEach( mtl => {
-              let map_strings = [ 'map', 'aoMap', 'alphaMap', 'bumpMap', 'emissiveMap', 'lightMap', 'normalMap', 'specularMap', 'metalnessMap', 'roughnessMap' ];
+              let map_strings = [ 'map', 'aoMap', 'alphaMap', 'bumpMap', 'emissiveMap', 'lightMap',
+                'normalMap', 'specularMap', 'metalnessMap', 'roughnessMap' ];
+
               mtl.vertexColors = vertex_colors_enabled;
               mtl.format = THREE.RGBAFormat;
 
               for (const [ key, value ] of Object.entries( textures )) {
                 map_strings.forEach( map_str => {
                   if (mtl[ map_str ]) {
-                    if (mtl[ map_str ].image[ 'src' ].substring( mtl[ map_str ].image[ 'src' ].lastIndexOf( '/' ) + 1) === key ) mtl[ map_str ].image[ 'src' ] = value;
+                    if (mtl[ map_str ].image[ 'src' ].substring( mtl[ map_str ].image[ 'src' ].lastIndexOf( '/' ) + 1) === key) {
+                      mtl[ map_str ].image[ 'src' ] = value;
+                    }
                   }
                 });
               }
@@ -630,15 +697,15 @@
                 if (child.isSkinnedMesh) child.frustumCulled = false;
               } else {
                 object_is_points = true;
+                child.sizeAttenuation = true;
+                child.sortPoints = true;
               }
 
               if (child.material) {
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
                     if (child.isPoints) {
-                      (isMobile === true) ? mtl.size = 0.8 : mtl.size = 0.5;
-                      child.sizeAttenuation = true;
-                      child.sortPoints = true;
+                      mtl.size = (isMobile === true) ? 0.8 : 0.6;
                     } else {
                       set_texture_colorSpace( mtl );
                       mtl.vertexColors = vertex_colors_enabled;
@@ -650,9 +717,7 @@
                   });
                 } else {
                   if (child.isPoints) {
-                    (isMobile === true) ? child.material.size = 0.8 : child.material.size = 0.5;
-                    child.sizeAttenuation = true;
-                    child.sortPoints = true;
+                    child.material.size = (isMobile === true) ? 0.8 : 0.6;
                   } else {
                     set_texture_colorSpace( child.material );
                     child.material.vertexColors = vertex_colors_enabled;
@@ -684,11 +749,16 @@
         if (animations && animations.length > 0) {
           animation_mixer = new THREE.AnimationMixer( mesh );
           current_animation = 0;
-          animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+
+          animations.forEach( clip => {
+            animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat;
+          });
+
           animation_mixer.clipAction( animations[ 0 ] ).play();
+          animation_running = true;
+
           document.getElementById('btn_animate').disabled = false;
           document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
-          animation_running = true;
         }
 
         // Add mesh to the scene
@@ -752,7 +822,7 @@
         if (material.transmissionMap) material.transmissionMap.colorSpace = THREE.LinearSRGBColorSpace;
       }
 
-      function finish_loading() {
+      async function finish_loading() {
         enable_disable( false );
 
         if (object_is_points === true) {
@@ -771,6 +841,13 @@
         render_requested = true;
         mouse_wheel = true;
         render();
+
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+      }
+
+      function log_info() {
+        console.log( 'Memory: ', renderer.info.memory );
+        console.log( 'Render: ', renderer.info.render );
       }
 
       function handle_error( error ) {
@@ -902,7 +979,9 @@
 
       async function render() {
         if (mesh) {
-          if (animation_running === true || mouse_down === true || mouse_wheel === true || (skeleton_demo === false && skeleton_demo_running === true)) {
+          if (animation_running === true || mouse_down === true || mouse_wheel === true ||
+            (skeleton_demo === false && skeleton_demo_running === true)) {
+
             if (skeleton_demo === false && skeleton_demo_running === true) {
               skeleton_helper.bones.forEach( bone => {
                 if (sk_count < 500) {
@@ -951,9 +1030,6 @@
       function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
         document.getElementById('btn_flat').style.backgroundColor = 'transparent';
-        document.getElementById('btn_load').style.backgroundColor = 'transparent';
-        document.getElementById('btn_clear').style.backgroundColor = 'transparent';
-        document.getElementById('btn_quick_x').style.backgroundColor = 'transparent';
         document.getElementById('btn_animate').style.backgroundColor = 'transparent';
         document.getElementById('btn_skeleton').style.backgroundColor = 'transparent';
         document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
@@ -971,6 +1047,8 @@
             }
 
             if (mesh) {
+              scene.remove( mesh );
+
               if (skeleton_helper) {
                 skeleton_demo_running = false;
 
@@ -993,18 +1071,68 @@
                 animation_mixer.uncacheRoot( animation_mixer.getRoot() );
               }
 
-              scene.remove( mesh );
+              if (mesh.skeleton && mesh.skeleton.boneTexture)
+                mesh.skeleton.boneTexture.dispose();
 
               mesh.traverse( ( child ) => {
-                if (child.isMesh || child.isPoints) {
+                if (child.isMesh || child.isPoints || child.isLine) {
+                  if (child.skeleton && child.skeleton.boneTexture)
+                    child.skeleton.boneTexture.dispose();
+
                   if (child.material) {
                     if (Array.isArray( child.material )) {
                       child.material.forEach( mtl => {
-                        if (mtl.map) mtl.map.dispose();
+                        if (mtl.uniforms) {
+                          Object.keys( mtl.uniforms ).forEach( ( key ) => {
+                            if (mtl.uniforms[ key ].value) {
+                              if (Array.isArray( mtl.uniforms[ key ].value ) && mtl.uniforms[ key ].value.length > 0) {
+                                mtl.uniforms[ key ].value.forEach( val => {
+                                  if (val.type && val.type === 1009)
+                                  val.dispose();
+                                });
+                              } else {
+                                if (mtl.uniforms[ key ].value.type && mtl.uniforms[ key ].value.type === 1009)
+                                mtl.uniforms[ key ].value.dispose();
+                              }
+                            }
+                          });
+                        } else {
+                          for (const prop in mtl) {
+                            texture_maps.forEach( tex_map => {
+                              if (prop === tex_map) {
+                                if (mtl[ prop ]) mtl[ prop ].dispose();
+                              }
+                            });
+                          };
+                        }
+
                         mtl.dispose();
                       });
                     } else {
-                      if (child.material.map) child.material.map.dispose();
+                      if (child.material.uniforms) {
+                        Object.keys( child.material.uniforms ).forEach( ( key ) => {
+                          if (child.material.uniforms[ key ].value) {
+                            if (Array.isArray( child.material.uniforms[ key ].value ) && child.material.uniforms[ key ].value.length > 0) {
+                              child.material.uniforms[ key ].value.forEach( val => {
+                                if (val.type && val.type === 1009)
+                                  val.dispose();
+                              });
+                            } else {
+                              if (child.material.uniforms[ key ].value.type && child.material.uniforms[ key ].value.type === 1009)
+                                child.material.uniforms[ key ].value.dispose();
+                            }
+                          }
+                        });
+                      } else {
+                        for (const prop in child.material) {
+                          texture_maps.forEach( tex_map => {
+                            if (prop === tex_map) {
+                              if (child.material[ prop ]) child.material[ prop ].dispose();
+                            }
+                          });
+                        };
+                      }
+
                       child.material.dispose();
                     }
                   }
@@ -1054,6 +1182,11 @@
         isMobile = (/iPad|iPhone|iPod/.test( navigator.platform ))
          || (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent ))
           || (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        texture_maps = [ 'map', 'aoMap', 'alphaMap', 'bumpMap', 'displacementMap', 'envMap', 'lightMap', 'emissiveMap', 'normalMap',
+         'metalnessMap', 'roughnessMap', 'anisotropyMap', 'clearcoatMap', 'clearcoatNormalMap', 'clearcoatRoughnessMap',
+          'iridescenceMap', 'iridescenceThicknessMap', 'sheenColorMap', 'sheenRoughnessMap', 'specularMap',
+           'specularColorMap', 'specularIntensityMap', 'thicknessMap', 'transmissionMap' ];
 
         mouse_wheel = true;
       }
