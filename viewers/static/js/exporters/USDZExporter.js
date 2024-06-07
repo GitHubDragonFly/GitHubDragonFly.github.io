@@ -2,7 +2,13 @@
 
 	class USDZExporter {
 
-		async parse( scene, options = {} ) {
+		parse( scene, onDone, onError, options ) {
+
+			this.parseAsync( scene, options ).then( onDone ).catch( onError );
+
+		}
+
+		async parseAsync( scene, options = {} ) {
 
 			options = Object.assign( {
 				ar: {
@@ -37,7 +43,11 @@
 
 					if ( Array.isArray( object.material ) === true ) {
 
-						console.warn( 'THREE.USDZExporter: Material arrays are not supported. Texture and/or color loss may occur.', object.material );
+						if ( object.material.length > 1 ) {
+
+							console.warn( 'THREE.USDZExporter: Material arrays are not supported. Texture and/or color loss may occur.', object.material );
+
+						}
 
 						material = object.material[ 0 ];
 
@@ -49,9 +59,9 @@
 
 								for ( let i = 1; i < object.material.length; i++ ) {
 
-									if ( material.color.r !== object.material[ i ].color.r
-										 || material.color.g !== object.material[ i ].color.g
-										  || material.color.b !== object.material[ i ].color.b ) {
+									if ( material.color.r !== object.material[ i ].color.r ||
+										material.color.g !== object.material[ i ].color.g ||
+										material.color.b !== object.material[ i ].color.b ) {
 
 										material = object.material[ i ];
 										break;
@@ -782,10 +792,10 @@
 
 		if ( material.isMeshPhysicalMaterial ) {
 
-			inputs.push( `${ pad }color3f inputs:specularColor = ${ buildColor( material.specularColor ) }` );
-			inputs.push( `${ pad }float inputs:clearcoat = ${ material.clearcoat }` );
-			inputs.push( `${ pad }float inputs:clearcoatRoughness = ${ material.clearcoatRoughness }` );
-			inputs.push( `${ pad }float inputs:ior = ${ material.ior }` );
+			if ( material.specularColor ) inputs.push( `${ pad }color3f inputs:specularColor = ${ buildColor( material.specularColor ) }` );
+			if ( material.clearcoat ) inputs.push( `${ pad }float inputs:clearcoat = ${ material.clearcoat }` );
+			if ( material.clearcoatRoughness ) inputs.push( `${ pad }float inputs:clearcoatRoughness = ${ material.clearcoatRoughness }` );
+			if ( material.ior ) inputs.push( `${ pad }float inputs:ior = ${ material.ior }` );
 
 			if ( material.specularColorMap ) {
 
