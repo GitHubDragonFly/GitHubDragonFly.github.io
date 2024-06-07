@@ -358,20 +358,7 @@ THREE.AssimpJSONLoader.prototype = {
 			const height = 128;
 
 			const size = width * height;
-			const data = new Uint8Array( 4 * size );
-			const color = new THREE.Color( 0xFFFFFF );
-
-			const r = Math.floor( color.r * 255 );
-			const g = Math.floor( color.g * 255 );
-			const b = Math.floor( color.b * 255 );
-
-			for ( let i = 0; i < size; i ++ ) {
-				const stride = i * 4;
-				data[ stride + 0 ] = r;
-				data[ stride + 1 ] = g;
-				data[ stride + 2 ] = b;
-				data[ stride + 3 ] = 255;
-			}
+			const data = new Uint8Array( 4 * size ).fill( 255 );
 
 			let tex = new THREE.DataTexture( data, width, height );
 			tex.encoding = THREE.sRGBEncoding;
@@ -557,7 +544,9 @@ THREE.AssimpJSONLoader.prototype = {
 			}
 			else if ( prop.key === '$mat.shininess' ) {
 
-				init_props[ 'shininess' ] = prop.value;
+				//init_props[ 'shininess' ] = prop.value;
+				init_props[ 'roughness' ] = prop.value > 0 ? 1.5 * prop.value : 0.4;
+				init_props[ 'metalness' ] = 0.6;
 
 			}
 
@@ -575,7 +564,8 @@ THREE.AssimpJSONLoader.prototype = {
 
 			}
 
-			mat = new THREE.MeshPhongMaterial( init_props );
+			//mat = new THREE.MeshPhongMaterial( init_props );
+			mat = new THREE.MeshStandardMaterial( init_props );
 
 		}
 
