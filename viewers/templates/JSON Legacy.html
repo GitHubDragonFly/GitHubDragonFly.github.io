@@ -2060,8 +2060,6 @@
         document.getElementById('div_message').style.display = '';
 
         if (scene) {
-          console.log('scene ', scene);
-
           document.getElementById('file_image_input').value = '';
 
           if (polar_grid_visible) show_polar_grid();
@@ -2423,7 +2421,7 @@
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
           directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2 );
-          directionalLight.position.set( 0, 0, 250 );
+          directionalLight.position.set( 0, 120, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
         }
@@ -2661,6 +2659,7 @@
                   }
 
                   merged_geometries.computeVertexNormals();
+                  merged_geometries.normalizeNormals();
                   merged_geometries.center();
 
                   merged_geometries.computeBoundingBox();
@@ -2797,6 +2796,7 @@
           }
 
           object.geometry.computeVertexNormals();
+          object.geometry.normalizeNormals();
           object.geometry.center();
 
           object.geometry.computeBoundingBox();
@@ -3119,6 +3119,172 @@
             handle_error( 'Unsupported URL file!' );
           }
         }
+      }
+
+      async function finish_loading() {
+        enable_disable( false );
+
+        if (object_is_points === true) {
+          document.getElementById('btn_flat').disabled = true;
+          document.getElementById('edge_color').disabled = true;
+          document.getElementById('btn_edges').disabled = true;
+          document.getElementById('btn_mtl_side').disabled = true;
+          document.getElementById('btn_wireframe').disabled = true;
+        }
+
+        mesh.traverse( function( child ) {
+          if ((child.isMesh || child.isPoints) && child.material) {
+            if (Array.isArray( child.material )) {
+              let child_count_array = 1;
+
+              initial_opacity_array[ child.name ] = {};
+              initial_transparency_array[ child.name ] = {};
+              original_color_array[ child.name ] = {};
+              original_side_array[ child.name ] = {};
+
+              child.material.forEach( mtl => {
+                initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
+                original_color_array[ child.name ][ child_count_array ] = new THREE.Color ( mtl.color );
+                original_side_array[ child.name ][ child_count_array ] = mtl.side;
+
+                if (mtl.map) {
+                  mtl.map.encoding = THREE.sRGBEncoding;
+                  document.getElementById('directional_light_intensity').value = 2.0;
+                  set_directional_light_intensity();
+                  document.getElementById('ambient_light_intensity').value = 1.0;
+                  set_ambient_light_intensity();
+                }
+
+                mtl.vertexColors = vertex_colors_enabled;
+
+                if (child.isPoints) {
+                  mtl.size = isMobile === true ? 0.8 : 0.5;
+                } else {
+                  mtl.format = THREE.RGBAFormat;
+                  mtl.side = THREE.DoubleSide;
+                  mtl.flatShading = false;
+                }
+
+                child_count_array += 1;
+
+                mtl.needsUpdate = true;
+              });
+            } else {
+              initial_opacity[ child.name ] = child.material.opacity;
+              initial_transparency[ child.name ] = child.material.transparent;
+              original_color[ child.name ] = new THREE.Color ( child.material.color );
+              original_side[ child.name ] = child.material.side;
+
+              if (child.material.map) {
+                child.material.map.encoding = THREE.sRGBEncoding;
+                document.getElementById('directional_light_intensity').value = 2.0;
+                set_directional_light_intensity();
+                document.getElementById('ambient_light_intensity').value = 1.0;
+                set_ambient_light_intensity();
+              }
+
+              child.material.vertexColors = vertex_colors_enabled;
+
+              if (child.isPoints) {
+                child.material.size = isMobile === true ? 0.8 : 0.5;
+              } else {
+                child.material.format = THREE.RGBAFormat;
+                child.material.side = THREE.DoubleSide;
+                child.material.flatShading = false;
+              }
+
+              child.material.needsUpdate = true;
+            }
+          }
+        });
+
+        set_initial_scale();
+        resize();
+
+        disabled_changed();
+
+        if (isMobile === true) {
+          document.getElementById('gizmo').style.display = 'none';
+        } else {
+          if (gizmo === undefined) {
+            gizmo = new OrbitControlsGizmo( controls, {
+              size: 65,
+              padding: 4,
+              bubbleSizePrimary: 7,
+              bubbleSizeSecondary: 3,
+              lineWidth: 1,
+              fontSize: '8px',
+              fontColor: 'black',
+              fontWeight: 'bold'
+            });
+
+            document.getElementById('gizmo').addEventListener( 'click', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
+            document.getElementById('gizmo').appendChild( gizmo.domElement );
+          }
+        }
+
+        console.timeEnd( 'Loading Time' );
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_message').style.display = 'none';
+
+        render_requested = true;
+        mouse_wheel = true;
+        render();
+
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 100 ) );
+      }
+
+      function log_info() {
+        console.log( 'Memory: ', renderer.info.memory );
+        console.log( 'Render: ', renderer.info.render );
+      }
+
+      function handle_error( error ) {
+        document.getElementById('div_message').innerText = 'Check the console for any error messages';
+        document.getElementById('div_message').style.display = '';
+        if (gui) set_gui_position();
+
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        mouse_wheel = true;
+        render_requested = false;
+        enable_disable( true );
+
+        if (gizmo) {
+          document.getElementById('gizmo').removeChild( gizmo.domElement );
+          gizmo.dispose();
+        }
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      // Merge multiple meshes into a single mesh, thanks to manthrax:
+      // https://discourse.threejs.org/t/merge-multiple-mesh-into-a-single-one/35971/6
+
+      function merge_meshes() {
+        let merged_geometries;
+        let geometries = [];
+        let meshes = [];
+
+        let m_meshes = mesh.clone();
+        m_meshes.updateMatrixWorld( true, true );
+
+        m_meshes.traverse( function( child ) {
+          if (child.isMesh) {
+            meshes.push( child );
+            geometries.push( child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone() );
+          }
+        });
+
+        geometries.forEach( ( geo, index ) => geo.applyMatrix( meshes[ index ].matrixWorld ) );
+        merged_geometries = THREE.BufferGeometryUtils.mergeBufferGeometries( geometries, true );
+        merged_geometries.applyMatrix( m_meshes.matrix.getInverse( m_meshes.matrix.clone() ) );
+        merged_geometries.userData.materials = meshes.map( m => m.material );
+
+        return merged_geometries;
       }
 
       /* Encode with draco compression - geometry */
@@ -3499,156 +3665,6 @@
         for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
 
         return compressedArrayBuffer;
-      }
-
-      async function finish_loading() {
-        enable_disable( false );
-
-        if (object_is_points === true) {
-          document.getElementById('btn_flat').disabled = true;
-          document.getElementById('edge_color').disabled = true;
-          document.getElementById('btn_edges').disabled = true;
-          document.getElementById('btn_mtl_side').disabled = true;
-          document.getElementById('btn_wireframe').disabled = true;
-        }
-
-        mesh.traverse( function( child ) {
-          if ((child.isMesh || child.isPoints) && child.material) {
-            if (Array.isArray( child.material )) {
-              let child_count_array = 1;
-
-              initial_opacity_array[ child.name ] = {};
-              initial_transparency_array[ child.name ] = {};
-              original_color_array[ child.name ] = {};
-              original_side_array[ child.name ] = {};
-
-              child.material.forEach( mtl => {
-                initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
-                initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
-                original_color_array[ child.name ][ child_count_array ] = new THREE.Color ( mtl.color );
-                original_side_array[ child.name ][ child_count_array ] = mtl.side;
-
-                mtl.vertexColors = vertex_colors_enabled;
-
-                if (child.isPoints) {
-                  mtl.size = isMobile === true ? 0.8 : 0.5;
-                } else {
-                  mtl.format = THREE.RGBAFormat;
-                  mtl.side = THREE.DoubleSide;
-                  mtl.flatShading = false;
-                }
-
-                child_count_array += 1;
-
-                mtl.needsUpdate = true;
-              });
-            } else {
-              initial_opacity[ child.name ] = child.material.opacity;
-              initial_transparency[ child.name ] = child.material.transparent;
-              original_color[ child.name ] = new THREE.Color ( child.material.color );
-              original_side[ child.name ] = child.material.side;
-
-              child.material.vertexColors = vertex_colors_enabled;
-
-              if (child.isPoints) {
-                child.material.size = isMobile === true ? 0.8 : 0.5;
-              } else {
-                child.material.format = THREE.RGBAFormat;
-                child.material.side = THREE.DoubleSide;
-                child.material.flatShading = false;
-              }
-
-              child.material.needsUpdate = true;
-            }
-          }
-        });
-
-        set_initial_scale();
-        resize();
-
-        disabled_changed();
-
-        if (isMobile === true) {
-          document.getElementById('gizmo').style.display = 'none';
-        } else {
-          if (gizmo === undefined) {
-            gizmo = new OrbitControlsGizmo( controls, {
-              size: 65,
-              padding: 4,
-              bubbleSizePrimary: 7,
-              bubbleSizeSecondary: 3,
-              lineWidth: 1,
-              fontSize: '8px',
-              fontColor: 'black',
-              fontWeight: 'bold'
-            });
-
-            document.getElementById('gizmo').addEventListener( 'click', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
-            document.getElementById('gizmo').appendChild( gizmo.domElement );
-          }
-        }
-
-        console.timeEnd( 'Loading Time' );
-        document.getElementById('div_loading').style.display = 'none';
-        document.getElementById('div_message').style.display = 'none';
-
-        render_requested = true;
-        mouse_wheel = true;
-        render();
-
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 100 ) );
-      }
-
-      function log_info() {
-        console.log( 'Memory: ', renderer.info.memory );
-        console.log( 'Render: ', renderer.info.render );
-      }
-
-      function handle_error( error ) {
-        document.getElementById('div_message').innerText = 'Check the console for any error messages';
-        document.getElementById('div_message').style.display = '';
-        if (gui) set_gui_position();
-
-        console.timeEnd( 'Loading Time' );
-        console.log( 'Error loading model!' );
-        console.log( error );
-        mouse_wheel = true;
-        render_requested = false;
-        enable_disable( true );
-
-        if (gizmo) {
-          document.getElementById('gizmo').removeChild( gizmo.domElement );
-          gizmo.dispose();
-        }
-
-        document.getElementById('div_loading').style.display = 'none';
-        document.getElementById('div_error').style.display = 'block';
-      }
-
-      // Merge multiple meshes into a single mesh, thanks to manthrax:
-      // https://discourse.threejs.org/t/merge-multiple-mesh-into-a-single-one/35971/6
-
-      function merge_meshes() {
-        let merged_geometries;
-        let geometries = [];
-        let meshes = [];
-
-        let m_meshes = mesh.clone();
-        m_meshes.updateMatrixWorld( true, true );
-
-        m_meshes.traverse( function( child ) {
-          if (child.isMesh) {
-            meshes.push( child );
-            geometries.push( child.geometry.index ? child.geometry.toNonIndexed() : child.geometry.clone() );
-          }
-        });
-
-        geometries.forEach( ( geo, index ) => geo.applyMatrix( meshes[ index ].matrixWorld ) );
-        merged_geometries = THREE.BufferGeometryUtils.mergeBufferGeometries( geometries, true );
-        merged_geometries.applyMatrix( m_meshes.matrix.getInverse( m_meshes.matrix.clone() ) );
-        merged_geometries.userData.materials = meshes.map( m => m.material );
-
-        return merged_geometries;
       }
 
       function show_polar_grid() {
@@ -4288,7 +4304,7 @@
         if (reset === true) {
           controls.reset();
           if (mesh) mesh.position.set( 0, 0, 0 );
-          directionalLight.position.set( 0, 0, 250 );
+          directionalLight.position.set( 0, 120, 250 );
           set_flat();
           set_model_opacity();
           set_scene_image( reset );
