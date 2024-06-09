@@ -226,9 +226,10 @@
       var selected_url_file = '', url_displayed = false, url_loading = false;
       var THREE, manager, loaded_model, material, extension, vertex_colors;
       var ww = window.innerWidth, wh = window.innerHeight, bounding_box;
-      var scene, camera, renderer, ambientLight, directionalLight;
+      var scene, camera, renderer, animations, animation_mixer;
+      var ambientLight, directionalLight, events_initialized;
+      var controls, device_controls, clock, texture_maps, isMobile;
       var controller, controllerGrip1, controllerGrip2, vr_button, vrb;
-      var controls, device_controls, clock, texture_maps, isMobile, events_initialized;
 
       function set_initial_scale() {
         // Set the initial scale of the object so it hopefully comes to view
@@ -275,7 +276,14 @@
           if (center.z !== 0) loaded_model.translateZ( center.z * ( - 1 ) );
         }
 
-        if (controls) controls.target.set( center.x, center.y, center.z );
+        if (controls) {
+          controls.target.set( center.x, center.y, center.z );
+        } else {
+          // Set the camera's z distance
+
+          camera.position.z = bounding_box.max.z + 2;
+          camera.updateProjectionMatrix();
+        }
       }
 
       function set_model_scale( scale ) {
@@ -347,6 +355,14 @@
               loaded_model = collada.scene;
               loaded_model.name = 'loaded_model';
 
+              animations = collada.scene.animations;
+
+              if (animations && animations.length > 0) {
+                animation_mixer = new THREE.AnimationMixer( collada.scene );
+                animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+                animation_mixer.clipAction( animations[ 0 ] ).play();
+              }
+
               loaded_model.traverse( ( child ) => {
                 if (child.isMesh || child.isPoints) {
                   if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
@@ -398,6 +414,14 @@
             fbx_loader.load( url, function( fbx_scene ) {
               loaded_model = fbx_scene;
               loaded_model.name = 'loaded_model';
+
+              animations = fbx_scene.animations;
+
+              if (animations && animations.length > 0) {
+                animation_mixer = new THREE.AnimationMixer( fbx_scene );
+                animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+                animation_mixer.clipAction( animations[ 0 ] ).play();
+              }
 
               loaded_model.traverse( ( child ) => {
                 if (child.isMesh || child.isPoints) {
@@ -458,6 +482,14 @@
             gltf_loader.load( url, function( gltf ) {
               loaded_model = gltf.scene;
               loaded_model.name = 'loaded_model';
+
+              animations = gltf.animations;
+
+              if (animations && animations.length > 0) {
+                animation_mixer = new THREE.AnimationMixer( gltf.scene );
+                animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+                animation_mixer.clipAction( animations[ 0 ] ).play();
+              }
 
               scene.add( loaded_model );
 
@@ -720,7 +752,7 @@
           });
         }
 
-        reset_all( true );
+        await reset_all( true );
 
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
@@ -840,6 +872,20 @@
           if (loaded_model && loaded_model.name === 'loaded_model') {
             scene.remove( loaded_model );
 
+            if (animation_mixer) {
+              animation_mixer.stopAllAction();
+
+              for ( let i = 0; i < animations.length; i++ ) {
+                animation_mixer.uncacheAction( animations[ i ] );
+                animation_mixer.uncacheClip( animations[ i ] );
+              }
+
+              animation_mixer.uncacheRoot( animation_mixer.getRoot() );
+
+              animations = [];
+              animation_mixer = null;
+            }
+
             if (loaded_model.skeleton && loaded_model.skeleton.boneTexture)
               loaded_model.skeleton.boneTexture.dispose();
 
@@ -921,6 +967,8 @@
 
       async function render() {
         if (loaded_model) {
+          if (animation_mixer) animation_mixer.update( clock.getDelta() );
+
           if (controls) controls.update();
 
           if (device_controls) {
