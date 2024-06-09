@@ -21,7 +21,7 @@ import {
 } from "three";
 
 class DeviceOrientationController extends EventDispatcher {
-	constructor(object, domElement) {
+	constructor( object, domElement ) {
 
 		super();
 
@@ -36,7 +36,7 @@ class DeviceOrientationController extends EventDispatcher {
 		this.useQuaternions = true; // use quaternions for orientation calculation by default
 
 		this.deviceOrientation = {};
-		this.screenOrientation = window.orientation || 0;
+		this.screenOrientation = window.screen.orientation || 0;
 
 		// Manual rotate override components
 		var startX = 0, startY = 0, currentX = 0, currentY = 0, scrollSpeedX, scrollSpeedY, tmpQuat = new Quaternion();
@@ -91,7 +91,7 @@ class DeviceOrientationController extends EventDispatcher {
 		}.bind(this);
 
 		this.onScreenOrientationChange = function () {
-			this.screenOrientation = window.orientation || 0;
+			this.screenOrientation = window.screen.orientation || 0;
 
 			fireEvent(CONTROLLER_EVENT.SCREEN_ORIENTATION);
 		}.bind(this);
@@ -120,8 +120,8 @@ class DeviceOrientationController extends EventDispatcher {
 			scrollSpeedX = (1200 / window.innerWidth) * 0.2;
 			scrollSpeedY = (800 / window.innerHeight) * 0.2;
 
-			this.element.addEventListener('mousemove', this.onDocumentMouseMove, false);
-			this.element.addEventListener('mouseup', this.onDocumentMouseUp, false);
+			this.element.addEventListener('pointermove', this.onDocumentMouseMove, false);
+			this.element.addEventListener('pointerup', this.onDocumentMouseUp, false);
 
 			fireEvent(CONTROLLER_EVENT.MANUAL_CONTROL + 'start');
 			fireEvent(CONTROLLER_EVENT.ROTATE_CONTROL + 'start');
@@ -133,8 +133,8 @@ class DeviceOrientationController extends EventDispatcher {
 		}.bind(this);
 
 		this.onDocumentMouseUp = function (event) {
-			this.element.removeEventListener('mousemove', this.onDocumentMouseMove, false);
-			this.element.removeEventListener('mouseup', this.onDocumentMouseUp, false);
+			this.element.removeEventListener('pointermove', this.onDocumentMouseMove, false);
+			this.element.removeEventListener('pointerup', this.onDocumentMouseUp, false);
 
 			appState = CONTROLLER_STATE.AUTO;
 
@@ -446,7 +446,7 @@ class DeviceOrientationController extends EventDispatcher {
 
 			window.addEventListener('compassneedscalibration', this.onCompassNeedsCalibration, false);
 
-			this.element.addEventListener('mousedown', this.onDocumentMouseDown, false);
+			this.element.addEventListener('pointerdown', this.onDocumentMouseDown, false);
 			this.element.addEventListener('touchstart', this.onDocumentTouchStart, false);
 
 			this.freeze = false;
@@ -462,7 +462,7 @@ class DeviceOrientationController extends EventDispatcher {
 
 			window.removeEventListener('compassneedscalibration', this.onCompassNeedsCalibration, false);
 
-			this.element.removeEventListener('mousedown', this.onDocumentMouseDown, false);
+			this.element.removeEventListener('pointerdown', this.onDocumentMouseDown, false);
 			this.element.removeEventListener('touchstart', this.onDocumentTouchStart, false);
 		};
 
