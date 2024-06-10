@@ -106,9 +106,10 @@ Number Type Converter
   - Zoom In / Out = mouse scroll wheel
 
 - Special notes about AR / VR Viewer:
-  - Currently highly experimental so it might not work properly or at all
-  - Using slightly modified version of [threeVR](https://github.com/richtr/threeVR) which might need some fixing
-  - It might work on both the desktop and mobile devices, either as a standard viewer or with AR / VR support
+  - Using slightly modified version of the three.js `DeviceOrientationControls`, last available in r133
+  - Currently highly experimental so it might work or it might not work properly or at all
+  - My tests had it working with Chrome browser on both the desktop and an Android mobile phone:
+    - either as a standard viewer or with AR / VR support
   - Supported import formats (single model or scene only): BIM, DAE, FBX, GLB, GLTF, PLY, USDZ:
     - Local and remote URL loading is supported
     - Local model files should be self-contained (embedded or binary)
