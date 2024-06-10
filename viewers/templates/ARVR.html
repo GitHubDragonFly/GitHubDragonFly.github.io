@@ -290,9 +290,9 @@
         // Scale according to window width / height, whichever is greater
 
         if (ww > wh) {
-          loaded_model.scale.multiplyScalar( ( wh / size.y ) * 0.15 );
+          loaded_model.scale.multiplyScalar( ( wh / size.y ) * 0.05 );
         } else {
-          loaded_model.scale.multiplyScalar( ( ww / size.x ) * 0.15 );
+          loaded_model.scale.multiplyScalar( ( ww / size.x ) * 0.05 );
         }
 
         // Get center coordinates and move to the center again
@@ -307,7 +307,7 @@
 
         // Scale again and re-center if the model's width / height is greater than the screen's width / height
 
-        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
+        while ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
           loaded_model.scale.multiplyScalar( ww / (ww > wh ? size.x : size.y) );
 
           bounding_box.setFromObject( loaded_model );
@@ -321,12 +321,10 @@
 
         loaded_model.position.y = 1.6;
 
-        if (controls) {
-          controls.target.set( 0, 1.6, 0 );
-        } else {
-          camera.lookAt( 0, 1.6, 0 );
-          camera.updateProjectionMatrix();
-        }
+        camera.position.z = bounding_box.max.z + 50;
+        camera.updateProjectionMatrix();
+
+        controls.target.set( center.x, center.y, center.z );
       }
 
       function set_model_scale( scale ) {
@@ -344,280 +342,283 @@
           return;
         }
 
-        switch ( extension ) {
-          case '.BIM':
-            const { BIMLoader } = await import( "../static/dotbim/loader/module/BIMLoader.js" );
+        await new Promise( async resolve => {
+          switch ( extension ) {
+            case '.BIM':
+              const { BIMLoader } = await import( "../static/dotbim/loader/module/BIMLoader.js" );
 
-            const bim_loader = new BIMLoader( manager );
+              const bim_loader = new BIMLoader( manager );
 
-            bim_loader.load( url, function( bim_meshes ) {
-              loaded_model = bim_meshes;
-              loaded_model.name = 'loaded_model';
+              bim_loader.load( url, function( bim_meshes ) {
+                loaded_model = bim_meshes;
+                loaded_model.name = 'loaded_model';
 
-              loaded_model.traverse( ( child ) => {
-                if (child.isMesh) {
-                  if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                  child.geometry.normalizeNormals();
-                  child.geometry.computeBoundingBox();
-                  child.geometry.computeBoundingSphere();
+                loaded_model.traverse( ( child ) => {
+                  if (child.isMesh) {
+                    if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                    child.geometry.normalizeNormals();
+                    child.geometry.computeBoundingBox();
+                    child.geometry.computeBoundingSphere();
 
-                  vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
+                    vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
 
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      set_texture_colorSpace( mtl );
-                      mtl.vertexColors = vertex_colors;
-                      mtl.side = THREE.DoubleSide;
-                      mtl.flatShading = true;
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        set_texture_colorSpace( mtl );
+                        mtl.vertexColors = vertex_colors;
+                        mtl.side = THREE.DoubleSide;
+                        mtl.flatShading = true;
 
-                      mtl.needsUpdate = true;
-                    });
-                  } else {
-                    set_texture_colorSpace( child.material );
-                    child.material.vertexColors = vertex_colors;
-                    child.material.side = THREE.DoubleSide;
-                    child.material.flatShading = true;
+                        mtl.needsUpdate = true;
+                      });
+                    } else {
+                      set_texture_colorSpace( child.material );
+                      child.material.vertexColors = vertex_colors;
+                      child.material.side = THREE.DoubleSide;
+                      child.material.flatShading = true;
 
-                    child.material.needsUpdate = true;
+                      child.material.needsUpdate = true;
+                    }
                   }
+                });
+
+                resolve( scene.add( loaded_model ) );
+              }, function ( xhr ) { // onProgress
+              }, function ( error ) { handle_error( error ); }); // onError
+
+              break;
+
+            case '.DAE':
+              const { ColladaLoader } = await import( "../static/jsm/loaders/ColladaLoader.js" );
+
+              const dae_loader = new ColladaLoader( manager );
+
+              dae_loader.load( url, function( collada ) {
+                loaded_model = collada.scene;
+                loaded_model.name = 'loaded_model';
+
+                animations = collada.scene.animations;
+
+                if (animations && animations.length > 0) {
+                  animation_mixer = new THREE.AnimationMixer( collada.scene );
+                  animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+                  animation_mixer.clipAction( animations[ 0 ] ).play();
                 }
-              });
 
-              scene.add( loaded_model );
-            }, function ( xhr ) { // onProgress
-            }, function ( error ) { handle_error( error ); }); // onError
+                loaded_model.traverse( ( child ) => {
+                  if (child.isMesh || child.isPoints) {
+                    if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                    child.geometry.normalizeNormals();
+                    child.geometry.computeBoundingBox();
+                    child.geometry.computeBoundingSphere();
 
-            break;
+                    vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
 
-          case '.DAE':
-            const { ColladaLoader } = await import( "../static/jsm/loaders/ColladaLoader.js" );
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        set_texture_colorSpace( mtl );
+                        mtl.vertexColors = vertex_colors;
+                        mtl.side = THREE.DoubleSide;
+                        mtl.flatShading = false;
 
-            const dae_loader = new ColladaLoader( manager );
+                        mtl.needsUpdate = true;
+                      });
+                    } else {
+                      set_texture_colorSpace( child.material );
+                      child.material.vertexColors = vertex_colors;
+                      child.material.side = THREE.DoubleSide;
+                      child.material.flatShading = false;
 
-            dae_loader.load( url, function( collada ) {
-              loaded_model = collada.scene;
-              loaded_model.name = 'loaded_model';
-
-              animations = collada.scene.animations;
-
-              if (animations && animations.length > 0) {
-                animation_mixer = new THREE.AnimationMixer( collada.scene );
-                animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
-                animation_mixer.clipAction( animations[ 0 ] ).play();
-              }
-
-              loaded_model.traverse( ( child ) => {
-                if (child.isMesh || child.isPoints) {
-                  if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                  child.geometry.normalizeNormals();
-                  child.geometry.computeBoundingBox();
-                  child.geometry.computeBoundingSphere();
-
-                  vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
-
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      set_texture_colorSpace( mtl );
-                      mtl.vertexColors = vertex_colors;
-                      mtl.side = THREE.DoubleSide;
-                      mtl.flatShading = false;
-
-                      mtl.needsUpdate = true;
-                    });
-                  } else {
-                    set_texture_colorSpace( child.material );
-                    child.material.vertexColors = vertex_colors;
-                    child.material.side = THREE.DoubleSide;
-                    child.material.flatShading = false;
-
-                    child.material.needsUpdate = true;
+                      child.material.needsUpdate = true;
+                    }
                   }
+                });
+
+                resolve( scene.add( loaded_model ) );
+              }, function ( xhr ) { // onProgress
+              }, function ( error ) { handle_error( error ); }); // onError
+
+              break;
+
+            case '.FBX':
+              const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
+              const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
+              const { FBXLoader } = await import( "../static/jsm/loaders/FBXLoader.js" );
+
+              const fbx_loader = new FBXLoader( manager );
+
+              const dds_loader = new DDSLoader( manager );
+              manager.addHandler( /\.dds$/i, dds_loader );
+
+              const tga_loader = new TGALoader( manager );
+              manager.addHandler( /\.tga$/i, dds_loader );
+
+              fbx_loader.load( url, function( fbx_scene ) {
+                loaded_model = fbx_scene;
+                loaded_model.name = 'loaded_model';
+
+                animations = fbx_scene.animations;
+
+                if (animations && animations.length > 0) {
+                  animation_mixer = new THREE.AnimationMixer( fbx_scene );
+                  animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+                  animation_mixer.clipAction( animations[ 0 ] ).play();
                 }
-              });
 
-              scene.add( loaded_model );
-            }, function ( xhr ) { // onProgress
-            }, function ( error ) { handle_error( error ); }); // onError
+                loaded_model.traverse( ( child ) => {
+                  if (child.isMesh || child.isPoints) {
+                    if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                    child.geometry.normalizeNormals();
+                    child.geometry.computeBoundingBox();
+                    child.geometry.computeBoundingSphere();
 
-            break;
+                    vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
 
-          case '.FBX':
-            const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
-            const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
-            const { FBXLoader } = await import( "../static/jsm/loaders/FBXLoader.js" );
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        set_texture_colorSpace( mtl );
+                        mtl.vertexColors = vertex_colors;
+                        mtl.side = THREE.DoubleSide;
 
-            const fbx_loader = new FBXLoader( manager );
+                        mtl.needsUpdate = true;
+                      });
+                    } else {
+                      set_texture_colorSpace( child.material );
+                      child.material.vertexColors = vertex_colors;
+                      child.material.side = THREE.DoubleSide;
 
-            const dds_loader = new DDSLoader( manager );
-            manager.addHandler( /\.dds$/i, dds_loader );
-
-            const tga_loader = new TGALoader( manager );
-            manager.addHandler( /\.tga$/i, dds_loader );
-
-            fbx_loader.load( url, function( fbx_scene ) {
-              loaded_model = fbx_scene;
-              loaded_model.name = 'loaded_model';
-
-              animations = fbx_scene.animations;
-
-              if (animations && animations.length > 0) {
-                animation_mixer = new THREE.AnimationMixer( fbx_scene );
-                animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
-                animation_mixer.clipAction( animations[ 0 ] ).play();
-              }
-
-              loaded_model.traverse( ( child ) => {
-                if (child.isMesh || child.isPoints) {
-                  if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                  child.geometry.normalizeNormals();
-                  child.geometry.computeBoundingBox();
-                  child.geometry.computeBoundingSphere();
-
-                  vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
-
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      set_texture_colorSpace( mtl );
-                      mtl.vertexColors = vertex_colors;
-                      mtl.side = THREE.DoubleSide;
-
-                      mtl.needsUpdate = true;
-                    });
-                  } else {
-                    set_texture_colorSpace( child.material );
-                    child.material.vertexColors = vertex_colors;
-                    child.material.side = THREE.DoubleSide;
-
-                    child.material.needsUpdate = true;
+                      child.material.needsUpdate = true;
+                    }
                   }
+                });
+
+                resolve( scene.add( loaded_model ) );
+              }, function ( xhr ) { // onProgress
+              }, function ( error ) { handle_error( error ); }); // onError
+
+              break;
+
+            case '.GLB':
+            case '.GLTF':
+              const { MeshoptDecoder } = await import( "meshoptimizer" );
+              const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
+              const { DRACOLoader } = await import( "three/addons/loaders/DRACOLoader.min.js" );
+              const { GLTFLoader } = await import( "../static/jsm/loaders/GLTFLoader.js" );
+
+              const gltf_loader = new GLTFLoader( manager );
+
+              const draco_loader = new DRACOLoader( manager );
+              draco_loader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/libs/draco/" );
+              draco_loader.setDecoderConfig( { type: 'js' } );
+              draco_loader.preload();
+
+              const ktx2_loader = new KTX2Loader( manager );
+              ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/libs/basis/" );
+              ktx2_loader.detectSupport( renderer );
+              manager.addHandler( /\.ktx2$/i, ktx2_loader );
+
+              gltf_loader.setKTX2Loader( ktx2_loader );
+              gltf_loader.setDRACOLoader( draco_loader );
+              gltf_loader.setMeshoptDecoder( MeshoptDecoder );
+
+              gltf_loader.load( url, function( gltf ) {
+                loaded_model = gltf.scene;
+                loaded_model.name = 'loaded_model';
+
+                animations = gltf.animations;
+
+                if (animations && animations.length > 0) {
+                  animation_mixer = new THREE.AnimationMixer( gltf.scene );
+                  animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+                  animation_mixer.clipAction( animations[ 0 ] ).play();
                 }
-              });
 
-              scene.add( loaded_model );
-            }, function ( xhr ) { // onProgress
-            }, function ( error ) { handle_error( error ); }); // onError
+                resolve( scene.add( loaded_model ) );
 
-            break;
+                gltf_loader.dracoLoader.dispose();
+                gltf_loader.ktx2Loader.dispose();
+              }, function ( xhr ) { // onProgress
+              }, function ( error ) { handle_error( error ); }); // onError
 
-          case '.GLB':
-          case '.GLTF':
-            const { MeshoptDecoder } = await import( "meshoptimizer" );
-            const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
-            const { DRACOLoader } = await import( "three/addons/loaders/DRACOLoader.min.js" );
-            const { GLTFLoader } = await import( "../static/jsm/loaders/GLTFLoader.js" );
+              break;
 
-            const gltf_loader = new GLTFLoader( manager );
+            case '.PLY':
+              const { PLYLoader } = await import( "three/addons/loaders/PLYLoader.min.js" );
+              const { mergeVertices } = await import( "three/addons/utils/BufferGeometryUtils.min.js" );
 
-            const draco_loader = new DRACOLoader( manager );
-            draco_loader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/libs/draco/" );
-            draco_loader.setDecoderConfig( { type: 'js' } );
-            draco_loader.preload();
+              const ply_loader = new PLYLoader( manager );
 
-            const ktx2_loader = new KTX2Loader( manager );
-            ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/libs/basis/" );
-            ktx2_loader.detectSupport( renderer );
-            manager.addHandler( /\.ktx2$/i, ktx2_loader );
+              ply_loader.load( url, function( geometry ) {
+                (geometry.hasAttribute( 'color' ) === true) ? vertex_colors = true : vertex_colors = false;
 
-            gltf_loader.setKTX2Loader( ktx2_loader );
-            gltf_loader.setDRACOLoader( draco_loader );
-            gltf_loader.setMeshoptDecoder( MeshoptDecoder );
+                if ( geometry.index !== null ) {
+                  geometry.deleteAttribute('normal');
+                  geometry = mergeVertices( geometry );
+                  geometry.computeVertexNormals();
+                  geometry.normalizeNormals();
+                  geometry.center();
 
-            gltf_loader.load( url, function( gltf ) {
-              loaded_model = gltf.scene;
-              loaded_model.name = 'loaded_model';
+                  material.vertexColors = vertex_colors;
 
-              animations = gltf.animations;
+                  loaded_model = new THREE.Mesh( geometry, material );
+                } else {
+                  let points_material = new THREE.PointsMaterial( { size: 0.35, transparent: true, blending: THREE.AdditiveBlending } );
 
-              if (animations && animations.length > 0) {
-                animation_mixer = new THREE.AnimationMixer( gltf.scene );
-                animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
-                animation_mixer.clipAction( animations[ 0 ] ).play();
-              }
+                  points_material.vertexColors = vertex_colors;
 
-              scene.add( loaded_model );
+                  loaded_model = new THREE.Points( geometry, points_material );
+                  loaded_model.sizeAttenuation = true;
+                  loaded_model.sortPoints = true;
+                }
 
-              gltf_loader.dracoLoader.dispose();
-              gltf_loader.ktx2Loader.dispose();
-            }, function ( xhr ) { // onProgress
-            }, function ( error ) { handle_error( error ); }); // onError
+                loaded_model.name = 'loaded_model';
 
-            break;
+                resolve( scene.add( loaded_model ) );
+              }, function ( xhr ) { // onProgress
+              }, function ( error ) { handle_error( error ); }); // onError
 
-          case '.PLY':
-            const { PLYLoader } = await import( "three/addons/loaders/PLYLoader.min.js" );
-            const { mergeVertices } = await import( "three/addons/utils/BufferGeometryUtils.min.js" );
+              break;
 
-            const ply_loader = new PLYLoader( manager );
+            case '.USDZ':
+              const { USDZLoader } = await import( "../static/jsm/loaders/USDZLoader.js" );
 
-            ply_loader.load( url, function( geometry ) {
-              (geometry.hasAttribute( 'color' ) === true) ? vertex_colors = true : vertex_colors = false;
+              const usdz_loader = new USDZLoader( manager );
 
-              if ( geometry.index !== null ) {
-                geometry.deleteAttribute('normal');
-                geometry = mergeVertices( geometry );
-                geometry.computeVertexNormals();
-                geometry.normalizeNormals();
-                geometry.center();
+              usdz_loader.load( url, function( usd ) {
+                loaded_model = usd;
+                loaded_model.name = 'loaded_model';
 
-                material.vertexColors = vertex_colors;
+                loaded_model.traverse( ( child ) => {
+                  if (child.isMesh) {
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        set_texture_colorSpace( mtl );
+                        mtl.side = THREE.DoubleSide;
+                        mtl.flatShading = false;
 
-                loaded_model = new THREE.Mesh( geometry, material );
-              } else {
-                let points_material = new THREE.PointsMaterial( { size: 0.35, transparent: true, blending: THREE.AdditiveBlending } );
+                        mtl.needsUpdate = true;
+                      });
+                    } else {
+                      set_texture_colorSpace( child.material );
+                      child.material.side = THREE.DoubleSide;
+                      child.material.flatShading = false;
 
-                points_material.vertexColors = vertex_colors;
-
-                loaded_model = new THREE.Points( geometry, points_material );
-                loaded_model.sizeAttenuation = true;
-                loaded_model.sortPoints = true;
-              }
-
-              loaded_model.name = 'loaded_model';
-
-              scene.add( loaded_model );
-            }, function ( xhr ) { // onProgress
-            }, function ( error ) { handle_error( error ); }); // onError
-
-            break;
-
-          case '.USDZ':
-            const { USDZLoader } = await import( "../static/jsm/loaders/USDZLoader.js" );
-
-            const usdz_loader = new USDZLoader( manager );
-
-            usdz_loader.load( url, function( usd ) {
-              loaded_model = usd;
-              loaded_model.name = 'loaded_model';
-
-              loaded_model.traverse( ( child ) => {
-                if (child.isMesh) {
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      set_texture_colorSpace( mtl );
-                      mtl.side = THREE.DoubleSide;
-                      mtl.flatShading = false;
-
-                      mtl.needsUpdate = true;
-                    });
-                  } else {
-                    set_texture_colorSpace( child.material );
-                    child.material.side = THREE.DoubleSide;
-                    child.material.flatShading = false;
-
-                    child.material.needsUpdate = true;
+                      child.material.needsUpdate = true;
+                    }
                   }
-                }
-              });
+                });
 
-              scene.add( loaded_model );
-            }, function ( xhr ) { // onProgress
-            }, function ( error ) { handle_error( error ); }); // onError
+                resolve( scene.add( loaded_model ) );
+              }, function ( xhr ) { // onProgress
+              }, function ( error ) { handle_error( error ); }); // onError
 
-            break;
+              break;
 
-          default:
-            break;
-        }
+            default:
+              break;
+
+          }
+        });
 
         finish_loading();
       }
@@ -639,14 +640,14 @@
 
         // Add AmbientLight to the scene
         if (ambientLight === undefined) {
-          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.8 );
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 1.0 );
           ambientLight.position.set( 0, 0, -250 );
           camera.add( ambientLight );
         }
 
         // Add DirectionalLight to the camera
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2.7 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2.8 );
           directionalLight.position.set( 0, 150, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
@@ -671,6 +672,7 @@
             const { VRButton } = await import( "three/addons/webxr/VRButton.min.js" );
 
             vr_button = await VRButton.createButton( renderer, { requiredFeatures: [ 'local-floor' ] } );
+            vr_button.style.color = 'red';
             if (isMobile === true) vr_button.style.marginBottom = '50px';
 
             document.body.appendChild( vr_button );
