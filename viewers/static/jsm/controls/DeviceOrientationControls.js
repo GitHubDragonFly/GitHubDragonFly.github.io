@@ -9,7 +9,7 @@ import {
 const _zee = new Vector3( 0, 0, 1 );
 const _euler = new Euler();
 const _q0 = new Quaternion();
-const _q1 = new Quaternion( Math.sqrt( 0.5 ), 0, 0, Math.sqrt( 0.5 ) ); // - PI/2 around the x-axis
+const _q1 = new Quaternion( - Math.sqrt( 0.5 ), 0, 0, Math.sqrt( 0.5 ) ); // - PI/2 around the x-axis
 
 const _changeEvent = { type: 'change' };
 
@@ -62,7 +62,7 @@ class DeviceOrientationControls extends EventDispatcher {
 
 			quaternion.multiply( _q1 ); // camera looks out the back of the device, not the top
 
-			quaternion.multiply( _q0.setFromAxisAngle( _zee, orient ) ); // adjust for screen orientation
+			quaternion.multiply( _q0.setFromAxisAngle( _zee, - orient ) ); // adjust for screen orientation
 
 		};
 
@@ -125,7 +125,7 @@ class DeviceOrientationControls extends EventDispatcher {
 
 				const orient = scope.screenOrientation ? MathUtils.degToRad( scope.screenOrientation ) : 0; // O
 
-				setObjectQuaternion( scope.object.quaternion, alpha, beta, gamma, orient );
+				setObjectQuaternion( scope.object.quaternion, alpha, beta, - gamma, orient );
 
 				if ( 8 * ( 1 - lastQuaternion.dot( scope.object.quaternion ) ) > EPS ) {
 
