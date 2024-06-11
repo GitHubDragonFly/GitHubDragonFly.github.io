@@ -14,7 +14,8 @@
           "three": "https://cdn.jsdelivr.net/npm/three@0.164.0/build/three.module.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/",
           "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.5/dist/decode.min.js",
-          "meshoptimizer": "https://esm.sh/meshoptimizer@0.20.0"
+          "meshoptimizer": "https://esm.sh/meshoptimizer@0.20.0",
+          "@tweenjs": "https://esm.sh/@tweenjs/tween.js"
         }
       }
     </script>
@@ -138,6 +139,7 @@
     </style>
 
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
+    <!-- Using tween.js library: https://github.com/tweenjs/tween.js -->
 
     <title>AR / VR Viewer</title>
   </head>
@@ -148,11 +150,13 @@
         <input type="file" id="file_input" onchange="init()" accept=".bim, .dae, .fbx, .glb, .gltf, .ply, .usdz" />
         <select title="Scale" id="model_scale" disabled>
           <option title="Model Scale" value="scale" selected disabled>Scale</option>
-          <option title="Scale 0.05x" value="0.05x" onclick="set_model_scale( '0.05x' );">0.05x</option>
-          <option title="Scale 0.1x" value="0.1x" onclick="set_model_scale( '0.1x' );">0.1x</option>
-          <option title="Scale 0.2x" value="0.2x" onclick="set_model_scale( '0.2x' );">0.2x</option>
-          <option title="Scale 0.5x" value="0.5x" onclick="set_model_scale( '0.5x' );">0.5x</option>
+          <option title="Scale 0.05x" value="0.05x" onclick="set_model_scale( '0.05x' );">1/20</option>
+          <option title="Scale 0.1x" value="0.1x" onclick="set_model_scale( '0.1x' );">1/10</option>
+          <option title="Scale 0.2x" value="0.2x" onclick="set_model_scale( '0.2x' );">1/5</option>
+          <option title="Scale 0.333333x" value="0.333333x" onclick="set_model_scale( '0.333333x' );">1/3</option>
+          <option title="Scale 0.5x" value="0.5x" onclick="set_model_scale( '0.5x' );">1/2</option>
           <option title="Scale 2x" value="2x" onclick="set_model_scale( '2x' );">2x</option>
+          <option title="Scale 3x" value="3x" onclick="set_model_scale( '3x' );">3x</option>
           <option title="Scale 5x" value="5x" onclick="set_model_scale( '5x' );">5x</option>
           <option title="Scale 10x" value="10x" onclick="set_model_scale( '10x' );">10x</option>
           <option title="Scale 20x" value="20x" onclick="set_model_scale( '20x' );">20x</option>
@@ -228,8 +232,12 @@
       var ww = window.innerWidth, wh = window.innerHeight, bounding_box;
       var scene, camera, renderer, animations, animation_mixer;
       var ambientLight, directionalLight, events_initialized, isMobile;
-      var do_controls, controls, device_controls, clock, texture_maps;
-      var ar, vr, controller, controllerGrip1, controllerGrip2, ar_button, vr_button;
+      var device_controls, do_controls, controls, clock, texture_maps, other_scale;
+      var ar, vr, ar_button, vr_button, controller, controllerGrip1, controllerGrip2;
+      var kinematics, kinematics_running, kinematicsTween, tween, tween_update, easing, duration;
+
+      const target = {};
+      const tweenParameters = {};
 
       async function set_equi() {
         if (scene) {
@@ -281,34 +289,35 @@
         let size = bounding_box.getSize( new THREE.Vector3() );
         let center = bounding_box.getCenter( new THREE.Vector3() );
 
-        // Move to the center
+        if (other_scale === true) {
+          if ( size.y > 1 ) {
+            loaded_model.scale.multiplyScalar( 50 / size.y );
+          } else if ( size.y > 0.02 ) {
+            loaded_model.scale.multiplyScalar( 25 / size.y );
+          } else if ( size.y > 0.01 ) {
+            loaded_model.scale.multiplyScalar( 10 / size.y );
+          } else {
+            loaded_model.scale.multiplyScalar( 1 / size.y )
+          }
 
-        if (center.x !== 0) loaded_model.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) loaded_model.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) loaded_model.translateZ( center.z * ( - 1 ) );
-
-        // Scale according to window width / height, whichever is greater
-
-        if (ww > wh) {
-          loaded_model.scale.multiplyScalar( ( wh / size.y ) * 0.05 );
+          bounding_box.setFromObject( loaded_model );
+          center = bounding_box.getCenter( new THREE.Vector3() );
         } else {
-          loaded_model.scale.multiplyScalar( ( ww / size.x ) * 0.05 );
-        }
+          // Move to the center
 
-        // Get center coordinates and move to the center again
+          if (center.x !== 0) loaded_model.translateX( center.x * ( - 1 ) );
+          if (center.y !== 0) loaded_model.translateY( center.y * ( - 1 ) );
+          if (center.z !== 0) loaded_model.translateZ( center.z * ( - 1 ) );
 
-        bounding_box.setFromObject( loaded_model );
-        size = bounding_box.getSize( new THREE.Vector3() );
-        center = bounding_box.getCenter( new THREE.Vector3() );
+          // Scale according to window width / height, whichever is greater
 
-        if (center.x !== 0) loaded_model.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) loaded_model.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) loaded_model.translateZ( center.z * ( - 1 ) );
+          if (ww > wh) {
+            loaded_model.scale.multiplyScalar( ( wh / size.y ) * 0.05 );
+          } else {
+            loaded_model.scale.multiplyScalar( ( ww / size.x ) * 0.05 );
+          }
 
-        // Scale again and re-center if the model's width / height is greater than the screen's width / height
-
-        while ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
-          loaded_model.scale.multiplyScalar( ww / (ww > wh ? size.x : size.y) );
+          // Get center coordinates and move to the center again
 
           bounding_box.setFromObject( loaded_model );
           size = bounding_box.getSize( new THREE.Vector3() );
@@ -317,9 +326,21 @@
           if (center.x !== 0) loaded_model.translateX( center.x * ( - 1 ) );
           if (center.y !== 0) loaded_model.translateY( center.y * ( - 1 ) );
           if (center.z !== 0) loaded_model.translateZ( center.z * ( - 1 ) );
-        }
 
-        loaded_model.position.y = 1.6;
+          // Scale again and re-center if the model's width / height is greater than the screen's width / height
+
+          while ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
+            loaded_model.scale.multiplyScalar( ww / (ww > wh ? size.x : size.y) );
+
+            bounding_box.setFromObject( loaded_model );
+            size = bounding_box.getSize( new THREE.Vector3() );
+            center = bounding_box.getCenter( new THREE.Vector3() );
+
+            if (center.x !== 0) loaded_model.translateX( center.x * ( - 1 ) );
+            if (center.y !== 0) loaded_model.translateY( center.y * ( - 1 ) );
+            if (center.z !== 0) loaded_model.translateZ( center.z * ( - 1 ) );
+          }
+        }
 
         camera.position.z = bounding_box.max.z + 50;
         camera.updateProjectionMatrix();
@@ -342,6 +363,38 @@
           return;
         }
 
+        function setupTween() {
+          for ( const prop in kinematics.joints ) {
+            if ( kinematics.joints.hasOwnProperty( prop ) ) {
+              if ( ! kinematics.joints[ prop ].static ) {
+                const joint = kinematics.joints[ prop ];
+                const old = tweenParameters[ prop ];
+                const position = old ? old : joint.zeroPosition;
+
+                tweenParameters[ prop ] = position;
+
+                target[ prop ] = THREE.MathUtils.randInt( joint.limits.min, joint.limits.max );
+              }
+            }
+          }
+
+          kinematicsTween = new tween( tweenParameters ).to( target, duration ).easing( easing.Quadratic.Out );
+
+          kinematicsTween.onUpdate( function( object ) {
+            for ( const prop in kinematics.joints ) {
+              if ( kinematics.joints.hasOwnProperty( prop ) ) {
+                if ( ! kinematics.joints[ prop ].static ) {
+                  kinematics.setJointValue( prop, object[ prop ] );
+                }
+              }
+            }
+          });
+
+          kinematicsTween.start();
+          kinematics_running = true;
+          setTimeout( setupTween, duration );
+        }
+
         await new Promise( async resolve => {
           switch ( extension ) {
             case '.BIM':
@@ -351,15 +404,9 @@
 
               bim_loader.load( url, function( bim_meshes ) {
                 loaded_model = bim_meshes;
-                loaded_model.name = 'loaded_model';
 
                 loaded_model.traverse( ( child ) => {
                   if (child.isMesh) {
-                    if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                    child.geometry.normalizeNormals();
-                    child.geometry.computeBoundingBox();
-                    child.geometry.computeBoundingSphere();
-
                     vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
 
                     if (Array.isArray( child.material )) {
@@ -393,9 +440,8 @@
 
               const dae_loader = new ColladaLoader( manager );
 
-              dae_loader.load( url, function( collada ) {
+              dae_loader.load( url, async function( collada ) {
                 loaded_model = collada.scene;
-                loaded_model.name = 'loaded_model';
 
                 animations = collada.scene.animations;
 
@@ -407,11 +453,6 @@
 
                 loaded_model.traverse( ( child ) => {
                   if (child.isMesh || child.isPoints) {
-                    if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                    child.geometry.normalizeNormals();
-                    child.geometry.computeBoundingBox();
-                    child.geometry.computeBoundingSphere();
-
                     vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
 
                     if (Array.isArray( child.material )) {
@@ -434,6 +475,24 @@
                   }
                 });
 
+                kinematics = collada.kinematics;
+
+                if (!(animations && animations.length > 0) && Object.keys( kinematics ).length !== 0) {
+                  if (!tween) {
+                    const { Easing, Tween, update } = await import( '@tweenjs' );
+
+                    tween_update = update;
+                    easing = Easing;
+                    tween = Tween;
+
+                    duration = THREE.MathUtils.randInt( 2500, 5000 );
+                  }
+
+                  setupTween();
+                }
+
+                other_scale = true;
+
                 resolve( scene.add( loaded_model ) );
               }, function ( xhr ) { // onProgress
               }, function ( error ) { handle_error( error ); }); // onError
@@ -455,7 +514,6 @@
 
               fbx_loader.load( url, function( fbx_scene ) {
                 loaded_model = fbx_scene;
-                loaded_model.name = 'loaded_model';
 
                 animations = fbx_scene.animations;
 
@@ -467,11 +525,6 @@
 
                 loaded_model.traverse( ( child ) => {
                   if (child.isMesh || child.isPoints) {
-                    if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                    child.geometry.normalizeNormals();
-                    child.geometry.computeBoundingBox();
-                    child.geometry.computeBoundingSphere();
-
                     vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
 
                     if (Array.isArray( child.material )) {
@@ -491,6 +544,8 @@
                     }
                   }
                 });
+
+                other_scale = true;
 
                 resolve( scene.add( loaded_model ) );
               }, function ( xhr ) { // onProgress
@@ -523,7 +578,6 @@
 
               gltf_loader.load( url, function( gltf ) {
                 loaded_model = gltf.scene;
-                loaded_model.name = 'loaded_model';
 
                 animations = gltf.animations;
 
@@ -549,7 +603,7 @@
               const ply_loader = new PLYLoader( manager );
 
               ply_loader.load( url, function( geometry ) {
-                (geometry.hasAttribute( 'color' ) === true) ? vertex_colors = true : vertex_colors = false;
+                vertex_colors = (geometry.hasAttribute( 'color' ) === true);
 
                 if ( geometry.index !== null ) {
                   geometry.deleteAttribute('normal');
@@ -567,11 +621,9 @@
                   points_material.vertexColors = vertex_colors;
 
                   loaded_model = new THREE.Points( geometry, points_material );
-                  loaded_model.sizeAttenuation = true;
-                  loaded_model.sortPoints = true;
                 }
 
-                loaded_model.name = 'loaded_model';
+                other_scale = true;
 
                 resolve( scene.add( loaded_model ) );
               }, function ( xhr ) { // onProgress
@@ -586,7 +638,6 @@
 
               usdz_loader.load( url, function( usd ) {
                 loaded_model = usd;
-                loaded_model.name = 'loaded_model';
 
                 loaded_model.traverse( ( child ) => {
                   if (child.isMesh) {
@@ -689,7 +740,16 @@
             if (vr_button === undefined) {
               const { VRButton } = await import( "three/addons/webxr/VRButton.min.js" );
 
-              vr_button = await VRButton.createButton( renderer, { requiredFeatures: [ 'unbounded' ] } );
+              vr_button = await VRButton.createButton( renderer, {
+                optionalFeatures: [
+                  'hand-tracking',
+                  'depth-sensing',
+                  'dom-overlay',
+                  'hit-test',
+                  'local',
+                ]
+              });
+
               if (isMobile === true) vr_button.style.marginBottom = '50px';
               vr_button.style.color = 'red';
 
@@ -698,7 +758,16 @@
           } else if (ar === true && ar_button === undefined) {
             const { ARButton } = await import( "three/addons/webxr/ARButton.min.js" );
 
-            ar_button = await ARButton.createButton( renderer, { requiredFeatures: [ 'unbounded' ] } );
+            ar_button = await ARButton.createButton( renderer, {
+              optionalFeatures: [
+                'hand-tracking',
+                'depth-sensing',
+                'dom-overlay',
+                'hit-test',
+                'local',
+              ]
+            });
+
             if (isMobile === true) ar_button.style.marginBottom = '50px';
             ar_button.style.color = 'red';
 
@@ -768,6 +837,9 @@
             fog: true
           });
         }
+
+        other_scale = false;
+        kinematics_running = false;
 
         await reset_all( true );
 
@@ -852,6 +924,24 @@
       }
 
       async function finish_loading() {
+        loaded_model.name = 'loaded_model';
+
+        loaded_model.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+            child.geometry.normalizeNormals();
+            child.geometry.computeBoundingBox();
+            child.geometry.computeBoundingSphere();
+
+            if (child.isSkinnedMesh) child.frustumCulled = false;
+
+            if (child.isPoints) {
+              child.sizeAttenuation = true;
+              child.sortPoints = true;
+            }
+          }
+        });
+
         await set_initial_scale();
         resize();
 
@@ -901,6 +991,8 @@
         if (scene) {
           if (loaded_model && loaded_model.name === 'loaded_model') {
             scene.remove( loaded_model );
+
+            if (kinematics_running === true && kinematicsTween) kinematicsTween.stop();
 
             if (animation_mixer) {
               animation_mixer.stopAllAction();
@@ -999,6 +1091,7 @@
       function render() {
         if (loaded_model) {
           if (animation_mixer) animation_mixer.update( clock.getDelta() );
+          if (kinematics_running === true && kinematicsTween) tween_update();
 
           if (controls) controls.update();
           if (device_controls) device_controls.update();
