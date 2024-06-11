@@ -56,13 +56,13 @@ class DeviceOrientationControls extends EventDispatcher {
 
 		const setObjectQuaternion = function ( quaternion, alpha, beta, gamma, orient ) {
 
-			_euler.set( - gamma, alpha, beta , 'ZXY' ); // 'ZXY' for the device, but 'YXZ' for us
+			_euler.set( beta, alpha, - gamma, 'YXZ' ); // 'ZXY' for the device, but 'YXZ' for us
 
 			quaternion.setFromEuler( _euler ); // orient the device
 
 			quaternion.multiply( _q1 ); // camera looks out the back of the device, not the top
 
-			quaternion.multiply( _q0.setFromAxisAngle( _zee, - orient ) ); // adjust for screen orientation
+			//quaternion.multiply( _q0.setFromAxisAngle( _zee, - orient ) ); // adjust for screen orientation
 
 		};
 
