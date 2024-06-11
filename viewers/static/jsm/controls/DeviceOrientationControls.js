@@ -9,7 +9,7 @@ import {
 const _zee = new Vector3( 0, 0, 1 );
 const _euler = new Euler();
 const _q0 = new Quaternion();
-const _q1 = new Quaternion(); // - PI/2 around the x-axis
+const _q1 = new Quaternion( - Math.sqrt( 0.5 ), 0, 0, Math.sqrt( 0.5 ) ); // - PI/2 around the x-axis
 
 const _changeEvent = { type: 'change' };
 
@@ -56,7 +56,7 @@ class DeviceOrientationControls extends EventDispatcher {
 
 		const setObjectQuaternion = function ( quaternion, alpha, beta, gamma, orient ) {
 
-			_euler.set( beta, alpha, - gamma, 'YXZ' ); // 'ZXY' for the device, but 'YXZ' for us
+			_euler.set( - gamma, alpha, beta , 'ZXY' ); // 'ZXY' for the device, but 'YXZ' for us
 
 			quaternion.setFromEuler( _euler ); // orient the device
 
