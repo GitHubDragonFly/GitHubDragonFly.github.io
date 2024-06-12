@@ -62,7 +62,7 @@ class DeviceOrientationControls extends EventDispatcher {
 
 			quaternion.multiply( _q1 ); // camera looks out the back of the device, not the top
 
-			quaternion.multiply( _q0.setFromAxisAngle( _zee, - orient ) ); // adjust for screen orientation
+			quaternion.multiply( _q0.setFromAxisAngle( _zee, orient ) ); // adjust for screen orientation
 
 		};
 
@@ -107,7 +107,7 @@ class DeviceOrientationControls extends EventDispatcher {
 
 			scope.screenOrientation = 0;
 
-			setObjectQuaternion( new Quaternion(), 0, 0, 0, 0 );
+			setObjectQuaternion( new Quaternion( - Math.sqrt( 0.5 ), 0, 0, Math.sqrt( 0.5 ) ), 0, 0, 0, 0 );
 
 			scope.enabled = false;
 
