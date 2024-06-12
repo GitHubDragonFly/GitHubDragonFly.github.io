@@ -9,7 +9,7 @@ import {
 const _zee = new Vector3( 0, 0, 1 );
 const _euler = new Euler();
 const _q0 = new Quaternion();
-const _q1 = new Quaternion( - 0.25, 0.5, 0, 1 ); // - PI/2 around the x-axis
+const _q1 = new Quaternion( 0.25, 0, 0, 0.5 ); // - PI/2 around the x-axis
 
 const _changeEvent = { type: 'change' };
 
@@ -107,7 +107,7 @@ class DeviceOrientationControls extends EventDispatcher {
 
 			scope.screenOrientation = 0;
 
-			setObjectQuaternion( new Quaternion( 0.25, 0.5, 0, 1 ), 0, 0, 0, 0 );
+			setObjectQuaternion( new Quaternion( - 0.25, 0, 0, 0.5 ), 0, 0, 0, 0 );
 
 			scope.enabled = false;
 
