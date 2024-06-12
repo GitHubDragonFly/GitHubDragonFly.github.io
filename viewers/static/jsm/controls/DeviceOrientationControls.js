@@ -62,7 +62,7 @@ class DeviceOrientationControls extends EventDispatcher {
 
 			quaternion.multiply( _q1 ); // camera looks out the back of the device, not the top
 
-			quaternion.multiply( _q0.setFromAxisAngle( _zee, orient ) ); // adjust for screen orientation
+			quaternion.multiply( _q0.setFromAxisAngle( _zee, - orient ) ); // adjust for screen orientation
 
 		};
 
