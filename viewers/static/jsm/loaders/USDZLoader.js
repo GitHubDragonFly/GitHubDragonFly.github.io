@@ -337,8 +337,6 @@ class USDZLoader extends Loader {
 			if ( ! data ) return undefined;
 
 			let geometry = new BufferGeometry();
-			let vertex_colors_present = false;
-			let vertex_colors_white = false;
 			let uvs = null;
 
 			if ( 'point3f[] points' in data ) {
