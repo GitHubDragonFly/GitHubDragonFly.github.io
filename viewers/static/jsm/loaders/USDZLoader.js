@@ -16,7 +16,7 @@ import {
 	Vector2
 } from "three";
 
-import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/libs/fflate.module.min.js";
+import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/libs/fflate.module.min.js";
 
 class USDAParser {
 
@@ -53,6 +53,16 @@ class USDAParser {
 
 						target[ lhs ] = group;
 						target = group;
+
+					} else if ( rhs.endsWith( '(' ) ) {
+
+						const values = rhs.slice( 0, - 1 );
+						target[ lhs ] = values;
+
+						const meta = {};
+						stack.push( meta );
+
+						target = meta;
 
 					} else {
 
@@ -306,42 +316,9 @@ class USDZLoader extends Loader {
 
 				if ( name.startsWith( 'def Mesh' ) ) {
 
-					// Move points to Mesh
-
-					if ( 'point3f[] points' in data ) {
-
-						object[ 'point3f[] points' ] = data[ 'point3f[] points' ];
-
-					}
-
-					// Move displayColor to Mesh
-
-					if ( 'color3f[] primvars:displayColor' in data ) {
-
-						object[ 'color3f[] primvars:displayColor' ] = data[ 'color3f[] primvars:displayColor' ];
-
-					}
-
-					// Move st to Mesh
-
-					if ( 'texCoord2f[] primvars:st' in data ) {
-
-						object[ 'texCoord2f[] primvars:st' ] = data[ 'texCoord2f[] primvars:st' ];
-
-					}
-
-					// Move st indices to Mesh
-
-					if ( 'int[] primvars:st:indices' in data ) {
-
-						object[ 'int[] primvars:st:indices' ] = data[ 'int[] primvars:st:indices' ];
-
-					}
-
 					return object;
 
 				}
-
 
 				if ( typeof object === 'object' ) {
 
@@ -360,13 +337,9 @@ class USDZLoader extends Loader {
 			if ( ! data ) return undefined;
 
 			let geometry = new BufferGeometry();
-
-			if ( 'int[] faceVertexIndices' in data ) {
-
-				const indices = JSON.parse( data[ 'int[] faceVertexIndices' ] );
-				geometry.setIndex( indices );
-
-			}
+			let vertex_colors_present = false;
+			let vertex_colors_white = false;
+			let uvs = null;
 
 			if ( 'point3f[] points' in data ) {
 
@@ -385,6 +358,21 @@ class USDZLoader extends Loader {
 			} else {
 
 				geometry.computeVertexNormals();
+				geometry.normalizeNormals();
+
+			}
+
+			if ( 'color3f[] primvars:displayColor' in data ) {
+
+				const color = JSON.parse( data[ 'color3f[] primvars:displayColor' ].replace( /[()]*/g, '' ) );
+
+				if ( Array.isArray( color ) && color.some( c => parseFloat( c ) < 1.0 ) ) {
+
+					const attribute = new BufferAttribute( new Float32Array( color ), 3 );
+
+					geometry.setAttribute( 'color', attribute );
+
+				}
 
 			}
 
@@ -396,30 +384,29 @@ class USDZLoader extends Loader {
 
 			if ( 'texCoord2f[] primvars:st' in data ) {
 
-				const uvs = JSON.parse( data[ 'texCoord2f[] primvars:st' ].replace( /[()]*/g, '' ) );
+				uvs = JSON.parse( data[ 'texCoord2f[] primvars:st' ].replace( /[()]*/g, '' ) );
 				const attribute = new BufferAttribute( new Float32Array( uvs ), 2 );
-
-				if ( 'int[] primvars:st:indices' in data ) {
-
-					geometry = geometry.toNonIndexed();
-
-					const indices = JSON.parse( data[ 'int[] primvars:st:indices' ] );
-					geometry.setAttribute( 'uv', toFlatBufferAttribute( attribute, indices ) );
-
-				} else {
-
-					geometry.setAttribute( 'uv', attribute );
-
-				}
+				geometry.setAttribute( 'uv', attribute );
 
 			}
 
-			if ( 'color3f[] primvars:displayColor' in data ) {
+			if ( 'int[] faceVertexIndices' in data ) {
 
-				const color = JSON.parse( data[ 'color3f[] primvars:displayColor' ].replace( /[()]*/g, '' ) );
-				const attribute = new BufferAttribute( new Float32Array( color ), 3 );
+				const indices = JSON.parse( data[ 'int[] faceVertexIndices' ] );
+				geometry.setIndex( indices );
 
-				geometry.setAttribute( 'color', attribute );
+			}
+
+			if ( 'int[] primvars:st:indices' in data && uvs !== null ) {
+
+				// custom uv index, overwrite uvs with new data
+
+				geometry = geometry.toNonIndexed();
+
+				const attribute = new BufferAttribute( new Float32Array( uvs ), 2 );
+
+				const indices = JSON.parse( data[ 'int[] primvars:st:indices' ] );
+				geometry.setAttribute( 'uv', toFlatBufferAttribute( attribute, indices ) );
 
 			}
 
@@ -918,7 +905,7 @@ class USDZLoader extends Loader {
 
 			if ( 'asset inputs:file' in data ) {
 
-				const path = data[ 'asset inputs:file' ].replace( /@*/g, '' );
+				const path = data[ 'asset inputs:file' ].replace( /@*/g, '' ).trim();
 
 				const loader = new TextureLoader();
 
