@@ -293,6 +293,7 @@
     </style>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- Using three.js library: https://github.com/mrdoob/three.js -->
     <!-- Using glTF Transform for MESHOPT compression: https://gltf-transform.dev -->
     <!-- Using gainmap-js encoder & decoder: https://github.com/MONOGRID/gainmap-js -->
     <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/ThreeOrbitControlsGizmo -->
@@ -659,13 +660,13 @@
         if (scene) {
           mouse_wheel = true;
 
-          renderer.setSize( window.innerWidth, window.innerHeight );
-
-          camera.aspect = window.innerWidth / window.innerHeight;
-          camera.updateProjectionMatrix();
-
           ww = window.innerWidth;
           wh = window.innerHeight;
+
+          renderer.setSize( ww, wh );
+
+          camera.aspect = ww / wh;
+          camera.updateProjectionMatrix();
 
           if (gui) set_gui_position();
 
@@ -711,7 +712,7 @@
     <script>
       var THREE, manager, texture_loader, ldraw_loader, renderer, exr_loader, rgbe_loader, hdrJPGLoader;
       var scene, camera, ldraw_obj, edges, edges_visible, render_requested;
-      var gui, gui_set = false, guiExposure, params, toneMappingOptions;
+      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
       var controls, orb_controls, gizmo, orb_controls_gizmo, tex, link;
       var grid, polar_grid, grid_visible, polar_grid_visible, isMobile;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
@@ -921,10 +922,12 @@
             let blob;
 
             if (binary === true) {
+              let type = 'application/octet-stream';
+
               if (meshopt === true) {
-                blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
+                blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: type } );
               } else {
-                blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+                blob = new Blob( [ json ], { type: type } );
               }
 
               zip.file( filename + '.glb', blob );
@@ -950,51 +953,43 @@
 
           let gltf_exporter = new GLTFExporter( manager );
 
-          let options = {	binary: true, maxTextureSize: 1024 || Infinity };
+          let options = {	binary: true, maxTextureSize: 1024 };
 
-          gltf_exporter.parse( ldraw_obj.clone(), function( json ) {
-            let blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+          gltf_exporter.parse( ldraw_obj.clone(), async function( json ) {
+            let simplified = await simplify( new Uint8Array( json ) );
 
-            let loader = new THREE.FileLoader( manager );
-            loader.setResponseType( 'arraybuffer' );
+            // Use ASSIMPJS to export files
+            assimpjs().then( async function( ajs ) {
+              let result = ajs.ConvertFile( filename, format, simplified, undefined, undefined );
+              let fileCount = result.FileCount();
 
-            loader.load( URL.createObjectURL( blob ), function( data ) {
-              // Revoke URL
-              URL.revokeObjectURL( blob );
-
-              // Use ASSIMPJS to export files
-              assimpjs().then( async function( ajs ) {
-                let result = ajs.ConvertFile( filename, format, new Uint8Array( data ), undefined, undefined );
-                let fileCount = result.FileCount();
-
-                // check if the conversion succeeded
-                if (result.IsSuccess() === false || fileCount === 0) {
-                  handle_export_error( result.GetErrorCode() );
-                  ajs = null;
-                  result = null;
-                  return;
-                }
-
-                // get the first result file and convert it to blob
-                let resultFile = await result.GetFile( 0 );
-                let jsonContent = resultFile.GetContent();
-                let blob = new Blob( [ jsonContent ], { type: 'application/octet-stream' } );
-
-                // Possible ASSIMP export formats, some with binary / ascii options:
-                //   assjson, assbin, assxml, collada, x, stp, obj, objnomtl, 3ds, 3mf, pbrt
-                //   gltf, gltf2, glb, glb2, stl, stlb, ply, plyb, fbx, fbxa, m3d, m3da, x3d
-                // For proper file extension, shorten the format before zipping it up
-                let ext_to_change = { 'fbxa': 'fbx', 'assjson': 'json' }; // 'collada': 'dae', 'plyb': 'ply' ... etc
-                if (ext_to_change[ format ]) format = ext_to_change[ format ];
-
-                zip.file( filename + '.' + format, blob );
-
+              // check if the conversion succeeded
+              if (result.IsSuccess() === false || fileCount === 0) {
+                handle_export_error( result.GetErrorCode() );
                 ajs = null;
                 result = null;
-                resultFile = null;
+                return;
+              }
 
-                await process_zip( '_' + format.toUpperCase() );
-              });
+              // get the first result file and convert it to blob
+              let resultFile = await result.GetFile( 0 );
+              let jsonContent = resultFile.GetContent();
+              let blob = new Blob( [ jsonContent ], { type: 'application/octet-stream' } );
+
+              // Possible ASSIMP export formats, some with binary / ascii options:
+              //   assjson, assbin, assxml, collada, x, stp, obj, objnomtl, 3ds, 3mf, pbrt
+              //   gltf, gltf2, glb, glb2, stl, stlb, ply, plyb, fbx, fbxa, m3d, m3da, x3d
+              // For proper file extension, shorten the format before zipping it up
+              let ext_to_change = { 'fbxa': 'fbx', 'assjson': 'json' }; // 'collada': 'dae', 'plyb': 'ply' ... etc
+              if (ext_to_change[ format ]) format = ext_to_change[ format ];
+
+              zip.file( filename + '.' + format, blob );
+
+              ajs = null;
+              result = null;
+              resultFile = null;
+
+              await process_zip( '_' + format.toUpperCase() );
             });
           }, function( error ) { handle_export_error( error ); }, options);
         }
@@ -1290,16 +1285,22 @@
         addFrame();
       }
 
-      function set_back_color() {
-        if (scene.environment) {
-          scene.environment.dispose();
-          scene.environment = null;
-        }
+      function reset_scene_params() {
+        if (scene) {
+          if (scene.environment) {
+            scene.environment.dispose();
+            scene.environment = null;
+          }
 
-        if (scene.background) {
-          scene.background.dispose();
-          scene.background = null;
+          if (scene.background) {
+            scene.background.dispose();
+            scene.background = null;
+          }
         }
+      }
+
+      async function set_back_color() {
+        await reset_scene_params();
 
         scene.environmentIntensity = 1.0;
         scene.background = null;
@@ -1408,15 +1409,7 @@
       }
 
       async function set_equi() {
-        if (scene.environment) {
-          scene.environment.dispose();
-          scene.environment = null;
-        }
-
-        if (scene.background) {
-          scene.background.dispose();
-          scene.background = null;
-        }
+        await reset_scene_params();
 
         if (equi_enabled === false) {
           if (gui_set === false) {
@@ -1462,8 +1455,28 @@
           if (document.getElementById('file_image_input').value !== '') {
             set_scene_image();
           } else {
-            scene.background = tex;
-            scene.environment = tex;
+            let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/opengameart/smoke1.png';
+
+            hdrJPGLoader.load( url, async function( texture ) {
+              let tex = await texture.toDataTexture();
+              tex.mapping = THREE.EquirectangularReflectionMapping;
+              tex.needsUpdate = true;
+
+              scene.background = tex;
+              scene.environment = tex;
+
+              mouse_wheel = true;
+
+              texture.renderTarget.texture.dispose();
+              texture.renderTarget.dispose();
+              texture.dispose();
+              tex.dispose();
+            }, function ( xhr ) {
+            }, function ( error ) {
+              document.getElementById('div_message').innerText = 'Error loading image';
+              console.log( 'Error loading Background Image File!' );
+              console.log( error );
+            });
           }
 
           scene.backgroundBlurriness = params.backBlurriness;
@@ -1499,8 +1512,6 @@
 
         mouse_wheel = true;
 
-        if (guiExposure) { guiExposure.destroy(); guiExposure = null; }
-
         gui.reset();
 
         document.getElementById('gui_position').style.display = 'none';
@@ -1511,19 +1522,11 @@
       async function set_scene_image( reset = false ) {
         let fii = document.getElementById('file_image_input').files[ 0 ];
 
-        if (scene.environment) {
-          scene.environment.dispose();
-          scene.environment = null;
-        }
-
-        if (scene.background) {
-          scene.background.dispose();
-          scene.background = null;
-        }
+        await reset_scene_params();
 
         if (fii) {
           if (reset === false) {
-            document.getElementById('div_message').innerText = 'Background and environment changing ...';
+            document.getElementById('div_message').innerText = 'Background and environment changing ... Please Wait';
             document.getElementById('div_message').style.display = '';
             if (gui) set_gui_position();
           }
@@ -1704,12 +1707,12 @@
 
               mouse_wheel = true;
 
+              document.getElementById('div_message').style.display = 'none';
+              if (gui) set_gui_position();
+
               texture.renderTarget.texture.dispose();
               texture.renderTarget.dispose();
               texture.dispose();
-
-              document.getElementById('div_message').style.display = 'none';
-              if (gui) set_gui_position();
 
               // encoder must be manually disposed when no longer needed
               image.dispose();
@@ -1733,16 +1736,8 @@
         mouse_wheel = true;
       }
 
-      function set_bgnd_linear_gradient() {
-        if (scene.environment) {
-          scene.environment.dispose();
-          scene.environment = null;
-        }
-
-        if (scene.background) {
-          scene.background.dispose();
-          scene.background = null;
-        }
+      async function set_bgnd_linear_gradient() {
+        await reset_scene_params();
 
         if (bgnd_linear_gradient === true) {
           bgnd_linear_gradient = false;
@@ -1948,7 +1943,12 @@
 
           if (polar_grid_visible === true) show_polar_grid();
           if (grid_visible === true) show_grid();
+
+          scene.remove( ldraw_obj );
+
           if (wireframe_enabled === true) show_wireframe();
+
+          if (vertex_colors_enabled === true) set_vertex_colors();
 
           if (edges && Object.entries( edges ).length !== 0) {
             if (edges_visible === true) show_edges();
@@ -1964,23 +1964,51 @@
             });
           }
 
-          scene.remove( ldraw_obj );
-
           ldraw_obj.traverse( function( child ) {
             if (child.isMesh || child.isLineSegments) {
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
+                  if (mtl.uniforms) {
+                    Object.keys( mtl.uniforms ).forEach( ( key ) => {
+                      if (mtl.uniforms[ key ].value) {
+                        if (Array.isArray( mtl.uniforms[ key ].value ) && mtl.uniforms[ key ].value.length > 0) {
+                          mtl.uniforms[ key ].value.forEach( val => {
+                            if (val.type && val.type === 1009)
+                              val.dispose();
+                          });
+                        } else {
+                          if (mtl.uniforms[ key ].value.type && mtl.uniforms[ key ].value.type === 1009)
+                            mtl.uniforms[ key ].value.dispose();
+                        }
+                      }
+                    });
+                  }
+
                   mtl.dispose();
                 });
               } else {
+                if (child.material.uniforms) {
+                  Object.keys( child.material.uniforms ).forEach( ( key ) => {
+                    if (child.material.uniforms[ key ].value) {
+                      if (Array.isArray( child.material.uniforms[ key ].value ) && child.material.uniforms[ key ].value.length > 0) {
+                        child.material.uniforms[ key ].value.forEach( val => {
+                          if (val.type && val.type === 1009)
+                            val.dispose();
+                        });
+                      } else {
+                        if (child.material.uniforms[ key ].value.type && child.material.uniforms[ key ].value.type === 1009)
+                          child.material.uniforms[ key ].value.dispose();
+                      }
+                    }
+                  });
+                }
+
                 child.material.dispose();
               }
 
               child.geometry.dispose();
             }
           });
-
-          if (gui) gui_reset();
 
           if (gizmo) {
             document.getElementById('gizmo').removeChild( gizmo.domElement );
@@ -2026,7 +2054,6 @@
         selected_ldraw_url_file = null;
         mouse_down = false;
         mouse_wheel = true;
-        guiExposure = null;
         edges = {};
         edges_visible = false;
         lines_visible = false;
@@ -2153,28 +2180,6 @@
           //controls.minPolarAngle = 1.1;
           //controls.minDistance = 2;
           //controls.maxDistance = 500;
-        }
-
-        if (tex === undefined) {
-          let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/opengameart/smoke1.png';
-
-          hdrJPGLoader.load( url, async function( texture ) {
-            tex = await texture.toDataTexture();
-
-            if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
-              const repeat_x = tex.image.width / 2048;
-              const repeat_y = tex.image.height / 2048;
-
-              tex.repeat.set( repeat_x, repeat_y );
-            }
-
-            tex.mapping = THREE.EquirectangularReflectionMapping;
-            tex.needsUpdate = true;
-
-            texture.renderTarget.texture.dispose();
-            texture.renderTarget.dispose();
-            texture.dispose();
-          });
         }
 
         await ldraw_loader.preloadMaterials( 'https://raw.githubusercontent.com/gkjohnson/ldraw-parts-library/master/colors/ldcfgalt.ldr' );
@@ -2436,6 +2441,35 @@
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
+      }
+
+      /* Simplify */
+
+      async function simplify( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer" );
+        const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
+        const { dedup, flatten, join, prune, simplify, unpartition } = await import( "@gltf-transform/functions" );
+
+        const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          unpartition(),
+          dedup(),
+          prune(),
+          flatten(),
+          join(),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+        );
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
       }
 
       /* Encode GLB with meshopt compression - geometry, morphs, animations */
@@ -2787,6 +2821,9 @@
       async function reset_only() {
         if (polar_grid_visible === true) show_polar_grid();
         if (grid_visible === true) show_grid();
+
+        scene.remove( ldraw_obj );
+
         if (wireframe_enabled === true) show_wireframe();
 
         if (vertex_colors_enabled === true) set_vertex_colors();
@@ -2805,15 +2842,45 @@
           });
         }
 
-        scene.remove( ldraw_obj );
-
         ldraw_obj.traverse( function( child ) {
           if (child.isMesh || child.isLineSegments) {
             if (Array.isArray( child.material )) {
               child.material.forEach( mtl => {
+                if (mtl.uniforms) {
+                  Object.keys( mtl.uniforms ).forEach( ( key ) => {
+                    if (mtl.uniforms[ key ].value) {
+                      if (Array.isArray( mtl.uniforms[ key ].value ) && mtl.uniforms[ key ].value.length > 0) {
+                        mtl.uniforms[ key ].value.forEach( val => {
+                          if (val.type && val.type === 1009)
+                            val.dispose();
+                        });
+                      } else {
+                        if (mtl.uniforms[ key ].value.type && mtl.uniforms[ key ].value.type === 1009)
+                          mtl.uniforms[ key ].value.dispose();
+                      }
+                    }
+                  });
+                }
+
                 mtl.dispose();
               });
             } else {
+              if (child.material.uniforms) {
+                Object.keys( child.material.uniforms ).forEach( ( key ) => {
+                  if (child.material.uniforms[ key ].value) {
+                    if (Array.isArray( child.material.uniforms[ key ].value ) && child.material.uniforms[ key ].value.length > 0) {
+                      child.material.uniforms[ key ].value.forEach( val => {
+                        if (val.type && val.type === 1009)
+                          val.dispose();
+                      });
+                    } else {
+                      if (child.material.uniforms[ key ].value.type && child.material.uniforms[ key ].value.type === 1009)
+                        child.material.uniforms[ key ].value.dispose();
+                    }
+                  }
+                });
+              }
+
               child.material.dispose();
             }
 
@@ -2825,8 +2892,6 @@
           renderer.info.reset();
           renderer.resetState();
         }
-
-        if (gui) gui_reset();
 
         reset_all( true );
 
@@ -2840,7 +2905,7 @@
         selected_ldraw_file !== null ? loadFile() : loadURLFile();
       }
 
-      function reset_all( reset = false ) {
+      async function reset_all( reset = false ) {
         // Reset all current rotational values
         document.getElementById('rotation_x').value = 0;
         document.getElementById('rotation_y').value = 0;
@@ -2899,19 +2964,11 @@
         document.getElementById('btn_random_vertex_colors').disabled = true;
         random_vertex_changed();
 
-        if (scene) {
-          if (scene.environment) {
-            scene.environment.dispose();
-            scene.environment = null;
-          }
-
-          if (scene.background) {
-            scene.background.dispose();
-            scene.background = null;
-          }
-        }
+        if (scene) await reset_scene_params();
 
         if (gui_set === true) {
+          gui_reset();
+          updateGUI();
           document.getElementById('gui_position').style.display = 'none';
         }
 
@@ -2940,9 +2997,41 @@
                 if (child.isMesh || child.isLineSegments) {
                   if (Array.isArray( child.material )) {
                     child.material.forEach( mtl => {
+                      if (mtl.uniforms) {
+                        Object.keys( mtl.uniforms ).forEach( ( key ) => {
+                          if (mtl.uniforms[ key ].value) {
+                            if (Array.isArray( mtl.uniforms[ key ].value ) && mtl.uniforms[ key ].value.length > 0) {
+                              mtl.uniforms[ key ].value.forEach( val => {
+                                if (val.type && val.type === 1009)
+                                  val.dispose();
+                              });
+                            } else {
+                              if (mtl.uniforms[ key ].value.type && mtl.uniforms[ key ].value.type === 1009)
+                                mtl.uniforms[ key ].value.dispose();
+                            }
+                          }
+                        });
+                      }
+
                       mtl.dispose();
                     });
                   } else {
+                    if (child.material.uniforms) {
+                      Object.keys( child.material.uniforms ).forEach( ( key ) => {
+                        if (child.material.uniforms[ key ].value) {
+                          if (Array.isArray( child.material.uniforms[ key ].value ) && child.material.uniforms[ key ].value.length > 0) {
+                            child.material.uniforms[ key ].value.forEach( val => {
+                              if (val.type && val.type === 1009)
+                                val.dispose();
+                            });
+                          } else {
+                            if (child.material.uniforms[ key ].value.type && child.material.uniforms[ key ].value.type === 1009)
+                              child.material.uniforms[ key ].value.dispose();
+                          }
+                        }
+                      });
+                    }
+
                     child.material.dispose();
                   }
 
@@ -2956,6 +3045,9 @@
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
             }
+
+            renderer.clear();
+            renderer.dispose();
           }
 
           document.getElementById('file_input').value = '';
@@ -3024,7 +3116,7 @@
         $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#model_scale').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
 
-        if (navigator.userAgent.indexOf('Chrome') !== -1 || navigator.userAgent.indexOf('Safari') !== -1 || isMobile === true) {
+        if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile === true) {
           $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
         }
