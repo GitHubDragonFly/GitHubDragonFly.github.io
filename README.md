@@ -95,6 +95,9 @@ Number Type Converter
 - They are functional `AS THEY ARE`
 - Purely designed as an online convenience
 - Intended for viewing a single 3D model or scene
+- Memory handling should be good, relatively speaking:
+  - With every next model loaded the previous model geometries / materials are being disposed of
+  - Since these viewers are webpages then it might just be easier to refresh the whole page before loading the next model
 - Different [three.js](https://github.com/mrdoob/three.js) revisions are used and with lots of customized code
 - Error handling narrows down to showing the `ERROR!` message so check the console output for details
 - On a desktop computer, most viewers will show some renderer info in the console after the model is loaded (like number of draw calls, triangles ... etc)
