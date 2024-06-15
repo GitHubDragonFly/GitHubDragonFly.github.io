@@ -146,7 +146,8 @@ class GCodeLoader extends Loader {
 				} );
 				//Process commands
 				//G0/G1 – Linear Movement
-				if ( cmd === 'G00' || cmd === 'G0' || cmd === 'G01' || cmd==='G1' || /(([XxYyZz]) *(-?\d+.?\d*)) *(([XxYyZz]) *(-?\d+.?\d*))? *(([XxYyZz]) *(-?\d+.?\d*))?/g.test(cmd) ) {
+				if ( cmd === 'G00' || cmd === 'G0' || cmd === 'G01' || cmd==='G1' ||
+						/(([XxYyZz]) *(-?\d+.?\d*)) *(([XxYyZz]) *(-?\d+.?\d*))? *(([XxYyZz]) *(-?\d+.?\d*))?/g.test(cmd) ) {
 
 					const line = {
 						x: args.x !== undefined ? absolute( state.x, args.x ) : state.x,
