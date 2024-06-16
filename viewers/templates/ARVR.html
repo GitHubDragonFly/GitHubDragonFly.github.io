@@ -22,7 +22,10 @@
 
     <script type="module">
       import * as three_js from "three";
+      import * as fflate_js from "three/addons/libs/fflate.module.min.js";
+
       THREE = three_js;
+      fflate = fflate_js;
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
@@ -147,7 +150,7 @@
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm" id="fm1">
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" id="file_input" onchange="init()" accept=".bim, .dae, .fbx, .glb, .gltf, .ply, .usdz" />
+        <input type="file" id="file_input" onchange="init()" accept=".3mf, .bim, .dae, .fbx, .glb, .gltf, .ply, .usdz" />
         <select title="Scale" id="model_scale" disabled>
           <option title="Model Scale" value="scale" selected disabled>Scale</option>
           <option title="Scale 0.05x" value="0.05x" onclick="set_model_scale( '0.05x' );">1/20</option>
@@ -228,9 +231,9 @@
 
     <script>
       var selected_url_file = '', url_displayed = false, url_loading = false;
-      var THREE, manager, loaded_model, material, extension, vertex_colors;
+      var THREE, fflate, manager, loaded_model, material, extension, vertex_colors;
       var ww = window.innerWidth, wh = window.innerHeight, bounding_box;
-      var scene, camera, renderer, animations, animation_mixer;
+      var scene, camera, renderer, animations, animation_mixer, merge_vertices;
       var ambientLight, directionalLight, events_initialized, isMobile;
       var device_controls, do_controls, controls, clock, texture_maps;
       var ar_button, vr_button, controller, controllerGrip1, controllerGrip2;
@@ -356,6 +359,49 @@
 
         await new Promise( async resolve => {
           switch ( extension ) {
+            case '.3MF':
+              const { ThreeMFLoader } = await import( "three/addons/loaders/3MFLoader.min.js" );
+
+              const tmf_loader = new ThreeMFLoader( manager );
+
+              tmf_loader.load( url, function( object ) {
+                loaded_model = object.clone();
+
+                loaded_model.traverse( ( child ) => {
+                  if (child.isMesh) {
+                    child.geometry.deleteAttribute('normal');
+                    child.geometry = merge_vertices( child.geometry, 1e-6 );
+                    child.geometry.computeVertexNormals();
+                    child.geometry.normalizeNormals();
+
+                    vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
+
+                    if (Array.isArray( child.material )) {
+                      child.material.forEach( mtl => {
+                        mtl.vertexColors = vertex_colors;
+                        mtl.side = THREE.DoubleSide;
+                        mtl.flatShading = false;
+
+                        mtl.needsUpdate = true;
+                      });
+                    } else {
+                      child.material.vertexColors = vertex_colors;
+                      child.material.side = THREE.DoubleSide;
+                      child.material.flatShading = false;
+
+                      child.material.needsUpdate = true;
+                    }
+                  }
+                });
+
+                loaded_model.rotation.x -= Math.PI / 2;
+
+                resolve( scene.add( loaded_model ) );
+              }, function ( xhr ) { // onProgress
+              }, function ( error ) { handle_error( error ); }); // onError
+
+              break;
+
             case '.BIM':
               const { BIMLoader } = await import( "../static/dotbim/loader/module/BIMLoader.js" );
 
@@ -553,7 +599,6 @@
 
             case '.PLY':
               const { PLYLoader } = await import( "three/addons/loaders/PLYLoader.min.js" );
-              const { mergeVertices } = await import( "three/addons/utils/BufferGeometryUtils.min.js" );
 
               const ply_loader = new PLYLoader( manager );
 
@@ -562,7 +607,7 @@
 
                 if ( geometry.index !== null ) {
                   geometry.deleteAttribute('normal');
-                  geometry = mergeVertices( geometry );
+                  geometry = merge_vertices( geometry, 1e-6 );
                   geometry.computeVertexNormals();
                   geometry.normalizeNormals();
                   geometry.center();
@@ -821,6 +866,11 @@
           });
         }
 
+        if (merge_vertices === undefined) {
+          const { mergeVertices } = await import( "three/addons/utils/BufferGeometryUtils.min.js" );
+          merge_vertices = mergeVertices;
+        }
+
         kinematics_running = false;
 
         await reset_all( true );
@@ -830,7 +880,7 @@
 
         enable_disable( true );
 
-        const model_extensions = [ '.BIM', '.DAE', '.FBX', '.GLB', '.GLTF', '.PLY', '.USDZ' ];
+        const model_extensions = [ '.3MF', '.BIM', '.DAE', '.DST', '.FBX', '.GLB', '.GLTF', '.PLY', '.USDZ' ];
 
         if (url_loading === false) {
           // Load local model file
