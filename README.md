@@ -114,7 +114,7 @@ Number Type Converter
   - My tests had it working with Chrome browser on both the desktop and an Android mobile phone:
     - either as a standard viewer or with AR / VR support
   - Supported import formats (single model or scene only):
-    - BIM, DAE, FBX, GLB, GLTF, PLY, USDZ
+    - 3MF, BIM, DAE, FBX, GLB, GLTF, PLY, USDZ
     - Local blobs and remote URL loading are supported
       - Local model files should be self-contained (embedded or binary)
 
