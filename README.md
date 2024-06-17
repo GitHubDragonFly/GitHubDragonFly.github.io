@@ -112,11 +112,15 @@ Number Type Converter
   - Using slightly modified version of the three.js `DeviceOrientationControls`, last available in r133
   - Currently highly experimental so it might work or it might not work properly or at all
   - My tests had it working with Chrome browser on both the desktop and an Android mobile phone:
-    - either as a standard viewer or with AR / VR support
+    - Either as a standard viewer or with AR / VR support
   - Supported import formats (single model or scene only):
     - 3MF, BIM, DAE, FBX, GLB, GLTF, PLY, USDZ
     - Local blobs and remote URL loading are supported
       - Local model files should be self-contained (embedded or binary)
+  - Currently available features:
+    - Model resizing
+    - Auto rotation
+    - Equirectangular background
 
 - Special notes about A-FRAME Viewer:
   - It is using [A-Frame Library / Framework](https://aframe.io) which makes it A-Frame specific
