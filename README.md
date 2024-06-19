@@ -97,7 +97,7 @@ Number Type Converter
 - Intended for viewing a single 3D model or scene
 - Memory handling should be good, relatively speaking:
   - With every next model loaded the previous model geometries / materials are being disposed of
-  - Since these viewers are webpages then it might just be easier to refresh the whole page before loading the next model
+  - Viewers are webpages so it might be easier to refresh the whole page before loading the next model
 - Desktop viewers should be usable on as low as 800 x 600 screen resolution:
   - Page zoom might need to be adjusted to keep controls uncluttered
   - 640 x 480 screen resoultion should also work but might present a limited workspace and visibility
