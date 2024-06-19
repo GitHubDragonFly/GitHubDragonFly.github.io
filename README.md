@@ -98,6 +98,9 @@ Number Type Converter
 - Memory handling should be good, relatively speaking:
   - With every next model loaded the previous model geometries / materials are being disposed of
   - Since these viewers are webpages then it might just be easier to refresh the whole page before loading the next model
+- Desktop viewers should be usable on as low as 800 x 600 screen resolution:
+  - Page zoom might need to be adjusted to keep controls uncluttered
+  - 640 x 480 screen resoultion should also work but might present a limited workspace and visibility
 - Different [three.js](https://github.com/mrdoob/three.js) revisions are used and with lots of customized code
 - Error handling narrows down to showing the `ERROR!` message so check the console output for details
 - On a desktop computer, most viewers will show some renderer info in the console after the model is loaded (like number of draw calls, triangles ... etc)
