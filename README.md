@@ -391,11 +391,12 @@ Number Type Converter
     - [equirectangular.png](https://github.com/mrdoob/three.js/blob/dev/examples/textures/equirectangular.png)
     - [kandao3.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/kandao3.jpg)
   - These viewers are also using [gainmap-js](https://github.com/MONOGRID/gainmap-js) encoder and decoder:
-    - Support loading a single JPEG file with integrated gainmaps
-    - Support loading EXR and HDR files which will be encoded on-the-fly into a single JPEG file with integrated gainmaps
-    - You could find some texture examples in the official three.js [equirectangular](https://github.com/mrdoob/three.js/tree/dev/examples/textures/equirectangular) folder
+    - To support loading a single JPEG file with integrated gainmaps
+    - To support loading EXR and HDR files, which will be encoded on-the-fly into a single JPEG file with integrated gainmaps
+      - You could find some texture examples in the official three.js [equirectangular](https://github.com/mrdoob/three.js/tree/dev/examples/textures/equirectangular) folder
 - PLY+STL, PRWM and VTK viewers can also show a points version of the loaded model and export it as such (if the model is not rather large):
-  - Tip: export this points model into PLY format and then drop it into [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) to get SPLAT file
+  - Tip: export this points model into PLY format and then drop the PLY file into [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) to get SPLAT file
+- VTK Viewer can also export edges, when enabled, in OBJ and GLTF exports of both solid and points model (a popup alert will notify about this)
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
     - currently available only in `FBX` `OBJ` `PLY+STL` `PRWM` viewers and should be tried on simple models
     - see the Animated GIF of a cube using Animated GIF as a texture in the `images` folder
