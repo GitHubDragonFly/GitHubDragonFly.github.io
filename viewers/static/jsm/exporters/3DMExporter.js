@@ -614,7 +614,7 @@ class Rhino3dmExporter {
 								a: 255
 							};
 
-							geometry_position_array = geometry_clone.attributes.position.array;
+							let geometry_position_array = geometry_clone.attributes.position.array;
 
 							for ( let j = 0; j < geometry_position_array.length; j += geometry_clone.attributes.position.itemSize ) {
 
