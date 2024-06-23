@@ -710,7 +710,7 @@ class OBJLoader extends Loader {
 				// Handle null terminated files without exception
 				if ( line === '\0' ) continue;
 
-				console.warn( 'THREE.OBJLoader: Unexpected line: "' + line + '"' );
+				throw new Error( 'THREE.OBJLoader: Unexpected line: "' + line + '"' );
 
 			}
 
