@@ -232,7 +232,7 @@ Number Type Converter
 - For quick testing of any viewer, see the `URLS4MODELS.md` file for corresponding URL examples
 - Some loading instructions are also available in [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) and [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repositories
 - Drag-and-drop is currently not supported in any viewer
-- ZIP file support is only available in the desktop version of OBJ+MTL Viewer
+- ZIP file support is only available in OBJ+MTL Viewer
 - Import files locally from a file browser dialog:
   - All files have to be in the same folder
   - Some viewers might have some limitations
