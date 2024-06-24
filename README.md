@@ -240,7 +240,9 @@ Number Type Converter
   - Make any necessary changes on your device to allow local file browsing
 - Import files via remote URL:
   - Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
-  - Some viewers do support Dropbox and GitHub and URLs without extension (normally applicable to single URL)
+  - For single URL:
+    - most viewers support GitHub
+    - some viewers support Dropbox and URLs without extension
   - URLs should have no CORS restrictions
 - Import formats, where applicable, with any optional or required textures:
   - 3DS, 3DM, 3MF, AMF, DAE, FBX, IFC, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, PRWM, USDZ, WRL, XYZ
