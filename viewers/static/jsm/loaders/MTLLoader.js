@@ -365,6 +365,8 @@ class MaterialCreator {
 
 			map.rotation = texParams.rotation;
 
+			map.channel = texParams.channel || 0;
+
 			map.wrapS = texParams.wrapS; // map.wrapS = scope.wrap;
 			map.wrapT = texParams.wrapT; // map.wrapT = scope.wrap;
 
@@ -841,12 +843,22 @@ class MaterialCreator {
 			center: new Vector2( 0, 0 ),
 			wrapS: RepeatWrapping,
 			wrapT: RepeatWrapping,
-			rotation: 0
+			rotation: 0,
+			channel: 0
 
 		 };
 
 		const items = value.split( /\s+/ );
 		let pos;
+
+		pos = items.indexOf( '-imfchan' );
+
+		if ( pos >= 0 ) {
+
+			texParams.channel = parseInt( items[ pos + 1 ] );
+			items.splice( pos, 2 );
+
+		}
 
 		pos = items.indexOf( '-bm' );
 
