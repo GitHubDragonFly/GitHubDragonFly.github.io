@@ -357,8 +357,7 @@ class MaterialCreator {
 			if ( params[ mapType ] ) return; // Keep the first encountered texture
 
 			const texParams = scope.getTextureParams( original_mat[ prop ] );
-			const texture_to_load = value.indexOf( ' ' ) > 1 ? value.substring( value.lastIndexOf( ' ' ) + 1 ) : value;
-			const map = scope.loadTexture( resolveURL( scope.baseUrl, texture_to_load ), null, materialName );
+			const map = scope.loadTexture( resolveURL( scope.baseUrl, value ), null, materialName );
 
 			map.repeat.copy( texParams.scale );
 			map.offset.copy( texParams.offset );
