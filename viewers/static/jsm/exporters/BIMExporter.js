@@ -7,7 +7,7 @@ import {
 	Vector3
 } from "three";
 
-import { deinterleaveAttribute, mergeVertices } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/utils/BufferGeometryUtils.min.js";
+import { deinterleaveAttribute, mergeVertices } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/utils/BufferGeometryUtils.min.js";
 
 /** Simple BIM (dotbim) Exporter
 *

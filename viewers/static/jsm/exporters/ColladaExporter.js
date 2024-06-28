@@ -7,8 +7,8 @@ import {
 	MeshBasicMaterial
 } from "three";
 
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/TextureUtils.js";
-import { deinterleaveAttribute } from "https://cdn.jsdelivr.net/npm/three@0.162.0/examples/jsm/utils/BufferGeometryUtils.js";
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/utils/TextureUtils.min.js";
+import { deinterleaveAttribute } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/utils/BufferGeometryUtils.min.js";
 
 /**
  * https://github.com/gkjohnson/collada-exporter-js

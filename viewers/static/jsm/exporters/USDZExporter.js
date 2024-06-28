@@ -8,9 +8,9 @@ import {
 import {
 	strToU8,
 	zipSync,
-} from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/libs/fflate.module.min.js";
+} from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/libs/fflate.module.min.js";
 
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/utils/TextureUtils.min.js";
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/utils/TextureUtils.min.js";
 
 class USDZExporter {
 
