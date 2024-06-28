@@ -112,6 +112,8 @@ Number Type Converter
   - Rotation = left-click + hold + drag
   - Move = right-click + hold + drag
   - Zoom In / Out = mouse scroll wheel
+  - The equivalent touch controls should work fine on mobile devices
+  - Hover the mouse over controls in the desktop viewers to se a popup description of the control
 
 - Special notes about AR / VR Viewer:
   - Using slightly modified version of the three.js `DeviceOrientationControls`, last available in r133
