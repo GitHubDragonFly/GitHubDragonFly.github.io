@@ -953,12 +953,16 @@
             if (binary === true) {
               let type = 'application/octet-stream';
 
-              if (draco === true) {
-                blob = new Blob( [ await draco_compress( new Uint8Array( json ) ) ], { type: type } );
-              } else if (meshopt === true) {
-                blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: type } );
-              } else {
-                blob = new Blob( [ json ], { type: type } );
+              try {
+                if (draco === true) {
+                  blob = new Blob( [ await draco_compress( new Uint8Array( json ) ) ], { type: type } );
+                } else if (meshopt === true) {
+                  blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: type } );
+                } else {
+                  blob = new Blob( [ await simplify( new Uint8Array( json ) ) ], { type: type } );
+                }
+              } catch ( error ) {
+                handle_export_error( error );
               }
 
               zip.file( filename + '.glb', blob );
@@ -2369,6 +2373,33 @@
         document.getElementById('div_error').style.display = 'block';
       }
 
+      /* Simplify */
+
+      async function simplify( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
+        const { dedup, flatten, join, prune, unpartition } = await import( "@gltf-transform/functions" );
+
+        const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          unpartition(),
+          dedup(),
+          prune(),
+          flatten(),
+          join()
+        );
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
+      }
+
       /* Encode GLB with draco compression - geometry */
 
       async function draco_compress( arrayBuffer ) {
@@ -2416,8 +2447,8 @@
 
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { MeshoptEncoder, MeshoptSimplifier } = await import( "meshoptimizer" );
-        const { dedup, flatten, instance, join, meshopt, palette, prune, simplify, unpartition, weld } = await import( "@gltf-transform/functions" );
+        const { MeshoptEncoder } = await import( "meshoptimizer" );
+        const { meshopt } = await import( "@gltf-transform/functions" );
         const { KHRONOS_EXTENSIONS, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
 
         await MeshoptEncoder.ready;
@@ -2431,15 +2462,6 @@
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
         await doc.transform(
-          unpartition(),
-          palette({ min: 5 }),
-          dedup(),
-          prune(),
-          instance( { min: 2 } ),
-          flatten(),
-          join(),
-          weld( { tolerance: 0, toleranceNormal: 0.1 } ),
-          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } ),
           meshopt( { encoder: MeshoptEncoder, level: 'high' } )
         );
 
