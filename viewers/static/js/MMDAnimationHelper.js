@@ -24,7 +24,9 @@
 		constructor( params = {} ) {
 
 			this.meshes = [];
+			this.meshAnimations = null;
 			this.camera = null;
+			this.cameraAnimations = null;
 			this.cameraTarget = new THREE.Object3D();
 			this.cameraTarget.name = 'target';
 			this.audio = null;
@@ -338,7 +340,19 @@
 			if ( mixer && this.enabled.animation ) {
 
 				mixer.stopAllAction();
+
+				for ( let i = 0; i < this.meshAnimations.length; i++ ) {
+
+					mixer.clipAction( this.meshAnimations[ i ] ).stop();
+					mixer.clipAction( this.meshAnimations[ i ] ).reset();
+					mixer.uncacheAction( this.meshAnimations[ i ] );
+					mixer.uncacheClip( this.meshAnimations[ i ] );
+
+				}
+
 				mixer.uncacheRoot( mixer.getRoot() );
+				console.log('mixer ', mixer);
+				mixer.dispose();
 
 			}
 
@@ -383,6 +397,16 @@
 			if ( mixer && this.enabled.cameraAnimation ) {
 
 				mixer.stopAllAction();
+
+				for ( let i = 0; i < this.cameraAnimations.length; i++ ) {
+
+					mixer.clipAction( this.cameraAnimations[ i ] ).stop();
+					mixer.clipAction( this.cameraAnimations[ i ] ).reset();
+					mixer.uncacheAction( this.cameraAnimations[ i ] );
+					mixer.uncacheClip( this.cameraAnimations[ i ] );
+
+				}
+
 				mixer.uncacheRoot( mixer.getRoot() );
 
 			}
@@ -416,6 +440,7 @@
 			if ( animation !== undefined ) {
 
 				const animations = Array.isArray( animation ) ? animation : [ animation ];
+				this.meshAnimations = animations;
 				objects.mixer = new THREE.AnimationMixer( mesh );
 
 				for ( let i = 0, il = animations.length; i < il; i ++ ) {
@@ -444,6 +469,7 @@
 		_setupCameraAnimation( camera, animation ) {
 
 			const animations = Array.isArray( animation ) ? animation : [ animation ];
+			this.cameraAnimations = animations;
 			const objects = this.objects.get( camera );
 			objects.mixer = new THREE.AnimationMixer( camera );
 
@@ -974,18 +1000,16 @@
 
 		} // Update with the actual result here
 
-
 		quaternion.copy( bone.quaternion );
 
 	} //
-
 
 	class AudioManager {
 
 		/**
    * @param {THREE.Audio} audio
    * @param {Object} params - (optional)
-   * @param {Nuumber} params.delayTime
+   * @param {Number} params.delayTime
    */
 		constructor( audio, params = {} ) {
 
@@ -1002,7 +1026,6 @@
    * @return {AudioManager}
    */
 
-
 		control( delta ) {
 
 			this.elapsed += delta;
@@ -1012,7 +1035,6 @@
 			return this;
 
 		} // private methods
-
 
 		_shouldStartAudio() {
 
@@ -1049,7 +1071,6 @@
  * @param {Array<Object>} grants
  */
 
-
 	class GrantSolver {
 
 		constructor( mesh, grants = [] ) {
@@ -1062,7 +1083,6 @@
    * Solve all the grant bones
    * @return {GrantSolver}
    */
-
 
 		update() {
 
@@ -1082,7 +1102,6 @@
    * @param {Object} grant - grant parameter
    * @return {GrantSolver}
    */
-
 
 		updateOne( grant ) {
 
