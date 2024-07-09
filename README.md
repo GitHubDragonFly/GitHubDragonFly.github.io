@@ -340,30 +340,38 @@ Number Type Converter
     - `EC` - edge color
   - `F` - flatShading
   - `f` - allows for Y-Flip of DDS textures when present in the model (ASSIMP Viewer)
-  - `G` - linear gradient background (also sets environment in some viewers)
-  - `I` - raycasting intersects (VTK Viewer)
-  - `K` - kinematics (DAE Viewer)
+  - `G` - linear gradient background
+    - will reset the background color
+    - will clear the `Eq` input if present
+    - also sets environment in some viewers
+  - `I` - raycasting intersects (available in VTK Viewer only)
+  - `K` - kinematics (available in DAE viewers only)
   - `L` - lines (LDRAW and its exports in ASSIMP, GLTF, OBJ, JSON viewers)
   - `O` - opacity (normally enabled with mouse double-click)
-  - `P` - poses (MMD Viewer)
-  - `S` - skeleton with demo (JSON viewers)
-  - `T` - optional textures (when loaded then can be applied to the model one at the time)
+  - `P` - poses (available in MMD viewers only)
+  - `S` - skeleton with demo (available in JSON viewers only)
+  - `T` - optional textures
+    - when loaded then can be applied to the model one at the time
+    - kind of expect UVs to be present
   - `V` - variants that might be present in GLTF models (ASSIMP, GLTF, GLTFS and GM viewers)
   - `W` - button or `Wire` checkbox to show wireframe
   - `X` - morphs
+  - `Y` - Y-flip exported textures (available in mobile GLTF Viewer only)
   - `As` - and / or `atoms` button (available in PDB viewers only)
   - `Bs` - and / or `bonds` button (available in PDB viewers only)
-  - `C0` - camera index, with 0 being default (GLTF viewer) (`CAM` + Index in GLTF Legacy viewer)
-  - `CS` - construction step (LDRAW Viewer)
+  - `C0` - camera index
+    - 0 being default in GLTF viewer
+    - shows as `CAM` + Index in GLTF Legacy viewer
+  - `CS` - construction step (available in LDRAW viewers only)
   - `DT` - material's depthTest switching (ASSIMP, GLTF, GLTFS viewers)
   - `Ls` - and / or `labels` button (available in PDB viewers only)
   - `MP` - material switching - Phong (MP), Standard (MS), Lambert (ML)
-  - `OL` - outline effect (MMD Viewer)
+  - `OL` - outline effect (available in MMD viewers only)
   - `OS` - material side - Original (OS), Front (FS), Back (BS), Double (DS)
-  - `PM` - show model as points (PLY+STL / PRWM / VTK viewers)
+  - `PM` - show model as points (PLY+STL, PRWM and VTK viewers)
   - `VC` - vertex colors
     - `!` - random vertex colors
-  - `XS` - xtra smooth
+  - `XS` - xtra smooth (available in OBJ Viewer only)
   - `RST` - reset
   - `#` - grid
 - Light controls, where applicable:
@@ -376,6 +384,8 @@ Number Type Converter
     - `SLi` - spotlight intensity
 - Other controls, where applicable:
   - `B` or `BG` - background color
+    - will reset the `G` button if enabled
+    - will clear the `Eq` input if present
   - `C` - object or points color
   - `Eq` - button or checkbox for setting an equirectangular background with additional controls, where applicable:
     - `setEnvMap` for setting envMap + metalness
