@@ -27,7 +27,6 @@
       import { DRACOLoader } from "three/addons/loaders/DRACOLoader.min.js";
       import { GLTFLoader } from "../../static/jsm/loaders/GLTFSLoader.js";
       import { OrbitControls } from "../../static/jsm/controls/OrbitControls.js";
-      import { RoomEnvironment } from "three/addons/environments/RoomEnvironment.min.js";
       import GLTFVideoTextureExtension from "../../static/jsm/extensions/loaders/EXT_texture_video/EXT_texture_video.js";
       import GLTFMaterialsVariantsExtension from "../../static/jsm/extensions/loaders/KHR_materials_variants/KHR_materials_variants.js";
 
@@ -55,7 +54,6 @@
       texture_loader = new THREE.TextureLoader( manager );
 
       orb_controls = OrbitControls;
-      room_env = RoomEnvironment;
     </script>
 
     <style>
@@ -252,7 +250,7 @@
 
     <script>
       var g_loader, ktx2_loader, texture_loader, gltf_loader, draco_loader, tga_loader, dds_loader;
-      var THREE, fflate, animations, animation_mixer, animation_running, current_animation, room_env;
+      var THREE, fflate, animations, animation_mixer, animation_running, current_animation;
       var gltf_obj, controls, orb_controls, wireframe_enabled, bounding_box, resource_path;
       var variants, current_variant, variants_available, draco_material, isMobile;
       var gltfMaterialsVariantsExtension, gltfVideoTextureExtension;
@@ -314,11 +312,6 @@
           if (center.z !== 0) gltf_obj.translateZ( center.z * ( - 1 ) );
         }
 
-        bounding_box.setFromObject( gltf_obj );
-        center = bounding_box.getCenter( new THREE.Vector3() );
-
-        controls.target.set( center.x, center.y, center.z );
-
         // Set the camera's z distance
 
         camera.position.z = bounding_box.max.z + 250;
@@ -368,102 +361,11 @@
         mouse_wheel = true;
       }
 
-      async function init(){
+      async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
-          if (gltf_obj) {
-            if (animation_mixer) {
-              animation_mixer.stopAllAction();
-
-              for ( let i = 0; i < animations.length; i++ ) {
-                animation_mixer.uncacheAction( animations[ i ] );
-                animation_mixer.uncacheClip( animations[ i ] );
-              }
-
-              animation_mixer.uncacheRoot( animation_mixer.getRoot() );
-            }
-
-            scene.remove( gltf_obj );
-
-            if (wireframe_enabled === true) show_wireframe();
-
-            if (gltf_obj.skeleton && gltf_obj.skeleton.boneTexture)
-              gltf_obj.skeleton.boneTexture.dispose();
-
-            gltf_obj.traverse( ( child ) => {
-              if (child.isMesh || child.isPoints || child.isLineSegments) {
-                if (child.skeleton && child.skeleton.boneTexture)
-                  child.skeleton.boneTexture.dispose();
-
-                if (child.material) {
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      if (mtl.uniforms) {
-                        Object.keys( mtl.uniforms ).forEach( ( key ) => {
-                          if (mtl.uniforms[ key ].value) {
-                            if (Array.isArray( mtl.uniforms[ key ].value ) && mtl.uniforms[ key ].value.length > 0) {
-                              mtl.uniforms[ key ].value.forEach( val => {
-                                if (val.type && val.type === 1009)
-                                  val.dispose();
-                              });
-                            } else {
-                              if (mtl.uniforms[ key ].value.type && mtl.uniforms[ key ].value.type === 1009)
-                                mtl.uniforms[ key ].value.dispose();
-                            }
-                          }
-                        });
-                      } else {
-                        for (const prop in mtl) {
-                          texture_maps.forEach( tex_map => {
-                            if (prop === tex_map) {
-                              if (mtl[ prop ]) mtl[ prop ].dispose();
-                            }
-                          });
-                        };
-                      }
-
-                      mtl.dispose();
-                    });
-                  } else {
-                    if (child.material.uniforms) {
-                      Object.keys( child.material.uniforms ).forEach( ( key ) => {
-                        if (child.material.uniforms[ key ].value) {
-                          if (Array.isArray( child.material.uniforms[ key ].value ) && child.material.uniforms[ key ].value.length > 0) {
-                            child.material.uniforms[ key ].value.forEach( val => {
-                              if (val.type && val.type === 1009)
-                                val.dispose();
-                            });
-                          } else {
-                            if (child.material.uniforms[ key ].value.type && child.material.uniforms[ key ].value.type === 1009)
-                              child.material.uniforms[ key ].value.dispose();
-                          }
-                        }
-                      });
-                    } else {
-                      for (const prop in child.material) {
-                        texture_maps.forEach( tex_map => {
-                          if (prop === tex_map) {
-                            if (child.material[ prop ]) child.material[ prop ].dispose();
-                          }
-                        });
-                      };
-                    }
-
-                    child.material.dispose();
-                  }
-                }
-
-                child.geometry.dispose();
-              }
-            });
-          }
-
-          if (draco_material) {
-            if (draco_material.map) draco_material.map.dispose();
-            draco_material.dispose();
-            draco_material = null;
-          }
+          if (gltf_obj) await scene_cleanup();
 
           mouse_wheel = true;
 
@@ -634,8 +536,10 @@
         }
 
         if (scene.environment === null) {
+          const { RoomEnvironment } = await import( "three/addons/environments/RoomEnvironment.min.js" );
+
           pmremGenerator = new THREE.PMREMGenerator( renderer );
-          scene.environment = pmremGenerator.fromScene( new room_env(), .005 ).texture;
+          scene.environment = pmremGenerator.fromScene( new RoomEnvironment(), .005 ).texture;
         }
 
         // Load DRACO or GLTF file
@@ -1108,7 +1012,7 @@
         if (render_requested === true) requestAnimationFrame( render );
       }
 
-      function reset_all( reset = false ) {
+      async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
         document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_animate').style.backgroundColor = 'transparent';
@@ -1136,88 +1040,7 @@
               gltf_loader.dracoLoader.dispose();
               gltf_loader.ktx2Loader.dispose();
 
-              if (animation_mixer) {
-                animation_mixer.stopAllAction();
-
-                for ( let i = 0; i < animations.length; i++ ) {
-                  animation_mixer.uncacheAction( animations[ i ] );
-                  animation_mixer.uncacheClip( animations[ i ] );
-                }
-
-                animation_mixer.uncacheRoot( animation_mixer.getRoot() );
-              }
-
-              scene.remove( gltf_obj );
-
-              if (gltf_obj.skeleton && gltf_obj.skeleton.boneTexture)
-                gltf_obj.skeleton.boneTexture.dispose();
-
-              gltf_obj.traverse( ( child ) => {
-                if (child.isMesh || child.isPoints || child.isLineSegments) {
-                  if (child.skeleton && child.skeleton.boneTexture)
-                    child.skeleton.boneTexture.dispose();
-
-                  if (child.material) {
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        if (mtl.uniforms) {
-                          Object.keys( mtl.uniforms ).forEach( ( key ) => {
-                            if (mtl.uniforms[ key ].value) {
-                              if (Array.isArray( mtl.uniforms[ key ].value ) && mtl.uniforms[ key ].value.length > 0) {
-                                mtl.uniforms[ key ].value.forEach( val => {
-                                  if (val.type && val.type === 1009)
-                                  val.dispose();
-                                });
-                              } else {
-                                if (mtl.uniforms[ key ].value.type && mtl.uniforms[ key ].value.type === 1009)
-                                mtl.uniforms[ key ].value.dispose();
-                              }
-                            }
-                          });
-                        } else {
-                          for (const prop in mtl) {
-                            texture_maps.forEach( tex_map => {
-                              if (prop === tex_map) {
-                                if (mtl[ prop ]) mtl[ prop ].dispose();
-                              }
-                            });
-                          };
-                        }
-
-                        mtl.dispose();
-                      });
-                    } else {
-                      if (child.material.uniforms) {
-                        Object.keys( child.material.uniforms ).forEach( ( key ) => {
-                          if (child.material.uniforms[ key ].value) {
-                            if (Array.isArray( child.material.uniforms[ key ].value ) && child.material.uniforms[ key ].value.length > 0) {
-                              child.material.uniforms[ key ].value.forEach( val => {
-                                if (val.type && val.type === 1009)
-                                  val.dispose();
-                              });
-                            } else {
-                              if (child.material.uniforms[ key ].value.type && child.material.uniforms[ key ].value.type === 1009)
-                                child.material.uniforms[ key ].value.dispose();
-                            }
-                          }
-                        });
-                      } else {
-                        for (const prop in child.material) {
-                          texture_maps.forEach( tex_map => {
-                            if (prop === tex_map) {
-                              if (child.material[ prop ]) child.material[ prop ].dispose();
-                            }
-                          });
-                        };
-                      }
-
-                      child.material.dispose();
-                    }
-                  }
-
-                  child.geometry.dispose();
-                }
-              });
+              await scene_cleanup();
 
               while (gltf_obj.children.length > 0) {
                 gltf_obj.remove( gltf_obj.children[ 0 ] );
@@ -1253,6 +1076,103 @@
         }
 
         mouse_wheel = true;
+      }
+
+      async function scene_cleanup() {
+        scene.remove( gltf_obj );
+
+        if (animation_mixer) {
+          animation_mixer.stopAllAction();
+
+          for ( let i = 0; i < animations.length; i++ ) {
+            animation_mixer.uncacheAction( animations[ i ] );
+            animation_mixer.uncacheClip( animations[ i ] );
+          }
+
+          animation_mixer.uncacheRoot( animation_mixer.getRoot() );
+        }
+
+        if (wireframe_enabled === true) show_wireframe();
+
+        if (gltf_obj.skeleton && gltf_obj.skeleton.boneTexture)
+          gltf_obj.skeleton.boneTexture.dispose();
+
+        gltf_obj.traverse( function( child ) {
+          if (child.isMesh || child.isPoints || ( child.isLine && child.geometry.type !== 'EdgesGeometry' )) {
+            if (child.skeleton && child.skeleton.boneTexture)
+                child.skeleton.boneTexture.dispose();
+
+            if (child.material) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  if (mtl.uniforms) {
+                    Object.keys( mtl.uniforms ).forEach( ( key ) => {
+                      if (mtl.uniforms[ key ].value) {
+                        let kv = mtl.uniforms[ key ].value;
+
+                        if (Array.isArray( kv ) && kv.length > 0) {
+                          kv.forEach( val => {
+                            if (val.type && val.type === 1009)
+                              val.dispose();
+                          });
+                        } else {
+                          if (kv.type && kv.type === 1009)
+                            kv.dispose();
+                        }
+                      }
+                    });
+                  } else {
+                    for (const prop in mtl) {
+                      texture_maps.forEach( tex_map => {
+                        if (prop === tex_map) {
+                          if (mtl[ prop ]) mtl[ prop ].dispose();
+                        }
+                      });
+                    };
+                  }
+
+                  mtl.dispose();
+                });
+              } else {
+                if (child.material.uniforms) {
+                  Object.keys( child.material.uniforms ).forEach( ( key ) => {
+                    if (child.material.uniforms[ key ].value) {
+                      let kv = child.material.uniforms[ key ].value;
+
+                      if (Array.isArray( kv ) && kv.length > 0) {
+                        kv.forEach( val => {
+                          if (val.type && val.type === 1009)
+                            val.dispose();
+                        });
+                      } else {
+                        if (kv.type && kv.type === 1009)
+                          kv.dispose();
+                      }
+                    }
+                  });
+                } else {
+                  for (const prop in child.material) {
+                    texture_maps.forEach( tex_map => {
+                      if (prop === tex_map) {
+                        if (child.material[ prop ]) child.material[ prop ].dispose();
+                      }
+                    });
+                  };
+                }
+
+                child.material.dispose();
+              }
+            }
+
+            child.geometry.dispose();
+          }
+        });
+
+        if (draco_material) {
+          if (draco_material.map) draco_material.map.dispose();
+          draco_material.dispose();
+          draco_material = null;
+        }
       }
 
       function enable_disable( disable = false ) {
