@@ -23,7 +23,6 @@
       import * as three_js from "three";
       import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
       import { Rhino3dmLoader } from "../../static/jsm/loaders/3DMLoader.js";
-      import { OrbitControls } from "three/addons/controls/OrbitControls.min.js";
 
       THREE = three_js;
 
@@ -36,8 +35,6 @@
       manager.addHandler(/\.3dm$/i, rhino_loader);
 
       lil_gui = GUI;
-
-      orb_controls = OrbitControls;
     </script>
 
     <style>
@@ -258,7 +255,7 @@
     <script>
       var THREE, manager, rhino_loader, rhino_obj, obj_is_mesh, gui, lil_gui;
       var renderer, scene, camera, render_requested, bounding_box;
-      var controls, orb_controls, mouse_down, mouse_wheel, events_initialized;
+      var controls, mouse_down, mouse_wheel, events_initialized;
       var ambientLight, directionalLight, wireframe_enabled, flatShading_enabled;
       var ww = window.innerWidth, wh = window.innerHeight, isMobile;
       var first_run = false, fr_count = 0, count = 0, texture_maps;
@@ -298,55 +295,15 @@
         mouse_wheel = true;
       }
 
-      function init() {
+      async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
-          if (rhino_obj) {
-            mouse_wheel = true;
+          mouse_wheel = true;
 
-            scene.remove( rhino_obj );
-
-            if (wireframe_enabled === true) show_wireframe();
-
-            rhino_obj.traverse( ( child ) => {
-              if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints ||
-                child.type === 'LineSegments' || child.isLine) {
-
-                if (child.material) {
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      for (const prop in mtl) {
-                        texture_maps.forEach( tex_map => {
-                          if (prop === tex_map) {
-                            if (mtl[ prop ]) mtl[ prop ].dispose();
-                          }
-                        });
-                      };
-
-                      mtl.dispose();
-                    });
-                  } else {
-                    for (const prop in child.material) {
-                      texture_maps.forEach( tex_map => {
-                        if (prop === tex_map) {
-                          if (child.material[ prop ]) child.material[ prop ].dispose();
-                        }
-                      });
-                    };
-
-                    child.material.dispose();
-                  }
-                }
-
-                child.geometry.dispose();
-              }
-            });
-          }
+          if (rhino_obj) await scene_cleanup();
 
           if (gui) gui_reset();
-
-          mouse_wheel = true;
 
           if (isMobile === false) {
             renderer.info.reset();
@@ -402,7 +359,7 @@
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
           renderer.toneMapping = THREE.NeutralToneMapping;
-          renderer.toneMappingExposure = 1;
+          renderer.toneMappingExposure = 1.25;
           renderer.setSize( ww, wh );
           renderer.info.autoReset = false;
           renderer.shadowMap.enabled = true;
@@ -419,28 +376,30 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 5000 );
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
 
         // Add AmbientLight to the scene
         if (ambientLight === undefined) {
-          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 1.0 );
-          ambientLight.position.set( 0, 0, -250 );
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.9 );
+          ambientLight.position.set( 0, 0, - 250 );
           camera.add( ambientLight );
         }
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 3.25 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 3.5 );
           directionalLight.position.set( 0, 0, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
         }
 
         if (controls === undefined) {
-          controls = new orb_controls( camera, renderer.domElement );
+          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+
+          controls = new OrbitControls( camera, renderer.domElement );
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.5;
           controls.rotateSpeed = 0.5;
@@ -461,7 +420,7 @@
       }
 
       function loadFile() {
-        rhino_loader.load( URL.createObjectURL( selected_rhino_file ), function( object ) {
+        rhino_loader.load( URL.createObjectURL( selected_rhino_file ), async function( object ) {
           URL.revokeObjectURL( selected_rhino_file );
 
           rhino_obj = object.clone();
@@ -509,9 +468,9 @@
             }
           });
 
-          if (obj_is_mesh) rhino_obj.rotation.x -= Math.PI / 2;
+          if (obj_is_mesh === true) rhino_obj.rotation.x -= Math.PI / 2;
 
-          if (rhino_obj.userData.layers.length > 1) start_gui();
+          if (rhino_obj.userData.layers.length > 1) await start_gui();
 
           // Add rhino_obj to the scene
           scene.add( rhino_obj );
@@ -804,7 +763,7 @@
         if (render_requested === true) requestAnimationFrame( render );
       }
 
-      function reset_all( reset = false ) {
+      async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
         document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_flat').style.backgroundColor = 'transparent';
@@ -817,43 +776,7 @@
         } else {
           // Page (re)loading
           if (scene) {
-            if (rhino_obj) {
-              scene.remove( rhino_obj );
-
-              rhino_obj.traverse( ( child ) => {
-                if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints ||
-                  child.type === 'LineSegments' || child.isLine) {
-
-                  if (child.material) {
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        for (const prop in mtl) {
-                          texture_maps.forEach( tex_map => {
-                            if (prop === tex_map) {
-                              if (mtl[ prop ]) mtl[ prop ].dispose();
-                            }
-                          });
-                        };
-
-                        mtl.dispose();
-                      });
-                    } else {
-                      for (const prop in child.material) {
-                        texture_maps.forEach( tex_map => {
-                          if (prop === tex_map) {
-                            if (child.material[ prop ]) child.material[ prop ].dispose();
-                          }
-                        });
-                      };
-
-                      child.material.dispose();
-                    }
-                  }
-
-                  child.geometry.dispose();
-                }
-              });
-            }
+            if (rhino_obj) await scene_cleanup();
 
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
@@ -875,6 +798,46 @@
         }
 
         mouse_wheel = true;
+      }
+
+      async function scene_cleanup() {
+        scene.remove( rhino_obj );
+
+        if (wireframe_enabled === true) await show_wireframe();
+
+        rhino_obj.traverse( ( child ) => {
+          if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints ||
+            child.type === 'LineSegments' || child.isLine) {
+
+            if (child.material) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  for (const prop in mtl) {
+                    texture_maps.forEach( tex_map => {
+                      if (prop === tex_map) {
+                        if (mtl[ prop ]) mtl[ prop ].dispose();
+                      }
+                    });
+                  };
+
+                  mtl.dispose();
+                });
+              } else {
+                for (const prop in child.material) {
+                  texture_maps.forEach( tex_map => {
+                    if (prop === tex_map) {
+                      if (child.material[ prop ]) child.material[ prop ].dispose();
+                    }
+                  });
+                };
+
+                child.material.dispose();
+              }
+            }
+
+            child.geometry.dispose();
+          }
+        });
       }
 
       function enable_disable( disable = false ) {
