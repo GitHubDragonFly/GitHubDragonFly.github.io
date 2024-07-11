@@ -321,62 +321,13 @@
         mouse_wheel = true;
       }
 
-      async function init(){
+      async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
-          if (animation_mixer) {
-            animation_mixer.stopAllAction();
-
-            for ( let i = 0; i < animations.length; i++ ) {
-              animation_mixer.uncacheAction( animations[ i ] );
-              animation_mixer.uncacheClip( animations[ i ] );
-            }
-
-            animation_mixer.uncacheRoot( animation_mixer.getRoot() );
-          }
-
-          scene.remove( fbx_obj );
-
-          if (fbx_obj.skeleton && fbx_obj.skeleton.boneTexture)
-            fbx_obj.skeleton.boneTexture.dispose();
-
-          fbx_obj.traverse( ( child ) => {
-            if (child.isMesh || child.isPoints) {
-              if (child.skeleton && child.skeleton.boneTexture)
-                child.skeleton.boneTexture.dispose();
-
-              if (child.material) {
-                if (Array.isArray( child.material )) {
-                  child.material.forEach( mtl => {
-                    for (const prop in mtl) {
-                      texture_maps.forEach( tex_map => {
-                        if (prop === tex_map) {
-                          if (mtl[ prop ]) mtl[ prop ].dispose();
-                        }
-                      });
-                    };
-
-                    mtl.dispose();
-                  });
-                } else {
-                  for (const prop in child.material) {
-                    texture_maps.forEach( tex_map => {
-                      if (prop === tex_map) {
-                        if (child.material[ prop ]) child.material[ prop ].dispose();
-                      }
-                    });
-                  };
-
-                  child.material.dispose();
-                }
-              }
-
-              child.geometry.dispose();
-            }
-          });
-
           mouse_wheel = true;
+
+          await scene_cleanup();
 
           if (isMobile === false) {
             renderer.info.reset();
@@ -407,9 +358,7 @@
         object_is_points = false;
         resource_path = '';
         mouse_down = false;
-        mouse_wheel = true;
-        first_run = true;
-        fr_count = 0;
+        mouse_wheel = false;
         textures = [];
         animations = [];
         animation_mixer = null;
@@ -489,7 +438,7 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 5000 );
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -525,10 +474,10 @@
         }
 
         // Load the fbx file
-        selected_fbx_file ? loadFile() : loadURLFile();
+        selected_fbx_file !== null ? loadFile() : loadURLFile();
       }
 
-      function loadFile(){
+      function loadFile() {
         // Launch loading of the selected file
         fbx_loader.load( URL.createObjectURL( selected_fbx_file ), function( fbx_scene ) {
           URL.revokeObjectURL( selected_fbx_file );
@@ -583,11 +532,6 @@
         }, resource_path);
 
         mouse_wheel = true;
-      }
-
-      function log_info() {
-        console.log( 'Memory: ', renderer.info.memory );
-        console.log( 'Render: ', renderer.info.render );
       }
 
       function loadURLFile() {
@@ -706,10 +650,17 @@
         document.getElementById('div_loading').style.display = 'none';
 
         render_requested = true;
-        mouse_wheel = true;
+        mouse_wheel = false;
+        first_run = true;
+        fr_count = 0;
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 100 ) );
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+      }
+
+      function log_info() {
+        console.log( 'Memory: ', renderer.info.memory );
+        console.log( 'Render: ', renderer.info.render );
       }
 
       function handle_error( error ) {
@@ -800,8 +751,9 @@
             if (first_run === true) {
               fr_count ++;
               if (fr_count > 15) {
-                first_run = false;
                 mouse_wheel = true;
+                first_run = false;
+                fr_count = 0;
                 count = 0;
               }
             } else {
@@ -820,13 +772,10 @@
         if (render_requested === true) requestAnimationFrame( render );
       }
 
-      function reset_all( reset = false ) {
+      async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
         document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_flat').style.backgroundColor = 'transparent';
-        document.getElementById('btn_load').style.backgroundColor = 'transparent';
-        document.getElementById('btn_clear').style.backgroundColor = 'transparent';
-        document.getElementById('btn_quick_x').style.backgroundColor = 'transparent';
         document.getElementById('btn_animate').style.backgroundColor = 'transparent';
         document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
 
@@ -842,41 +791,7 @@
               scene.environment = null;
             }
 
-            if (fbx_obj) {
-              scene.remove( fbx_obj );
-
-              fbx_obj.traverse( ( child ) => {
-                if (child.isMesh || child.isPoints) {
-                  if (child.material) {
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtrl => {
-                        for (const prop in mtrl) {
-                          texture_maps.forEach( tex_map => {
-                            if (prop === tex_map) {
-                              if (mtrl[ prop ]) mtrl[ prop ].dispose();
-                            }
-                          });
-                        };
-
-                        mtrl.dispose();
-                      });
-                    } else {
-                      for (const prop in child.material) {
-                        texture_maps.forEach( tex_map => {
-                          if (prop === tex_map) {
-                            if (child.material[ prop ]) child.material[ prop ].dispose();
-                          }
-                        });
-                      };
-
-                      child.material.dispose();
-                    }
-                  }
-
-                  child.geometry.dispose();
-                }
-              });
-            }
+            if (fbx_obj) await scene_cleanup();
 
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
@@ -897,6 +812,61 @@
         }
 
         mouse_wheel = true;
+      }
+
+      async function scene_cleanup() {
+        scene.remove( fbx_obj );
+
+        if (animation_mixer) {
+          animation_mixer.stopAllAction();
+
+          for ( let i = 0; i < animations.length; i++ ) {
+            animation_mixer.uncacheAction( animations[ i ] );
+            animation_mixer.uncacheClip( animations[ i ] );
+          }
+
+          animation_mixer.uncacheRoot( animation_mixer.getRoot() );
+        }
+
+        if (wireframe_enabled === true) await show_wireframe();
+
+        if (fbx_obj.skeleton && fbx_obj.skeleton.boneTexture)
+          fbx_obj.skeleton.boneTexture.dispose();
+
+        fbx_obj.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            if (child.skeleton && child.skeleton.boneTexture)
+                child.skeleton.boneTexture.dispose();
+
+            if (child.material) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  for (const prop in mtl) {
+                    texture_maps.forEach( tex_map => {
+                      if (prop === tex_map) {
+                        if (mtl[ prop ]) mtl[ prop ].dispose();
+                      }
+                    });
+                  };
+
+                  mtl.dispose();
+                });
+              } else {
+                for (const prop in child.material) {
+                  texture_maps.forEach( tex_map => {
+                    if (prop === tex_map) {
+                      if (child.material[ prop ]) child.material[ prop ].dispose();
+                    }
+                  });
+                };
+
+                child.material.dispose();
+              }
+            }
+
+            child.geometry.dispose();
+          }
+        });
       }
 
       function enable_disable( disable = false ) {
