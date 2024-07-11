@@ -9,7 +9,7 @@ Else, copy any of the following links and then paste it within the `URL` option 
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/collada/abb_irb52_7_120.dae`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/usdz/saeukkang.usdz`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vrml/extrusion3.wrl`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/fbx/stanford-bunny.fbx`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/fbx/Samba Dancing.fbx`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pdb/diamond.pdb`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ply/binary/Lucy100k.ply`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/stl/binary/colored.stl`
