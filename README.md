@@ -115,7 +115,7 @@ Number Type Converter
   - The equivalent touch controls should work fine on mobile devices
   - Hover the mouse over controls in the desktop viewers to se a popup description of the control
 
-- Special notes about AR / VR Viewer:
+- Special notes about `AR / VR Viewer`:
   - Using slightly modified version of the three.js `DeviceOrientationControls`, last available in r133
   - Currently highly experimental so it might work or it might not work properly or at all
   - My tests had it working with Chrome browser on both the desktop and an Android mobile phone:
@@ -129,7 +129,7 @@ Number Type Converter
     - Auto rotation
     - Equirectangular background
 
-- Special notes about A-FRAME Viewer:
+- Special notes about `A-FRAME Viewer`:
   - It is using [A-Frame Library / Framework](https://aframe.io) which makes it A-Frame specific
   - It is currently highly experimental so not sure if everything works as it should be
   - It is supposed to be used mainly on mobile devices supporting AR / VR
@@ -138,7 +138,7 @@ Number Type Converter
     - Local blobs and remote URL loading are supported
       - Local model files should be self-contained (embedded or binary)
 
-- Special notes about SPLAT Viewer:
+- Special notes about `SPLAT Viewer`:
   - It is using [@pmndrs/drei-vanilla](https://github.com/pmndrs/drei-vanilla#splat) splat loader built around [antimatter15/splat](https://github.com/antimatter15/splat)
   - Supports both local blob and remote URL loading
   - It requires a good and fast graphics hardware
@@ -192,7 +192,7 @@ Number Type Converter
   - When using the viewer's `URL` option remember the following:
     - BIN and / or MTL file URLs might need to be added alongside the model URL and comma separated, this would normally apply to some GLTF and OBJ files, for example:
       - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/OBJ/spider.obj, https://raw.githubusercontent.com/assimp/assimp/master/test/models/OBJ/spider.mtl`
-      - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/glTF/CesiumMilkTruck/CesiumMilkTruck.gltf, https://raw.githubusercontent.com/assimp/assimp/master/test/models/glTF/CesiumMilkTruck/CesiumMilkTruck.bin`
+      - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck.gltf, https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/main/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck.bin`
     - For MD2 models you would have to add their texture URL, for example:
       - `https://raw.githubusercontent.com/assimp/assimp/master/test/models/MD2/faerie.md2, https://raw.githubusercontent.com/assimp/assimp/master/test/models/MD2/faerie2.bmp`
     - If textures are not automatically fetched with the model URL only then add the texture location URL, for example:
