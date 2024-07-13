@@ -351,8 +351,6 @@
 				}
 
 				mixer.uncacheRoot( mixer.getRoot() );
-				console.log('mixer ', mixer);
-				mixer.dispose();
 
 			}
 
