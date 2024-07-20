@@ -214,7 +214,8 @@ Number Type Converter
   - USDZ files with USDC (binary model packed in) can be viewed with the following:
     - [USDZ Online Viewer](https://www.usdz-viewer.net/)
     - [USD Viewer](https://usd-viewer.glitch.me/?file=)
-      - this viewer can also be used as a workaround to export some models to GLB format and then either use my [GLTF Viewer](https://githubdragonfly.github.io/viewers/templates/GLTF%20Viewer.html) or [three.js editor](https://threejs.org/editor/) to export it to USDZ with USDA packed in
+    - Both of the above can also be used as a workaround to export some models to GLB format and then:
+      - use either my [GLTF Viewer](https://githubdragonfly.github.io/viewers/templates/GLTF%20Viewer.html) or [three.js editor](https://threejs.org/editor/) to export it to USDZ with USDA packed in
 
 - Special notes about `GLTF Legacy` viewer which is using modified version of mrdoob's [model-tag](https://github.com/mrdoob/model-tag):
   - Set in 500 x 500 viewport and seems to have a good fit on mobile devices
