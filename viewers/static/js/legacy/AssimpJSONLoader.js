@@ -605,7 +605,11 @@ THREE.AssimpJSONLoader.prototype = {
 				bone_id = 0;
 				let current_index = -1;
 
-				this.traverse( rootnode.children[ i ].children, current_index, mesh_bones );
+				if ( rootnode.children[ i ].children && rootnode.children[ i ].children.length > 0 ) {
+
+					this.traverse( rootnode.children[ i ].children, current_index, mesh_bones );
+
+				}
 
 			}
 
@@ -720,7 +724,7 @@ THREE.AssimpJSONLoader.prototype = {
 
 		}
 
-		for ( i = 0; node.children && i < node.children.length; i++ ) {
+		for ( let i = 0; node.children && i < node.children.length; i++ ) {
 
 			obj.add( this.parseObject( json, node.children[ i ], meshes, materials ) );
 
