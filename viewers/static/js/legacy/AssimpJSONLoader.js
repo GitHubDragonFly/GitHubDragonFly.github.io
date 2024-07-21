@@ -579,7 +579,7 @@ THREE.AssimpJSONLoader.prototype = {
 
 			bones.length = 0;
 
-			for ( i = 0, il = rootnode.children.length; i < il; i++ ) {
+			for ( let i = 0, il = rootnode.children.length; i < il; i++ ) {
 
 				root = new THREE.Object3D();
 
@@ -691,16 +691,13 @@ THREE.AssimpJSONLoader.prototype = {
 
 	parseObject : function( json, node, meshes, materials ) {
 
-		let obj = new THREE.Object3D()
-		,	i
-		,	idx
-		;
+		let idx, obj = new THREE.Object3D();
 
 		obj.name = node.name || '';
 		obj.matrix = new THREE.Matrix4().fromArray( node.transformation ).transpose();
 		obj.matrix.decompose( obj.position, obj.quaternion, obj.scale );
 
-		for ( i = 0; node.meshes && i < node.meshes.length; i++ ) {
+		for ( let i = 0; node.meshes && i < node.meshes.length; i++ ) {
 
 			idx = node.meshes[ i ];
 
