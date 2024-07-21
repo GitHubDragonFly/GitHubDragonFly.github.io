@@ -34,8 +34,6 @@
       import * as three_js from "three";
       import * as fflate_js from "three/addons/libs/fflate.module.min.js";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { STLLoader } from "three/addons/loaders/STLLoader.min.js";
-      import { PLYLoader } from "three/addons/loaders/PLYLoader.min.js";
       import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
       import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
       import { GifLoader } from "../static/jsm/loaders/three-gif-loader/gif-loader.js";
@@ -46,9 +44,6 @@
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
-
-      ply_loader = new PLYLoader( manager );
-      stl_loader = new STLLoader( manager );
 
       texture_loader = new THREE.TextureLoader( manager );
 
@@ -742,7 +737,7 @@
       var merge_vertices, gif_loader, gif_writer, exr_loader, rgbe_loader, hdrJPGLoader;
       var fflate, renderer, scene, camera, mesh, triangles_count, edges, edges_visible, render_requested;
       var controls, orb_controls, gizmo, orb_controls_gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
-      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions, tex, outline_material;
+      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions, outline_material;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, link, isMobile;
       var original_model, points_model, object_is_points, sampler, equi_enabled;
       var ambientLight, hemisphereLight, directionalLight;
@@ -2142,54 +2137,36 @@
         if (scene) {
           document.getElementById('file_image_input').value = '';
 
+          mouse_wheel = true;
+
           if (polar_grid_visible === true) show_polar_grid();
           if (grid_visible === true) show_grid();
 
-          if (mesh) {
-            scene.remove( mesh );
+          if (mesh) await scene_cleanup();
 
-            if (edges !== null) {
-              if (edges_visible === true) await show_edges();
-
-              edges.traverse( child => {
-                if (child.isLine || child.type === 'LineSegments') {
-                  child.material.dispose();
-                  child.geometry.dispose();
-                }
-              });
-            }
-
-            mesh.traverse( ( child ) => {
-              if (child.isMesh || child.isPoints) {
-                if (child.material && child.material.map) child.material.map.dispose();
-                if (child.material) child.material.dispose();
-                if (child.geometry) child.geometry.dispose();
-              }
-            });
-
-            while (mesh.children.length > 0) {
-              mesh.remove( mesh.children[ 0 ] );
-            }
-
-            material.dispose();
-          }
+          material.dispose();
 
           if (gizmo) {
             document.getElementById('gizmo').removeChild( gizmo.domElement );
             gizmo = undefined;
           }
 
-          if (isMobile === false) {
-            renderer.info.reset();
-            renderer.resetState();
-          }
-
-          reset_all( true );
+          await reset_all( true );
         }
 
         enable_disable( true );
 
         if (zip === undefined) zip = new JSZip();
+
+        if (ply_loader === undefined) {
+          const { PLYLoader } = await import( "three/addons/loaders/PLYLoader.min.js" );
+          ply_loader = new PLYLoader( manager );
+        }
+
+        if (stl_loader === undefined) {
+          const { STLLoader } = await import( "three/addons/loaders/STLLoader.min.js" );
+          stl_loader = new STLLoader( manager );
+        }
 
         if (tga_loader === undefined) {
           const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
@@ -2334,7 +2311,7 @@
         if (grid === undefined) grid = new THREE.GridHelper( 200, 200, 'yellow' );
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 5000 );
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -2342,7 +2319,7 @@
         // Add AmbientLight to the scene
         if (ambientLight === undefined) {
           ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0 );
-          ambientLight.position.set( 0, 0, -250 );
+          ambientLight.position.set( 0, 0, - 250 );
           scene.add( ambientLight );
         }
 
@@ -2426,7 +2403,7 @@
 
         triangles_count = object.attributes.position.count / 3;
 
-        point_size = isMobile === true ? 0.5 : 0.4;
+        point_size = isMobile === true ? 0.5 : 0.6;
 
         let smooth = object.clone();
 
@@ -3255,47 +3232,17 @@
       async function reset_only() {
         mouse_wheel = true;
 
-        scene.remove( mesh );
-
         if (polar_grid_visible === true) show_polar_grid();
         if (grid_visible === true) show_grid();
 
-        if (edges !== null) {
-          if (edges_visible === true) await show_edges();
+        await scene_cleanup();
 
-          edges.traverse( child => {
-            if (child.isLine || child.type === 'LineSegments') {
-              child.material.dispose();
-              child.geometry.dispose();
-            }
-          });
-        }
-
-        mesh.traverse( ( child ) => {
-          if (child.isMesh || child.isPoints) {
-            if (child.material && child.material.map) child.material.map.dispose();
-            if (child.material) child.material.dispose();
-            if (child.geometry) child.geometry.dispose();
-          }
-        });
-
-        while (mesh.children.length > 0) {
-          mesh.remove( mesh.children[ 0 ] );
-        }
-
-        if (isMobile === false) {
-          renderer.info.reset();
-          renderer.resetState();
-        }
-
-        reset_all( true );
+        await reset_all( true );
 
         console.time( 'Loading Time' );
 
         document.getElementById('div_loading').innerHTML = 'Reload';
         document.getElementById('div_loading').style.display = 'block';
-
-        mouse_wheel = true;
 
         loadFile();
       }
@@ -3407,19 +3354,7 @@
         } else {
           // Page (re)loading
           if (scene) {
-            if (mesh) {
-              scene.remove( mesh );
-
-              mesh.traverse( ( child ) => {
-                if (child.isMesh || child.isPoints) {
-                  if (child.material && child.material.map) child.material.map.dispose();
-                  if (child.material) child.material.dispose();
-                  if (child.geometry) child.geometry.dispose();
-                }
-              });
-            }
-
-            if (tex) tex.dispose();
+            if (mesh) await scene_cleanup();
 
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
@@ -3450,6 +3385,40 @@
         disabled_changed();
 
         mouse_wheel = true;
+      }
+
+      async function scene_cleanup() {
+        scene.remove( mesh );
+
+        renderer.clear();
+
+        if (edges !== null) {
+          if (edges_visible === true) await show_edges();
+
+          edges.traverse( child => {
+            if (child.isLine || child.type === 'LineSegments') {
+              child.material.dispose();
+              child.geometry.dispose();
+            }
+          });
+        }
+
+        mesh.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            if (child.material && child.material.map) child.material.map.dispose();
+            if (child.material) child.material.dispose();
+            if (child.geometry) child.geometry.dispose();
+          }
+        });
+
+        while (mesh.children.length > 0) {
+          mesh.remove( mesh.children[ 0 ] );
+        }
+
+        if (isMobile === false) {
+          renderer.info.reset();
+          renderer.resetState();
+        }
       }
 
       function enable_disable( disable = false ) {
@@ -3493,14 +3462,14 @@
 
     <script>
       function document_ready() {
-        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform ))
-         || (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent ))
-          || (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
+          (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
 
         $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#model_scale').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
 
-        if (navigator.userAgent.indexOf('Chrome') !== -1 || navigator.userAgent.indexOf('Safari') !== -1 || isMobile === true) {
+        if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile === true) {
           $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
         }
@@ -3519,7 +3488,7 @@
         $('button').each( function() {
           if (this.disabled === false ) {
             $(this).hover(
-            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
           } else {
             $(this).unbind('mouseenter mouseleave');
@@ -3531,7 +3500,7 @@
         $('select').each( function() {
           if (this.disabled === false) {
             $(this).hover(
-            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
           } else {
             $(this).unbind('mouseenter mouseleave');
@@ -3543,7 +3512,7 @@
         $('input[type=color]').each( function() {
           if (this.disabled === false ) {
             $(this).hover(
-            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
           } else {
             $(this).unbind('mouseenter mouseleave');
@@ -3561,13 +3530,13 @@
         } else {
           if ($._data($('#btn_grid')[ 0 ], 'events') === undefined) {
             $('#btn_grid').hover(
-            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
           }
 
           if ($._data($('#btn_polar_grid')[ 0 ], 'events') === undefined) {
             $('#btn_polar_grid').hover(
-            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
           }
         }
@@ -3581,11 +3550,11 @@
           $('#back_color').unbind('mouseenter mouseleave');
         } else {
           $('#btn_bgnd_linear_gradient').hover(
-          function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+          function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
           function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
 
           $('#back_color').hover(
-          function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
+          function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
           function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
         }
 
@@ -3597,7 +3566,7 @@
           $('#btn_points_model').unbind('mouseenter mouseleave');
         } else {
           $('#btn_points_model').hover(
-          function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+          function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
           function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
         }
 
@@ -3609,7 +3578,7 @@
           $('#btn_random_vertex_colors').unbind('mouseenter mouseleave');
         } else {
           $('#btn_random_vertex_colors').hover(
-          function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+          function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
           function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
         }
 
