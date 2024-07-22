@@ -23,7 +23,6 @@
       import * as three_js from "three";
       import { PCDLoader } from "three/addons/loaders/PCDLoader.min.js";
       import { XYZLoader } from "../../static/jsm/loaders/XYZLoader.js";
-      import { OrbitControls } from "three/addons/controls/OrbitControls.min.js";
 
       THREE = three_js;
 
@@ -42,8 +41,6 @@
 
       pcd_loader = new PCDLoader( manager );
       xyz_loader = new XYZLoader( manager );
-
-      orb_controls = OrbitControls;
     </script>
 
     <style>
@@ -161,20 +158,27 @@
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
-        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="min-width: 34px;">URL</button>
-        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".pcd, .xyz" />
+        <button title="Get remote model via URL" id="btn_url" onclick="show_url()" style="min-width: 38px;">URL</button>
+        <label for="btn_url" title="Get remote model via URL"></label>
+        <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
+        <label for="btn_file_input" title="Browse Local Files"></label>
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".pcd, .xyz" />
         <label for="back_color" title="Background Color">B</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <label for="points_color" title="Points Color">C</label>
         <input type="color" title="Points Color" id="points_color" name="points_color" onchange="set_points_color();" disabled />
         <button title="Increase Points Size" id="btn_plus" onclick="increase_points_size();" style="color: red;" disabled>+</button>
+        <label for="btn_plus" title="Increase Points Size"></label>
         <button title="Decrease Points Size" id="btn_minus" onclick="decrease_points_size();" style="color: red;" disabled>-</button>
+        <label for="btn_minus" title="Decrease Points Size"></label>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
         <input type="text" id="url_entry" value="" style="width: calc(75% - 12px);" />
         <button title="Load" id="btn_load" onclick="load_url_file();" style="min-width: 8.5%;">Load</button>
+        <label for="btn_load" title="Load"></label>
         <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
+        <label for="btn_clear" title="Clear"></label>
       </div>
     </div>
 
@@ -242,7 +246,7 @@
 
     <script>
       var THREE, manager, pcd_loader, xyz_loader, xyz_format, render_requested;
-      var renderer, scene, camera, pcd_obj, controls, orb_controls, isMobile;
+      var renderer, scene, camera, pcd_obj, controls, isMobile;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var ww = window.innerWidth, wh = window.innerHeight, count = 0;
       var selected_pcd_file, selected_url_file = '', bounding_box;
@@ -312,24 +316,15 @@
         mouse_wheel = true;
       }
 
-      function init() {
+      async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
-          if (pcd_obj) {
-            scene.remove( pcd_obj );
-
-            pcd_obj.traverse( ( child ) => {
-              if (child.isPoints) {
-                child.material.dispose();
-                child.geometry.dispose();
-              }
-            });
-          }
-
           mouse_wheel = true;
 
-          reset_all( true );
+          if (pcd_obj) await scene_cleanup();
+
+          await reset_all( true );
         }
 
         enable_disable( true );
@@ -341,8 +336,6 @@
         render_requested = false;
         vertex_colors_enabled = false;
         bounding_box = new THREE.Box3();
-
-        document.getElementById('points_color').value = '#000000';
 
         console.time( 'Loading Time' );
         document.body.style.backgroundImage = 'none';
@@ -389,13 +382,15 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 5000 );
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
 
         if (controls === undefined) {
-          controls = new orb_controls( camera, renderer.domElement );
+          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+
+          controls = new OrbitControls( camera, renderer.domElement );
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.5;
           controls.rotateSpeed = 0.5;
@@ -580,12 +575,10 @@
         if (render_requested === true) requestAnimationFrame( render );
       }
 
-      function reset_all( reset = false ) {
+      async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
         document.getElementById('points_color').value = '#000000';
         document.getElementById('btn_url').style.backgroundColor = 'transparent';
-        document.getElementById('btn_load').style.backgroundColor = 'transparent';
-        document.getElementById('btn_clear').style.backgroundColor = 'transparent';
         document.getElementById('btn_plus').style.backgroundColor = 'transparent';
         document.getElementById('btn_minus').style.backgroundColor = 'transparent';
 
@@ -596,16 +589,7 @@
         } else {
           // Page (re)loading
           if (scene) {
-            if (pcd_obj) {
-              scene.remove( pcd_obj );
-
-              pcd_obj.traverse( ( child ) => {
-                if (child.isPoints) {
-                  child.material.dispose();
-                  child.geometry.dispose();
-                }
-              });
-            }
+            if (pcd_obj) await scene_cleanup();
 
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
@@ -627,6 +611,25 @@
         mouse_wheel = true;
       }
 
+      async function scene_cleanup() {
+        scene.remove( pcd_obj );
+
+        renderer.clear();
+
+        pcd_obj.traverse( ( child ) => {
+          if (child.isPoints) {
+            if (child.material.map) child.material.map.dispose();
+            child.material.dispose();
+            child.geometry.dispose();
+          }
+        });
+
+        if (isMobile === false) {
+          renderer.info.reset();
+          renderer.resetState();
+        }
+      }
+
       function enable_disable( disable = false ) {
         document.getElementById('back_color').disabled = disable;
         document.getElementById('points_color').disabled = disable;
@@ -640,9 +643,9 @@
 
     <script>
       function document_ready() {
-        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform ))
-         || (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent ))
-          || (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
+          (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
 
         mouse_wheel = true;
       }
@@ -651,7 +654,7 @@
         $('button').each( function() {
           if (this.disabled === false ) {
             $(this).hover(
-            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
           } else {
             $(this).unbind('mouseenter mouseleave');
@@ -663,7 +666,7 @@
         $('input[type=color]').each( function() {
           if (this.disabled === false ) {
             $(this).hover(
-            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
           } else {
             $(this).unbind('mouseenter mouseleave');
