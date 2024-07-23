@@ -24,7 +24,6 @@
 
     <script type="module">
       import * as three_js from "three";
-      import { OrbitControls } from "three/addons/controls/OrbitControls.min.js";
       import { Splat, SplatLoader } from "https://cdn.jsdelivr.net/npm/@pmndrs/vanilla@1.16.0/core/Splat.min.js";
 
       THREE = three_js;
@@ -32,7 +31,6 @@
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
 
-      orb_controls = OrbitControls;
       splat_loader = SplatLoader;
       splat = Splat;
     </script>
@@ -153,16 +151,13 @@
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
-        <button title="URL of the remote splat" id="btn_url" onclick="show_url();" style="min-width: 34px;">URL</button>
-        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".splat" />
-      </div>
-      <div class="fm" id="url" style="display: none;">
-        <label for="url_entry" title="Remote URL"></label>
-        <input type="text" id="url_entry" value="" style="width: calc(75% - 12px);" />
-        <button title="Load" id="btn_load" onclick="load_url_file();" style="min-width: 8.5%;">Load</button>
-        <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
-      </div>
-      <div class="fm">
+        <button title="Get remote splat via URL" id="btn_url" onclick="show_url()" style="min-width: 38px;">URL</button>
+        <label for="btn_url" title="Get remote model via URL"></label>
+        <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
+        <label for="btn_file_input" title="Browse Local Files"></label>
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".splat" />
+        <button title="Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="color: blue;" disabled>G</button>
+        <label for="btn_bgnd_linear_gradient" title="Gradient Color Background"></label>
         <select title="Quick XYZ Rotation" id="quick_rotation" disabled>
           <option title="Quick XYZ Rotation" value="qrot" selected disabled>Rotate</option>
           <option title="Rotate 180x" value="180x" onclick="quick_x_rotation( '1' );">180x</option>
@@ -186,7 +181,14 @@
           <option title="Scale 10x" value="10x" onclick="set_model_scale( '10x' );">10x</option>
           <option title="Scale 20x" value="20x" onclick="set_model_scale( '20x' );">20x</option>
         </select>
-        <button title="Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="color: blue;" disabled>G</button>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="width: calc(75% - 12px);" />
+        <button title="Load" id="btn_load" onclick="load_url_file();" style="min-width: 8.5%;">Load</button>
+        <label for="btn_load" title="Load"></label>
+        <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
+        <label for="btn_clear" title="Clear"></label>
       </div>
     </div>
 
@@ -252,7 +254,7 @@
 
     <script>
       var THREE, splat_loader, splat, splats, manager, isMobile;
-      var controls, orb_controls, renderer, scene, camera, render_requested;
+      var controls, renderer, scene, camera, render_requested;
       var ww = window.innerWidth, wh = window.innerHeight, bgnd_linear_gradient;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var selected_local_file, selected_url_file = '';
@@ -282,7 +284,7 @@
           context.fillRect( 0, 0, ww, wh );
           let lg_texture = new THREE.Texture( canvas );
           lg_texture.mapping = THREE.EquirectangularReflectionMapping;
-          renderer.toneMappingExposure = 0.7;
+          renderer.toneMappingExposure = 1.5;
           scene.background = lg_texture;
           lg_texture.needsUpdate = true;
 
@@ -324,40 +326,15 @@
         mouse_wheel = true;
       }
 
-      function init() {
+      async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
-          if (splats) {
-            scene.remove( splats );
-
-            splats.traverse( ( child ) => {
-              if (child.isMesh || child.isPoints) {
-                if (child.material) {
-                  if (child.material.uniforms) {
-                    Object.keys( child.material.uniforms ).forEach( ( key ) => {
-                      if (child.material.uniforms[ key ].value && child.material.uniforms[ key ].value.isTexture) {
-                        child.material.uniforms[ key ].value.dispose();
-                      }
-                    });
-                  }
-
-                  child.material.dispose();
-                }
-
-                if (child.geometry) child.geometry.dispose();
-              }
-            });
-          }
-
-          if (isMobile === false) {
-            renderer.info.reset();
-            renderer.resetState();
-          }
-
           mouse_wheel = true;
 
-          reset_all( true );
+          if (splats) await scene_cleanup();
+
+          await reset_all( true );
         }
 
         enable_disable( true );
@@ -401,7 +378,7 @@
           renderer = new THREE.WebGLRenderer( { antialias: false, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
           renderer.toneMapping = THREE.NeutralToneMapping;
-          renderer.toneMappingExposure = 1.2;
+          renderer.toneMappingExposure = 1.5;
           renderer.info.autoReset = false;
           renderer.setSize( ww, wh );
           renderer.autoClear = false;
@@ -419,13 +396,15 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 5000 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 10000 );
           camera.position.set( 0, 0, 30 );
           scene.add( camera );
         }
 
         if (controls === undefined) {
-          controls = new orb_controls( camera, renderer.domElement );
+          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+
+          controls = new OrbitControls( camera, renderer.domElement );
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.5;
           controls.rotateSpeed = 0.8;
@@ -518,21 +497,21 @@
         }
       }
 
-      function log_info() {
-        console.log( 'Memory: ', renderer.info.memory );
-        console.log( 'Render: ', renderer.info.render );
-      }
-
       async function finish_loading() {
         console.timeEnd( 'Loading Time' );
         enable_disable( false );
         render_requested = true;
-        mouse_wheel = true;
+        mouse_wheel = false;
         first_run = true;
         fr_count = 0;
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 100 ) );
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+      }
+
+      function log_info() {
+        console.log( 'Memory: ', renderer.info.memory );
+        console.log( 'Render: ', renderer.info.render );
       }
 
       function handle_error( error ) {
@@ -559,7 +538,11 @@
             if (first_run === true) {
               fr_count ++;
               if (fr_count > 10) {
+                mouse_wheel = true;
                 first_run = false;
+                fr_count = 0;
+                count = 0;
+
                 document.getElementById('div_loading').style.display = 'none';
               }
             } else {
@@ -578,30 +561,9 @@
         if (render_requested === true) requestAnimationFrame( render );
       }
 
-      function reset_only() {
-        if (scene) {
-          scene.remove( splats );
-          splats = null;
-        }
-
-        reset_all( true );
-
-        console.time( 'Loading Time' );
-
-        document.getElementById('div_loading').innerHTML = 'Reload';
-        document.getElementById('div_loading').style.display = 'block';
-
-        mouse_wheel = true;
-
-        (selected_local_file !== null) ? loadFile() : loadURLFile();
-      }
-
-      function reset_all( reset = false ) {
+      async function reset_all( reset = false ) {
         bgnd_linear_gradient = false;
         document.getElementById('btn_url').style.backgroundColor = 'transparent';
-        document.getElementById('btn_load').style.backgroundColor = 'transparent';
-        document.getElementById('btn_clear').style.backgroundColor = 'transparent';
-
         document.getElementById('btn_bgnd_linear_gradient').disabled = false;
         document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
 
@@ -613,27 +575,7 @@
         } else {
           // Page (re)loading
           if (scene) {
-            if (splats) {
-              scene.remove( splats );
-
-              splats.traverse( ( child ) => {
-                if (child.isMesh || child.isPoints) {
-                  if (child.material) {
-                    if (child.material.uniforms) {
-                      Object.keys( child.material.uniforms ).forEach( ( key ) => {
-                        if (child.material.uniforms[ key ].value && child.material.uniforms[ key ].value.isTexture) {
-                          child.material.uniforms[ key ].value.dispose();
-                        }
-                      });
-                    }
-
-                    child.material.dispose();
-                  }
-
-                  if (child.geometry) child.geometry.dispose();
-                }
-              });
-            }
+            if (splats) await scene_cleanup();
 
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
@@ -655,6 +597,35 @@
         mouse_wheel = true;
       }
 
+      async function scene_cleanup() {
+        scene.remove( splats );
+
+        renderer.clear();
+
+        splats.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            if (child.material) {
+              if (child.material.uniforms) {
+                Object.keys( child.material.uniforms ).forEach( ( key ) => {
+                  if (child.material.uniforms[ key ].value && child.material.uniforms[ key ].value.isTexture) {
+                    child.material.uniforms[ key ].value.dispose();
+                  }
+                });
+              }
+
+              child.material.dispose();
+            }
+
+            if (child.geometry) child.geometry.dispose();
+          }
+        });
+
+        if (isMobile === false) {
+          renderer.info.reset();
+          renderer.resetState();
+        }
+      }
+
       function enable_disable( disable = false ) {
         document.getElementById('btn_bgnd_linear_gradient').disabled = disable;
         document.getElementById('quick_rotation').disabled = disable;
@@ -667,14 +638,14 @@
 
     <script>
       function document_ready() {
-        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform ))
-         || (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent ))
-          || (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
+          (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
 
         $('#model_scale').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#quick_rotation').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
 
-        if (navigator.userAgent.indexOf('Chrome') !== -1 || navigator.userAgent.indexOf('Safari') !== -1 || isMobile === true) {
+        if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile === true) {
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
           $('#quick_rotation').change( function() { $(this).children(':selected').click(); });
         }
@@ -686,7 +657,7 @@
         $('button').each( function() {
           if (this.disabled === false ) {
             $(this).hover(
-            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
           } else {
             $(this).unbind('mouseenter mouseleave');
@@ -698,7 +669,7 @@
         $('select').each( function() {
           if (this.disabled === false) {
             $(this).hover(
-            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
           } else {
             $(this).unbind('mouseenter mouseleave');
