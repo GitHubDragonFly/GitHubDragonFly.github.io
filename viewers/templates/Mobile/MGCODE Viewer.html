@@ -22,7 +22,6 @@
     <script type="module">
       import * as three_js from "three";
       import { GCodeLoader } from "../../static/jsm/loaders/GCodeLoader.js";
-      import { OrbitControls } from "three/addons/controls/OrbitControls.min.js";
 
       THREE = three_js;
 
@@ -30,8 +29,6 @@
       manager.onLoad = function() { mouse_wheel = true; }
 
       gcode_loader = new GCodeLoader( manager );
-
-      orb_controls = OrbitControls;
     </script>
 
     <style>
@@ -149,17 +146,23 @@
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
-        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".gcode, .ncc, .ngc" />
-        <label for="back_color" title="Background Color">B</label>
+        <button title="Get remote model via URL" id="btn_url" onclick="show_url()" style="min-width: 38px;">URL</button>
+        <label for="btn_url" title="Get remote model via URL"></label>
+        <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
+        <label for="btn_file_input" title="Browse Local Files"></label>
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".gcode, .ncc, .ngc" />
+        <label for="back_color" title="Background Color">BG</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Path" id="btn_path" onclick="show_path()" style="min-width: 40px;" disabled>path</button>
+        <label for="btn_path" title="Path"></label>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
         <input type="text" id="url_entry" value="" style="width: calc(75% - 12px);" />
         <button title="Load" id="btn_load" onclick="load_url_file();" style="min-width: 8.5%;">Load</button>
+        <label for="btn_load" title="Load"></label>
         <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
+        <label for="btn_clear" title="Clear"></label>
       </div>
     </div>
 
@@ -224,8 +227,8 @@
     </script>
 
     <script>
-      var THREE, manager, renderer, scene, camera, gcode_loader, gcode_obj;
-      var controls, orb_controls, path, path_visible, render_requested;
+      var THREE, manager, renderer, scene, gcode_loader, gcode_obj;
+      var camera, controls, path, path_visible, render_requested;
       var mouse_down, mouse_wheel, events_initialized, isMobile;
       var ww = window.innerWidth, wh = window.innerHeight;
       var url_displayed = false, url_loading = false, count = 0;
@@ -255,45 +258,21 @@
 
         bounding_box.setFromObject( gcode_obj );
         let center = bounding_box.getCenter(new THREE.Vector3());
+
         controls.target.set( center.x, center.y, center.z );
 
         mouse_wheel = true;
       }
 
-      function init() {
+      async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
-          if (gcode_obj) {
-            scene.remove( gcode_obj );
+          mouse_wheel = true;
 
-            mouse_wheel = true;
-            renderer.clear();
-            render();
+          if (gcode_obj) await scene_cleanup();
 
-            if (path_visible === true) show_path();
-
-            gcode_obj.traverse( ( child ) => {
-              if (child.isLine) {
-                child.material.dispose();
-                child.geometry.dispose();
-              }
-            });
-
-            path.traverse( ( child ) => {
-              if (child.isLine) {
-                child.material.dispose();
-                child.geometry.dispose();
-              }
-            });
-          }
-
-          if (isMobile === false) {
-            renderer.info.reset();
-            renderer.resetState();
-          }
-
-          reset_all( true );
+          await reset_all( true );
         }
 
         enable_disable( true );
@@ -352,13 +331,15 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 5000 );
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
 
         if (controls === undefined) {
-          controls = new orb_controls( camera, renderer.domElement );
+          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+
+          controls = new OrbitControls( camera, renderer.domElement );
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.5;
           controls.rotateSpeed = 0.5;
@@ -500,7 +481,7 @@
         if (render_requested === true) requestAnimationFrame( render );
       }
 
-      function reset_all( reset = false ) {
+      async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
         document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_path').style.backgroundColor = 'transparent';
@@ -512,23 +493,7 @@
         } else {
           // Page (re)loading
           if (scene) {
-            if (gcode_obj) {
-              scene.remove( gcode_obj );
-
-              gcode_obj.traverse( ( child ) => {
-                if (child.isLine) {
-                  child.material.dispose();
-                  child.geometry.dispose();
-                }
-              });
-
-              path.traverse( ( child ) => {
-                if (child.isLine) {
-                  child.material.dispose();
-                  child.geometry.dispose();
-                }
-              });
-            }
+            if (gcode_obj) await scene_cleanup();
 
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
@@ -550,6 +515,33 @@
         mouse_wheel = true;
       }
 
+      async function scene_cleanup() {
+        scene.remove( gcode_obj );
+
+        renderer.clear();
+
+        if (path_visible === true) await show_path();
+
+        gcode_obj.traverse( ( child ) => {
+          if (child.isLine) {
+            child.material.dispose();
+            child.geometry.dispose();
+          }
+        });
+
+        path.traverse( ( child ) => {
+          if (child.isLine) {
+            child.material.dispose();
+            child.geometry.dispose();
+          }
+        });
+
+        if (isMobile === false) {
+          renderer.info.reset();
+          renderer.resetState();
+        }
+      }
+
       function enable_disable( disable = false ) {
         document.getElementById('back_color').disabled = disable;
         document.getElementById('btn_path').disabled = disable;
@@ -561,18 +553,16 @@
 
     <script>
       function document_ready() {
-        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform ))
-         || (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent ))
-          || (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
-
-        mouse_wheel = true;
+        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
+          (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
       }
 
       function disabled_changed() {
         $('button').each( function() {
           if (this.disabled === false ) {
             $(this).hover(
-            function() { $(this)[ 0 ].style.border = 'solid 2px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
           } else {
             $(this).unbind('mouseenter mouseleave');
@@ -584,7 +574,7 @@
         $('input[type=color]').each( function() {
           if (this.disabled === false ) {
             $(this).hover(
-            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
           } else {
             $(this).unbind('mouseenter mouseleave');
