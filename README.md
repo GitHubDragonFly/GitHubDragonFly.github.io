@@ -102,6 +102,7 @@ Number Type Converter
   - Page zoom might need to be adjusted to keep controls uncluttered
   - There is a full-screen switching button which can also help or just use your browser shortcut keys
   - 640 x 480 screen resoultion should also work but might present a limited workspace and visibility
+  - Workaround for any low resolution is to use stripped down and mobile friendly viewers instead
 - Different [three.js](https://github.com/mrdoob/three.js) revisions are used throughout and with lots of customized code:
   - Most viewers page title should show what three.js revision is used
 - Error handling narrows down to showing the `ERROR!` message so check the console output for details
@@ -113,7 +114,8 @@ Number Type Converter
   - Move = right-click + hold + drag
   - Zoom In / Out = mouse scroll wheel
   - The equivalent touch controls should work fine on mobile devices
-  - Hover the mouse over controls in the desktop viewers to se a popup description of the control
+  - Hover the mouse over controls in the desktop viewers to se a popup description of the control:
+    - If the control is not disabled then it might show a red border around it (applicable to button, color and select controls)
 
 - Special notes about `AR / VR Viewer`:
   - Using slightly modified version of the three.js `DeviceOrientationControls`, last available in r133
