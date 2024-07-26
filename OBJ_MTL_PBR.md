@@ -10,6 +10,7 @@ Most, if not all, of the available viewers do include the OBJ Exporter, thus can
 
 As for the textures, any of the following image formats should work with OBJ models when specified in the MTL file:
   - BMP, DDS, GIF, JPEG, PNG, TGA, WEBP
+  - Test model can be found [here](https://github.com/GitHubDragonFly/GitHubDragonFly.github.io/tree/main/viewers/examples/cerberus) and each of the zip files can be loaded as such
 
 This document would represent a summary of PBR entries that can be found in the exported MTL file, with mentioning of some possibly utilized standard entries whose description can be seen online [here](https://paulbourke.net/dataformats/mtl/).
 
