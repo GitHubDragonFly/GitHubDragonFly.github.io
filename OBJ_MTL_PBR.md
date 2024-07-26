@@ -88,6 +88,7 @@ This can be tested by using the [Khronos Group glTF v2.0 examples](https://githu
  - Extract all the files to a folder on your device (this needs to be done since my viewers currently don't support loading of zip files)
  - Examine the MTL file to see what the entries look like and then do the following:
    - Use my [OBJ Viewer](https://githubdragonfly.github.io/viewers/templates/ASSIMP%20Viewer.html) or [ASSIMP Viewer](https://githubdragonfly.github.io/viewers/templates/ASSIMP%20Viewer.html) and select its `Browse` option to load these extracted files all at once - your device will have to allow loading local files
+   - `OBJ Viewer` additionally supports loading of `ZIP` files
  - After the model is loaded then make sure to check the `Eq` box in the viewer to get the environment texture / lights
 
 Not all the examples will work properly but lots of them do.
