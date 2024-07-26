@@ -354,6 +354,9 @@ class MaterialCreator {
 
 		function setMapForType( mapType, value, prop ) {
 
+			// Skip all texture parameters and use texture name only
+			value = value.substring( value.lastIndexOf( ' ' ) + 1 );
+
 			if ( params[ mapType ] ) return; // Keep the first encountered texture
 
 			const texParams = scope.getTextureParams( original_mat[ prop ] );
@@ -950,7 +953,7 @@ class MaterialCreator {
 
 		if ( mapping !== undefined ) texture.mapping = mapping;
 
-		if (ext === '.tga') { texture.generateMipmaps = true; texture.flipY = true; }
+		if ( ext === '.tga' ) { texture.generateMipmaps = true; texture.flipY = true; }
 
 		return texture;
 
