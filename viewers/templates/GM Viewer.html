@@ -347,19 +347,16 @@
         let options = {	binary: true, maxTextureSize: tex_res };
 
         let glTF = await modelViewer.exportScene( options );
+        let glTF_arrayBuffer = await glTF.arrayBuffer();
+        let glTF_array = new Uint8Array( glTF_arrayBuffer );
 
-        let glTF_array, file;
+        if (draco === true) file_name += ' DRACO';
+        else if (meshopt === true) file_name += ' MESHOPT';
 
-        if ( draco === true || meshopt === true || tex_res !== Infinity || tex_fmt !== '' ) {
-          const glTF_arrayBuffer = await glTF.arrayBuffer();
-          glTF_array = new Uint8Array( glTF_arrayBuffer );
+        if (tex_fmt !== '') file_name += ' ' + tex_fmt;
+        if (tex_res !== Infinity) file_name += ' (' + tex_res + ')';
 
-          if (draco === true) file_name += ' DRACO';
-          else if (meshopt === true) file_name += ' MESHOPT';
-
-          if (tex_fmt !== '') file_name += ' ' + tex_fmt;
-          if (tex_res !== Infinity) file_name += ' (' + tex_res + ')';
-        }
+        let file;
 
         try {
           if (draco === true) {
@@ -369,7 +366,7 @@
           } else if (tex_fmt !== '') {
             file = new File( [ await texture_compress( glTF_array ) ], file_name + '.glb' );
           } else {
-            file = new File( [ glTF ], file_name + '.glb' );
+            file = new File( [ await simplify( glTF_array ) ], file_name + '.glb' );
           }
         } catch ( error ) {
           handle_export_error( error );
@@ -382,6 +379,35 @@
         link.click();
 
         finish_export();
+      }
+
+      /* Simplify */
+
+      async function simplify( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer" );
+        const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
+        const { dedup, flatten, join, prune, simplify, unpartition, weld } = await import( "@gltf-transform/functions" );
+
+        const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          unpartition(),
+          dedup(),
+          prune(),
+          flatten(),
+          join(),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+        );
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
       }
 
       /* Encode with draco compression - geometry */
