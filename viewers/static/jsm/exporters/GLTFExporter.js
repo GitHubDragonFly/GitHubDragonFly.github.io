@@ -26,7 +26,7 @@ import {
 	Quaternion,
 } from "three";
 
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/utils/TextureUtils.min.js";
+import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/utils/TextureUtils.min.js";
 
 /**
  * The KHR_mesh_quantization extension allows these extra attribute component types
@@ -867,7 +867,10 @@ class GLTFWriter {
 		canvas.width = width;
 		canvas.height = height;
 
-		const context = canvas.getContext( '2d' );
+		const context = canvas.getContext( '2d', {
+			willReadFrequently: true,
+		} );
+
 		context.fillStyle = '#00ffff';
 		context.fillRect( 0, 0, width, height );
 
@@ -2099,7 +2102,7 @@ class GLTFWriter {
 			if ( ! trackNode || ! trackProperty ) {
 
 				console.warn( 'THREE.GLTFExporter: Could not export animation track "%s".', track.name );
-				return null;
+				continue;
 
 			}
 
@@ -2833,7 +2836,12 @@ class GLTFMaterialsVolumeExtension {
 
 		}
 
-		extensionDef.attenuationDistance = material.attenuationDistance;
+		if ( material.attenuationDistance !== Infinity ) {
+
+			extensionDef.attenuationDistance = material.attenuationDistance;
+
+		}
+
 		extensionDef.attenuationColor = material.attenuationColor.toArray();
 
 		materialDef.extensions = materialDef.extensions || {};
