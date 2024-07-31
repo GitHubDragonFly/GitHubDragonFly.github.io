@@ -57,6 +57,8 @@ For those who either deal with or are just learning about Programmable Logic Con
 Intro video shows how to start using 3D viewers by loading model files from a hard drive:
  - It was captured by using the free and open source [OBS Studio](https://github.com/obsproject/obs-studio) software.
 
+Videos available in my other repositories were also captured by the OBS Studio.
+
 # Mozilla Firefox screenshots
 
 Main Menu Page (desktop)
@@ -163,7 +165,7 @@ Number Type Converter
     - The viewer supports loading of multiple models at once, which will be switchable with the viewer's `M` button
     - Support for USDZ was also added but is untested:
       - Purely logical approach, not sure if it is correct
-  - `GLTF Viewer` is for v2.0 glTF files and is currently using r164 of three.js:
+  - `GLTF Viewer` is for v2.0 glTF files and is currently using r167 of three.js:
     - does not support obsolete `pbrSpecularGlossiness`
     - supports currently arbitrary `KHR_animation_pointer`
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js:
@@ -363,8 +365,8 @@ Number Type Converter
   - `As` - and / or `atoms` button (available in PDB viewers only)
   - `Bs` - and / or `bonds` button (available in PDB viewers only)
   - `C0` - camera index
-    - 0 being default in GLTF viewer
-    - shows as `CAM` + Index in GLTF Legacy viewer
+    - 0 being default (ASSIMP, GLTF, GLTFS viewers)
+    - shows as `Cam + Index` in the GLTF Legacy viewer
   - `CS` - construction step (available in LDRAW viewers only)
   - `DT` - material's depthTest switching (ASSIMP, GLTF, GLTFS viewers)
   - `Ls` - and / or `labels` button (available in PDB viewers only)
@@ -396,7 +398,7 @@ Number Type Converter
     - scene background `backBlurriness` and `backIntensity`
     - this will also disable/enable the gradient background `G` button and background color control 
 - JSON viewers support three.js and assimp JS / JSON formats with limitations:
-  - JSON Viewer is currently using r164 of three.js and cannot open legacy formats
+  - JSON Viewer is currently using r167 of three.js and cannot open legacy formats
   - JSON Legacy viewer is using r111 of three.js to support legacy THREE.Geometry:
     - It is using 4 loaders: ObjectLoader, BufferGeometryLoader, LegacyJSONLoader and AssimpJSONLoader
     - It could possibly open and export current three.js JSON format, with limitations of r111
