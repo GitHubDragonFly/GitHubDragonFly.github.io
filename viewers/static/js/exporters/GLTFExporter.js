@@ -828,7 +828,10 @@
 			canvas.width = width;
 			canvas.height = height;
 
-			const context = canvas.getContext( '2d' );
+			const context = canvas.getContext( '2d', {
+				willReadFrequently: true,
+			} );
+
 			context.fillStyle = '#00ffff';
 			context.fillRect( 0, 0, width, height );
 
@@ -2009,7 +2012,7 @@
 				if ( ! trackNode || ! trackProperty ) {
 
 					console.warn( 'THREE.GLTFExporter: Could not export animation track "%s".', track.name );
-					return null;
+					continue;
 
 				}
 
@@ -2707,7 +2710,12 @@
 
 			}
 
-			if ( material.attenuationDistance ) extensionDef.attenuationDistance = material.attenuationDistance;
+			if ( material.attenuationDistance && material.attenuationDistance !== Infinity ) {
+
+				extensionDef.attenuationDistance = material.attenuationDistance;
+
+			}
+
 			if ( material.attenuationColor ) extensionDef.attenuationColor = material.attenuationColor.toArray();
 
 			materialDef.extensions = materialDef.extensions || {};
