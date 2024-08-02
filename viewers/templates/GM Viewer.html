@@ -3,7 +3,7 @@
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="GLTF, GLB, VRM, USDZ Viewer using Google's model-viewer web component">
+    <meta name="description" content="GLTF, GLB, VRM Viewer using Google's model-viewer web component">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.8.3/dist/es-module-shims.min.js"></script>
@@ -157,7 +157,7 @@
         <label for="btn_url" title="Get remote model via URL"></label>
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="btn_file_input" title="Browse Local Files"></label>
-        <input type="file" id="file_input" style="display: none;" onchange="init()" accept=".glb, .gltf, .usdz, .vrm, .bin, .ktx2, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
+        <input type="file" id="file_input" style="display: none;" onchange="init()" accept=".glb, .gltf, .vrm, .bin, .ktx2, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
         <label for="back_color" title="Background Color">B</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Switch Model" id="btn_current_model" onclick="current_model_changed()" disabled>M</button>
@@ -178,6 +178,11 @@
           <option title="GL Transmission Format binary with DRACO and optional texture compression" value="glbd" onclick="export_glb( true, false )">GLB_d</option>
           <option title="GL Transmission Format binary with Meshopt and optional texture compression" value="glbm" onclick="export_glb( false, true )">GLB_m</option>
           <option title="GL Transmission Format ascii" value="gltf" onclick="export_gltf()">GLTF</option>
+          <option title="Export as Image" value="image" disabled>- Image -</option>
+          <option title="Export as GIF Image" value="gif" onclick="export_image( 'gif' )">GIF</option>
+          <option title="Export as JPG Image" value="jpg" onclick="export_image( 'jpg' )">JPG</option>
+          <option title="Export as PNG Image" value="png" onclick="export_image( 'png' )">PNG</option>
+          <option title="Export as WEBP Image" value="webp" onclick="export_image( 'webp' )">WEBP</option>
         </select>
         <select title="Maximum Exported Texture Resolution" id="export_tex_res" disabled>
           <option title="Original" value="original" onclick="tex_res = Infinity;" selected>None</option>
@@ -277,12 +282,12 @@
     </script>
 
     <script>
-      var gltf_filenames, usdz_filenames, models, current_model = 0;
-      var filename, selected_file, other_files, selected_url_file = '';
+      var filename, gltf_filenames, models, current_model = 0;
+      var selected_file, other_files, selected_url_file = '';
       var url_displayed = false, url_loading = false;
       var ww = window.innerWidth, wh = window.innerHeight, link;
-      var isAppleDevice, isMobile, tex_res, tex_fmt;
-      var equi_enabled = false, rotation_enabled = false, neutral_lighting = false;
+      var isMobile, tex_res, tex_fmt, neutral_lighting = false;
+      var equi_enabled = false, rotation_enabled = false;
       var variants, current_variant = 0, variants_available = false;
       var animations, current_animation = 0, animation_running = false;
 
@@ -317,6 +322,35 @@
       function handle_export_error( error ) {
         alert( 'Export error!' );
         console.log( error );
+        finish_export();
+      }
+
+      async function export_image( type = 'png' ) {
+        await start_export();
+
+        let modelViewer = document.getElementById('mv');
+
+        let image = await modelViewer.toDataURL( 'image/' + type, encoderOptions = 1.0 );
+
+        // Get the base64 encoded data
+        let base64data = image.replace( /^data:image\/(png|jpg|gif|webp);base64,/, '' );
+
+        // Convert data to Uint8Array
+        let b = atob( base64data );
+        let data = new Uint8Array( b.length );
+
+        for ( let i = 0, l = data.length; i < l; i ++ ) {
+          data[ i ] = b.charCodeAt( i );
+        }
+
+        let blob = new Blob( [ data ], { type: 'image/' + type } );
+        let file = new File( [ blob ], filename + '.' + type );
+
+        link.download = file.name;
+        link.href = URL.createObjectURL( file );
+        URL.revokeObjectURL( file );
+        link.click();
+
         finish_export();
       }
 
@@ -791,7 +825,6 @@
         tex_res = Infinity;
         filename = null;
         gltf_filenames = {};
-        usdz_filenames = {};
         models = [];
 
         enable_disable( true );
@@ -823,18 +856,6 @@
             } else if (extensions.some( ext => fn_uc.endsWith( ext ) )) {
               other_files[ fi.files[ i ].name ] = URL.createObjectURL( fi.files[ i ] );
               URL.revokeObjectURL( fi.files[ i ] );
-            } else if (fn_uc.endsWith('.USDZ')) {
-              let url = URL.createObjectURL( fi.files[ i ] );
-
-              models.push( url );
-
-              usdz_filenames[ url ] = fi.files[ i ].name;
-
-              if (filename === null) filename = usdz_filenames[ url ].substring( 0, usdz_filenames[ url ].lastIndexOf('.') );
-
-              if (selected_file === null) selected_file = url;
-
-              URL.revokeObjectURL( fi.files[ i ] );
             }
           };
 
@@ -852,7 +873,7 @@
             disabled_changed();
           } else {
             document.getElementById('div_error').style.display = 'block';
-            console.log( 'No valid GLTF or GLB or VRM or USDZ file selected!' );
+            console.log( 'No valid GLTF or GLB or VRM file selected!' );
             return;
           }
 
@@ -915,13 +936,6 @@
 
         if (gltf_filenames[ selected_file ]) {
           mdl_viewer.setAttribute( 'src', selected_file );
-        } else if (usdz_filenames[ selected_file ]) {
-          if (isAppleDevice === true) {
-            mdl_viewer.setAttribute( 'ios-src', selected_file );
-          } else {
-            console.log( 'Could not detect USDZ support on this device!' )
-            mdl_viewer.setAttribute( 'src', '#' );
-          }
         }
       }
 
@@ -947,11 +961,6 @@
                 gltf_filenames[ url ] = url.substring( url.lastIndexOf( '/' ) + 1 );
                 if (filename === null) filename = gltf_filenames[ url ].substring( 0, gltf_filenames[ url ].lastIndexOf('.') );
                 if (selected_file === null) selected_file = url;
-              } else if (fn_uc.endsWith('.USDZ')) {
-                models.push( url );
-                usdz_filenames[ url ] = url.substring( url.lastIndexOf( '/' ) + 1 );
-                if (filename === null) filename = usdz_filenames[ url ].substring( 0, usdz_filenames[ url ].lastIndexOf('.') );
-                if (selected_file === null) selected_file = url;
               }
             }
           } else {
@@ -968,11 +977,6 @@
               models.push( selected_url_file );
               gltf_filenames[ selected_url_file ] = selected_url_file.substring( selected_url_file.lastIndexOf( '/' ) + 1 );
               if (filename === null) filename = gltf_filenames[ selected_url_file ].substring( 0, gltf_filenames[ selected_url_file ].lastIndexOf('.') );
-              if (selected_file === null) selected_file = selected_url_file;
-            } else if (url_uc.endsWith('.USDZ')) {
-              models.push( selected_url_file );
-              usdz_filenames[ selected_url_file ] = selected_url_file.substring( selected_url_file.lastIndexOf( '/' ) + 1 );
-              if (filename === null) filename = usdz_filenames[ selected_url_file ].substring( 0, usdz_filenames[ selected_url_file ].lastIndexOf('.') );
               if (selected_file === null) selected_file = selected_url_file;
             }
           }
@@ -1031,13 +1035,6 @@
 
           if (gltf_filenames[ selected_file ]) {
             mdl_viewer.setAttribute( 'src', selected_file );
-          } else if (usdz_filenames[ selected_file ]) {
-            if (isAppleDevice === true) {
-              mdl_viewer.setAttribute( 'ios-src', selected_file );
-            } else {
-              console.log( 'Could not detect USDZ support on this device!' )
-              mdl_viewer.setAttribute( 'src', '#' );
-            }
           }
         }
       }
@@ -1084,7 +1081,7 @@
           if (gltf_filenames[ models[ current_model ] ]) {
             filename = gltf_filenames[ models[ current_model ] ].substring( 0, gltf_filenames[ models[ current_model ] ].lastIndexOf('.') );
           } else {
-            filename = usdz_filenames[ models[ current_model ] ].substring( 0, usdz_filenames[ models[ current_model ] ].lastIndexOf('.') );
+            filename = 'Model';
           }
 
           if (mdl_viewer.availableAnimations.length > 0) {
@@ -1125,13 +1122,6 @@
 
         if (gltf_filenames[ models[ current_model ] ]) {
           mdl_viewer.setAttribute( 'src', models[ current_model ] );
-        } else if (usdz_filenames[ models[ current_model ] ]) {
-          if (isAppleDevice === true) {
-            mdl_viewer.setAttribute( 'ios-src', models[ current_model ] );
-          } else {
-            console.log( 'Could not detect USDZ support on this device!' )
-            mdl_viewer.setAttribute( 'src', '#' );
-          }
         }
       }
 
@@ -1277,10 +1267,6 @@
           (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
 
-        isAppleDevice = (/MacIntel|iPad|iPhone|iPod/.test( navigator.platform )) ||
-          (/Macintosh|iPhone|iPad|iPod|CriOS/i.test( navigator.userAgent )) ||
-          (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
-
         $('#export_tex_fmt').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#export_tex_res').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
@@ -1304,6 +1290,7 @@
         m_viewer.setAttribute( 'autoplay', 'true' );
         m_viewer.setAttribute( 'loading', 'eager' );
         m_viewer.setAttribute( 'exposure', '0.85' );
+        m_viewer.setAttribute( 'modelCacheSize', '3' );
         m_viewer.setAttribute( 'touch-action', 'none' );
         //m_viewer.setAttribute( 'shadow-intensity', '1' );
         m_viewer.setAttribute( 'class', 'model_viewer' );
