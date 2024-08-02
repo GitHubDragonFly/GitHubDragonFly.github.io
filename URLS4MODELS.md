@@ -1,8 +1,8 @@
 # Usage
 
-If you wish to have some example 3D model files on your device then just download the zip file of the [three.js](https://github.com/mrdoob/three.js/tree/master) repo (green `Code` button) and extract the `models` folder found under `examples`.
+If you wish to have some example 3D model files on your device then just download the zip file of the [three.js](https://github.com/mrdoob/three.js/tree/master) repo (click on the green `Code` button) and extract the `models` folder found under the `examples` folder.
 
-Else, copy any of the following links and then paste it within the `URL` option of the corresponding viewer:
+Else, most of the passive links below are of the actual models so copy any of them and then paste it within the `URL` option of the corresponding viewer:
 
 - access to [three.js](https://github.com/mrdoob/three.js/tree/master/examples) examples can be achieved with the following URL format, mind the correct path after `models`:
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/RobotExpressive/RobotExpressive.glb`
@@ -90,9 +90,12 @@ For multiple image format testing - copy all of the following and then paste it 
 
 # Additional Resources
 
-Most viewers will allow GitHub URLs, some viewers will allow Dropbox shared URLs. In addition, use the `Raw` button in any of the GitHub repositories to get the correct URL or just download the file to a hard drive and load it with the `Browse` option of the corresponding viewer:
+Most viewers will allow GitHub URLs, some viewers will additionally allow Dropbox shared URLs.
 
- - check the `viewers/examples` folder in this repository for some example models
+GitHub repositories offer an option, 3 dots button in the top right corner of the page, to copy permalink of the file to the clipboard which can then be pasted into the `URL` textbox of the corresponding viewer or just download the file to a hard drive and load it with the `Browse` option of the corresponding viewer:
+
+ - check the [examples](https://github.com/GitHubDragonFly/GitHubDragonFly.github.io/tree/main/viewers/examples) folder in this repository for some example models:
+   - ZIP files are allowed in the `OBJ + MTL Viewer` so use the `Cerberus` model files as they are
  - `https://github.com/gkjohnson/3d-demo-data/tree/main/models`
  - `https://github.com/ue4plugins/GLTFWebViewer/tree/main/public/assets`
  - `https://github.com/josdirksen/learning-threejs/tree/master/assets/models`
@@ -104,4 +107,4 @@ Most viewers will allow GitHub URLs, some viewers will allow Dropbox shared URLs
  - `http://www.oyonale.com/modeles.php?lang=en&format=OBJ`
  - `https://market.pmnd.rs`
  - for STEP / IGES file downloads visit [novotechnik](https://www.novotechnik.de/en/downloads/cad-data)
- - some APNG example files at `https://github.com/onevcat/APNGKit/tree/master/Tests/APNGKitTests/Resources/General`
+ - some APNG example files available at [APNGKit](https://github.com/onevcat/APNGKit/tree/master/Tests/APNGKitTests/Resources/General) repository
