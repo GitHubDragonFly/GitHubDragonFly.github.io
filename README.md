@@ -54,8 +54,9 @@ For those who either deal with or are just learning about Programmable Logic Con
  - Use whatever you can from my repositories
  - Make the [AdvancedHMI](https://www.advancedhmi.com/) website your next stop for highly functional FREE software.
 
-Intro video shows how to start using 3D viewers by loading model files from a hard drive:
- - It was captured by using the free and open source [OBS Studio](https://github.com/obsproject/obs-studio) software.
+The `Intro` button on the main page will connect to the video that shows how to start using 3D viewers by browsing and loading model files from a hard drive:
+ - Opening models via any viewer's `URL` option might be simpler than browsing locally, provided that you have the actual model's URL available
+ - This video was captured by using the free and open source [OBS Studio](https://github.com/obsproject/obs-studio) software
 
 Videos available in my other repositories were also captured by the OBS Studio.
 
