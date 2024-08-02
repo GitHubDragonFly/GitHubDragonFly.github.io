@@ -164,8 +164,6 @@ Number Type Converter
     - Supports both local (blob) and remote URL loading
     - Local loading supports self-contained models (embedded GLTF or binary GLB) as well as GLTF + BIN + Textures
     - The viewer supports loading of multiple models at once, which will be switchable with the viewer's `M` button
-    - Support for USDZ was also added but is untested:
-      - Purely logical approach, not sure if it is correct
   - `GLTF Viewer` is for v2.0 glTF files and is currently using r167 of three.js:
     - does not support obsolete `pbrSpecularGlossiness`
     - supports currently arbitrary `KHR_animation_pointer`
