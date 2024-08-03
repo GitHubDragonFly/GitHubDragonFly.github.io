@@ -427,16 +427,20 @@ Number Type Converter
     - Ref: [The Book of Shaders](https://thebookofshaders.com/04/) by Patricio Gonzalez Vivo & Jen Lowe
     - It also has a little bit of [Proton](https://github.com/drawcall/three.proton) mouse flare thanks to [threejs-mesh-modifiers](https://github.com/drawcall/threejs-mesh-modifiers) example
 - Tips:
-  - if the model is correctly loaded but you cannot see it then try any or all of the following:
-    - apply `edges`
-    - zoom `in/out` or apply `Scale`
-    - apply `flatShading`
-    - apply `Vertex Colors` and `Random Vertex Colors`
-    - change `ambient light` to white
-    - change `background color` to white
-    - try anything else not mentioned above
-  - large resolution textures should be scaled down before loading, as an example download [`Bedroom`](https://casual-effects.com/data/index.html) with 8k images and try it AS IS, then scale them down to 1k or 2k (which will speed up loading in browsers)
-  - you could also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) and [Online 3D Viewer](https://3dviewer.net) exporters / converters
+  - If you think that the model is correctly loaded but you cannot see it then check the following:
+    - If the viewer has Gizmo but it is not showing then there might be something wrong with the model
+    - If the viewer has Gizmo and it is showing, or does not have Gizmo at all, then try any or all of the following:
+      - apply `edges`
+      - zoom `in/out` or apply `Scale`
+      - apply `flatShading`
+      - apply `Vertex Colors` and `Random Vertex Colors`
+      - change `ambient light` to white
+      - change `background color` to white
+      - try anything else not mentioned above
+  - Large resolution textures should be scaled down before loading, as an example:
+    - download [`Bedroom`](https://casual-effects.com/data/index.html) with 8k images and try it AS IS
+    - scale textures down to 1k or 2k (which will speed up loading in browsers)
+  - Also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) and [Online 3D Viewer](https://3dviewer.net) exporters / converters
 
 PLY+STL Viewer
 ![PLY+STL Viewer](images/PLY%20Viewer.png?raw=true)
