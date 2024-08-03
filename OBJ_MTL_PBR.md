@@ -11,7 +11,9 @@ Most, if not all, of the available viewers do include the OBJ Exporter, thus can
 
 As for the textures, any of the following image formats should work with OBJ models when specified in the MTL file:
   - BMP, DDS, GIF, JPEG, PNG, TGA, WEBP
-  - Test model can be found [here](https://github.com/GitHubDragonFly/GitHubDragonFly.github.io/tree/main/viewers/examples/cerberus) and each of the zip files can be loaded as such via the `URL` option of my [OBJ+MTL Viewer](https://githubdragonfly.github.io/viewers/templates/OBJ%20Viewer.html)
+  - Test model can be found [here](https://github.com/GitHubDragonFly/GitHubDragonFly.github.io/tree/main/viewers/examples/cerberus) and each of the zip files can be loaded as such:
+    - clicking each of these zip files will take you to the page where you should look for 3 dots button in the top right corner and its option to copy permalink of the file to the clipboard which can then be pasted into the `URL` textbox of my [OBJ Viewer](https://githubdragonfly.github.io/viewers/templates/OBJ%20Viewer.html)
+    - the other option would be to just download the file to a hard drive and load it with the `Browse` option of the same viewer
 
 This document would represent a summary of PBR entries that can be found in the exported MTL file, with mentioning of some possibly utilized standard entries, whose description can be seen online [here](https://paulbourke.net/dataformats/mtl/), as well as just a few FYI Blender adopted entries as per [these proposals](https://en.wikipedia.org/wiki/Wavefront_.obj_file#Physically-based_rendering).
 
