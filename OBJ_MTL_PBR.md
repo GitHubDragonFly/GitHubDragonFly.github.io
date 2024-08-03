@@ -4,7 +4,8 @@ Keep in mind that this repository is using the following customized OBJ related 
 
 These files have been synchronized to work with each other and process all custom PBR entries found in the MTL file, as listed further below, aiming at providing the GLTF alike functionality in the OBJ Viewer by taking advantage of the `THREE.MeshPhysicalMaterial` and a modified `GLTF Loader`.
 
-All the entries have been set as such so they are compatible with `three.js` as well as the `assimp` library being used in this repository.
+All the entries have been set as such so they are compatible with `three.js` as well as the `assimp` library being used in this repository:
+- Note that the `assimp` library was heavily customized with features currently not available in the official repository but available in the [updates](https://github.com/GitHubDragonFly/assimp/tree/updates) branch
 
 Most, if not all, of the available viewers do include the OBJ Exporter, thus can try to export their models to `OBJ + MTL + textures` format with whatever limitations there might be (like animations for example).
 
