@@ -154,6 +154,7 @@ Number Type Converter
     - [Super Splat](https://playcanvas.com/super-splat) editor
   - Here is a URL for the lego brick splat model, made of points and available in my repository, that you can use for testing:
     - `https://raw.githubusercontent.com/GitHubDragonFly/GitHubDragonFly.github.io/main/viewers/examples/legobrick.splat`
+  - Some more splat files available [here](https://huggingface.co/cakewalk/splat-data/tree/main)
   - This viewer also supports loading of Luma Splats URLs:
     - An example URL to use for testing `https://lumalabs.ai/capture/ca9ea966-ca24-4ec1-ab0f-af665cb546ff`
     - More info on [Luma WebGL Library](https://github.com/lumalabs/luma-web-examples)
