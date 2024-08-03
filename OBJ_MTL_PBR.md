@@ -12,7 +12,9 @@ As for the textures, any of the following image formats should work with OBJ mod
   - BMP, DDS, GIF, JPEG, PNG, TGA, WEBP
   - Test model can be found [here](https://github.com/GitHubDragonFly/GitHubDragonFly.github.io/tree/main/viewers/examples/cerberus) and each of the zip files can be loaded as such
 
-This document would represent a summary of PBR entries that can be found in the exported MTL file, with mentioning of some possibly utilized standard entries whose description can be seen online [here](https://paulbourke.net/dataformats/mtl/).
+This document would represent a summary of PBR entries that can be found in the exported MTL file, with mentioning of some possibly utilized standard entries, whose description can be seen online [here](https://paulbourke.net/dataformats/mtl/), as well as just a few FYI Blender adopted entries as per [these proposals](https://en.wikipedia.org/wiki/Wavefront_.obj_file#Physically-based_rendering).
+
+Since the MTL file is a text file, then it could be edited manually and any entries changed if required.
 
 ## Standard Entries:
 
@@ -33,7 +35,7 @@ This document would represent a summary of PBR entries that can be found in the 
    - `map_Pr` - roughnessMap
  - `map_Px` - replaces both `map_Pm` and `map_Pr` when they are identical
 
- - `Pa`/ `Par` - anisotropy (strength) / anisotropyRotation
+ - `Pa`/ `Par` - anisotropy / anisotropy rotation (BLENDER: `aniso` / `anisor`)
    - `map_Pa` - anisotropyMap
 
  - `Pi` / `Pii` - iridescence / iridescenceIOR
@@ -41,13 +43,13 @@ This document would represent a summary of PBR entries that can be found in the 
  - `Pitx` / `Pity` - iridescenceThicknessMinimum / iridescenceThicknessMaximum (aka iridescenceThicknessRange[x, y] in three.js)
    - `map_Pit` - iridescenceThicknessMap
 
- - `Pcc` / `Pcr` - clearcoat / clearcoatRoughness
+ - `Pcc` / `Pcr` - clearcoat / clearcoat roughness (BLENDER: `Pc` / `Pcr`)
    - `map_Pcc` - clearcoatMap
    - `map_Pcn` - clearcoatNormalMap
    - `map_Pcr` - clearcoatRoughnessMap
 
- - `Ps` / `Psr` - sheenColor / sheenRoughness
-   - `map_Psc` - sheenColorMap
+ - `Ps` / `Psr` - sheenColor [RGB] / sheenRoughness (BLENDER: using `Ps` for sheen layer intensity instead)
+   - `map_Psc` - sheenColorMap (BLENDER: `map_Ps`)
    - `map_Psr` - sheenRoughnessMap`
 
  - `Pth` - thickness
@@ -56,7 +58,7 @@ This document would represent a summary of PBR entries that can be found in the 
  - `Ptr` - transmission
    - `map_Ptr` - transmissionMap
 
- - `Psp` - specularColor
+ - `Psp` - specularColor [RGB]
    - `map_Psp` - specularColorMap
 
  - `Psi` - specularIntensity
@@ -76,7 +78,7 @@ Entries currently not compatible with the `assimp` library but working fine in t
  - `Pbr_ps` - sheen (layer intensity)
  - `Pbr_pl_map` - lightMap
 
-Remember that other OBJ + MTL viewers will probably NOT be able to interpret most of these PBR entries.
+Keep in mind that other OBJ + MTL viewers will probably NOT be able to interpret most of these PBR entries.
 
 # Testing
 
@@ -91,7 +93,7 @@ This can be tested by using the [Khronos Group glTF v2.0 examples](https://githu
    - `OBJ Viewer` additionally supports loading of `ZIP` files
  - After the model is loaded then make sure to check the `Eq` box in the viewer to get the environment texture / lights
 
-Not all the examples will work properly but lots of them do.
+Most of the examples will work properly but some might NOT.
 
 # Credits
 
