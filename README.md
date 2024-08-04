@@ -223,13 +223,13 @@ Number Type Converter
     - Both of the above can also be used as a workaround to export some models to GLB format and then:
       - use either my [GLTF Viewer](https://githubdragonfly.github.io/viewers/templates/GLTF%20Viewer.html) or [three.js editor](https://threejs.org/editor/) to export it to USDZ with USDA packed in
 
-- Special notes about `GLTF Legacy` viewer which:
+- Special notes about `GLTF Legacy` viewer:
   - Using modified version of mrdoob's [model-tag](https://github.com/mrdoob/model-tag) element
   - Set in 500 x 500 viewport and seems to have a good fit on mobile devices
   - Supported import formats: GLTF v1.0 + BIN + Textures
   - Unsupported import formats: GLB
   - It can export to GLTF / GLB v2.0 and OBJ formats (animations are not currently supported)
-  - Use ASSIMP Viewer instead since it has less limitations and more export options
+  - Maybe use the ASSIMP Viewer instead since it has less limitations and more export options
   - Most of the following notes do not apply to GLTF Legacy viewer in general
 
 ## Applicable to most viewers
