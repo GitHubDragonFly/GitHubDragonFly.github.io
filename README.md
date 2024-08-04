@@ -397,7 +397,7 @@ Number Type Converter
     - `toneMapping` with `exposure` and `envMapIntensity`
     - scene background `backBlurriness` and `backIntensity`
     - this will also disable/enable the gradient background `G` button and background color control 
-- JSON viewers support three.js and assimp JS / JSON formats with limitations:
+- JSON viewers support three.js and assimp JS and/or JSON formats with some limitations:
   - JSON Viewer is currently using r167 of three.js and cannot open legacy formats
   - JSON Legacy viewer is using r111 of three.js to support legacy THREE.Geometry:
     - It is using 4 loaders: ObjectLoader, BufferGeometryLoader, LegacyJSONLoader and AssimpJSONLoader
@@ -429,17 +429,18 @@ Number Type Converter
 - Tips:
   - If you think that the model is correctly loaded but you cannot see it then check the following:
     - If the viewer has Gizmo but it is not showing then there might be something wrong with the model
-    - If the viewer has Gizmo and it is showing, or does not have Gizmo at all, then try any or all of the following:
-      - apply `edges`
-      - zoom `in/out` or apply `Scale`
-      - apply `flatShading`
-      - apply `Vertex Colors` and `Random Vertex Colors`
-      - change `ambient light` to white
+    - If the viewer has Gizmo and it is showing, or does not have Gizmo at all, then try any or all of the following (whatever is available in that particular viewer):
       - change `background color` to white
-      - try anything else not mentioned above
+      - zoom `in/out` or apply `Scale`
+      - apply `Vertex Colors`
+        - apply `Random Vertex Colors`
+      - apply `flatShading`
+      - manipulate lights
+      - apply `edges`
+      - try anything else not mentioned above (including other available 3rd party online viewers)
   - Large resolution textures should be scaled down before loading, as an example:
     - download [`Bedroom`](https://casual-effects.com/data/index.html) with 8k images and try it AS IS
-    - scale textures down to 1k or 2k (which will speed up loading in browsers)
+    - use some Paint program to scale textures down to 1k or 2k (which will speed up loading in browsers)
   - Also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) and [Online 3D Viewer](https://3dviewer.net) exporters / converters
 
 PLY+STL Viewer
