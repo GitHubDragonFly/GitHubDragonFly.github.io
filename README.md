@@ -98,6 +98,8 @@ Number Type Converter
 - They are functional `AS THEY ARE`
 - Purely designed as an online convenience
 - Intended for viewing a single 3D model or scene
+- Any of the viewers might have bugs and interface / library related limitations
+  - Some viewers might be slow to load some models
 - Memory handling should be good, relatively speaking:
   - With every next model loaded the previous model geometries / materials are being disposed of
   - Viewers are webpages so it might be easier to refresh the whole page before loading the next model
@@ -182,7 +184,6 @@ Number Type Converter
     - `https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF-Binary/BarramundiFish.glb`
     - `https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF-Embedded/BarramundiFish.gltf`
     - `https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish.gltf, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish.bin, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0001.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0002.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0003.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish_texture_0004.jpg, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish0FS.glsl, https://github.com/KhronosGroup/glTF-Sample-Models/blob/master/1.0/BarramundiFish/glTF/BarramundiFish0VS.glsl`
-  - Might have bugs and interface / library related limitations and slow to load some models
   - Loading ASSIMP models will have `flatShading` turned ON so hit the `F` button to turn it OFF if required
   - It tries to take advantage of the `THREE.MeshPhysicalMaterial` to bring a GLTF alike functionality for OBJ + MTL models
   - Has multiple export options available, with special notes about JSON formats:
@@ -212,7 +213,6 @@ Number Type Converter
   - Loading via URL currently requires all model files URLs and comma separated (no files will be fetched automatically), here is an example for Khronos [CesiumMilkTruck](https://github.com/KhronosGroup/glTF-Sample-Models/tree/master/2.0/CesiumMilkTruck):
     - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck.gltf, https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck_data.bin, https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/CesiumMilkTruck/glTF/CesiumMilkTruck.jpg`
   - For proper viewing and additional features try using the actual [Online 3D Viewer](https://3dviewer.net/) website
-  - Might have bugs and library related limitations
   - Most of the following notes do not apply to Quick Viewer in general
 
 - Special notes about `USDZ Viewer`:
@@ -223,9 +223,9 @@ Number Type Converter
     - Both of the above can also be used as a workaround to export some models to GLB format and then:
       - use either my [GLTF Viewer](https://githubdragonfly.github.io/viewers/templates/GLTF%20Viewer.html) or [three.js editor](https://threejs.org/editor/) to export it to USDZ with USDA packed in
 
-- Special notes about `GLTF Legacy` viewer which is using modified version of mrdoob's [model-tag](https://github.com/mrdoob/model-tag):
+- Special notes about `GLTF Legacy` viewer which:
+  - Using modified version of mrdoob's [model-tag](https://github.com/mrdoob/model-tag) element
   - Set in 500 x 500 viewport and seems to have a good fit on mobile devices
-  - It is relatively simple and might have bugs and limitations
   - Supported import formats: GLTF v1.0 + BIN + Textures
   - Unsupported import formats: GLB
   - It can export to GLTF / GLB v2.0 and OBJ formats (animations are not currently supported)
