@@ -110,8 +110,10 @@ Number Type Converter
   - Most viewers page title should show what three.js revision is used
 - Error handling narrows down to showing the `ERROR!` message so check the console output for details
 - On a desktop computer, most viewers will show some renderer info in the console after the model is loaded (like number of draw calls, triangles ... etc)
-- To modify or customize your 3D model, use either the official [three.js editor](https://threejs.org/editor/) or try its [customized version](https://github.com/GitHubDragonFly/Localized_3js)
+- To modify or customize your 3D model:
+  - Use either the official [three.js editor](https://threejs.org/editor/) or try its [customized version](https://github.com/GitHubDragonFly/Localized_3js)
   - Additional tool for textures, requires an account and compatible hardware: [NVIDIA Texture Tools Exporter](https://developer.nvidia.com/texture-tools-exporter)
+  - Use [Blender](https://www.blender.org/) software
 - These would be the mouse controls:
   - Rotation = left-click + hold + drag
   - Move = right-click + hold + drag
