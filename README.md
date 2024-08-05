@@ -15,6 +15,8 @@ This website is designed to serve as a hub with links to:
 
 Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations:
   - See screenshots below for different appearances of the main menu page
+  - Mobile viewers are available on desktop computers
+  - Desktop viewers are NOT available on mobile devices (unless you enter any viewer's exact URL manually)
   - As per the [PageSpeed Insights](https://pagespeed.web.dev/) basic tests, almost all the pages / code:
     - **Are highly performant**:
       - relatively scored depending on how busy and responsive `github` `cdn.jsdelivr.net` `esm.sh` networks are at the time of testing
@@ -23,17 +25,13 @@ Originally designed for a desktop but has been adapted to also show properly on 
     - **Are Accessibility optimized** (AODA in Ontario)
       - keyboard users might be somewhat limited to what's implemented within three.js library
 
-The `M3D` button, which stands for `Mobile 3D`, provides access to:
- - Simple Cube Shading example
- - nunuStudio Games and Experiences examples
-   - not as functional and visually appealing as on a desktop but made available regardless
- - Stripped down and simplified version of mobile friendly 3D viewers:
-   - Almost all viewers are currently available and should work fine on desktop devices as well
-   - Mobile `Quick Viewer`, `GM Viewer` and `GLTF Viewer` also include some export options and more features
-   - Consider bookmarking the [mobile main page](https://githubdragonfly.github.io/viewers/templates/Mobile/index.html) for continuous access to all viewers
-   - Consider bookmarking any single viewer's link for continuous access to that particular viewer
-   - Consider using WiFi connection, whenever possible, since the library files still need to be downloaded
-   - All mobile testing was done on an Android mobile phone and an iPad
+The `Mobile 3D` button provides access to stripped down and simplified version of mobile friendly 3D viewers:
+- Almost all viewers are currently available and should work fine on desktop devices as well
+- Mobile `Quick Viewer`, `GM Viewer` and `GLTF Viewer` also include some export options and more features
+- Consider bookmarking the [mobile main page](https://githubdragonfly.github.io/viewers/templates/Mobile/index.html) for continuous access to all viewers
+- Consider bookmarking any single viewer's link for continuous access to that particular viewer
+- Consider using WiFi connection, whenever possible, since the library files still need to be downloaded
+- All mobile testing was done on an Android mobile phone and an iPad
 
 GitHub servers are providing correct access to all files:
   - Cloning or downloading this repository and using it offline will have a somewhat reduced functionality if run locally without some server
