@@ -121,6 +121,7 @@ Number Type Converter
   - Move = right-click + hold + drag
   - Zoom In / Out = mouse scroll wheel
   - The equivalent touch controls should work fine on mobile devices
+  - Most viewers have the `zoomToCursor` feature enabled, which should work with touch controls as well
   - Hover the mouse over controls in the desktop viewers to se a popup description of the control:
     - If the control is not disabled then it might show a red border around it (applicable to button, color and select controls)
 
