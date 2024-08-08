@@ -98,8 +98,8 @@ Number Type Converter
 - Intended for viewing a single 3D model or scene
 - Any of the viewers might have bugs and interface / library related limitations
   - Some viewers might be slow to load some models
-- Currently experimental WebGPU support is included in mobile 3DM, 3DS and 3MF viewers:
-  - Maybe use Chrome browser and enable its WebGPU experimental features to test these viewers (and your computer)
+- Currently experimental three.js WebGPU support is included in experimental `GLTF WebGPU` viewer:
+  - Maybe use Chrome browser and enable its WebGPU experimental features to test this viewer (and your computer)
 - Memory handling should be good, relatively speaking:
   - With every next model loaded the previous model geometries / materials are being disposed of
   - Viewers are webpages so it might be easier to refresh the whole page before loading the next model
