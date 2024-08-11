@@ -100,6 +100,7 @@ Number Type Converter
   - Some viewers might be slow to load some models
 - Currently experimental three.js WebGPU support is included in experimental `GLTF WebGPU` viewer:
   - Maybe use Chrome browser and enable its WebGPU experimental features to test this viewer (and your computer)
+  - Mobile version of the viewer is available but not properly tested yet
 - Memory handling should be good, relatively speaking:
   - With every next model loaded the previous model geometries / materials are being disposed of
   - Viewers are webpages so it might be easier to refresh the whole page before loading the next model
