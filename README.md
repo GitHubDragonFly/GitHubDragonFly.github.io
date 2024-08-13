@@ -95,7 +95,11 @@ Number Type Converter
 
 - They are functional `AS THEY ARE`
 - Purely designed as an online convenience
-- Intended for viewing a single 3D model or scene
+- Intended for viewing a single 3D model or scene:
+  - Remote loading is done via the `URL` button, which has associated URL textbox
+  - Local loading is done via the browse button:
+    - Browser specific, desktop viewers might show this button as either `Browse...` or `Choose Files`
+    - Mobile viewers show it as the `Browse` button
 - Any of the viewers might have bugs and interface / library related limitations
   - Some viewers might be slow to load some models
 - Currently experimental three.js WebGPU support is included in experimental `GLTF WebGPU` viewer:
