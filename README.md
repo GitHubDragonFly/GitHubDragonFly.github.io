@@ -388,12 +388,12 @@ Number Type Converter
   - `RST` - reset
   - `#` - grid
 - Light controls, where applicable:
-  - `AL` - ambient light
+  - `AL` - ambient light color
     - `ALi` - ambient light intensity
-  - `DL` - directional light
+  - `DL` - directional light color
     - `DLi` - directional light intensity
-  - `HL` - hemisphere light
-  - `SL` - spotlight
+  - `HL` - hemisphere light color
+  - `SL` - spotlight color
     - `SLi` - spotlight intensity
 - Other controls, where applicable:
   - `B` or `BG` - background color
