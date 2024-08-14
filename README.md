@@ -310,7 +310,7 @@ Number Type Converter
     - Exporting some models might crash the browser when running out of memory 
     - Exporting some models might be easier / better done with multiple viewers, examples:
       - MMD -> OBJ and then OBJ -> JSON might be better than straight MMD -> JSON export
-      - IFC -> GLB and then GLB -> GLB_m (with MESHOPT compression) and then GLB_m -> GLB_d (with DRACO compression) might be easier than straight IFC -> GLB_d export
+      - IFC -> GLB_m (with MESHOPT compression) and then GLB_m -> GLB_d (with DRACO compression) might be easier than straight IFC -> GLB_d export
     - DAE, GLB, GLTF, JSON, OBJ + MTL, PLY, STL, USDZ modified exporters are [three.js](https://github.com/mrdoob/three.js) based
     - USDZ exporter tips:
       - Handles GLTF / GLB formats the best due to their use of the THREE.MeshStandardMaterial
