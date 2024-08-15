@@ -433,7 +433,9 @@ Number Type Converter
 - There is also a simple cube shading example available at the bottom of the menu:
     - It is fully automatic and manipulates each of the RGBA components
     - Ref: [The Book of Shaders](https://thebookofshaders.com/04/) by Patricio Gonzalez Vivo & Jen Lowe
-    - It also has a little bit of [Proton](https://github.com/drawcall/three.proton) mouse flare thanks to [threejs-mesh-modifiers](https://github.com/drawcall/threejs-mesh-modifiers) example
+    - It also has a little bit of:
+      - [three.quarks](https://github.com/Alchemist0823/three.quarks) atom thanks to its own [example](https://codesandbox.io/p/sandbox/three-quarks-atom-particle-system-xp3fvz?file=%2Findex.html)
+      - [Proton](https://github.com/drawcall/three.proton) mouse flare thanks to [threejs-mesh-modifiers](https://github.com/drawcall/threejs-mesh-modifiers) example
 - Tips:
   - If you think that the model is correctly loaded but you cannot see it then check the following:
     - If the viewer has Gizmo but it is not showing then there might be something wrong with the model
