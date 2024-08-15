@@ -10,4 +10,10 @@ Some additional legacy models can also be found here: `http://geoffair.org/fg/gl
 Cerberus examples:
 
 - Original files from [three.js OBJ examples](https://github.com/mrdoob/three.js/tree/dev/examples/models/obj/cerberus).
-- Converted and modified to showcase multiple different `OBJ + MTL` loading options.
+- Converted and modified to showcase multiple different `OBJ + MTL` loading options:
+  - Can be loaded as ZIP files in the OBJ+MTL Viewer
+
+Quarks atom is used in [Cube Shading](https://githubdragonfly.github.io/viewers/templates/Cube%20Shading.html) example:
+- Three.quarks: `https://github.com/Alchemist0823/three.quarks`
+- Sandbox Example: `https://codesandbox.io/p/sandbox/three-quarks-atom-particle-system-xp3fvz?file=%2Findex.html`
+- Official Website: `https://quarks.art`
