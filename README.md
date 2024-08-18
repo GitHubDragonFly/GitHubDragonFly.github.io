@@ -296,15 +296,19 @@ Number Type Converter
       - it disregards the background color but does observe the background image with simple color palette
       - consider changing Directional Light color and / or using Ambient Light to avoid poor quality GIF for some models
       - non-animated models will spin 360 degrees
-      - see the `legobrick` generated GIF examples and their optimized / resized version in the `images` folder
+
+        ![legobrick (optimized   resized with ezgif com-gif-maker)](https://github.com/user-attachments/assets/7ae67a61-bcb8-492f-876a-3212c98f6653)
+
     - Animated PNG (APNG) exports are powered by [UPNG.js](https://github.com/photopea/UPNG.js) and [Pako.js](https://github.com/nodeca/pako)
       - almost the same features as in the Animated GIF export, see above
       - use some background image to avoid visual anomalies (artifacts) in the resulting file due to transparency:
         - where applicable, use the `Eq` checkbox to apply equirectangular scene background
         - where applicable, use the `G` button to add grayish linear gradient as a scene background
         - use `black.gif` or `white.gif` or `dark_blue.png` files found in the `images` folder as a simple choice for background image
-      - see the `legobrick` generated (A)PNG example and its optimized / resized version in the `images` folder
       - currently set for full color PNG but can be changed to Lossy PNG to speed up processing (see the comment in the code)
+
+        ![legobrick (optimized   resized with ezgif com-gif-maker)](https://github.com/user-attachments/assets/8b51ffec-e36d-4d07-a4a4-5b5f0b07f207)
+
     - JSON export is actually three.js created format
     - Try not to change file names when saving files during initial export
     - Exporting some models might crash the browser when running out of memory 
@@ -429,7 +433,9 @@ Number Type Converter
   - Export edges, when enabled, in OBJ and GLTF exports of both solid and points model (a popup alert will notify about this)
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
     - currently available only in `FBX` `OBJ` `PLY+STL` `PRWM` viewers and should be tried on simple models
-    - see the Animated GIF of a cube using Animated GIF as a texture in the `images` folder
+
+      ![Cube with Animated GIF texture](https://github.com/user-attachments/assets/bb87f931-f50b-4c2c-8016-495fe9df2e13)
+
 - There is also a simple cube shading example available at the bottom of the menu:
     - It is fully automatic and manipulates each of the RGBA components
     - Ref: [The Book of Shaders](https://thebookofshaders.com/04/) by Patricio Gonzalez Vivo & Jen Lowe
