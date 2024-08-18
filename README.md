@@ -114,7 +114,9 @@ Number Type Converter
   - 640 x 480 screen resoultion should also work but might present a limited workspace and visibility
   - Workaround for any low resolution is to use stripped down and mobile friendly viewers instead
 - Different [three.js](https://github.com/mrdoob/three.js) revisions are used throughout and with lots of customized code:
-  - Most viewers page title should show what three.js revision is used
+  - Most viewers page title should show what three.js revision is being used
+  - Most viewers currently use `importmap` and `module` imports:
+    - If, for whatever reason, you might need a `non-module` version of three.js files then consider using [Demoduler](https://boytchev.github.io/demoduler/)
 - Error handling narrows down to showing the `ERROR!` message so check the console output for details
 - On a desktop computer, most viewers will show some renderer info in the console after the model is loaded (like number of draw calls, triangles ... etc)
 - To modify or customize your 3D model:
