@@ -101,8 +101,8 @@ Number Type Converter
     - Browser specific, desktop viewers might show this button as either `Browse...` or `Choose Files`
     - Mobile viewers show it as the `Browse` button
 - Any of the viewers might have bugs and interface / library related limitations
-  - Some viewers might be slow to load some models
-- Currently experimental three.js WebGPU support is included in experimental `GLTF WebGPU` viewer:
+  - Some viewers might be slow to load some models, usually if using `WASM` of some library
+- Currently experimental three.js `WebGPU` support is included in experimental `GLTF WebGPU` viewer:
   - Maybe use Chrome browser and enable its WebGPU experimental features to test this viewer (and your computer)
   - Mobile version of the viewer is available but not properly tested yet
 - Memory handling should be good, relatively speaking:
@@ -114,15 +114,15 @@ Number Type Converter
   - 640 x 480 screen resoultion should also work but might present a limited workspace and visibility
   - Workaround for any low resolution is to use stripped down and mobile friendly viewers instead
 - Different [three.js](https://github.com/mrdoob/three.js) revisions are used throughout and with lots of customized code:
-  - Most viewers page title should show what three.js revision is being used
+  - Applicable to desktop usage - most viewers page title, when visible, should show what three.js revision is being used
   - Most viewers currently use `importmap` and `module` imports:
-    - If, for whatever reason, you might need a `non-module` version of three.js files then consider using [Demoduler](https://boytchev.github.io/demoduler/)
+    - If, for whatever reason, you might need a `non-module` version of three.js files then consider using the [Demoduler](https://boytchev.github.io/demoduler/) which might have some limitations
 - Error handling narrows down to showing the `ERROR!` message so check the console output for details
 - On a desktop computer, most viewers will show some renderer info in the console after the model is loaded (like number of draw calls, triangles ... etc)
 - To modify or customize your 3D model:
+  - Use the [Blender](https://www.blender.org/) software
   - Use either the official [three.js editor](https://threejs.org/editor/) or try its [customized version](https://github.com/GitHubDragonFly/Localized_3js)
   - Additional tool for textures, requires an account and compatible hardware: [NVIDIA Texture Tools Exporter](https://developer.nvidia.com/texture-tools-exporter)
-  - Use [Blender](https://www.blender.org/) software
 - These would be the mouse controls:
   - Rotation = left-click + hold + drag
   - Move = right-click + hold + drag
