@@ -4328,6 +4328,7 @@ class GLTFParser {
 				const sampler = samplers[ i ];
 				const target = targets[ i ];
 				if ( node === undefined ) continue;
+				if ( ! outputAccessor ) continue;
 				node.updateMatrix();
 				node.matrixAutoUpdate = true;
 				let TypedKeyframeTrack;
@@ -4376,7 +4377,7 @@ class GLTFParser {
 
 				let outputArray = outputAccessor.array;
 
-				if ( outputAccessor.normalized ) {
+				if ( outputArray && outputAccessor.normalized ) {
 
 					const scale = getNormalizedComponentScale( outputArray.constructor );
 					const scaled = new Float32Array( outputArray.length );
