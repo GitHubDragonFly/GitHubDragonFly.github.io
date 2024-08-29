@@ -44,6 +44,7 @@ import {
 	VectorKeyframeTrack,
 	SRGBColorSpace
 } from "three";
+
 import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/libs/fflate.module.min.js";
 import { NURBSCurve } from "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/curves/NURBSCurve.min.js";
 
@@ -139,15 +140,16 @@ class FBXLoader extends Loader {
 
 			fbxTree = new TextParser().parse( FBXText );
 
-		} // console.log( fbxTree );
+		}
 
 		const textureLoader = new TextureLoader( this.manager ).setPath( this.resourcePath || path ).setCrossOrigin( this.crossOrigin );
 		return new FBXTreeParser( textureLoader, this.manager ).parse( fbxTree );
 
 	}
 
-} // Parse the FBXTree object returned by the BinaryParser or TextParser and return a THREE.Group
+}
 
+// Parse the FBXTree object returned by the BinaryParser or TextParser and return a THREE.Group
 
 class FBXTreeParser {
 
@@ -169,9 +171,10 @@ class FBXTreeParser {
 		this.parseScene( deformers, geometryMap, materials );
 		return sceneGraph;
 
-	} // Parses FBXTree.Connections which holds parent-child connections between objects (e.g. material -> texture, model->geometry )
-	// and details the connection type
+	}
 
+	// Parses FBXTree.Connections which holds parent-child connections between objects (e.g. material -> texture, model->geometry )
+	// and details the connection type
 
 	parseConnections() {
 
@@ -222,10 +225,11 @@ class FBXTreeParser {
 
 		return connectionMap;
 
-	} // Parse FBXTree.Objects.Video for embedded image data
+	}
+
+	// Parse FBXTree.Objects.Video for embedded image data
 	// These images are connected to textures in FBXTree.Objects.Textures
 	// via FBXTree.Connections.
-
 
 	parseImages() {
 
@@ -240,7 +244,9 @@ class FBXTreeParser {
 
 				const videoNode = videoNodes[ nodeID ];
 				const id = parseInt( nodeID );
-				images[ id ] = videoNode.RelativeFilename || videoNode.Filename; // raw image data is in videoNode.Content
+				images[ id ] = videoNode.RelativeFilename || videoNode.Filename;
+
+				// raw image data is in videoNode.Content
 
 				if ( 'Content' in videoNode ) {
 
@@ -269,8 +275,9 @@ class FBXTreeParser {
 
 		return images;
 
-	} // Parse embedded image data in FBXTree.Video.Content
+	}
 
+	// Parse embedded image data in FBXTree.Video.Content
 
 	parseImage( videoNode ) {
 
@@ -339,10 +346,11 @@ class FBXTreeParser {
 
 		}
 
-	} // Parse nodes in FBXTree.Objects.Texture
+	}
+
+	// Parse nodes in FBXTree.Objects.Texture
 	// These contain details such as UV scaling, cropping, rotation etc and are connected
 	// to images in FBXTree.Objects.Video
-
 
 	parseTextures( images ) {
 
@@ -363,8 +371,9 @@ class FBXTreeParser {
 
 		return textureMap;
 
-	} // Parse individual node in FBXTree.Objects.Texture
+	}
 
+	// Parse individual node in FBXTree.Objects.Texture
 
 	parseTexture( textureNode, images ) {
 		let texture;
@@ -391,7 +400,9 @@ class FBXTreeParser {
 		const wrapModeU = textureNode.WrapModeU;
 		const wrapModeV = textureNode.WrapModeV;
 		const valueU = wrapModeU !== undefined ? wrapModeU.value : 0;
-		const valueV = wrapModeV !== undefined ? wrapModeV.value : 0; // http://download.autodesk.com/us/fbx/SDKdocs/FBX_SDK_Help/files/fbxsdkref/class_k_fbx_texture.html#889640e63e2e681259ea81061b85143a
+		const valueV = wrapModeV !== undefined ? wrapModeV.value : 0;
+
+		// http://download.autodesk.com/us/fbx/SDKdocs/FBX_SDK_Help/files/fbxsdkref/class_k_fbx_texture.html#889640e63e2e681259ea81061b85143a
 		// 0: repeat(default), 1: clamp
 
 		texture.wrapS = valueU === 0 ? RepeatWrapping : ClampToEdgeWrapping;
@@ -407,8 +418,9 @@ class FBXTreeParser {
 
 		return texture;
 
-	} // load a texture specified as a blob or data URI, or via an external URL using THREE.TextureLoader
+	}
 
+	// load a texture specified as a blob or data URI, or via an external URL using THREE.TextureLoader
 
 	loadTexture( textureNode, images ) {
 
@@ -972,6 +984,8 @@ class FBXTreeParser {
 	}
 
 	buildSkeleton( relationships, skeletons, id, name ) {
+
+		if ( ! relationships ) return null;
 
 		let bone = null;
 		relationships.parents.forEach( function ( parent ) {
