@@ -33,21 +33,19 @@ import {
 	Quaternion,
 	QuaternionKeyframeTrack,
 	RepeatWrapping,
-	ShapeUtils,
 	Skeleton,
 	SkinnedMesh,
 	SpotLight,
 	Texture,
 	TextureLoader,
 	Uint16BufferAttribute,
-	Vector2,
 	Vector3,
 	Vector4,
 	VectorKeyframeTrack,
 	SRGBColorSpace
 } from "three";
-import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/libs/fflate.module.min.js";
-import { NURBSCurve } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/curves/NURBSCurve.min.js";
+import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/libs/fflate.module.min.js";
+import { NURBSCurve } from "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/curves/NURBSCurve.min.js";
 
 /**
 * THREE.Loader loads FBX file and generates THREE.Group representing FBX scene.
@@ -703,7 +701,7 @@ class FBXTreeParser {
 				case 'TransparentColor':
 				case 'TransparencyFactor':
 					parameters.alphaMap = scope.getTexture( textureMap, child.ID );
-					parameters.transparent = true;
+					parameters.transparent = parameters.opacity ? ( parameters.opacity < 1.0 ) === true : true;
 					break;
 
 				case 'ShininessExponent': // AKA glossiness map
@@ -860,13 +858,18 @@ class FBXTreeParser {
 
 			const modelNode = modelNodes[ model.ID ];
 			scope.setLookAtProperties( model, modelNode );
-			const parentConnections = connections.get( model.ID ).parents;
-			parentConnections.forEach( function ( connection ) {
 
-				const parent = modelMap.get( connection.ID );
-				if ( parent !== undefined ) parent.add( model );
+			if ( connections.get( model.ID ) !== undefined ) {
 
-			} );
+				const parentConnections = connections.get( model.ID ).parents;
+				parentConnections.forEach( function ( connection ) {
+
+					const parent = modelMap.get( connection.ID );
+					if ( parent !== undefined ) parent.add( model );
+
+				} );
+
+			}
 
 			if ( model.parent === null ) {
 
@@ -1730,7 +1733,7 @@ class GeometryParser {
 
 		}
 
-		if ( geoNode.LayerElementNormal ) {
+		if ( geoNode.LayerElementNormal && geoNode.LayerElementNormal[ 0 ].Normals ) {
 
 			geoInfo.normal = this.parseNormals( geoNode.LayerElementNormal[ 0 ] );
 
@@ -1962,7 +1965,7 @@ class GeometryParser {
 
 		} );
 
-		if ( buffers.vertex.length === 0 ) {
+		if ( buffers.vertex.length === 0 && buffers.uvs.length === 0 && buffers.vertexWeights.length === 0 ) {
 
 			// Assume it is a points model
 			buffers.vertex = geoInfo.vertexPositions;
@@ -1979,6 +1982,11 @@ class GeometryParser {
 		} else if ( points_faceColors.length > 0 ) {
 
 			points_faceColors.length = 0;
+			isPoints = false;
+
+		} else {
+
+			isPoints = false;
 
 		}
 
@@ -3879,7 +3887,7 @@ class BinaryReader {
 
 		const nullByte = a.indexOf( 0 );
 		if ( nullByte >= 0 ) a = a.slice( 0, nullByte );
-		return LoaderUtils.decodeText( new Uint8Array( a ) );
+		return new TextDecoder().decode( new Uint8Array( a ) );
 
 	}
 
@@ -4159,7 +4167,7 @@ function convertArrayBufferToString( buffer, from, to ) {
 
 	if ( from === undefined ) from = 0;
 	if ( to === undefined ) to = buffer.byteLength;
-	return LoaderUtils.decodeText( new Uint8Array( buffer, from, to ) );
+	return new TextDecoder().decode( new Uint8Array( buffer, from, to ) );
 
 }
 
