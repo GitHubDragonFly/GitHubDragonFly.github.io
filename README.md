@@ -68,15 +68,20 @@ https://github.com/user-attachments/assets/25436e28-3b4d-4165-85db-21e8033ef42a
 
 Main Menu Page (desktop)
 
-![Desktop Start Page](images/screenshot.png?raw=true)
+![screenshot](https://github.com/user-attachments/assets/01330c45-4a4d-4b7a-8527-cff745978779)
 
 Main Menu Page (mobile)
 
-![Mobile Start Page](images/screenshot_mobile.jpg?raw=true)
+![screenshot_mobile](https://github.com/user-attachments/assets/85c3da9f-efe4-4c7a-bc29-6be7a13f8a9e)
 
 # Notes about Number Type Converter
 
-- Appears to be fully functional for conversion between binary, hex, octal, signed and unsigned 8 / 16 / 32 / 64 / 128-bit integers and 32 / 64-bit floating-point numbers
+- Appears to be fully functional for conversion between:
+  - binary
+  - hexadecimal
+  - octal
+  - signed and unsigned 8, 16, 32, 64 and 128 bit integers
+  - 32 and 64 bit floating-point numbers
 - This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/Number_Type_Converter) so check its description
 - An open mind and some knowledge of number systems, hopefully binary, will help understand the displayed values
 - Not all numbers might be easily visible on mobile devices so use only when needed
@@ -85,7 +90,8 @@ Main Menu Page (mobile)
 - Integer representation of the floating-point values might be inaccurate due to precision and / or rounding
 
 Number Type Converter
-![Number Type Converter](images/Number%20Type%20Converter.png?raw=true)
+
+![Number Type Converter](https://github.com/user-attachments/assets/7e16f5f3-2db7-4726-a42a-48bde8ec1f8c)
 
 # Notes about nunuStudio Games and Experiences Examples
 
