@@ -32,6 +32,7 @@ The `Mobile 3D` button provides access to stripped down and simplified version o
 - Consider bookmarking any single viewer's link for continuous access to that particular viewer
 - Consider using WiFi connection, whenever possible, since the library files still need to be downloaded
 - All mobile testing was done on an Android mobile phone and an iPad
+  - You might need to use the `URL` loading on an iPad
 
 GitHub servers are providing correct access to all files:
   - Cloning or downloading this repository and using it offline will have a somewhat reduced functionality if run locally without some server
