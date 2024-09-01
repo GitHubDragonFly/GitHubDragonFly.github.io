@@ -474,7 +474,8 @@ Number Type Converter
   - Also try using [COLLADA2GLTF](https://github.com/KhronosGroup/COLLADA2GLTF) and [FBX2glTF](https://github.com/facebookincubator/FBX2glTF) and [Online 3D Viewer](https://3dviewer.net) exporters / converters
 
 PLY+STL Viewer
-![PLY+STL Viewer](images/PLY%20Viewer.png?raw=true)
+
+![PLY Viewer](https://github.com/user-attachments/assets/81ab6ca8-69fd-41b2-8547-9b18b99d32bd)
 
 # Notes about three.js Texture Viewer
 
@@ -502,7 +503,7 @@ PLY+STL Viewer
   - In Windows, for example, right-click the file itself then choose `Open With` and select `Firefox` browser
   - Windows users could also consider getting the [QuickLook](https://apps.microsoft.com/store/detail/quicklook/9NV4BS3L1H4S) app
 
-![Texture Viewer](images/Texture%20Viewer.png?raw=true)
+![Texture Viewer](https://github.com/user-attachments/assets/6d1cdbc4-f89a-4f6e-b48f-8504d19a89aa)
 
 # License
 
