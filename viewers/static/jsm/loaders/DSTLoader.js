@@ -32,22 +32,17 @@ Modified and customized by GitHubDragonFly on 5/7/24:
 */
 
 import {
-  Box3,
   BufferGeometry,
   Color,
   DoubleSide,
   Float32BufferAttribute,
   Line,
   LineBasicMaterial,
-  LinearFilter,
-  LinearMipmapLinearFilter,
   Loader,
   Mesh,
   MeshStandardMaterial,
-  OrthographicCamera,
   Vector2,
-  Vector3,
-  WebGLRenderTarget
+  Vector3
 } from "three";
 
 class DSTLoader extends Loader {
