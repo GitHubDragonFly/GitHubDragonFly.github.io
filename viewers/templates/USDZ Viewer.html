@@ -55,6 +55,7 @@
       orb_controls_gizmo = OrbitControlsGizmo;
     </script>
 
+    <script src="../static/assimpjs/assimpjs.min.js" defer></script>
     <script src="../static/js/upng/UPNG.min.js" defer></script>
     <script src="../static/js/omggif/omggif.min.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
@@ -356,6 +357,9 @@
           <option title="PLY - Polygon File Format binary" value="ply" onclick="export_ply( true );">PLY_b</option>
           <option title="STL - Stereolithography Format" value="stl" onclick="export_stl();">STL</option>
           <option title="USDZ - Universal Scene Description Format" value="usdz" onclick="export_usdz();">USDZ</option>
+          <option title="ASSIMP Export Formats" value="assimp" disabled>ASSIMP</option>
+          <option title="FBX - Filmbox Format" value="fbx" onclick="export_assimp( 'fbx' );">FBX</option>
+          <option title="ASSJSON - Assimp JSON Format" value="assjson" onclick="export_assimp( 'assjson' );">JSON</option>
           <option title="Animated Graphics Exports" value="ani" disabled>- ANI -</option>
           <option title="GIF - Animated GIF" value="gif" onclick="export_animated_gif();">GIF</option>
           <option title="PNG - Animated PNG (APNG)" value="apng" onclick="export_animated_png();">PNG</option>
@@ -1065,6 +1069,57 @@
 
               await process_zip( '_GLTF' + (tex_res !== Infinity) ? ' (' + tex_res + ')' : '' );
             }
+          }, function( error ) { handle_export_error( error ); }, options);
+        }
+      }
+
+      async function export_assimp( format = 'fbx' ) {
+        if (mesh) {
+          await start_export();
+
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
+
+          let options = {	binary: true, maxTextureSize: tex_res };
+
+          gltf_exporter.parse( mesh.clone(), async function( json ) {
+            let simplified = await simplify( new Uint8Array( json ) );
+
+            // Use ASSIMPJS to export files
+            assimpjs().then( async function( ajs ) {
+              let result = ajs.ConvertFile( filename, format, simplified, undefined, undefined );
+              let fileCount = result.FileCount();
+
+              // check if the conversion succeeded
+              if (result.IsSuccess() === false || fileCount === 0) {
+                handle_export_error( result.GetErrorCode() );
+                ajs = null;
+                result = null;
+                return;
+              }
+
+              // get the first result file and convert it to blob
+              let resultFile = await result.GetFile( 0 );
+              let jsonContent = resultFile.GetContent();
+              let blob = new Blob( [ jsonContent ], { type: 'application/octet-stream' } );
+
+              // Possible ASSIMP export formats, some with binary / ascii options:
+              //   assjson, assbin, assxml, collada, x, stp, obj, objnomtl, 3ds, 3mf, pbrt
+              //   gltf, gltf2, glb, glb2, stl, stlb, ply, plyb, fbx, fbxa, x3d
+              //   m3d / m3da - disabled since no longer maintained within ASSIMP
+              // For proper file extension, shorten the format before zipping it up
+              let ext_to_change = { 'fbxa': 'fbx', 'assjson': 'json', 'collada': 'dae' }; // 'plyb': 'ply' ... etc
+              if (ext_to_change[ format ]) format = ext_to_change[ format ];
+
+              zip.file( filename + '.' + format, blob );
+
+              ajs = null;
+              result = null;
+              resultFile = null;
+
+              await process_zip( '_' + format.toUpperCase() );
+            });
           }, function( error ) { handle_export_error( error ); }, options);
         }
       }
@@ -2457,6 +2512,35 @@
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
+      }
+
+      /* Simplify */
+
+      async function simplify( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer" );
+        const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
+        const { dedup, flatten, join, prune, simplify, unpartition } = await import( "@gltf-transform/functions" );
+
+        const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          unpartition(),
+          dedup(),
+          prune(),
+          flatten(),
+          join(),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+        );
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
       }
 
       /* Encode with draco compression - geometry */
