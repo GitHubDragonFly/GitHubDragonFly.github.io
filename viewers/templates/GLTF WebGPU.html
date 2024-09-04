@@ -11,9 +11,9 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.webgpu.min.js",
-          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.webgpu.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.webgpu.min.js",
+          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.webgpu.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/",
           "meshoptimizer": "https://esm.sh/meshoptimizer@0.20.0"
         }
       }
@@ -41,12 +41,12 @@
       manager.onLoad = function() { mouse_wheel = true; }
 
       ktx2_loader = new KTX2Loader( manager );
-      ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/libs/basis/" );
+      ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/libs/basis/" );
 
       manager.addHandler( /\.ktx2$/i, ktx2_loader );
 
       draco_loader = new DRACOLoader( manager );
-      draco_loader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/libs/draco/" );
+      draco_loader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/libs/draco/" );
       draco_loader.setDecoderConfig( { type: 'js' } );
       draco_loader.preload();
 
@@ -317,7 +317,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>GLTF WebGPU (r167)</title>
+    <title>GLTF WebGPU (r168)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -745,7 +745,7 @@
       var vertex_colors_enabled, original_vertex_colors, original_vertex_color_array;
       var local_files, local_files_indexes, local_bin_files, slider_height = 0;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
-      var selected_gltf_file, selected_draco_file, selected_url_file = '';
+      var selected_gltf_file, selected_draco_file, selected_url_file = '', node_materials;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
@@ -1975,7 +1975,7 @@
         }
 
         if (outline_material === undefined) {
-          outline_material = new THREE.LineBasicMaterial( { color: 0xFF0000 } );
+          outline_material = new THREE.LineBasicNodeMaterial( { color: 0xFF0000 } );
         }
 
         selected_gltf_file = null;
@@ -2147,9 +2147,16 @@
 
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
-        // Create a grid helper for use with Orbit Controls
-        if (polar_grid === undefined) polar_grid = new THREE.PolarGridHelper( 100, 10 );
-        if (grid === undefined) grid = new THREE.GridHelper( 200, 200, 'yellow' );
+        // Create grid helpers for use with Orbit Controls
+        if (polar_grid === undefined) {
+          polar_grid = new THREE.PolarGridHelper( 100, 10 );
+          if (node_materials[ polar_grid.material.type ]) polar_grid.material = switch_material( polar_grid.material );
+        }
+
+        if (grid === undefined) {
+          grid = new THREE.GridHelper( 200, 200, 'yellow' );
+          if (node_materials[ grid.material.type ]) grid.material = switch_material( grid.material );
+        }
 
         // Add axes helper
         //scene.add( new THREE.AxesHelper( 50 ) );
@@ -2196,6 +2203,16 @@
 
         // Load DRACO or GLTF file
         (selected_gltf_file !== null) ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : loadURLFile() );
+      }
+
+      function switch_material( mtl ) {
+        let nodeMaterial = new node_materials[ mtl.type ]();
+
+        for (const key in mtl) {
+          nodeMaterial[ key ] = mtl[ key ];
+        }
+
+        return nodeMaterial;
       }
 
       function loadFile() {
@@ -2250,15 +2267,7 @@
           let child_count = 1;
 
           gltf_obj.traverse( async function( child ) {
-            if (child.isLineSegments) {
-              if (child.name === '') child.name = 'childLines_' + child_count;
-
-              lines_present = lines_visible = true;
-              document.getElementById('btn_lines').disabled = false;
-              document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
-            }
-
-            if (child.isMesh || child.isPoints) {
+            if (child.isMesh || child.isPoints || child.isLine) {
               if (child.name === '') child.name = 'child_' + child_count;
 
               child.geometry.computeBoundingBox();
@@ -2272,10 +2281,18 @@
                 document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
               }
 
+              if (child.isLine) {
+                lines_present = lines_visible = true;
+                document.getElementById('btn_lines').disabled = false;
+                document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
+              }
+
               if (child.isMesh) {
                 if (child.isSkinnedMesh) child.frustumCulled = false;
 
                 if (variants_available === true && child.material && child.userData.gltfExtensions) {
+                  if (node_materials[ child.material.type ]) child.material = switch_material( child.material );
+
                   variant_materials[ child.id ] = {};
                   const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
 
@@ -2284,13 +2301,14 @@
 
                     if (mapping) {
                       await parser.getDependency( 'material', mapping.material ).then( function( material ) {
+                        if (node_materials[ material.type ]) material = switch_material( material );
                         variant_materials[ child.id ][ variants[ i ] ] = material;
                         if (i === 0) child.material = material;
                       });
                     }
                   }
                 }
-              } else {
+              } else if (child.isPoints) {
                 object_is_points = true;
                 child.sizeAttenuation = true;
                 child.sortPoints = true;
@@ -2312,10 +2330,7 @@
                 original_vertex_color_array[ child.name ] = {};
 
                 child.material.forEach( mtl => {
-                  if (mtl.isMeshPhysicalMaterial || mtl.isMeshStandardMaterial) {
-                    let nodeMaterial = THREE.NodeMaterial.fromMaterial( mtl );
-                    mtl = nodeMaterial;
-                  }
+                  if (node_materials[ mtl.type ]) mtl = switch_material( mtl );
 
                   if (mtl.name === '') mtl.name = 'material_' + child_count_array;
 
@@ -2332,10 +2347,7 @@
                   child_count_array += 1;
                 });
               } else {
-                if (child.material.isMeshPhysicalMaterial || child.material.isMeshStandardMaterial) {
-                  let nodeMaterial = THREE.NodeMaterial.fromMaterial( child.material );
-                  child.material = nodeMaterial;
-                }
+                if (node_materials[ child.material.type ]) child.material = switch_material( child.material );
 
                 if (child.material.name === '') child.material.name = 'material_' + child_count;
 
@@ -2579,15 +2591,7 @@
             let child_count = 1;
 
             gltf_obj.traverse( async function( child ) {
-              if (child.isLineSegments) {
-                if (child.name === '') child.name = 'childLines_' + child_count;
-
-                lines_present = lines_visible = true;
-                document.getElementById('btn_lines').disabled = false;
-                document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
-              }
-
-              if (child.isMesh || child.isPoints) {
+              if (child.isMesh || child.isPoints || child.isLine) {
                 if (child.name === '') child.name = 'child_' + child_count;
 
                 child.geometry.computeBoundingBox();
@@ -2601,10 +2605,18 @@
                   document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
                 }
 
+                if (child.isLine) {
+                  lines_present = lines_visible = true;
+                  document.getElementById('btn_lines').disabled = false;
+                  document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
+                }
+
                 if (child.isMesh) {
                   if (child.isSkinnedMesh) child.frustumCulled = false;
 
                   if (variants_available === true && child.material && child.userData.gltfExtensions) {
+                    if (node_materials[ child.material.type ]) child.material = switch_material( child.material );
+
                     variant_materials[ child.id ] = {};
                     const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
 
@@ -2613,13 +2625,14 @@
 
                       if (mapping) {
                         await parser.getDependency( 'material', mapping.material ).then( function( material ) {
+                          if (node_materials[ material.type ]) material = switch_material( material );
                           variant_materials[ child.id ][ variants[ i ] ] = material;
                           if (i === 0) child.material = material;
                         });
                       }
                     }
                   }
-                } else {
+                } else if (child.isPoints) {
                   object_is_points = true;
                   child.sizeAttenuation = true;
                   child.sortPoints = true;
@@ -2641,10 +2654,7 @@
                   original_vertex_color_array[ child.name ] = {};
 
                   child.material.forEach( mtl => {
-                    if (mtl.isMeshPhysicalMaterial || mtl.isMeshStandardMaterial) {
-                      let nodeMaterial = THREE.NodeMaterial.fromMaterial( mtl );
-                      mtl = nodeMaterial;
-                    }
+                    if (node_materials[ mtl.type ]) mtl = switch_material( mtl );
 
                     if (mtl.name === '') mtl.name = 'material_' + child_count_array;
 
@@ -2661,10 +2671,7 @@
                     child_count_array += 1;
                   });
                 } else {
-                  if (child.material.isMeshPhysicalMaterial || child.material.isMeshStandardMaterial) {
-                    let nodeMaterial = THREE.NodeMaterial.fromMaterial( child.material );
-                    child.material = nodeMaterial;
-                  }
+                  if (node_materials[ child.material.type ]) child.material = switch_material( child.material );
 
                   if (child.material.name === '') child.material.name = 'material_' + child_count;
 
@@ -2848,7 +2855,7 @@
 
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 500 ) );
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
       }
 
       function log_info() {
@@ -3639,6 +3646,14 @@
           'iridescenceMap', 'iridescenceThicknessMap', 'sheenColorMap', 'sheenRoughnessMap', 'specularMap',
           'specularColorMap', 'specularIntensityMap', 'thicknessMap', 'transmissionMap'
         ];
+
+        node_materials = { MeshBasicMaterial: THREE.MeshBasicNodeMaterial, MeshLambertMaterial: THREE.MeshLambertNodeMaterial,
+          MeshMatcapMaterial: THREE.MeshMatcapNodeMaterial, MeshNormalMaterial: THREE.MeshNormalNodeMaterial,
+          MeshPhongMaterial: THREE.MeshPhongNodeMaterial, MeshPhysicalMaterial: THREE.MeshPhysicalNodeMaterial,
+          MeshStandardMaterial: THREE.MeshStandardNodeMaterial, MeshToonMaterial: THREE.MeshToonNodeMaterial,
+          LineBasicMaterial: THREE.LineBasicNodeMaterial, LineDashedMaterial: THREE.LineDashedNodeMaterial,
+          PointsMaterial: THREE.PointsNodeMaterial, ShadowMaterial: THREE.ShadowNodeMaterial, SpriteMaterial: THREE.SpriteNodeMaterial
+        };
 
         $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#model_scale').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
