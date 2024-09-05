@@ -23,7 +23,6 @@
     <script type="module">
       import * as three_js from "three";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { OrbitControls } from "three/addons/controls/OrbitControls.min.js";
 
       THREE = three_js;
 
@@ -34,8 +33,6 @@
 
       gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
       set_gui_position();
-
-      orb_controls = OrbitControls;
     </script>
 
     <script src="../static/js/upng/UPNG.min.js" defer></script>
@@ -264,14 +261,14 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>IMG2MESH Viewer</title>
+    <title>IMG2MESH Viewer (r168)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm" id="fm1">
         <label for="file_input" title="Image to 3D Mesh" style="color: #553801; margin-left: 3px;">Img</label>
         <button title="URL of the remote image" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input title="Browse Local Files" type="file" id="file_input" onchange="init();" accept=".dib, .ico, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" />
+        <input title="Browse Local Files" type="file" id="file_input" onchange="init();" accept=".dib, .ico, .tga, .tif, .tiff, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" />
         <label for="file_image_input" title="Background Image" id="lbl_fii" style="color: #553801;">BGND</label>
         <input title="Background Image" type="file" id="file_image_input" accept=".exr, .hdr, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
         <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="background-color: transparent; color: blue; min-width: 25px;" disabled>Eq</button>
@@ -598,9 +595,9 @@
 
     <script>
       var THREE, img_obj, manager, renderer, render_requested, scene, camera;
-      var texture_loader, exr_loader, rgbe_loader, slider_height = 0, count = 0;
-      var controls, orb_controls, mouse_down, mouse_wheel, events_initialized;
-      var gui, gui_set = false, guiExposure, params, toneMappingOptions;
+      var loader, texture_loader, tiff_loader, tga_loader, exr_loader, rgbe_loader;
+      var controls, mouse_down, mouse_wheel, events_initialized, slider_height = 0;
+      var gui, gui_set = false, guiExposure, params, toneMappingOptions, count = 0;
       var grid, polar_grid, grid_visible, polar_grid_visible, zip;
       var ambientLight, directionalLight, isMobile, filename;
       var ww = window.innerWidth, wh = window.innerHeight;
@@ -1288,7 +1285,7 @@
               URL.revokeObjectURL( fii );
             });
           } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
-            let loader;
+            let hd_loader;
 
             if (fn_uc.endsWith('.EXR')) {
               if (exr_loader === undefined) {
@@ -1298,7 +1295,7 @@
                 manager.addHandler( /\.exr$/i, exr_loader );
               }
 
-              loader = exr_loader;
+              hd_loader = exr_loader;
             } else {
               if (rgbe_loader === undefined) {
                 const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
@@ -1306,10 +1303,10 @@
                 rgbe_loader.setDataType( THREE.HalfFloatType );
               }
 
-              loader = rgbe_loader;
+              hd_loader = rgbe_loader;
             }
 
-            loader.load( URL.createObjectURL( fii ), function( texture ) {
+            hd_loader.load( URL.createObjectURL( fii ), function( texture ) {
               URL.revokeObjectURL( fii );
 
               texture.colorSpace = THREE.SRGBColorSpace;
@@ -1566,7 +1563,16 @@
         canv.width = width;
         canv.height = height;
         let ctx = canv.getContext( '2d' );
-        ctx.drawImage( image, 0, 0, canv.width, canv.height );
+
+        if ( image instanceof ImageData ) {
+          ctx.putImageData( image, 0, 0 );
+        } else if ( image.data && image.data.constructor === Uint8Array ) {
+          let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
+          ctx.putImageData( imgData, 0, 0 );
+        } else {
+          ctx.drawImage( image, 0, 0, canv.width, canv.height );
+        }
+
         let px = ctx.getImageData( 0, 0, canv.width, canv.height );
         let d = px.data;
 
@@ -1591,6 +1597,7 @@
 
         //Single front and back face
         let vt = 0;
+
         if (!quadPerPixel) {
           vts.push( 0, 0, d2, w, 0, d2, w, h, d2, 0, h, d2 );
           vts.push( 0, 0, -d2, w, 0, -d2, w, h, -d2, 0, h, -d2 );
@@ -1650,7 +1657,7 @@
       };
 
       const createExtrudedImageMesh = async ( { url, depth = 0.1, quadPerPixel = false } ) => {
-        let tex = await texture_loader.loadAsync( url );
+        let tex = await loader.loadAsync( url );
         tex.minFilter = tex.magFilter = THREE.NearestFilter;
         tex.colorSpace = 'srgb';
         tex.flipY = false;
@@ -1734,16 +1741,33 @@
 
         if (url_loading === false) {
           let image_extensions = [ '.BMP', '.DIB', '.GIF', '.ICO', '.JPG', '.JPEG', '.JFIF',
-            '.PJPEG', '.PJP', '.PNG', '.SVG', '.WEBP' ];
+            '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.TIF', '.TIFF', '.WEBP' ];
 
-          // Loaded file(s)
-          local_files = document.getElementById('file_input').files;
+          // Loaded file
+          let local_file = document.getElementById('file_input').files[ 0 ];
+          let fn_uc = local_file.name.toUpperCase();
 
-          for (let i = 0; i < local_files.length; i++) {
-            let fn_uc = local_files[ i ].name.toUpperCase();
+          if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) {
+            selected_img_file = local_file;
 
-            if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) { selected_img_file = local_files[ i ]; }
-          };
+            if (fn_uc.endsWith( '.TIF' ) || fn_uc.endsWith( '.TIFF' )) {
+              if (tiff_loader === undefined) {
+                const { TIFFLoader } = await import( "three/addons/loaders/TIFFLoader.min.js" );
+                tiff_loader = new TIFFLoader( manager );
+              }
+
+              loader = tiff_loader;
+            } else if (fn_uc.endsWith( '.TGA' )) {
+              if (tga_loader === undefined) {
+                const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
+                tga_loader = new TGALoader( manager );
+              }
+
+              loader = tga_loader;
+            } else {
+              loader = texture_loader;
+            }
+          }
 
           if (selected_img_file === null) {
             handle_error( 'No valid image file selected!' );
@@ -1810,7 +1834,9 @@
         }
 
         if (controls === undefined) {
-          controls = new orb_controls( camera, renderer.domElement );
+          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+
+          controls = new OrbitControls( camera, renderer.domElement );
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.6;
           controls.rotateSpeed = 0.6;
