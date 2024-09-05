@@ -159,6 +159,16 @@ Number Type Converter
     - Auto rotation
     - Equirectangular background
 
+- Special notes about `Image to 3D Mesh Viewer`:
+  - It shows as `IMG2MESH` under the `General` option of the main menu
+  - Based on thrax version of code: `https://tartan-swanky-plutonium.glitch.me/`
+  - Original code: `https://github.com/shaoruu/three-extruded-image`
+  - Supported image formats:
+    - BMP, DIB, GIF, ICO, JPEG, PNG, SVG, WEBP
+    - Local blobs and remote URL loading are supported
+  - Supports exporting to the following formats:
+    - Animated GIF and PNG, 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ
+
 - Special notes about `A-FRAME Viewer`:
   - It is using [A-Frame Library / Framework](https://aframe.io) which makes it A-Frame specific
   - It is currently highly experimental so not sure if everything works as it should be
