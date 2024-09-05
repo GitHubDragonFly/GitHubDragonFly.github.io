@@ -145,6 +145,17 @@ Number Type Converter
   - Hover the mouse over controls in the desktop viewers to se a popup description of the control:
     - If the control is not disabled then it might show a red border around it (applicable to button, color and select controls)
 
+- Special notes about `Image to 3D Mesh Viewer`:
+  - It shows as `IMG2MESH` under the `General` option of the main menu
+  - Based on thrax version of code: `https://tartan-swanky-plutonium.glitch.me/`
+  - Original code: `https://github.com/shaoruu/three-extruded-image`
+  - Supported image formats:
+    - BMP, DIB, GIF, ICO, JPEG, PNG, SVG, WEBP
+    - Local blobs and remote URL loading are supported
+  - Supports exporting to the following formats:
+    - Animated GIF and PNG, 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ
+    - Maximum exported texture size is currently limited to 2k
+
 - Special notes about `AR / VR Viewer`:
   - Using slightly modified version of the three.js `DeviceOrientationControls`, last available in r133
   - Currently highly experimental so it might work or it might not work properly or at all
@@ -158,16 +169,6 @@ Number Type Converter
     - Model resizing
     - Auto rotation
     - Equirectangular background
-
-- Special notes about `Image to 3D Mesh Viewer`:
-  - It shows as `IMG2MESH` under the `General` option of the main menu
-  - Based on thrax version of code: `https://tartan-swanky-plutonium.glitch.me/`
-  - Original code: `https://github.com/shaoruu/three-extruded-image`
-  - Supported image formats:
-    - BMP, DIB, GIF, ICO, JPEG, PNG, SVG, WEBP
-    - Local blobs and remote URL loading are supported
-  - Supports exporting to the following formats:
-    - Animated GIF and PNG, 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ
 
 - Special notes about `A-FRAME Viewer`:
   - It is using [A-Frame Library / Framework](https://aframe.io) which makes it A-Frame specific
