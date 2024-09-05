@@ -150,7 +150,7 @@ Number Type Converter
   - Based on thrax version of code: `https://tartan-swanky-plutonium.glitch.me/`
   - Original code: `https://github.com/shaoruu/three-extruded-image`
   - Supported image formats:
-    - BMP, DIB, GIF, ICO, JPEG, PNG, SVG, WEBP
+    - BMP, DIB, GIF, ICO, JPEG, PNG, SVG, TGA, TIF, TIFF, WEBP
     - Local blobs and remote URL loading are supported
   - Supports exporting to the following formats:
     - Animated GIF and PNG, 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ
