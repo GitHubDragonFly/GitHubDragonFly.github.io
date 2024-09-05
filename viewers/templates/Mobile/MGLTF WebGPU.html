@@ -321,19 +321,17 @@
     </script>
 
     <script>
-      var THREE, fflate, gpu, gl2, manager, g_loader, gltf_loader, gltf_obj;
+      var THREE, fflate, gpu, gl2, g_loader, gltf_loader, gltf_obj, clock;
       var ktx2_loader, texture_loader, draco_loader, tga_loader, dds_loader;
-      var vrm, vrm_registered = false, current_vrm, renderer, scene, scenes;
-      var default_camera, camera, cameras, cam_id, controls;
+      var manager, parser, resource_path, renderer, scene, scenes, controls;
+      var default_camera, camera, cameras, cam_id, draco_material, count = 0;
       var animations, animation_mixer, current_animation, extras, current_extra;
       var variants, variant_materials, current_variant, variants_available;
-      var parser, resource_path, draco_material, clock;
       var mouse_down, mouse_wheel, events_initialized, isMobile;
       var ambientLight, directionalLight, wireframe_enabled;
       var ww = window.innerWidth, wh = window.innerHeight;
       var animation_running, extra_running, texture_maps;
       var render_requested, flat_shading_enabled;
-      var first_run = false, fr_count = 0, count = 0;
       var bounding_box, vertex_colors_enabled;
       var local_files, local_files_indexes, local_bin_files;
       var url_displayed = false, url_loading = false, node_materials;
@@ -578,8 +576,6 @@
 
         selected_gltf_file = null;
         selected_draco_file = null;
-        current_vrm = null;
-        vrm = false;
         mouse_down = false;
         mouse_wheel = true;
         local_files = null;
@@ -625,7 +621,6 @@
 
             if (fn_uc.endsWith('.GLB') || fn_uc.endsWith('.GLTF') || fn_uc.endsWith('.VRM')) {
               selected_gltf_file = i;
-              if (fn_uc.endsWith('.VRM')) vrm = true;
             }
             else if (fn_uc.endsWith('.DRC')) { selected_draco_file = i; }
             else if (fn_uc.endsWith('.BIN')) { local_bin_files.push( i ); }
@@ -689,12 +684,6 @@
           gltf_loader.setKTX2Loader( ktx2_loader );
           gltf_loader.setDRACOLoader( draco_loader );
           gltf_loader.setMeshoptDecoder( MeshoptDecoder );
-        }
-
-        if (vrm === true && vrm_registered === false) {
-          const { VRMLoaderPlugin } = await import( 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2.1.1/lib/three-vrm.module.min.js' );
-          gltf_loader.register( ( parser ) => { return new VRMLoaderPlugin( parser ); });
-          vrm_registered = true;
         }
 
         if (selected_url_file === '') {
@@ -796,20 +785,7 @@
           parser = gltf.parser;
           scenes = gltf.scenes;
           cameras = gltf.cameras;
-
-          if (gltf.userData.vrm) {
-            const { VRMUtils } = await import( 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2.1.1/lib/three-vrm.module.min.js' );
-
-            current_vrm = gltf.userData.vrm;
-            gltf_obj = gltf.userData.vrm.scene;
-
-            VRMUtils.removeUnnecessaryVertices( gltf.scene );
-            VRMUtils.removeUnnecessaryJoints( gltf.scene );
-
-            gltf_obj.traverse( ( obj ) => { obj.frustumCulled = false; });
-          } else {
-            gltf_obj = gltf.scene;
-          }
+          gltf_obj = gltf.scene;
 
           if (cameras && cameras.length > 0) {
             document.getElementById('btn_cameras').disabled = false;
@@ -1064,30 +1040,13 @@
 
           // No extension checking for URL so it has to point to VRM or GLTF or GLB or DRC model
 
-          const { VRMLoaderPlugin } = await import( 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2.1.1/lib/three-vrm.module.min.js' );
-          gltf_loader.register( ( parser ) => { return new VRMLoaderPlugin( parser ); });
-
           console.log( 'Trying GLTF Loader...' );
 
           gltf_loader.load( selected_url_file, async gltf => {
             parser = gltf.parser;
             scenes = gltf.scenes;
             cameras = gltf.cameras;
-
-            if (gltf.userData.vrm) {
-              const { VRMUtils } = await import( 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@2.1.1/lib/three-vrm.module.min.js' );
-
-              current_vrm = gltf.userData.vrm;
-              gltf_obj = gltf.userData.vrm.scene;
-              vrm = true;
-
-              VRMUtils.removeUnnecessaryVertices( gltf.scene );
-              VRMUtils.removeUnnecessaryJoints( gltf.scene );
-
-              gltf_obj.traverse( ( obj ) => { obj.frustumCulled = false; });
-            } else {
-              gltf_obj = gltf.scene;
-            }
+            gltf_obj = gltf.scene;
 
             if (cameras && cameras.length > 0) {
               document.getElementById('btn_cameras').disabled = false;
@@ -1271,16 +1230,8 @@
         document.getElementById('div_message').style.display = 'none';
 
         render_requested = true;
-
-        if (vrm === true) {
-          mouse_wheel = false;
-          first_run = true;
-          fr_count = 0;
-          count = 0;
-        } else {
-          mouse_wheel = true;
-        }
-
+        mouse_wheel = true;
+        count = 0;
         render();
 
         if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
@@ -1367,43 +1318,15 @@
 
       async function render() {
         if (gltf_obj) {
-          if (first_run === true || animation_running === true || mouse_down === true || mouse_wheel === true) {
+          if (animation_running === true || mouse_down === true || mouse_wheel === true) {
             if (animation_running === true) animation_mixer.update( clock.getDelta() );
 
-            if (first_run === true) {
-              fr_count ++;
-
-              // Quick demo VRM humanoid by tweaking its bones
-
-              if (vrm === true && current_vrm && current_vrm.humanoid && current_vrm.humanoid._normalizedHumanBones) {
-                const s = 0.01 * Math.PI * Math.sin( Math.PI * clock.elapsedTime );
-
-                if (fr_count > 175) {
-                  current_vrm.humanoid.resetNormalizedPose();
-                } else {
-                  Object.keys( current_vrm.humanoid._normalizedHumanBones.humanBones ).forEach( key => {
-                    current_vrm.humanoid.getNormalizedBoneNode( key ).rotation.y = s;
-                  });
-                }
-
-                // update vrm
-                current_vrm.update( clock.getDelta() );
-              }
-
-              if (fr_count > 175) {
-                mouse_wheel = true;
-                first_run = false;
-                fr_count = 0;
+            if (mouse_wheel === true) {
+              if (count > 25) {
+                mouse_wheel = false;
                 count = 0;
-              }
-            } else {
-              if (mouse_wheel === true) {
-                if (count > 25) {
-                  mouse_wheel = false;
-                  count = 0;
-                } else {
-                  count ++;
-                }
+              } else {
+                count ++;
               }
             }
 
