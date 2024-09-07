@@ -149,12 +149,15 @@ Number Type Converter
   - It shows as `IMG2MESH` under the `General` option of the main menu
   - Based on thrax version of code: `https://tartan-swanky-plutonium.glitch.me/`
   - Original code: `https://github.com/shaoruu/three-extruded-image`
-  - Supported image formats:
-    - BMP, DIB, GIF, ICO, JPEG, PNG, SVG, TGA, TIF, TIFF, WEBP
-    - Local blobs and remote URL loading are supported
+  - Supported import image formats:
+    - BMP, DIB, GIF, ICO, JPEG, PNG, SVG, TGA, TIFF, WEBP
+    - Local blobs and remote URL loading are supported:
+      - URLs have to end with supported extension
+      - GitHub URLs are supported
   - Supports exporting to the following formats:
-    - Animated GIF and PNG, 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ
-    - Maximum exported texture size is currently limited to 2k
+    - Animated GIF and PNG (see general notes about these formats further below)
+    - 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
+      - Maximum exported texture size is currently limited to 2k
 
 - Special notes about `AR / VR Viewer`:
   - Using slightly modified version of the three.js `DeviceOrientationControls`, last available in r133
