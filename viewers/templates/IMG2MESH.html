@@ -270,7 +270,7 @@
         <label for="btn_url" title="Get remote image via URL"></label>
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="btn_file_input" title="Browse Local Files"></label>
-        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".dib, .ico, .tga, .tif, .tiff, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" />
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".dds, .dib, .ico, .tga, .tif, .tiff, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" />
         <label for="btn_file_image_input" title="Background Image" style="display: none;">BGND</label>
         <button title="Background Image" id="btn_file_image_input" style="display: none; min-width: 54px;" onclick="document.getElementById('file_image_input').click();">Browse</button>
         <input type="file" id="file_image_input" style="display: none;" onchange="set_scene_image();" accept=".exr, .hdr, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" />
@@ -602,8 +602,8 @@
     </script>
 
     <script>
-      var THREE, img_obj, manager, renderer, render_requested, scene, camera;
-      var loader, texture_loader, tiff_loader, tga_loader, exr_loader, rgbe_loader;
+      var THREE, img_obj, manager, renderer, render_requested, scene, camera, loader;
+      var texture_loader, dds_loader, tiff_loader, tga_loader, exr_loader, rgbe_loader;
       var controls, mouse_down, mouse_wheel, events_initialized, slider_height = 0;
       var gui, gui_set = false, guiExposure, params, toneMappingOptions, count = 0;
       var grid, polar_grid, grid_visible, polar_grid_visible, zip;
@@ -1548,6 +1548,42 @@
         mouse_wheel = true;
       }
 
+      async function convert_dds_to_png( url ) {
+        const { decompress } = await import( "three/addons/utils/TextureUtils.min.js" );
+
+        let file_loader = new THREE.FileLoader( manager );
+        file_loader.setResponseType( 'arraybuffer' );
+
+        let array_buffer;
+
+        await new Promise( resolve => {
+          file_loader.load( url, function( file_data ) {
+            resolve( array_buffer = new Uint8Array( file_data ) );
+          });
+        });
+
+        let dds = await loader.parse( array_buffer.buffer, true  );
+        let width = dds.width;
+        let height = dds.height;
+
+        // convert DDS to PNG
+        tex = new THREE.CompressedTexture( dds.mipmaps, width, height, dds.format );
+        tex.needsUpdate = true;
+
+        let canvas_tex = await decompress( tex );
+
+        let new_texture;
+
+        await new Promise( resolve => {
+          texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), function( texture ) {
+            texture.needsUpdate = true;
+            resolve( new_texture = texture );
+          });
+        });
+
+        return new_texture;
+      }
+
       const extrudedImageGeometry = ({
         image,
         depth = 1,
@@ -1653,10 +1689,18 @@
       };
 
       const createExtrudedImageMesh = async ( { url, depth = 0.1, quadPerPixel = false } ) => {
-        let tex = await loader.loadAsync( url );
+        let tex;
+
+        if (loader === dds_loader) {
+          tex = await convert_dds_to_png( url );
+          tex.flipY = true;
+        } else {
+          tex = await loader.loadAsync( url );
+          tex.flipY = false;
+        }
+
         tex.minFilter = tex.magFilter = THREE.NearestFilter;
         tex.colorSpace = 'srgb';
-        tex.flipY = false;
 
         let g = extrudedImageGeometry( { image: tex.source.data, depth, quadPerPixel } );
 
@@ -1673,7 +1717,7 @@
       };
 
       async function set_loader( fn_uc ) {
-        let image_extensions = [ '.BMP', '.DIB', '.GIF', '.ICO', '.JPG', '.JPEG', '.JFIF',
+        let image_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.ICO', '.JPG', '.JPEG', '.JFIF',
           '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.TIF', '.TIFF', '.WEBP' ];
 
         if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) {
@@ -1691,6 +1735,13 @@
             }
 
             loader = tga_loader;
+          } else if (fn_uc.endsWith( '.DDS' )) {
+            if (dds_loader === undefined) {
+              const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
+              dds_loader = new DDSLoader( manager );
+            }
+
+            loader = dds_loader;
           } else {
             loader = texture_loader;
           }
