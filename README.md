@@ -298,8 +298,11 @@ Number Type Converter
     - This is using customized [DST Embroidery File Loader](https://github.com/manthrax/dst-format)
     - The `images` folder also includes `threadNormal` and `threadTexture` images from the same website
   - OCCT supported formats: STEP, STP, IGES, IGS, BREP, BRP, BIM
-    - STEP Viewer is using [occt-import-js](https://github.com/kovacsv/occt-import-js) and a modified version of [dotbim.three.js](https://github.com/ricaun/dotbim.three.js):
-      - Custom BIM Loader is also available
+    - STEP++ Viewer is using:
+      - [occt-import-js](https://github.com/kovacsv/occt-import-js) library
+      - Modified version of [dotbim.three.js](https://github.com/ricaun/dotbim.three.js):
+        - Custom three.js compatible BIM Loader is also available
+      - Alternative [three-iges-loader](https://github.com/Konsept-Design/three-iges-loader) when the main loader errors out
 - Export formats, where applicable:
   - 3DM, BIM, DAE, APNG, FBX, STEP, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, OFF, PLY, STL, PRWM, USDZ
     - OFF exports are only available in the Quick Viewer, as stated further above
