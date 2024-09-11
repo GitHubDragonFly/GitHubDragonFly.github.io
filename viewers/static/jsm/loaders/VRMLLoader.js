@@ -34,8 +34,6 @@ import {
 	Vector3
 } from "three";
 
-var local_ImageTextures;
-
 class VRMLLoader extends Loader {
 
 	constructor( manager ) {
@@ -50,25 +48,29 @@ class VRMLLoader extends Loader {
 
 		}
 
+		this.loader = null;
+		this.inlineNodes = [];
+		this.local_ImageTextures = '';
+
 	}
 
-	load( url, localImageTextures, onLoad, onProgress, onError ) {
+	load( url, onLoad, onProgress, onError, localImageTextures ) {
 
 		const scope = this;
 
-		if (localImageTextures !== '') local_ImageTextures = localImageTextures;
+		if (localImageTextures !== '') scope.local_ImageTextures = localImageTextures;
 
 		const path = ( scope.path === '' ) ? LoaderUtils.extractUrlBase( url ) : scope.path;
 
-		const loader = new FileLoader( scope.manager );
-		loader.setPath( scope.path );
-		loader.setRequestHeader( scope.requestHeader );
-		loader.setWithCredentials( scope.withCredentials );
-		loader.load( url, function ( text ) {
+		scope.loader = new FileLoader( scope.manager );
+		scope.loader.setPath( scope.path );
+		scope.loader.setRequestHeader( scope.requestHeader );
+		scope.loader.setWithCredentials( scope.withCredentials );
+		scope.loader.load( url, async function ( text ) {
 
 			try {
 
-				onLoad( scope.parse( text, path ) );
+				onLoad( await scope.parse( text, path ) );
 
 			} catch ( e ) {
 
@@ -90,9 +92,9 @@ class VRMLLoader extends Loader {
 
 	}
 
-	parse( data, path ) {
+	async parse( data, path ) {
 
-		const loader = this;
+		const scope = this;
 
 		const nodeMap = {};
 
@@ -118,7 +120,6 @@ class VRMLLoader extends Loader {
 			if ( parser.errors.length > 0 ) {
 
 				console.error( parser.errors );
-
 				throw Error( 'THREE.VRMLLoader: Parsing errors detected.' );
 
 			}
@@ -138,7 +139,7 @@ class VRMLLoader extends Loader {
 			// from http://gun.teipir.gr/VRML-amgem/spec/part1/concepts.html#SyntaxBasics
 
 			const RouteIdentifier = createToken( { name: 'RouteIdentifier', pattern: /[^\x30-\x39\0-\x20\x22\x27\x23\x2b\x2c\x2d\x2e\x5b\x5d\x5c\x7b\x7d][^\0-\x20\x22\x27\x23\x2b\x2c\x2d\x2e\x5b\x5d\x5c\x7b\x7d]*[\.][^\x30-\x39\0-\x20\x22\x27\x23\x2b\x2c\x2d\x2e\x5b\x5d\x5c\x7b\x7d][^\0-\x20\x22\x27\x23\x2b\x2c\x2d\x2e\x5b\x5d\x5c\x7b\x7d]*/ } );
-			const Identifier = createToken( { name: 'Identifier', pattern: /[^\x30-\x39\0-\x20\x22\x27\x23\x2b\x2c\x2d\x2e\x5b\x5d\x5c\x7b\x7d][^\0-\x20\x22\x27\x23\x2b\x2c\x2d\x2e\x5b\x5d\x5c\x7b\x7d]*/, longer_alt: RouteIdentifier } );
+			const Identifier = createToken( { name: 'Identifier', pattern: /[^\x30-\x39\0-\x20\x22\x27\x23\x2b\x2c\x2d\x2e\x5b\x5d\x5c\x7b\x7d]([^\0-\x20\x22\x27\x23\x2b\x2c\x2e\x5b\x5d\x5c\x7b\x7d])*/, longer_alt: RouteIdentifier } );
 
 			// from http://gun.teipir.gr/VRML-amgem/spec/part1/nodesRef.html
 
@@ -195,7 +196,7 @@ class VRMLLoader extends Loader {
 
 			//
 
-			const StringLiteral = createToken( { name: 'StringLiteral', pattern: /"(:?[^\\"\n\r]+|\\(:?[bfnrtv"\\/]|u[0-9a-fA-F]{4}))*"/ } );
+			const StringLiteral = createToken( { name: 'StringLiteral', pattern: /"(?:[^\\"\n\r]|\\[bfnrtv"\\/]|\\u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F])*"/ } );
 			const HexLiteral = createToken( { name: 'HexLiteral', pattern: /0[xX][0-9a-fA-F]+/ } );
 			const NumberLiteral = createToken( { name: 'NumberLiteral', pattern: /[-+]?([0-9]+\.?[0-9]*|\.?[0-9]+)([eE][-+]?[0-9]+)?/ } );
 			const TrueLiteral = createToken( { name: 'TrueLiteral', pattern: /TRUE/ } );
@@ -558,9 +559,8 @@ class VRMLLoader extends Loader {
 
 			// second iteration: build nodes
 
-			for ( let i = 0, l = nodes.length; i < l; i ++ ) {
+			for ( const node of nodes ) {
 
-				const node = nodes[ i ];
 				const object = getNode( node );
 
 				if ( object instanceof Object3D ) scene.add( object );
@@ -714,9 +714,6 @@ class VRMLLoader extends Loader {
 					break;
 
 				case 'Inline':
-					build = buildInlineNode( node );
-					break;
-
 				case 'Anchor':
 				case 'Billboard':
 
@@ -776,13 +773,10 @@ class VRMLLoader extends Loader {
 
 			const object = new Group();
 
-			//
-
 			const fields = node.fields;
 
-			for ( let i = 0, l = fields.length; i < l; i ++ ) {
+			for ( const field of fields ) {
 
-				const field = fields[ i ];
 				const fieldName = field.name;
 				const fieldValues = field.values;
 
@@ -801,7 +795,7 @@ class VRMLLoader extends Loader {
 						break;
 
 					case 'children':
-						parseFieldChildren( fieldValues, object );
+						parseFieldChildren( fieldValues, object, node );
 						break;
 
 					case 'collide':
@@ -809,7 +803,7 @@ class VRMLLoader extends Loader {
 						break;
 
 					case 'rotation':
-						const axis = new Vector3( fieldValues[ 0 ], fieldValues[ 1 ], fieldValues[ 2 ] );
+						const axis = new Vector3( fieldValues[ 0 ], fieldValues[ 1 ], fieldValues[ 2 ] ).normalize();
 						const angle = fieldValues[ 3 ];
 						object.quaternion.setFromAxisAngle( axis, angle );
 						break;
@@ -1438,18 +1432,26 @@ class VRMLLoader extends Loader {
 					case 'url':
 						let url = fieldValues[ 0 ];
 
-						if (url && local_ImageTextures) {
+						if ( url && scope.local_ImageTextures !== '' ) {
+
 							let image_set = false;
-							let blobs = local_ImageTextures.split(',');
+							let blobs = scope.local_ImageTextures.split(',');
 
 							blobs.forEach( ( blob_name, index ) => {
-								if (blob_name === url) {
-									if (!image_set) {
+
+								if ( blob_name === url ) {
+
+									if ( ! image_set ) {
+
 										url = blobs[ index + 1 ];
 										image_set = true;
+
 									}
+
 								}
+
 							});
+
 						}
 
 						if ( url ) texture = textureLoader.load( url );
@@ -1566,69 +1568,6 @@ class VRMLLoader extends Loader {
 			}
 
 			return worldInfo;
-
-		}
-
-		function buildInlineNode ( node ) {
-
-			const object = new Group();
-
-			const fields = node.fields;
-
-			for ( let i = 0, l = fields.length; i < l; i ++ ) {
-
-				const field = fields[ i ];
-				const fieldName = field.name;
-				const fieldValues = field.values;
-
-				switch ( fieldName ) {
-
-					case 'bboxCenter':
-						// field not supported
-						break;
-
-					case 'bboxSize':
-						// field not supported
-						break;
-
-					case 'url':
-						const urls = fieldValues;
-
-						function tryUrl( i ) {
-
-							loader.load( urls[ i ], function ( loaded ) {
-
-								object.clear();
-								object.add( loaded );
-
-							}, undefined, function ( err ) {
-
-								if ( i < urls.length - 1 ) {
-
-									tryUrl( i + 1 );
-
-								} else {
-
-									console.error( err );
-
-								}
-
-							} );
-
-						}
-
-						tryUrl( 0 );
-						break;
-
-					default:
-						console.warn( 'THREE.VRMLLoader: Unknown field:', fieldName );
-						break;
-
-				}
-
-			}
-
-			return object;
 
 		}
 
@@ -2643,7 +2582,7 @@ class VRMLLoader extends Loader {
 
 					// rotate
 
-					quaternion.setFromAxisAngle( axis, angle );
+					quaternion.setFromAxisAngle( axis.normalize(), angle );
 					vertex.applyQuaternion( quaternion );
 
 					// translate
@@ -2794,13 +2733,20 @@ class VRMLLoader extends Loader {
 
 		}
 
-		function parseFieldChildren( children, owner ) {
+		function parseFieldChildren( children, owner, node ) {
 
-			for ( let i = 0, l = children.length; i < l; i ++ ) {
+			for ( const child of children ) {
 
-				const object = getNode( children[ i ] );
+				if ( child.name && child.name === 'Inline' && child.build === undefined ) {
 
-				if ( object instanceof Object3D ) owner.add( object );
+					scope.inlineNodes.push( { child: child, node: node } );
+
+				} else {
+
+					const object = getNode( child );
+					if ( object instanceof Object3D ) owner.add( object );
+
+				}
 
 			}
 
@@ -3283,15 +3229,134 @@ class VRMLLoader extends Loader {
 
 		}
 
+		async function buildInlineNode ( node, text ) {
+
+			let new_scene;
+
+			const fields = node.fields;
+
+			for ( const field of fields ) {
+
+				const fieldName = field.name;
+				const fieldValues = field.values;
+
+				switch ( fieldName ) {
+
+					case 'bboxCenter':
+						// field not supported
+						break;
+
+					case 'bboxSize':
+						// field not supported
+						break;
+
+					case 'url':
+						try {
+
+							let new_tree = await generateVRMLTree( text );
+
+							await new Promise( resolve => {
+
+								resolve( new_scene = parseTree( new_tree ) );
+
+							});
+
+						} catch ( error ) {
+
+							console.log( error );
+
+						}
+
+						break;
+
+					default:
+						console.warn( 'THREE.VRMLLoader: Unknown field:', fieldName );
+						break;
+
+				}
+
+			}
+
+			return new_scene;
+
+		}
+
 		// create JSON representing the tree structure of the VRML asset
 
-		const tree = generateVRMLTree( data );
+		const tree = await generateVRMLTree( data );
 
 		// parse the tree structure to a three.js scene
 
-		const scene = parseTree( tree );
+		await new Promise( resolve => {
 
-		return scene;
+			resolve( scope.scene = parseTree( tree ) );
+
+		});
+
+		// fetch and process all inline nodes
+		// currently works with online URL models, at least the following example:
+		// https://raw.githubusercontent.com/rustbox/router/f280f25/SYZYGY-PHY/SYZYGY-PHY.wrl
+
+		if ( scope.inlineNodes.length > 0 ) {
+
+			await Promise.all( scope.inlineNodes.map( ( inline_node ) =>
+
+				fetch( scope.resourcePath + inline_node.child.fields[ 0 ].values[ 0 ] )
+
+			) ).then( ( responses ) => {
+
+				return Promise.all( responses.map( ( res ) => res.arrayBuffer() ) );
+
+			}).then ( async ( arrayBuffers ) => {
+
+				let i = 0;
+
+				for ( const inline_node of scope.inlineNodes ) {
+
+					let text = new TextDecoder().decode( new Uint8Array( arrayBuffers[ i ] ) );
+
+					inline_node.child.build = await buildInlineNode( inline_node.child, text );
+
+					if ( inline_node.child.build !== undefined && inline_node.node.DEF !== undefined && inline_node.child.build.hasOwnProperty( 'name' ) === true ) {
+
+						inline_node.child.build.name = inline_node.node.DEF;
+
+					}
+
+					for ( const field of inline_node.node.fields ) {
+
+						if ( field.name === 'rotation' ) {
+
+							const axis = new Vector3( field.values[ 0 ], field.values[ 1 ], field.values[ 2 ] ).normalize();
+							const angle = field.values[ 3 ];
+							inline_node.child.build.quaternion.setFromAxisAngle( axis, angle );
+	
+						} else if ( field.name === 'scale' ) {
+
+							inline_node.child.build.scale.set( field.values[ 0 ], field.values[ 1 ], field.values[ 2 ] );
+
+						} else if ( field.name === 'translation' ) {
+
+							inline_node.child.build.position.set( field.values[ 0 ], field.values[ 1 ], field.values[ 2 ] );
+
+						}
+
+					}
+
+					// scope.scene should have been created and contain what appears to
+					// be an orderly group with empty inline nodes + main model meshes
+					// so we will just replace the empty inline nodes
+					scope.scene.children[ 0 ].children[ i ] = inline_node.child.build;
+
+					i++ ;
+
+				}
+
+			});
+
+		}
+
+		return scope.scene;
 
 	}
 
