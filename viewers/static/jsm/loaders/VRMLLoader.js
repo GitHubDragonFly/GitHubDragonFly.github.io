@@ -3301,7 +3301,7 @@ class VRMLLoader extends Loader {
 
 			await Promise.all( scope.inlineNodes.map( ( inline_node ) =>
 
-				fetch( scope.resourcePath + inline_node.child.fields[ 0 ].values[ 0 ] )
+				fetch( ( inline_node.child.fields[ 0 ].values[ 0 ].toLowerCase().startsWith( 'http' ) === true ? '' : scope.resourcePath ) + inline_node.child.fields[ 0 ].values[ 0 ] )
 
 			) ).then( ( responses ) => {
 
