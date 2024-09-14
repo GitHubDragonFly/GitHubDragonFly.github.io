@@ -11,8 +11,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
         }
       }
     </script>
@@ -183,7 +183,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>OBJ+MTL Viewer (r167)</title>
+    <title>OBJ+MTL Viewer (r168)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -192,7 +192,7 @@
         <label for="btn_url" title="Get remote model via URL"></label>
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="btn_file_input" title="Browse Local Files"></label>
-        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".zip, .obj, .mtl, .dib, .dds, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".zip, .obj, .mtl, .dds, .dib, .ktx2, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
         <label for="back_color" title="Background Color">B</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
@@ -298,13 +298,13 @@
     </script>
 
     <script>
-      var THREE, manager, file_loader, texture_loader, obj_loader, mtl_loader, tga_loader, dds_loader;
-      var uSync, sFromU8, renderer, scene, camera, Obj, render_requested;
+      var THREE, texture_loader, obj_loader, mtl_loader, dds_loader, ktx2_loader, tga_loader;
+      var manager, file_loader, uSync, sFromU8, renderer, scene, camera, Obj, render_requested;
       var ambientLight, directionalLight, bounding_box, flat_shading_enabled;
       var controls, mouse_down, mouse_wheel, events_initialized;
       var ww = window.innerWidth, wh = window.innerHeight, isMobile, map_strings;
       var first_run = false, fr_count = 0, wireframe_enabled, count = 0;
-      var selected_mtl_file, selected_mtl_url_file, selected_obj_file, zip_file, zip_textures;
+      var selected_mtl_file, selected_mtl_url_file, selected_obj_file, zip_file, textures;
       var url_displayed = false, url_loading = false, vertex_colors_enabled, texture_maps;
       var selected_url_file = '', selected_obj_url_file, local_files, local_files_indexes;
 
@@ -375,9 +375,52 @@
         mouse_wheel = true;
       }
 
+      // modified decompress function from TextureUtils.js
+
+      async function decompress( texture, maxTextureSize = Infinity, renderer = null ) {
+
+        let _renderer = renderer;
+
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.needsUpdate = true;
+
+        const _camera = new THREE.PerspectiveCamera();
+
+        // Set the texture as scene's background
+
+        const _scene = new THREE.Scene();
+        _scene.background = texture;
+
+        if ( ! _renderer ) _renderer = new THREE.WebGLRenderer( { antialias: false } );
+
+        _renderer.setSize( Math.min( texture.image.width, maxTextureSize ), Math.min( texture.image.height, maxTextureSize ) );
+        _renderer.clear();
+        _renderer.render( _scene, _camera );
+
+        let readableTexture = new THREE.CanvasTexture( _renderer.domElement );
+
+        readableTexture.colorSpace = THREE.SRGBColorSpace;
+        readableTexture.minFilter = texture.minFilter || THREE.LinearMipmapLinearFilter;
+        readableTexture.magFilter = texture.magFilter || THREE.LinearFilter;
+        readableTexture.wrapS = texture.wrapS || THREE.RepeatWrapping;
+        readableTexture.wrapT = texture.wrapT || THREE.RepeatWrapping;
+        readableTexture.name = texture.name;
+        readableTexture.needsUpdate = true;
+
+        if ( _renderer ) {
+          _scene.background.dispose();
+          texture.dispose();
+
+          _renderer.dispose();
+          _renderer = null;
+        }
+
+        return readableTexture;
+      }
+
       async function process_loaded_zip( z_file ) {
         let image_extensions = [ '.bmp', '.dds', '.dib', '.gif', '.jpg', '.jpeg', '.jfif',
-          '.pjpeg', '.pjp', '.png', '.svg', '.tga', '.webp' ];
+          '.ktx2', '.pjpeg', '.pjp', '.png', '.svg', '.tga', '.webp' ];
 
         let mime_type = 'image/';
 
@@ -426,11 +469,11 @@
                 break;
             }
 
-            // handle TGA and DDS separately
-            if ( ext === 'dds' || ext === 'tga' ) {
-              let loader = ext === 'dds' ? dds_loader : tga_loader;
+            // handle DDS, KTX2 and TGA separately
+            if ( ext === 'dds' || ext === 'ktx2' || ext === 'tga' ) {
+              let loader = (ext === 'dds') ? dds_loader : ((ext === 'ktx2') ? ktx2_loader : tga_loader);
 
-              let tex;
+              let tex, dds, ktx2;
 
               if ( ext === 'tga' ) {
                 tex = loader.parse( z_file[ key ].buffer );
@@ -444,24 +487,35 @@
                 let imgData = new ImageData( new Uint8ClampedArray( tex.data ), tex.width, tex.height );
                 ctx.putImageData( imgData, 0, 0 );
 
-                zip_textures[ key ] = canvas.toDataURL( 'image/png', 1 );
-              } else {
-                const { decompress } = await import( "three/addons/utils/TextureUtils.min.js" );
-
-                let dds = await loader.parse( z_file[ key ].buffer, true );
+                textures[ key ] = canvas.toDataURL( 'image/png', 1 );
+              } else if ( ext === 'dds' ) {
+                dds = await loader.parse( z_file[ key ].buffer, true );
 
                 // convert DDS to PNG
                 tex = new THREE.CompressedTexture( dds.mipmaps, dds.width, dds.height, dds.format );
-                tex.repeat.y = -1;
                 tex.needsUpdate = true;
 
                 let canvas_tex = await decompress( tex );
 
-                zip_textures[ key ] = canvas_tex.image.toDataURL( 'image/png', 1 );
+                textures[ key ] = canvas_tex.image.toDataURL( 'image/png', 1 );
+              } else {
+                await new Promise( resolve => {
+                  loader.parse( z_file[ key ].buffer, function( texture ) {
+                    resolve( ktx2 = texture );
+                  });
+                });
+
+                // convert KTX2 to PNG
+                tex = new THREE.CompressedTexture( ktx2.mipmaps, ktx2.source.data.width, ktx2.source.data.height, ktx2.format );
+                tex.needsUpdate = true;
+
+                let canvas_tex = await decompress( tex );
+
+                textures[ key ] = canvas_tex.image.toDataURL( 'image/png', 1 );
               }
             } else {
               let blob = new Blob( [ z_file[ key ].buffer ], { type: mime_type } );
-              zip_textures[ key ] = URL.createObjectURL( blob );
+              textures[ key ] = URL.createObjectURL( blob );
               URL.revokeObjectURL( blob );
             }
           }
@@ -476,9 +530,9 @@
 
           if (Obj) await scene_cleanup();
 
-          if ( Object.entries( zip_textures ).length > 0 ) {
-            Object.keys( zip_textures ).forEach( ( key ) => {
-              delete zip_textures[ key ];
+          if ( Object.entries( textures ).length > 0 ) {
+            Object.keys( textures ).forEach( ( key ) => {
+              delete textures[ key ];
             });
           }
 
@@ -487,16 +541,23 @@
 
         enable_disable( true );
 
-        if (tga_loader === undefined) {
-          const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
-          tga_loader = new TGALoader( manager );
-          manager.addHandler( /\.tga$/i, tga_loader );
-        }
-
         if (dds_loader === undefined) {
           const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
           dds_loader = new DDSLoader( manager );
           manager.addHandler( /\.dds$/i, dds_loader );
+        }
+
+        if (ktx2_loader === undefined) {
+          const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
+          ktx2_loader = new KTX2Loader( manager );
+          ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/libs/basis/" );
+          manager.addHandler( /\.ktx2$/i, ktx2_loader );
+        }
+
+        if (tga_loader === undefined) {
+          const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
+          tga_loader = new TGALoader( manager );
+          manager.addHandler( /\.tga$/i, tga_loader );
         }
 
         obj_loader.setMaterials( null );
@@ -508,7 +569,7 @@
         local_files_indexes = [];
         local_files = null;
         zip_file = null;
-        zip_textures = {};
+        textures = {};
         mouse_down = false;
         mouse_wheel = true;
         flat_shading_enabled = false;
@@ -525,9 +586,29 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.toneMapping = THREE.NeutralToneMapping;
+          renderer.toneMappingExposure = 1.75;
+          renderer.setSize( ww, wh );
+          renderer.info.autoReset = false;
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
+          renderer.autoClear = false;
+
+          if (ktx2_loader) {
+            ktx2_loader.detectSupport( renderer );
+            ktx2_loader.init();
+          }
+
+          document.body.appendChild( renderer.domElement );
+        }
+
         if (url_loading === false) {
           let img_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF',
-            '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
+            '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
 
           // Loaded file(s)
           local_files = document.getElementById('file_input').files;
@@ -539,7 +620,35 @@
             else if (fn_uc.endsWith('.MTL')) { selected_mtl_file = i; }
             else if (fn_uc.endsWith('.ZIP')) { zip_file = i; }
             else if (img_extensions.some( ext => fn_uc.endsWith( ext ) )) {
+              let url = URL.createObjectURL( local_files[ i ] );
               local_files_indexes.push( i );
+
+              // handle DDS and KTX2 separately
+              if ( fn_uc.endsWith('.DDS') || fn_uc.endsWith('.KTX2') ) {
+                let loader = fn_uc.endsWith('.DDS') ? dds_loader : ktx2_loader;
+
+                let tex, ctex, canvas_tex;
+
+                await new Promise( resolve => {
+                  loader.load( url, function( texture ) {
+                    resolve( ctex = texture );
+                  });
+                });
+
+                // convert to PNG
+                tex = new THREE.CompressedTexture( ctex.mipmaps, ctex.source.data.width, ctex.source.data.height, ctex.format );
+                tex.needsUpdate = true;
+
+                canvas_tex = await decompress( tex );
+
+                textures[ local_files[ i ].name ] = canvas_tex.image.toDataURL( 'image/png', 1 );
+              } else {
+                let blob = new Blob( [ await local_files[ i ].arrayBuffer() ], { type: local_files[ i ].type } );
+                textures[ local_files[ i ].name ] = URL.createObjectURL( blob );
+                URL.revokeObjectURL( blob );
+              }
+
+              URL.revokeObjectURL( local_files[ i ] );
             }
           };
 
@@ -554,21 +663,6 @@
           document.getElementById('file_input').value = '';
           local_files_indexes.length = 0;
           url_loading = false;
-        }
-
-        if (renderer === undefined) {
-          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
-          renderer.setPixelRatio( window.devicePixelRatio );
-          renderer.toneMapping = THREE.NeutralToneMapping;
-          renderer.toneMappingExposure = 1.75;
-          renderer.setSize( ww, wh );
-          renderer.info.autoReset = false;
-          renderer.shadowMap.enabled = true;
-          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
-          renderer.autoClear = false;
-
-          document.body.appendChild( renderer.domElement );
         }
 
         if (scene === undefined) scene = new THREE.Scene();
@@ -657,10 +751,10 @@
             if (child.geometry.isBufferGeometry) {
               if (! child.geometry.getAttribute( 'normal' )) child.geometry.computeVertexNormals();
               child.geometry.normalizeNormals();
-            }
 
-            child.geometry.computeBoundingBox();
-            child.geometry.computeBoundingSphere();
+              child.geometry.computeBoundingBox();
+              child.geometry.computeBoundingSphere();
+            }
 
             if (child.geometry.hasAttribute( 'color' )) {
               vertex_colors_enabled = true;
@@ -677,6 +771,9 @@
             if (Array.isArray( child.material )) {
               child.material.forEach( mtrl => {
                 set_texture_colorSpace( mtrl );
+
+                mtrl.castShadow = true;
+                mtrl.receiveShadow = true;
                 mtrl.vertexColors = vertex_colors_enabled;
 
                 if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 1.25;
@@ -685,6 +782,9 @@
               });
             } else {
               set_texture_colorSpace( child.material );
+
+              child.material.castShadow = true;
+              child.material.receiveShadow = true;
               child.material.vertexColors = vertex_colors_enabled;
 
               if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 1.25;
@@ -698,13 +798,13 @@
       async function loadZipFile() {
         if (selected_mtl_file !== null) {
           let mtl = await mtl_loader.parse( selected_mtl_file );
-          if ( Object.entries( zip_textures ).length > 0 ) {
+          if ( Object.entries( textures ).length > 0 ) {
             for ( const [ key, value ] of Object.entries( mtl.materialsInfo ) ) {
-              for ( const textureKey of Object.keys( zip_textures ) ) {
+              for ( const textureKey of Object.keys( textures ) ) {
                 map_strings.forEach( map_str => {
                   if ( value[ map_str ] ) {
                     value[ map_str ].trim();
-                    if ( value[ map_str ].endsWith( textureKey ) ) value[ map_str ] = zip_textures[ textureKey ];
+                    if ( value[ map_str ].endsWith( textureKey ) ) value[ map_str ] = textures[ textureKey ];
                   }
                 });
               }
@@ -749,96 +849,73 @@
         mouse_wheel = true;
       }
 
-      function loadFile() {
+      async function loadFile() {
+        let ab, u8array, text;
+
         if (selected_mtl_file !== null) {
-          mtl_loader.load( URL.createObjectURL( local_files[ selected_mtl_file ] ), ( mtl ) => {
-            URL.revokeObjectURL( local_files[ selected_mtl_file ] );
+          ab = await local_files[ selected_mtl_file ].arrayBuffer();
+          u8array = new Uint8Array( ab );
+          text = await new TextDecoder().decode( u8array );
 
-            if (local_files_indexes.length > 0) {
-              for (const [ key, value ] of Object.entries( mtl.materialsInfo )) {
-                local_files_indexes.forEach( file_index => {
-                  let fn_uc = local_files[ file_index ].name.toUpperCase();
+          let mtl = await mtl_loader.parse( text );
 
-                  if (fn_uc.endsWith('.DDS') === true || fn_uc.endsWith('.TGA') === true) {
-                    mtl.materialsInfo[ key ][ 'ext' ] = fn_uc.endsWith('.DDS') === true ? '.dds' : '.tga';
+          if ( Object.entries( textures ).length > 0 ) {
+            for ( const [ key, value ] of Object.entries( mtl.materialsInfo ) ) {
+              for ( const textureKey of Object.keys( textures ) ) {
+                map_strings.forEach( map_str => {
+                  if ( value[ map_str ] ) {
+                    value[ map_str ].trim();
+                    if ( value[ map_str ].endsWith( textureKey ) ) value[ map_str ] = textures[ textureKey ];
                   }
-
-                  set_mtl_materialsInfo( key, value, file_index, mtl )
                 });
               }
-            } else {
-              mtl.preload();
             }
+          } else {
+            mtl.preload();
+          }
 
-            obj_loader.setMaterials( mtl );
+          obj_loader.setMaterials( mtl );
 
-            // Launch loading of the selected file
-            obj_loader.load( URL.createObjectURL( local_files[ selected_obj_file ] ), async function ( object ) {
-              URL.revokeObjectURL( local_files[ selected_obj_file ] );
+          ab = await local_files[ selected_obj_file ].arrayBuffer();
+          u8array = new Uint8Array( ab );
+          text = await new TextDecoder().decode( u8array );
 
-              Obj = object;
-
-              await process_obj();
-
-              // Add 3D object to scene
-              scene.add( Obj );
-              Obj.position.set( 0, 0, 0 );
-              camera.lookAt( Obj.position );
-
-              finish_loading();
-            }, function ( xhr ) { // onProgress
-            }, function ( error ) { // onError
-              handle_error( error );
-              URL.revokeObjectURL( local_files[ selected_obj_file ] );
-            });
-          }, function ( xhr ) {  // onProgress
-          }, function ( error ) { // onError
+          try {
+            Obj = await obj_loader.parse( text );
+          } catch (error) {
             handle_error( error );
-            URL.revokeObjectURL( local_files[ selected_mtl_file ] );
-          });
+          }
+
+          await process_obj();
+
+          // Add 3D object to scene
+          scene.add( Obj );
+          Obj.position.set( 0, 0, 0 );
+          camera.lookAt( Obj.position );
+
+          finish_loading();
         } else {
-          // Launch loading of the selected file
-          obj_loader.load( URL.createObjectURL( local_files[ selected_obj_file ] ), async function( object ) {
-            URL.revokeObjectURL( local_files[ selected_obj_file ] );
+          ab = await local_files[ selected_obj_file ].arrayBuffer();
+          u8array = new Uint8Array( ab );
+          text = await new TextDecoder().decode( u8array );
 
-            Obj = object;
-
-            await process_obj();
-
-            // Add 3D object to scene
-            scene.add( Obj );
-            Obj.position.set( 0, 0, 0 );
-            camera.lookAt( Obj.position );
-
-            finish_loading();
-          }, function ( xhr ) { // onProgress
-          }, function ( error ) { // onError
+          try {
+            Obj = await obj_loader.parse( text );
+          } catch (error) {
             handle_error( error );
-            URL.revokeObjectURL( selected_obj_file );
-          });
+          }
+
+          await process_obj();
+
+          // Add 3D object to scene
+          scene.add( Obj );
+          Obj.position.set( 0, 0, 0 );
+          camera.lookAt( Obj.position );
+
+          finish_loading();
         }
 
         mouse_wheel = true;
-      }
-
-      function set_mtl_materialsInfo( key, value, file_index, mtl ) {
-        let file_url = URL.createObjectURL( local_files[ file_index ] ).substring( mtl.baseUrl.length );
-
-        map_strings.forEach( map_str => {
-          if (value[ map_str ]) {
-            if (value[ map_str ].indexOf( ' ' ) > -1) {
-              if (local_files[ file_index ].name === value[ map_str ].substring( value[ map_str ].lastIndexOf( ' ' ) + 1 )) {
-                mtl.materialsInfo[ key ][ map_str ] = file_url;
-              }
-            } else {
-              if (value[ map_str ].endsWith( local_files[ file_index ].name )) {
-                mtl.materialsInfo[ key ][ map_str ] = file_url;
-              }
-            }
-          }
-        });
-
-        URL.revokeObjectURL( local_files[ file_index ] );
       }
 
       async function loadURLFile() {
@@ -854,6 +931,8 @@
               }
 
               let url_uc = url.toUpperCase();
+
+              // Ignore images since the texture button 'T' is not included
 
               if (url_uc.endsWith('.MTL')) {
                 selected_mtl_url_file = url;
@@ -1104,7 +1183,7 @@
             // If it might be slow to render initially
             if (first_run === true) {
               fr_count ++;
-              if (fr_count > 15) {
+              if (fr_count > 25) {
                 mouse_wheel = true;
                 first_run = false;
                 fr_count = 0;
@@ -1112,7 +1191,7 @@
               }
             } else {
               if (mouse_wheel === true) {
-                if (count > 10) {
+                if (count > 15) {
                   mouse_wheel = false;
                   count = 0;
                 } else {
