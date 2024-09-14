@@ -1,0 +1,2797 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="OBJ + MTL (Wavefront Technologies) Viewer with WebGPU">
+    <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.8.3/dist/es-module-shims.min.js"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.webgpu.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import * as fflate_js from "three/addons/libs/fflate.module.min.js";
+
+      THREE = three_js;
+      fflate = fflate_js;
+
+      // Embedded MTL Loader - Start
+
+      class MTLLoader extends THREE.Loader {
+        constructor( manager ) {
+          super( manager );
+        }
+
+        load( url, onLoad, onProgress, onError ) {
+          const scope = this;
+
+          const path = ( this.path === '' ) ? THREE.LoaderUtils.extractUrlBase( url ) : this.path;
+
+          const loader = new THREE.FileLoader( this.manager );
+          loader.setPath( this.path );
+          loader.setRequestHeader( this.requestHeader );
+          loader.setWithCredentials( this.withCredentials );
+          loader.load( url, function ( text ) {
+
+            try {
+              onLoad( scope.parse( text, path ) );
+            } catch ( e ) {
+              if ( onError ) {
+                onError( e );
+              } else {
+                console.error( e );
+              }
+
+              scope.manager.itemError( url );
+            }
+          }, onProgress, onError );
+        }
+
+        setMaterialOptions( value ) {
+          this.materialOptions = value;
+          return this;
+        }
+
+        parse( text, path ) {
+          const lines = text.split( '\n' );
+          let info = {};
+          const delimiter_pattern = /\s+/;
+          const materialsInfo = {};
+
+          for ( let i = 0; i < lines.length; i ++ ) {
+            let line = lines[ i ];
+            line = line.trim();
+
+            if ( line.length === 0 || line.charAt( 0 ) === '#' ) {
+              continue;
+            }
+
+            const pos = line.indexOf( ' ' );
+
+            let key = ( pos >= 0 ) ? line.substring( 0, pos ) : line;
+            key = key.toLowerCase();
+
+            let value = ( pos >= 0 ) ? line.substring( pos + 1 ) : '';
+            value = value.trim();
+
+            if ( key === 'newmtl' ) {
+              info = { name: value };
+              materialsInfo[ value ] = info;
+            } else {
+              if ( key === 'ka' || key === 'kd' || key === 'ks' || key === 'ke' ) {
+                const ss = value.split( delimiter_pattern, 3 );
+                info[ key ] = [ parseFloat( ss[ 0 ] ), parseFloat( ss[ 1 ] ), parseFloat( ss[ 2 ] ) ];
+              } else {
+                info[ key ] = value;
+              }
+            }
+          }
+
+          const materialCreator = new MaterialCreator( this.resourcePath || path, this.materialOptions );
+          materialCreator.setCrossOrigin( this.crossOrigin );
+          materialCreator.setManager( this.manager );
+          materialCreator.setMaterials( materialsInfo );
+          return materialCreator;
+        }
+      }
+
+      class MaterialCreator {
+        constructor( baseUrl = '', options = {} ) {
+          this.baseUrl = baseUrl;
+          this.options = options;
+          this.originalMaterialsInfo = {};
+          this.materialsInfo = {};
+          this.materials = {};
+          this.materialsArray = [];
+          this.nameLookup = {};
+
+          this.crossOrigin = 'anonymous';
+
+          this.side = ( this.options.side !== undefined ) ? this.options.side : THREE.FrontSide;
+          this.wrap = ( this.options.wrap !== undefined ) ? this.options.wrap : THREE.RepeatWrapping;
+        }
+
+        setCrossOrigin( value ) {
+          this.crossOrigin = value;
+          return this;
+        }
+
+        setManager( value ) {
+          this.manager = value;
+        }
+
+        setMaterials( materialsInfo ) {
+          this.originalMaterialsInfo = materialsInfo;
+          this.materialsInfo = this.convert( materialsInfo );
+          this.materials = {};
+          this.materialsArray = [];
+          this.nameLookup = {};
+        }
+
+        convert( materialsInfo ) {
+          if ( ! this.options ) return materialsInfo;
+
+          const converted = {};
+
+          for ( const mn in materialsInfo ) {
+            const mat = materialsInfo[ mn ];
+            const covmat = {};
+            converted[ mn ] = covmat;
+
+            for ( const prop in mat ) {
+              let save = true;
+              let value = mat[ prop ];
+              const lprop = prop.toLowerCase();
+
+              switch ( lprop ) {
+                case 'kd':
+                case 'ka':
+                case 'ke':
+                case 'ks':
+                  if ( this.options && this.options.normalizeRGB ) {
+                    value = [ value[ 0 ] / 255, value[ 1 ] / 255, value[ 2 ] / 255 ];
+                  }
+
+                  if ( this.options && this.options.ignoreZeroRGBs ) {
+                    if ( value[ 0 ] === 0 && value[ 1 ] === 0 && value[ 2 ] === 0 ) {
+                      save = false;
+                    }
+                  }
+
+                  break;
+
+                default:
+                  break;
+              }
+
+              if ( save ) {
+                covmat[ lprop ] = value;
+              }
+            }
+          }
+
+          return converted;
+        }
+
+        preload() {
+          for ( const mn in this.materialsInfo ) {
+            this.create( mn );
+          }
+        }
+
+        getIndex( materialName ) {
+          return this.nameLookup[ materialName ];
+        }
+
+        getAsArray() {
+          let index = 0;
+
+          for ( const mn in this.materialsInfo ) {
+            this.materialsArray[ index ] = this.create( mn );
+            this.nameLookup[ mn ] = index;
+            index ++;
+          }
+
+          return this.materialsArray;
+        }
+
+        create( materialName ) {
+          if ( this.materials[ materialName ] === undefined ) {
+            this.createMaterial_( materialName );
+          }
+
+          return this.materials[ materialName ];
+        }
+
+        createMaterial_( materialName ) {
+          const scope = this;
+          const mat = this.materialsInfo[ materialName ];
+          const original_mat = this.originalMaterialsInfo[ materialName ];
+
+          const params = {
+            name: materialName,
+            side: this.side
+          };
+
+          function resolveURL( baseUrl, url ) {
+            if ( typeof url !== 'string' || url === '' ) return '';
+
+            if ( /^https?:\/\//i.test( url ) ) return url;
+
+            return baseUrl + url;
+          }
+
+          function setMapForType( mapType, value, prop ) {
+            value = value.substring( value.lastIndexOf( ' ' ) + 1 );
+
+            if ( params[ mapType ] ) return;
+
+            const texParams = scope.getTextureParams( original_mat[ prop ] );
+            const map = scope.loadTexture( resolveURL( scope.baseUrl, value ), null, materialName );
+
+            map.repeat.copy( texParams.scale );
+            map.offset.copy( texParams.offset );
+            map.center.copy( texParams.center );
+
+            map.rotation = texParams.rotation;
+
+            map.channel = texParams.channel || 0;
+
+            map.wrapS = texParams.wrapS;
+            map.wrapT = texParams.wrapT;
+
+            map.colorSpace = THREE.NoColorSpace;
+
+            params[ mapType ] = map;
+          }
+
+          let use_phong = true;
+          let refraction_present = false;
+          let refraction_value;
+          let iridescenceThicknessRange = [ 100, 400 ];
+
+          for ( const prop in mat ) {
+            const value = mat[ prop ];
+            let n;
+
+            if ( value === '' ) continue;
+
+            const lprop = prop.toLowerCase();
+
+            switch ( lprop ) {
+              case 'ka':
+                params.aoMapIntensity = parseFloat( value[ 0 ] );
+                break;
+
+              case 'kd':
+                params.color = new THREE.Color().fromArray( value );
+                break;
+
+              case 'ks':
+                params.specular = new THREE.Color().fromArray( value );
+                break;
+
+              case 'ke':
+                params.emissive = new THREE.Color().fromArray( value );
+                break;
+
+              case 'map_ka':
+                setMapForType( 'aoMap', value, lprop );
+                break;
+
+              case 'map_kd':
+                setMapForType( 'map', value, lprop );
+                break;
+
+              case 'map_ks':
+                setMapForType( 'specularMap', value, lprop );
+                break;
+
+              case 'map_ke':
+              case 'map_emissive':
+                setMapForType( 'emissiveMap', value, lprop );
+                break;
+
+              case 'norm':
+              case 'map_kn':
+                setMapForType( 'normalMap', value, lprop );
+                break;
+
+              case 'bump':
+              case 'map_bump':
+                setMapForType( 'bumpMap', value, lprop );
+                break;
+
+              case 'map_d':
+                setMapForType( 'alphaMap', value, lprop );
+                params.transparent = true;
+                break;
+
+              case 'disp':
+              case 'map_disp':
+                setMapForType( 'displacementMap', value, lprop );
+                break;
+
+              case 'disp_b':
+                params.displacementBias = parseFloat( value );
+                break;
+
+              case 'disp_s':
+                params.displacementScale = parseFloat( value );
+                break;
+
+              case 'pli':
+                params.lightMapIntensity = parseFloat( value );
+                break;
+
+              case 'pa':
+                params.anisotropy = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'par':
+                params.anisotropyRotation = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'pad':
+                params.attenuationDistance = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'pac':
+                params.attenuationColor = new THREE.Color().fromArray( value.split( ' ' ).map( Number ) );
+                use_phong = false;
+                break;
+
+              case 'pe':
+                params.emissiveIntensity = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'pm':
+                params.metalness = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'pr':
+                params.roughness = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'pns':
+                params.normalScale = new THREE.Vector2().fromArray( value.split( ' ' ).map( Number ) );
+                break;
+
+              case 'pcc':
+                params.clearcoat = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'pcr':
+                params.clearcoatRoughness = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'pcn':
+                params.clearcoatNormalScale = new THREE.Vector2().fromArray( value.split( ' ' ).map( Number ) );
+                use_phong = false;
+                break;
+
+              case 'pdt':
+                params.depthTest = parseFloat( value ) === 1.0;
+                break;
+
+              case 'ni':
+                refraction_present = true;
+                refraction_value = parseFloat( value );
+                break;
+
+              case 'pi':
+                params.iridescence = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'pii':
+                params.iridescenceIOR = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'pitx':
+                iridescenceThicknessRange[ 0 ] = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'pity':
+                iridescenceThicknessRange[ 1 ] = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'pbr_ps':
+                params.sheen = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'ps':
+                params.sheenColor = new THREE.Color().fromArray( value.split( ' ' ).map( Number ) );
+                use_phong = false;
+                break;
+
+              case 'psr':
+                params.sheenRoughness = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'psp':
+                params.specularColor = new THREE.Color().fromArray( value.split( ' ' ).map( Number ) );
+                use_phong = false;
+                break;
+
+              case 'psi':
+                params.specularIntensity = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'pth':
+                params.thickness = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 'ptr':
+                params.transmission = parseFloat( value );
+                use_phong = false;
+                break;
+
+              case 's':
+                params.side = parseInt( value );
+                break;
+
+              case 'a':
+                params.alphaTest = parseFloat( value );
+                break;
+
+              case 'pbr_pl_map':
+                setMapForType( 'lightMap', value, lprop );
+                break;
+
+              case 'map_pa':
+                setMapForType( 'anisotropyMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_pm':
+                setMapForType( 'metalnessMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_pr':
+                setMapForType( 'roughnessMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_px':
+                setMapForType( 'metalnessMap', value, lprop );
+                setMapForType( 'roughnessMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_pcc':
+                setMapForType( 'clearcoatMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_pcn':
+                setMapForType( 'clearcoatNormalMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_pcr':
+                setMapForType( 'clearcoatRoughnessMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_pit':
+                setMapForType( 'iridescenceThicknessMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_pi':
+                setMapForType( 'iridescenceMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_psc':
+                setMapForType( 'sheenColorMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_psr':
+                setMapForType( 'sheenRoughnessMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_psp':
+                setMapForType( 'specularColorMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_psi':
+                setMapForType( 'specularIntensityMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_pth':
+                setMapForType( 'thicknessMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'map_ptr':
+                setMapForType( 'transmissionMap', value, lprop );
+                use_phong = false;
+                break;
+
+              case 'ns':
+                params.shininess = parseFloat( value );
+                break;
+
+              case 'd':
+                n = parseFloat( value );
+
+                if ( n < 1 ) {
+                  params.opacity = n;
+                  params.transparent = true;
+                }
+
+                break;
+
+              case 'tr':
+                n = parseFloat( value );
+
+                if ( this.options && this.options.invertTrProperty ) n = 1 - n;
+
+                if ( n > 0 ) {
+                  params.opacity = 1 - n;
+                  params.transparent = true;
+                }
+
+                break;
+
+              default:
+                break;
+            }
+          }
+
+          if ( use_phong === true ) {
+            if ( refraction_present === true ) params.refractionRatio = refraction_value;
+            this.materials[ materialName ] = new THREE.MeshPhongNodeMaterial( params );
+          } else {
+            if ( refraction_present === true ) params.ior = refraction_value;
+            if ( params.iridescence ) params.iridescenceThicknessRange = iridescenceThicknessRange;
+
+            if ( params.anisotropy && params.anisotropyMap && params.anisotropyRotation ) {
+              params.anisotropyMap.mapping = 300;
+              params.anisotropyRotation = - ( Math.asin( params.anisotropyRotation ) / params.anisotropy );
+            } else if ( params.anisotropyMap && params.anisotropy && ! params.anisotropyRotation ) {
+              params.anisotropyMap.mapping = 300;
+              params.anisotropyRotation = - Math.PI / 3;
+            } else if ( ! params.anisotropyMap && params.anisotropy && params.anisotropyRotation ) {
+              params.anisotropyRotation = - params.anisotropyRotation;
+            }
+
+            if ( params.transmission && params.transmission > 0 ) {
+              if ( params.metalnessMap !== undefined && params.metalness === undefined ) {
+                params.metalness = 0.01;
+              }
+
+              if ( params.roughnessMap !== undefined && params.roughness === undefined ) {
+                params.roughness = 0.01;
+              }
+
+              if ( params.roughnessMap !== undefined && params.roughness === 1 ) {
+                params.roughness = 0.95;
+              }
+
+              if ( params.metalnessMap === undefined && params.roughnessMap === undefined ) {
+                if ( params.metalness === undefined && ( params.roughness === undefined || params.roughness === 1.0 ) ) {
+                  params.roughness = 0.01;
+                }
+              }
+            }
+
+            this.materials[ materialName ] = new THREE.MeshPhysicalNodeMaterial( params );
+          }
+
+          return this.materials[ materialName ];
+        }
+
+        getTextureParams( value ) {
+          const texParams = {
+            scale: new THREE.Vector2( 1, 1 ),
+            offset: new THREE.Vector2( 0, 0 ),
+            center: new THREE.Vector2( 0, 0 ),
+            wrapS: THREE.RepeatWrapping,
+            wrapT: THREE.RepeatWrapping,
+            rotation: 0,
+            channel: 0
+          };
+
+          const items = value.split( /\s+/ );
+          let pos;
+
+          pos = items.indexOf( '-imfchan' );
+
+          if ( pos >= 0 ) {
+            texParams.channel = parseInt( items[ pos + 1 ] );
+            items.splice( pos, 2 );
+          }
+
+          pos = items.indexOf( '-bm' );
+
+          if ( pos >= 0 ) {
+            texParams.bumpScale = parseFloat( items[ pos + 1 ] );
+            items.splice( pos, 2 );
+          }
+
+          pos = items.indexOf( '-r' );
+
+          if ( pos >= 0 ) {
+            texParams.rotation = parseFloat( items[ pos + 1 ] );
+            items.splice( pos, 2 );
+          }
+
+          pos = items.indexOf( '-c' );
+
+          if ( pos >= 0 ) {
+            texParams.center.set( parseFloat( items[ pos + 1 ] ), parseFloat( items[ pos + 2 ] ) );
+            items.splice( pos, 3 );
+          }
+
+          pos = items.indexOf( '-s' );
+
+          if ( pos >= 0 ) {
+            texParams.scale.set( parseFloat( items[ pos + 1 ] ), parseFloat( items[ pos + 2 ] ) );
+            items.splice( pos, 4 );
+          }
+
+          pos = items.indexOf( '-o' );
+
+          if ( pos >= 0 ) {
+            texParams.offset.set( parseFloat( items[ pos + 1 ] ), parseFloat( items[ pos + 2 ] ) );
+            items.splice( pos, 4 );
+          }
+
+          pos = items.indexOf( '-w' );
+
+          if ( pos >= 0 ) {
+            texParams.wrapS = Number( items[ pos + 1 ] );
+            texParams.wrapT = Number( items[ pos + 2 ] );
+            items.splice( pos, 3 );
+          }
+
+          return texParams;
+        }
+
+        loadTexture( url, mapping, materialName ) {
+          const manager = ( this.manager !== undefined ) ? this.manager : DefaultLoadingManager;
+
+          let ext = this.materialsInfo[ materialName ].ext || '';
+
+          let loader;
+
+          if (ext !== '') {
+            loader = manager.getHandler( ext );
+          } else {
+            loader = manager.getHandler( url );
+          }
+
+          if ( loader === null ) loader = new THREE.TextureLoader( manager );
+
+          if ( loader.setCrossOrigin ) loader.setCrossOrigin( this.crossOrigin );
+
+          let texture = loader.load( url );
+
+          if ( ! texture ) texture = new THREE.Texture();
+
+          if ( mapping !== undefined ) texture.mapping = mapping;
+          if ( ext === '.tga' ) { texture.generateMipmaps = true; texture.flipY = true; }
+
+          return texture;
+        }
+      }
+
+      // Embedded MTL Loader - End
+
+      // Embedded OBJ Loader - Start
+
+      const _object_pattern = /^[og]\s*(.+)?/;
+      const _material_library_pattern = /^mtllib /;
+      const _material_use_pattern = /^usemtl /;
+      const _map_use_pattern = /^usemap /;
+      const _face_vertex_data_separator_pattern = /\s+/;
+
+      const _vA = new THREE.Vector3();
+      const _vB = new THREE.Vector3();
+      const _vC = new THREE.Vector3();
+
+      const _ab = new THREE.Vector3();
+      const _cb = new THREE.Vector3();
+
+      const _color = new THREE.Color();
+
+      function ParserState() {
+        const state = {
+          objects: [],
+          object: {},
+
+          vertices: [],
+          normals: [],
+          colors: [],
+          uvs: [],
+
+          materials: {},
+          materialLibraries: [],
+
+          startObject: function ( name, fromDeclaration ) {
+            if ( this.object && this.object.fromDeclaration === false ) {
+              this.object.name = name;
+              this.object.fromDeclaration = ( fromDeclaration !== false );
+              return;
+            }
+
+            const previousMaterial = ( this.object && typeof this.object.currentMaterial === 'function' ? this.object.currentMaterial() : undefined );
+
+            if ( this.object && typeof this.object._finalize === 'function' ) {
+              this.object._finalize( true );
+            }
+
+            this.object = {
+              name: name || '',
+              fromDeclaration: ( fromDeclaration !== false ),
+              geometry: {
+                vertices: [],
+                normals: [],
+                colors: [],
+                uvs: [],
+                hasUVIndices: false
+              },
+              materials: [],
+              smooth: true,
+
+              startMaterial: function ( name, libraries ) {
+                const previous = this._finalize( false );
+
+                if ( previous && ( previous.inherited || previous.groupCount <= 0 ) ) {
+                  this.materials.splice( previous.index, 1 );
+                }
+
+                const material = {
+                  index: this.materials.length,
+                  name: name || '',
+                  mtllib: ( Array.isArray( libraries ) && libraries.length > 0 ? libraries[ libraries.length - 1 ] : '' ),
+                  smooth: ( previous !== undefined ? previous.smooth : this.smooth ),
+                  groupStart: ( previous !== undefined ? previous.groupEnd : 0 ),
+                  groupEnd: - 1,
+                  groupCount: - 1,
+                  inherited: false,
+
+                  clone: function ( index ) {
+                    const cloned = {
+                      index: ( typeof index === 'number' ? index : this.index ),
+                      name: this.name,
+                      mtllib: this.mtllib,
+                      smooth: this.smooth,
+                      groupStart: 0,
+                      groupEnd: - 1,
+                      groupCount: - 1,
+                      inherited: false
+                    };
+
+                    cloned.clone = this.clone.bind( cloned );
+
+                    return cloned;
+                  }
+                };
+
+                this.materials.push( material );
+
+                return material;
+              },
+
+              currentMaterial: function () {
+                if ( this.materials.length > 0 ) {
+                  return this.materials[ this.materials.length - 1 ];
+                }
+
+                return undefined;
+              },
+
+              _finalize: function ( end ) {
+                const lastMultiMaterial = this.currentMaterial();
+
+                if ( lastMultiMaterial && lastMultiMaterial.groupEnd === - 1 ) {
+                  lastMultiMaterial.groupEnd = this.geometry.vertices.length / 3;
+                  lastMultiMaterial.groupCount = lastMultiMaterial.groupEnd - lastMultiMaterial.groupStart;
+                  lastMultiMaterial.inherited = false;
+                }
+
+                if ( end && this.materials.length > 1 ) {
+                  for ( let mi = this.materials.length - 1; mi >= 0; mi -- ) {
+                    if ( this.materials[ mi ].groupCount <= 0 ) {
+                      this.materials.splice( mi, 1 );
+                    }
+                  }
+                }
+
+                if ( end && this.materials.length === 0 ) {
+                  this.materials.push( {
+                    name: '',
+                    smooth: this.smooth
+                  } );
+                }
+
+                return lastMultiMaterial;
+              }
+            };
+
+            if ( previousMaterial && previousMaterial.name && typeof previousMaterial.clone === 'function' ) {
+              const declared = previousMaterial.clone( 0 );
+              declared.inherited = true;
+              this.object.materials.push( declared );
+            }
+
+            this.objects.push( this.object );
+          },
+
+          finalize: function () {
+            if ( this.object && typeof this.object._finalize === 'function' ) {
+              this.object._finalize( true );
+            }
+          },
+
+          parseVertexIndex: function ( value, len ) {
+            const index = parseInt( value, 10 );
+            return ( index >= 0 ? index - 1 : index + len / 3 ) * 3;
+          },
+
+          parseNormalIndex: function ( value, len ) {
+            const index = parseInt( value, 10 );
+            return ( index >= 0 ? index - 1 : index + len / 3 ) * 3;
+          },
+
+          parseUVIndex: function ( value, len ) {
+            const index = parseInt( value, 10 );
+            return ( index >= 0 ? index - 1 : index + len / 2 ) * 2;
+          },
+
+          addVertex: function ( a, b, c ) {
+            const src = this.vertices;
+            const dst = this.object.geometry.vertices;
+
+            dst.push( src[ a + 0 ], src[ a + 1 ], src[ a + 2 ] );
+            dst.push( src[ b + 0 ], src[ b + 1 ], src[ b + 2 ] );
+            dst.push( src[ c + 0 ], src[ c + 1 ], src[ c + 2 ] );
+          },
+
+          addVertexPoint: function ( a ) {
+            const src = this.vertices;
+            const dst = this.object.geometry.vertices;
+
+            dst.push( src[ a + 0 ], src[ a + 1 ], src[ a + 2 ] );
+          },
+
+          addVertexLine: function ( a ) {
+            const src = this.vertices;
+            const dst = this.object.geometry.vertices;
+
+            dst.push( src[ a + 0 ], src[ a + 1 ], src[ a + 2 ] );
+          },
+
+          addNormal: function ( a, b, c ) {
+            const src = this.normals;
+            const dst = this.object.geometry.normals;
+
+            dst.push( src[ a + 0 ], src[ a + 1 ], src[ a + 2 ] );
+            dst.push( src[ b + 0 ], src[ b + 1 ], src[ b + 2 ] );
+            dst.push( src[ c + 0 ], src[ c + 1 ], src[ c + 2 ] );
+          },
+
+          addFaceNormal: function ( a, b, c ) {
+            const src = this.vertices;
+            const dst = this.object.geometry.normals;
+
+            _vA.fromArray( src, a );
+            _vB.fromArray( src, b );
+            _vC.fromArray( src, c );
+
+            _cb.subVectors( _vC, _vB );
+            _ab.subVectors( _vA, _vB );
+            _cb.cross( _ab );
+
+            _cb.normalize();
+
+            dst.push( _cb.x, _cb.y, _cb.z );
+            dst.push( _cb.x, _cb.y, _cb.z );
+            dst.push( _cb.x, _cb.y, _cb.z );
+          },
+
+          addColor: function ( a, b, c ) {
+            const src = this.colors;
+            const dst = this.object.geometry.colors;
+
+            if ( src[ a ] !== undefined ) dst.push( src[ a + 0 ], src[ a + 1 ], src[ a + 2 ] );
+            if ( src[ b ] !== undefined ) dst.push( src[ b + 0 ], src[ b + 1 ], src[ b + 2 ] );
+            if ( src[ c ] !== undefined ) dst.push( src[ c + 0 ], src[ c + 1 ], src[ c + 2 ] );
+          },
+
+          addUV: function ( a, b, c ) {
+            const src = this.uvs;
+            const dst = this.object.geometry.uvs;
+
+            dst.push( src[ a + 0 ], src[ a + 1 ] );
+            dst.push( src[ b + 0 ], src[ b + 1 ] );
+            dst.push( src[ c + 0 ], src[ c + 1 ] );
+          },
+
+          addDefaultUV: function () {
+            const dst = this.object.geometry.uvs;
+
+            dst.push( 0, 0 );
+            dst.push( 0, 0 );
+            dst.push( 0, 0 );
+          },
+
+          addUVLine: function ( a ) {
+            const src = this.uvs;
+            const dst = this.object.geometry.uvs;
+
+            dst.push( src[ a + 0 ], src[ a + 1 ] );
+          },
+
+          addFace: function ( a, b, c, ua, ub, uc, na, nb, nc ) {
+            const vLen = this.vertices.length;
+
+            let ia = this.parseVertexIndex( a, vLen );
+            let ib = this.parseVertexIndex( b, vLen );
+            let ic = this.parseVertexIndex( c, vLen );
+
+            this.addVertex( ia, ib, ic );
+            this.addColor( ia, ib, ic );
+
+            if ( na !== undefined && na !== '' ) {
+              const nLen = this.normals.length;
+
+              ia = this.parseNormalIndex( na, nLen );
+              ib = this.parseNormalIndex( nb, nLen );
+              ic = this.parseNormalIndex( nc, nLen );
+
+              this.addNormal( ia, ib, ic );
+            } else {
+              this.addFaceNormal( ia, ib, ic );
+            }
+
+            if ( ua !== undefined && ua !== '' ) {
+              const uvLen = this.uvs.length;
+
+              ia = this.parseUVIndex( ua, uvLen );
+              ib = this.parseUVIndex( ub, uvLen );
+              ic = this.parseUVIndex( uc, uvLen );
+
+              this.addUV( ia, ib, ic );
+
+              this.object.geometry.hasUVIndices = true;
+            } else {
+              this.addDefaultUV();
+            }
+          },
+
+          addPointGeometry: function ( vertices ) {
+            this.object.geometry.type = 'Points';
+
+            const vLen = this.vertices.length;
+
+            for ( let vi = 0, l = vertices.length; vi < l; vi ++ ) {
+              const index = this.parseVertexIndex( vertices[ vi ], vLen );
+
+              this.addVertexPoint( index );
+              this.addColor( index );
+            }
+          },
+
+          addLineGeometry: function ( vertices, uvs ) {
+            this.object.geometry.type = 'Line';
+
+            const vLen = this.vertices.length;
+            const uvLen = this.uvs.length;
+
+            for ( let vi = 0, l = vertices.length; vi < l; vi ++ ) {
+              const index = this.parseVertexIndex( vertices[ vi ], vLen );
+
+              this.addVertexLine( index );
+              this.addColor( index );
+            }
+
+            for ( let uvi = 0, l = uvs.length; uvi < l; uvi ++ ) {
+              this.addUVLine( this.parseUVIndex( uvs[ uvi ], uvLen ) );
+            }
+          }
+        };
+
+        state.startObject( '', false );
+
+        return state;
+      }
+
+      class OBJLoader extends THREE.Loader {
+        constructor( manager ) {
+          super( manager );
+
+          this.materials = null;
+        }
+
+        load( url, onLoad, onProgress, onError ) {
+          const scope = this;
+
+          const loader = new THREE.FileLoader( this.manager );
+          loader.setPath( this.path );
+          loader.setRequestHeader( this.requestHeader );
+          loader.setWithCredentials( this.withCredentials );
+          loader.load( url, function ( text ) {
+            try {
+              onLoad( scope.parse( text ) );
+            } catch ( e ) {
+              if ( onError ) {
+                onError( e );
+              } else {
+                console.error( e );
+              }
+
+              scope.manager.itemError( url );
+            }
+          }, onProgress, onError );
+        }
+
+        setMaterials( materials ) {
+          this.materials = materials;
+
+          return this;
+        }
+
+        parse( text ) {
+          const state = new ParserState();
+
+          if ( text.indexOf( '\r\n' ) !== - 1 ) {
+            text = text.replace( /\r\n/g, '\n' );
+          }
+
+          if ( text.indexOf( '\\\n' ) !== - 1 ) {
+            text = text.replace( /\\\n/g, '' );
+          }
+
+          const lines = text.split( '\n' );
+          let result = [];
+
+          for ( let i = 0, l = lines.length; i < l; i ++ ) {
+            const line = lines[ i ].trimStart();
+
+            if ( line.length === 0 ) continue;
+
+            const lineFirstChar = line.charAt( 0 );
+
+            if ( lineFirstChar === '#' ) continue;
+
+            if ( lineFirstChar === 'v' ) {
+              const data = line.split( _face_vertex_data_separator_pattern );
+
+              switch ( data[ 0 ] ) {
+                case 'v':
+                  state.vertices.push(
+                    parseFloat( data[ 1 ] ),
+                    parseFloat( data[ 2 ] ),
+                    parseFloat( data[ 3 ] )
+                  );
+
+                  if ( data.length >= 7 ) {
+                    _color.setRGB(
+                      parseFloat( data[ 4 ] ),
+                      parseFloat( data[ 5 ] ),
+                      parseFloat( data[ 6 ] )
+                    ).convertSRGBToLinear();
+
+                    state.colors.push( _color.r, _color.g, _color.b );
+                  } else {
+                    state.colors.push( undefined, undefined, undefined );
+                  }
+
+                  break;
+
+                case 'vn':
+                  state.normals.push(
+                    parseFloat( data[ 1 ] ),
+                    parseFloat( data[ 2 ] ),
+                    parseFloat( data[ 3 ] )
+                  );
+
+                  break;
+
+                case 'vt':
+                  state.uvs.push(
+                    parseFloat( data[ 1 ] ),
+                    parseFloat( data[ 2 ] )
+                  );
+
+                  break;
+              }
+            } else if ( lineFirstChar === 'f' ) {
+              const lineData = line.slice( 1 ).trim();
+              const vertexData = lineData.split( _face_vertex_data_separator_pattern );
+              const faceVertices = [];
+
+              for ( let j = 0, jl = vertexData.length; j < jl; j ++ ) {
+                const vertex = vertexData[ j ];
+
+                if ( vertex.length > 0 ) {
+                  const vertexParts = vertex.split( '/' );
+                  faceVertices.push( vertexParts );
+                }
+              }
+
+              const v1 = faceVertices[ 0 ];
+
+              for ( let j = 1, jl = faceVertices.length - 1; j < jl; j ++ ) {
+                const v2 = faceVertices[ j ];
+                const v3 = faceVertices[ j + 1 ];
+
+                state.addFace(
+                  v1[ 0 ], v2[ 0 ], v3[ 0 ],
+                  v1[ 1 ], v2[ 1 ], v3[ 1 ],
+                  v1[ 2 ], v2[ 2 ], v3[ 2 ]
+                );
+              }
+            } else if ( lineFirstChar === 'l' ) {
+              const lineParts = line.substring( 1 ).trim().split( ' ' );
+              let lineVertices = [];
+              const lineUVs = [];
+
+              if ( line.indexOf( '/' ) === - 1 ) {
+                lineVertices = lineParts;
+              } else {
+                for ( let li = 0, llen = lineParts.length; li < llen; li ++ ) {
+                  const parts = lineParts[ li ].split( '/' );
+
+                  if ( parts[ 0 ] !== '' ) lineVertices.push( parts[ 0 ] );
+                  if ( parts[ 1 ] !== '' ) lineUVs.push( parts[ 1 ] );
+                }
+              }
+
+              state.addLineGeometry( lineVertices, lineUVs );
+            } else if ( lineFirstChar === 'p' ) {
+              const lineData = line.slice( 1 ).trim();
+              const pointData = lineData.split( ' ' );
+
+              state.addPointGeometry( pointData );
+            } else if ( ( result = _object_pattern.exec( line ) ) !== null ) {
+              const name = ( ' ' + result[ 0 ].slice( 1 ).trim() ).slice( 1 );
+
+              state.startObject( name );
+            } else if ( _material_use_pattern.test( line ) ) {
+              state.object.startMaterial( line.substring( 7 ).trim(), state.materialLibraries );
+            } else if ( _material_library_pattern.test( line ) ) {
+              state.materialLibraries.push( line.substring( 7 ).trim() );
+            } else if ( _map_use_pattern.test( line ) ) {
+              console.warn( 'THREE.OBJLoader: Rendering identifier "usemap" not supported. Textures must be defined in MTL files.' );
+            } else if ( lineFirstChar === 's' ) {
+              result = line.split( ' ' );
+
+              if ( result.length > 1 ) {
+                const value = result[ 1 ].trim().toLowerCase();
+                state.object.smooth = ( value !== '0' && value !== 'off' );
+              } else {
+                state.object.smooth = true;
+              }
+
+              const material = state.object.currentMaterial();
+              if ( material ) material.smooth = state.object.smooth;
+            } else {
+              if ( line === '\0' ) continue;
+
+              throw new Error( 'THREE.OBJLoader: Unexpected line: "' + line + '"' );
+            }
+          }
+
+          state.finalize();
+
+          const container = new THREE.Group();
+          container.materialLibraries = [].concat( state.materialLibraries );
+
+          const hasPrimitives = ! ( state.objects.length === 1 && state.objects[ 0 ].geometry.vertices.length === 0 );
+
+          if ( hasPrimitives === true ) {
+            for ( let i = 0, l = state.objects.length; i < l; i ++ ) {
+              const object = state.objects[ i ];
+              const geometry = object.geometry;
+              const materials = object.materials;
+              const isLine = ( geometry.type === 'Line' );
+              const isPoints = ( geometry.type === 'Points' );
+              let hasVertexColors = false;
+
+              if ( geometry.vertices.length === 0 ) continue;
+
+              const buffergeometry = new THREE.BufferGeometry();
+
+              buffergeometry.setAttribute( 'position', new THREE.Float32BufferAttribute( geometry.vertices, 3 ) );
+
+              if ( geometry.normals.length > 0 ) {
+                buffergeometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( geometry.normals, 3 ) );
+              }
+
+              if ( geometry.colors.length > 0 ) {
+                hasVertexColors = true;
+                buffergeometry.setAttribute( 'color', new THREE.Float32BufferAttribute( geometry.colors, 3 ) );
+              }
+
+              if ( geometry.hasUVIndices === true ) {
+                buffergeometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( geometry.uvs, 2 ) );
+              }
+
+              const createdMaterials = [];
+
+              for ( let mi = 0, miLen = materials.length; mi < miLen; mi ++ ) {
+                const sourceMaterial = materials[ mi ];
+                const materialHash = sourceMaterial.name + '_' + sourceMaterial.smooth + '_' + hasVertexColors;
+                let material = state.materials[ materialHash ];
+
+                if ( this.materials !== null ) {
+                  material = this.materials.create( sourceMaterial.name );
+
+                  if ( isLine && material && ! ( material instanceof THREE.LineBasicMaterial ) ) {
+                    const materialLine = new THREE.LineBasicNodeMaterial();
+                    Material.prototype.copy.call( materialLine, material );
+                    materialLine.color.copy( material.color );
+                    material = materialLine;
+                  } else if ( isPoints && material && ! ( material instanceof THREE.PointsMaterial ) ) {
+                    const materialPoints = new THREE.PointsNodeMaterial( { size: 10, sizeAttenuation: false } );
+                    Material.prototype.copy.call( materialPoints, material );
+                    materialPoints.color.copy( material.color );
+                    materialPoints.map = material.map;
+                    material = materialPoints;
+                  }
+                }
+
+                if ( material === undefined ) {
+                  if ( isLine ) {
+                    material = new THREE.LineBasicNodeMaterial();
+                  } else if ( isPoints ) {
+                    material = new THREE.PointsNodeMaterial( { size: 1, sizeAttenuation: false } );
+                  } else {
+                    material = new THREE.MeshPhongNodeMaterial();
+                  }
+
+                  material.name = sourceMaterial.name;
+                  material.flatShading = sourceMaterial.smooth ? false : true;
+                  material.vertexColors = hasVertexColors;
+
+                  state.materials[ materialHash ] = material;
+                }
+
+                createdMaterials.push( material );
+              }
+
+              let mesh;
+
+              if ( createdMaterials.length > 1 ) {
+                for ( let mi = 0, miLen = materials.length; mi < miLen; mi ++ ) {
+                  const sourceMaterial = materials[ mi ];
+                  buffergeometry.addGroup( sourceMaterial.groupStart, sourceMaterial.groupCount, mi );
+                }
+
+                if ( isLine ) {
+                  mesh = new THREE.LineSegments( buffergeometry, createdMaterials );
+                } else if ( isPoints ) {
+                  mesh = new THREE.Points( buffergeometry, createdMaterials );
+                } else {
+                  mesh = new THREE.Mesh( buffergeometry, createdMaterials );
+                }
+              } else {
+                if ( isLine ) {
+                  mesh = new THREE.LineSegments( buffergeometry, createdMaterials[ 0 ] );
+                } else if ( isPoints ) {
+                  mesh = new THREE.Points( buffergeometry, createdMaterials[ 0 ] );
+                } else {
+                  mesh = new THREE.Mesh( buffergeometry, createdMaterials[ 0 ] );
+                }
+              }
+
+              mesh.name = object.name;
+
+              container.add( mesh );
+            }
+          } else {
+            if ( state.vertices.length > 0 ) {
+              const material = new THREE.PointsNodeMaterial( { size: 1, sizeAttenuation: false } );
+
+              const buffergeometry = new THREE.BufferGeometry();
+
+              buffergeometry.setAttribute( 'position', new Float32BufferAttribute( state.vertices, 3 ) );
+
+              if ( state.colors.length > 0 && state.colors[ 0 ] !== undefined ) {
+                buffergeometry.setAttribute( 'color', new Float32BufferAttribute( state.colors, 3 ) );
+                material.vertexColors = true;
+              }
+
+              const points = new Points( buffergeometry, material );
+              container.add( points );
+            }
+          }
+
+          return container;
+        }
+      }
+
+      // OBJ Loader Ends
+
+      manager = new THREE.LoadingManager();
+      manager.onLoad = function() { mouse_wheel = true; }
+
+      file_loader = new THREE.FileLoader( manager );
+      file_loader.setResponseType( 'arraybuffer' );
+
+      obj_loader = new OBJLoader( manager );
+      mtl_loader = new MTLLoader( manager );
+    </script>
+
+    <style>
+      body, html {
+        position: relative;
+        display: block;
+        background-color: black;
+        width: 100%;
+        min-height: 100vh;
+        border: 0;
+        padding: 0;
+        margin: 0;
+        overflow: hidden;
+      }
+
+      button {
+        background-color: transparent;
+        border: 1px solid blue;
+        -webkit-border-radius: 3px;
+        border-radius: 3px;
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+        min-width: 19px;
+        height: 22px;
+        padding: 1px;
+      }
+
+      label {
+        vertical-align: middle;
+        height: 22px;
+        margin: 2px 0 2px 0;
+      }
+
+      input[type=color] {
+        border: 1px solid whitesmoke;
+        margin: 2px 3px 2px -2px;
+        vertical-align: middle;
+        background: none;
+        height: 20px;
+        width: 16px;
+        padding: 0;
+      }
+
+      input[type=file] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        max-width: 160px;
+      }
+
+      input[type=range] {
+        vertical-align: middle;
+        margin: 2px 0 2px 0;
+        min-width: 30px;
+      }
+
+      input[type=text] {
+        vertical-align: middle;
+        margin: 2px 2px 2px 0;
+      }
+
+      .dropdown {
+        background-color: transparent;
+        border: 1px solid #DEAF64;
+        -webkit-border-radius: 3px;
+        border-radius: 3px;
+        vertical-align: middle;
+        display: inline-block;
+        position: relative;
+        min-width: 40px;
+        font-size: 85%;
+        color: blue;
+        border: none;
+        padding: 1px;
+      }
+
+      .dropdown-content {
+        background-color: #FFFAD5;
+        border: 1px solid #DEAF64;
+        -webkit-border-radius: 3px;
+        border-radius: 3px;
+        position: absolute;
+        display: none;
+        margin-top: 2px;
+        z-index: 10;
+      }
+
+      .error_msg {
+        background-color: transparent;
+        position: absolute;
+        text-align: center;
+        font-size: x-large;
+        display: none;
+        color: red;
+        width: 240px;
+        height: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .loading_msg {
+        background-color: transparent;
+        color: greenyellow;
+        position: absolute;
+        text-align: center;
+        font-size: large;
+        height: 240px;
+        width: 240px;
+        top: 50%;
+        left: 50%;
+        margin-left: -127px;
+        padding: 10px;
+        border: none;
+      }
+
+      .fm {
+        color: navy;
+        width: 99%;
+        border: 1px solid navy;
+        -webkit-border-radius: 2px;
+        border-radius: 2px;
+        padding: 4px;
+        margin: 1px;
+      }
+
+      .fixed-menu {
+        background-color: whitesmoke;
+        display: inline-block;
+        position: fixed;
+        padding: 1px;
+        width: 100%;
+        z-index: 1;
+        margin: 0;
+      }
+    </style>
+
+    <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- Using three.js library: https://github.com/mrdoob/three.js -->
+    <!-- OBJ Examples from: https://github.com/mrdoob/three.js -->
+    <!-- More OBJ examples: -->
+    <!--   https://people.math.sc.edu/Burkardt/data/data.html -->
+    <!--   http://casual-effects.com/data/index.html -->
+    <!--   https://www.videocopilot.net/blog/2016/05/free-star-wars-model-pack/ -->
+    <!-- Also see: https://davidoreilly.itch.io/walt-disney-3d-head , http://www.davidoreilly.com/ -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>OBJ+MTL WebGPU (r168)</title>
+  </head>
+  <body onload="reset_all(); document_ready();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm" id="fm1">
+        <button title="Get remote model via URL" id="btn_url" onclick="show_url()" style="min-width: 38px;">URL</button>
+        <label for="btn_url" title="Get remote model via URL"></label>
+        <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
+        <label for="btn_file_input" title="Browse Local Files"></label>
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".zip, .obj, .mtl, .dib, .dds, .ktx2, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
+        <label for="back_color" title="Background Color">B</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
+          <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
+            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="50" step="0.05" value="5" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
+            <span id="dli_val">5</span>
+          </div>
+        </button>
+        <label for="btn_dc_dli" title="Directional Light Intensity"></label>
+        <button title="Toggle Flat Shading" id="btn_flat" onclick="set_flat();" disabled>F</button>
+        <label for="btn_flat" title="Toggle Flat Shading"></label>
+        <button title="Toggle Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
+        <label for="btn_wireframe" title="Toggle Wireframe"></label>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="min-width: 15px;" disabled>&#x2191</button>
+        <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="width: calc(75% - 12px);" />
+        <button title="Load" id="btn_load" onclick="load_url_file();" style="min-width: 8.5%;">Load</button>
+        <label for="btn_load" title="Load"></label>
+        <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
+        <label for="btn_clear" title="Clear"></label>
+      </div>
+      <div class="fm" id="div_message" style="width: 99%; margin: 2px 0 2px 1px; color: maroon;">
+        Use inputs above
+      </div>
+    </div>
+
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">OBJ WebGPU</div>
+
+    <script>
+      function hide_dropdown_dli() { $('#dc_dli').fadeOut(); mouse_wheel = true; }
+
+      function show_hide_dropdown_dli() {
+        if ($('#dc_dli')[ 0 ].style.display === 'none') {
+          $('#dc_dli').fadeIn();
+
+          $('#dc_dli')[ 0 ].style.marginTop = '2px';
+
+          $('#directional_light_intensity').focus();
+        } else {
+          $('#dc_dli').fadeOut();
+        }
+
+        mouse_wheel = true;
+      }
+
+      function return_false() { return false; }
+
+      function show_url() {
+        if (url_displayed === true) {
+          document.getElementById('url').style.display = 'none';
+          document.getElementById('btn_url').style.backgroundColor = 'transparent';
+          url_displayed = false;
+        } else {
+          document.getElementById('url').style.display = 'block';
+          document.getElementById('btn_url').style.backgroundColor = 'lightgreen';
+          url_displayed = true;
+        }
+
+        resize();
+
+        mouse_wheel = true;
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+
+        window.addEventListener( 'pointerdown', ( event ) => { mouse_down = true; }, false);
+        window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
+        window.addEventListener( 'keydown', ( event ) => {
+          if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
+            controls.listenToKeyEvents( window );
+            mouse_wheel = true;
+          }
+        }, false);
+        window.addEventListener( 'keyup', ( event ) => {
+          if (arrow_keys.some( k => k === event.key )) {
+            controls.stopListenToKeyEvents();
+            mouse_wheel = false;
+          }
+        }, false);
+      }
+
+      function resize() {
+        if (scene !== undefined) {
+          mouse_wheel = true;
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          renderer.setSize( ww, wh );
+
+          camera.aspect = ww / wh;
+          camera.updateProjectionMatrix();
+
+          mouse_wheel = true;
+        }
+      }
+    </script>
+
+    <script>
+      var THREE, fflate, manager, file_loader, obj_loader, mtl_loader;
+      var Obj, dds_loader, ktx2_loader, tga_loader, render_requested;
+      var controls, renderer, scene, camera, bounding_box;
+      var mouse_down, mouse_wheel, events_initialized;
+      var ambientLight, directionalLight, texture_maps;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var first_run = false, fr_count = 0, count = 0;
+      var flat_shading_enabled, wireframe_enabled, isMobile;
+      var url_displayed = false, url_loading = false, textures, map_strings;
+      var selected_mtl_file, selected_mtl_url_file, selected_obj_url_file, zip_file;
+      var selected_url_file = '', selected_obj_file, local_files, local_files_indexes;
+
+      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
+
+      function set_back_color() {
+        let bg_colors = document.getElementById('back_color').value;
+
+        scene.background = new THREE.Color().setRGB(
+          parseInt( bg_colors.substring( 1, 3 ), 16 ) / 255.0,
+          parseInt( bg_colors.substring( 3, 5 ), 16 ) / 255.0,
+          parseInt( bg_colors.substring( 5 ), 16 ) / 255.0
+        );
+
+        mouse_wheel = true;
+      }
+
+      function set_directional_light_intensity() {
+        let dli_value = document.getElementById('directional_light_intensity').value;
+        document.getElementById('dli_val').innerText = dli_value;
+        directionalLight.intensity = parseFloat( dli_value );
+        mouse_wheel = true;
+      }
+
+      function set_initial_scale() {
+        // Set the initial scale of the object so it hopefully comes to view
+
+        bounding_box.setFromObject( Obj );
+        let size = bounding_box.getSize( new THREE.Vector3() );
+        let center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
+
+        // Move to the center
+
+        if (center.x !== 0) Obj.translateX( center.x );
+        if (center.y !== 0) Obj.translateY( center.y );
+        if (center.z !== 0) Obj.translateZ( center.z );
+
+        // Scale according to window width / height, whichever is greater
+
+        if (ww > wh) {
+          Obj.scale.multiplyScalar( ( wh / size.y ) * 0.15 );
+        } else {
+          Obj.scale.multiplyScalar( ( ww / size.x ) * 0.15 );
+        }
+
+        // Get center coordinates and move to the center again
+
+        bounding_box.setFromObject( Obj );
+        size = bounding_box.getSize( new THREE.Vector3() );
+        center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
+
+        if (center.x !== 0) Obj.translateX( center.x );
+        if (center.y !== 0) Obj.translateY( center.y );
+        if (center.z !== 0) Obj.translateZ( center.z );
+
+        // Scale again and re-center if the model's width / height is greater than the screen's width / height
+
+        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
+          Obj.scale.multiplyScalar( ( ww / (ww > wh ? size.x : size.y) ) );
+
+          bounding_box.setFromObject( Obj );
+          size = bounding_box.getSize( new THREE.Vector3() );
+          center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
+
+          if (center.x !== 0) Obj.translateX( center.x );
+          if (center.y !== 0) Obj.translateY( center.y );
+          if (center.z !== 0) Obj.translateZ( center.z );
+        }
+
+        // Set the camera's z distance
+
+        camera.position.z = bounding_box.max.z + 250;
+        camera.updateProjectionMatrix();
+
+        mouse_wheel = true;
+      }
+
+      function quick_x_rotation( angle ) {
+        Obj.rotateX( Math.PI * parseFloat( angle ) );
+
+        mouse_wheel = true;
+      }
+
+      // modified decompress function from TextureUtils.js
+
+      async function decompress( texture, maxTextureSize = Infinity, renderer = null ) {
+
+        let _renderer = renderer;
+        let resize = false;
+
+        texture.colorSpace = THREE.SRGBColorSpace;
+        texture.needsUpdate = true;
+
+        // WebGPU currently does not seem to like non-power-of-two textures
+
+        let width = texture.image.width;
+        let height = texture.image.height;
+
+        if ( ! THREE.MathUtils.isPowerOfTwo( width ) || ! THREE.MathUtils.isPowerOfTwo( height )) {
+
+          width = THREE.MathUtils.ceilPowerOfTwo( width );
+          height = THREE.MathUtils.ceilPowerOfTwo( height );
+          resize = true;
+
+        }
+
+        const _camera = new THREE.PerspectiveCamera();
+
+        // Set the texture as scene's background
+
+        const _scene = new THREE.Scene();
+        _scene.background = texture;
+
+        if ( ! _renderer ) {
+
+          if ( THREE.WebGPURenderer ) {
+
+            _renderer = new THREE.WebGPURenderer( { antialias: false } );
+            await _renderer.init();
+
+          } else {
+
+            _renderer = new THREE.WebGLRenderer( { antialias: false } );
+
+          }
+
+        }
+
+        _renderer.setSize( Math.min( width, maxTextureSize ), Math.min( height, maxTextureSize ) );
+        _renderer.clear();
+        _renderer.render( _scene, _camera );
+
+        let readableTexture = new THREE.CanvasTexture( _renderer.domElement );
+
+        // Resize back to original texture size
+
+        if (resize === true) {
+
+          await new Promise( resolve => {
+
+            let canvas = document.createElement( 'canvas' );
+            canvas.width = texture.image.width;
+            canvas.height = texture.image.height;
+
+            let ctx = canvas.getContext( '2d' );
+
+            let img = new Image();
+
+            img.onload = function() {
+
+              ctx.drawImage(this, 0, 0, canvas.width, canvas.height);
+              resolve( readableTexture.image = canvas );
+
+            }
+
+            img.src = readableTexture.image.toDataURL( 'image/png', 1 );
+
+          });
+
+        }
+
+        readableTexture.colorSpace = THREE.SRGBColorSpace;
+        readableTexture.minFilter = texture.minFilter || THREE.LinearMipmapLinearFilter;
+        readableTexture.magFilter = texture.magFilter || THREE.LinearFilter;
+        readableTexture.wrapS = texture.wrapS || THREE.RepeatWrapping;
+        readableTexture.wrapT = texture.wrapT || THREE.RepeatWrapping;
+        readableTexture.name = texture.name;
+        readableTexture.needsUpdate = true;
+
+        if ( _renderer ) {
+          _scene.background.dispose();
+          texture.dispose();
+
+          _renderer.dispose();
+          _renderer = null;
+        }
+
+        return readableTexture;
+
+      }
+
+      async function process_loaded_zip( z_file ) {
+        let image_extensions = [ '.bmp', '.dds', '.dib', '.gif', '.jpg', '.jpeg', '.jfif', '.ktx2',
+          '.pjpeg', '.pjp', '.png', '.svg', '.tga', '.webp' ];
+
+        let mime_type = 'image/';
+
+        for ( const key of Object.keys( z_file ) ) {
+
+          let key_lc = key.toLowerCase();
+
+          if ( key_lc.endsWith( '.obj' ) ) {
+            selected_obj_file = await fflate.strFromU8( z_file[ key ] );
+          } else if ( key_lc.endsWith( '.mtl' ) ) {
+            selected_mtl_file = await fflate.strFromU8( z_file[ key ] );
+          } else if (image_extensions.some( ext => key_lc.endsWith( ext ) )) {
+            let ext = key_lc.substring( key_lc.lastIndexOf( '.' ) + 1 );
+
+            switch ( ext ) {
+              case 'png':
+                mime_type += 'png';
+    						break;
+
+              case 'jpg':
+              case 'pjp':
+              case 'jpeg':
+              case 'jfif':
+              case 'pjpeg':
+                mime_type += 'jpeg';
+                break;
+
+              case 'bmp':
+              case 'dib':
+                mime_type += 'bmp';
+                break;
+
+              case 'gif':
+                mime_type += 'gif';
+                break;
+
+              case 'svg':
+                mime_type += 'svg+xml';
+                break;
+
+              case 'webp':
+                mime_type += 'webp';
+                break;
+
+              default:
+                break;
+            }
+
+            // handle DDS, KTX2 and TGA separately
+            if ( ext === 'dds' || ext === 'ktx2' || ext === 'tga' ) {
+              let loader = (ext === 'dds') ? dds_loader : ((ext === 'ktx2') ? ktx2_loader : tga_loader);
+
+              let tex, ktx2, dds;
+
+              if ( ext === 'tga' ) {
+                tex = loader.parse( z_file[ key ].buffer );
+
+                // convert TGA to PNG
+                let canvas = document.createElement( 'canvas' );
+                let ctx = canvas.getContext( '2d' );
+                canvas.width = tex.width;
+                canvas.height = tex.height;
+
+                let imgData = new ImageData( new Uint8ClampedArray( tex.data ), tex.width, tex.height );
+                ctx.putImageData( imgData, 0, 0 );
+
+                textures[ key ] = canvas.toDataURL( 'image/png', 1 );
+              } else if ( ext === 'ktx2' ) {
+                await new Promise( resolve => {
+                  loader.parse( z_file[ key ].buffer, function( texture ) {
+                    resolve( ktx2 = texture );
+                  });
+                });
+
+                // convert KTX2 to PNG
+                tex = new THREE.CompressedTexture( ktx2.mipmaps, ktx2.source.data.width, ktx2.source.data.height, ktx2.format );
+                tex.needsUpdate = true;
+
+                let canvas_tex = await decompress( tex );
+
+                textures[ key ] = canvas_tex.image.toDataURL( 'image/png', 1 );
+              } else {
+                dds = await loader.parse( z_file[ key ].buffer, true );
+
+                // convert DDS to PNG
+                tex = new THREE.CompressedTexture( dds.mipmaps, dds.width, dds.height, dds.format );
+                tex.needsUpdate = true;
+
+                let canvas_tex = await decompress( tex );
+
+                textures[ key ] = canvas_tex.image.toDataURL( 'image/png', 1 );
+              }
+            } else {
+              let blob = new Blob( [ z_file[ key ].buffer ], { type: mime_type } );
+              textures[ key ] = URL.createObjectURL( blob );
+              URL.revokeObjectURL( blob );
+            }
+          }
+        }
+      }
+
+      async function init() {
+        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+
+        document.getElementById('div_message').innerHTML = 'Loading ... ' + pw;
+        document.getElementById('div_message').style.display = '';
+
+        if (scene) {
+          mouse_wheel = true;
+
+          if (Obj) await scene_cleanup();
+
+          if ( Object.entries( textures ).length > 0 ) {
+            Object.keys( textures ).forEach( ( key ) => {
+              delete textures[ key ];
+            });
+          }
+
+          await reset_all( true );
+        }
+
+        enable_disable( true );
+
+        if (dds_loader === undefined) {
+          const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
+          dds_loader = new DDSLoader( manager );
+          manager.addHandler( /\.dds$/i, dds_loader );
+        }
+
+        if (ktx2_loader === undefined) {
+          const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
+          ktx2_loader = new KTX2Loader( manager );
+          ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/libs/basis/" );
+          manager.addHandler( /\.ktx2$/i, ktx2_loader );
+        }
+
+        if (tga_loader === undefined) {
+          const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
+          tga_loader = new TGALoader( manager );
+          manager.addHandler( /\.tga$/i, tga_loader );
+        }
+
+        obj_loader.setMaterials( null );
+
+        selected_obj_file = null;
+        selected_obj_url_file = null;
+        selected_mtl_file = null;
+        selected_mtl_url_file = null;
+        local_files_indexes = [];
+        textures = {};
+        local_files = null;
+        zip_file = null;
+        mouse_down = false;
+        mouse_wheel = true;
+        wireframe_enabled = false;
+        flat_shading_enabled = false;
+        render_requested = false;
+        bounding_box = new THREE.Box3();
+
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (renderer === undefined) {
+          try {
+            renderer = new THREE.WebGPURenderer( { antialias: true, alpha: true, logarithmicDetphBuffer: true } );
+            await renderer.init();
+          } catch ( error ) {
+            handle_error( error );
+            return;
+          }
+
+          renderer.setPixelRatio( window.devicePixelRatio < 1.5 ? window.devicePixelRatio : 2.0 );
+          renderer.outputColorSpace = THREE.SRGBColorSpace;
+          renderer.toneMapping = THREE.NeutralToneMapping;
+          renderer.toneMappingExposure = 1.0;
+          renderer.setSize( ww, wh );
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.autoClear = false;
+
+          if (ktx2_loader) {
+            ktx2_loader.detectSupport( renderer );
+            await ktx2_loader.init();
+          }
+
+          document.body.appendChild( renderer.domElement );
+        }
+
+        if (url_loading === false) {
+          let img_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF',
+            '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
+
+          // Loaded file(s)
+          local_files = document.getElementById('file_input').files;
+
+          for (let i = 0; i < local_files.length; i++) {
+            let fn_uc = local_files[ i ].name.toUpperCase();
+
+            if (fn_uc.endsWith('.ZIP')) { zip_file = i; }
+            else if (fn_uc.endsWith('.MTL')) { selected_mtl_file = i; }
+            else if (fn_uc.endsWith('.OBJ')) { selected_obj_file = i; }
+            else if (img_extensions.some( ext => fn_uc.endsWith( ext ) )) {
+              let url = URL.createObjectURL( local_files[ i ] );
+              local_files_indexes.push( i );
+
+              // handle DDS, KTX2 and TGA separately
+              if ( fn_uc.endsWith('.DDS') || fn_uc.endsWith('.KTX2') ) {
+                let loader = fn_uc.endsWith('.DDS') ? dds_loader : ktx2_loader;
+
+                let tex, ctex, canvas_tex;
+
+                await new Promise( resolve => {
+                  loader.load( url, function( texture ) {
+                    resolve( ctex = texture );
+                  });
+                });
+
+                // convert to PNG
+                tex = new THREE.CompressedTexture( ctex.mipmaps, ctex.source.data.width, ctex.source.data.height, ctex.format );
+                tex.needsUpdate = true;
+
+                canvas_tex = await decompress( tex );
+
+                textures[ local_files[ i ].name ] = canvas_tex.image.toDataURL( 'image/png', 1 );
+              } else if (fn_uc.endsWith('.TGA')) {
+                await new Promise( resolve => {
+                  tga_loader.load( url, function( texture ) {
+                    resolve( tex = texture );
+                  });
+                });
+
+                let canvas_tex = await decompress( tex );
+
+                textures[ local_files[ i ].name ] = canvas_tex.image.toDataURL( 'image/png', 1 );
+              } else {
+                let blob = new Blob( [ await local_files[ i ].arrayBuffer() ], { type: local_files[ i ].type } );
+                textures[ local_files[ i ].name ] = URL.createObjectURL( blob );
+                URL.revokeObjectURL( blob );
+              }
+
+              URL.revokeObjectURL( local_files[ i ] );
+            }
+          };
+
+          if (selected_obj_file === null && zip_file === null) {
+            handle_error( 'No valid file selected!' );
+            return;
+          }
+
+          selected_url_file = '';
+        } else {
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          local_files_indexes.length = 0;
+          url_loading = false;
+        }
+
+        if (scene === undefined) scene = new THREE.Scene();
+
+        scene.backgroundBlurriness = 0;
+        scene.backgroundIntensity = 1.0;
+
+        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+        if (camera === undefined) {
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
+          camera.position.set( 0, 0, 250 );
+          scene.add( camera );
+        }
+
+        // Add AmbientLight to the scene
+        if (ambientLight === undefined) {
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.5 );
+          ambientLight.position.set( 0, 0, -250 );
+          camera.add( ambientLight );
+        }
+
+        // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
+        if (directionalLight === undefined) {
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 5 );
+          directionalLight.position.set( 0, 150, 250 );
+          directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
+          camera.add( directionalLight );
+        }
+
+        if (controls === undefined) {
+          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+
+          controls = new OrbitControls( camera, renderer.domElement );
+          controls.zoomToCursor = true;
+          controls.zoomSpeed = 0.6;
+          controls.rotateSpeed = 0.6;
+          controls.keyPanSpeed = 0.6; 
+          controls.panSpeed = 0.6;
+          //controls.enableDamping = true;
+          //controls.dampingFactor = 0.05;
+          //controls.enableKeys = false;
+          //controls.enableZoom = true;
+          //controls.maxPolarAngle = 2.2;
+          //controls.minPolarAngle = 1.1;
+          //controls.minDistance = 2;
+          //controls.maxDistance = 500;
+        }
+
+        if (scene.environment === null) {
+          let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/water.jpg';
+
+          new THREE.TextureLoader().load( url, async function( texture ) {
+            texture.mapping = THREE.EquirectangularReflectionMapping;
+            texture.colorSpace = THREE.SRGBColorSpace;
+            texture.needsUpdate = true;
+
+            scene.environment = texture;
+            scene.environmentIntensity = 0.15;
+
+            mouse_wheel = true;
+
+            texture.dispose();
+          }, function ( xhr ) {
+          }, function ( error ) {
+            console.log( 'Error Loading Scene Environment Image File!' );
+            console.log( error );
+          });
+        }
+
+        if (zip_file !== null) {
+          file_loader.load( URL.createObjectURL( local_files[ zip_file ] ), async function( buffer ) {
+            URL.revokeObjectURL( local_files[ zip_file ] );
+
+            const z_file = await fflate.unzipSync( new Uint8Array( buffer ) );
+
+            await process_loaded_zip( z_file );
+
+            // Load the Obj file
+            selected_obj_file !== null ? loadZipFile() : handle_error( 'No valid OBJ file found!' );
+          });
+        } else {
+          // Load the Obj file
+          selected_obj_file !== null ? loadFile() : loadURLFile();
+        }
+      }
+
+      function process_obj() {
+        Obj.traverse( function( child ) {
+          if (child.isMesh || child.isPoints || child.isLine) {
+            if (child.geometry.isBufferGeometry) {
+              if (! child.geometry.getAttribute( 'normal' )) child.geometry.computeVertexNormals();
+              child.geometry.normalizeNormals();
+
+              child.geometry.computeBoundingBox();
+              child.geometry.computeBoundingSphere();
+            }
+          }
+
+          if (child.isLine) {
+            child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+          }
+
+          if (child.isMesh || child.isPoints) {
+            if (child.isPoints) {
+              child.sizeAttenuation = true;
+              child.sortPoints = true;
+            }
+
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtrl => {
+                if (mtrl.aoMap && child.geometry.attributes.uv1 === undefined && child.geometry.attributes.uv !== undefined) {
+                  child.geometry.setAttribute( 'uv1', child.geometry.attributes.uv );
+                  mtrl.aoMap.channel = 1;
+                }
+
+                set_texture_colorSpace( mtrl );
+
+                mtrl.vertexColors = child.geometry.hasAttribute( 'color' );
+                if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 1.25;
+
+                mtrl.needsUpdate = true;
+
+                child_count_array += 1;
+              });
+            } else {
+              if (child.material.aoMap && child.geometry.attributes.uv1 === undefined && child.geometry.attributes.uv !== undefined) {
+                child.geometry.setAttribute( 'uv1', child.geometry.attributes.uv );
+                child.material.aoMap.channel = 1;
+              }
+
+              set_texture_colorSpace( child.material );
+
+              child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+              if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 1.25;
+
+              child.material.needsUpdate = true;
+            }
+          }
+        });
+      }
+
+      async function loadZipFile() {
+        if (selected_mtl_file !== null) {
+          let mtl = await mtl_loader.parse( selected_mtl_file );
+
+          if ( Object.entries( textures ).length > 0 ) {
+            for ( const [ key, value ] of Object.entries( mtl.materialsInfo ) ) {
+              for ( const textureKey of Object.keys( textures ) ) {
+                map_strings.forEach( map_str => {
+                  if ( value[ map_str ] ) {
+                    value[ map_str ].trim();
+                    if ( value[ map_str ].endsWith( textureKey ) ) value[ map_str ] = textures[ textureKey ];
+                  }
+                });
+              }
+            }
+          } else {
+            mtl.preload();
+          }
+
+          obj_loader.setMaterials( mtl );
+
+          try {
+            Obj = await obj_loader.parse( selected_obj_file );
+          } catch (error) {
+            handle_error( error );
+          }
+
+          await process_obj();
+
+          // Add 3D object to scene
+          scene.add( Obj );
+          Obj.position.set( 0, 0, 0 );
+          camera.lookAt( Obj.position );
+
+          finish_loading();
+        } else {
+          try {
+            Obj = await obj_loader.parse( selected_obj_file );
+          } catch (error) {
+            handle_error( error );
+          }
+
+          await process_obj();
+
+          // Add 3D object to scene
+          scene.add( Obj );
+          Obj.position.set( 0, 0, 0 );
+          camera.lookAt( Obj.position );
+
+          finish_loading();
+        }
+
+        mouse_wheel = true;
+      }
+
+      async function loadFile() {
+        let ab, u8array, text;
+
+        if (selected_mtl_file !== null) {
+          ab = await local_files[ selected_mtl_file ].arrayBuffer();
+          u8array = new Uint8Array( ab );
+          text = await new TextDecoder().decode( u8array );
+
+          let mtl = await mtl_loader.parse( text );
+
+          if ( Object.entries( textures ).length > 0 ) {
+            for ( const [ key, value ] of Object.entries( mtl.materialsInfo ) ) {
+              for ( const textureKey of Object.keys( textures ) ) {
+                map_strings.forEach( map_str => {
+                  if ( value[ map_str ] ) {
+                    value[ map_str ].trim();
+                    if ( value[ map_str ].endsWith( textureKey ) ) value[ map_str ] = textures[ textureKey ];
+                  }
+                });
+              }
+            }
+          } else {
+            mtl.preload();
+          }
+
+          obj_loader.setMaterials( mtl );
+
+          ab = await local_files[ selected_obj_file ].arrayBuffer();
+          u8array = new Uint8Array( ab );
+          text = await new TextDecoder().decode( u8array );
+
+          try {
+            Obj = await obj_loader.parse( text );
+          } catch (error) {
+            handle_error( error );
+          }
+
+          await process_obj();
+
+          // Add 3D object to scene
+          scene.add( Obj );
+          Obj.position.set( 0, 0, 0 );
+          camera.lookAt( Obj.position );
+
+          finish_loading();
+        } else {
+          ab = await local_files[ selected_obj_file ].arrayBuffer();
+          u8array = new Uint8Array( ab );
+          text = await new TextDecoder().decode( u8array );
+
+          try {
+            Obj = await obj_loader.parse( text );
+          } catch (error) {
+            handle_error( error );
+          }
+
+          await process_obj();
+
+          // Add 3D object to scene
+          scene.add( Obj );
+          Obj.position.set( 0, 0, 0 );
+          camera.lookAt( Obj.position );
+
+          finish_loading();
+        }
+
+        mouse_wheel = true;
+      }
+
+      async function loadURLFile() {
+        if (selected_url_file !== '') {
+          if (selected_url_file.indexOf( ',' ) > -1) {
+            let urls = selected_url_file.split( ',' );
+
+            let tex_index = 0;
+
+            for (let i = 0; i < urls.length; i++) {
+              let url = urls[ i ].trim();
+
+              if (url.startsWith('https://github.com') === true) {
+                url = ( url.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+              }
+
+              let url_uc = url.toUpperCase();
+
+              if (url_uc.endsWith('.ZIP')) {
+                zip_file = url;
+              } else if (url_uc.endsWith('.MTL')) {
+                selected_mtl_url_file = url;
+              } else if (url_uc.endsWith('.OBJ')) {
+                selected_obj_url_file = url;
+              } else if (url.endsWith( '/' )) {
+                obj_loader.setResourcePath( url );
+              }
+            }
+
+            if (zip_file !== null) {
+              file_loader.load( zip_file, async function( buffer ) {
+                const z_file = await fflate.unzipSync( new Uint8Array( buffer ) );
+                await process_loaded_zip( z_file );
+                return loadZipFile();
+              });
+            }
+
+            if (selected_obj_url_file !== null) {
+              if (selected_mtl_url_file !== null) {
+                mtl_loader.load( selected_mtl_url_file, ( mtl ) => {
+                  mtl.preload();
+
+                  obj_loader.setMaterials( mtl );
+
+                  obj_loader.load( selected_obj_url_file, async function( object ) {
+                    Obj = object;
+
+                    await process_obj();
+
+                    // Add 3D object to scene
+                    scene.add( Obj );
+                    Obj.position.set( 0, 0, 0 );
+                    camera.lookAt( Obj.position );
+
+                    finish_loading();
+                  }, function ( xhr ) { // onProgress
+                  }, function ( error ) { handle_error( error ); }); // onError
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { handle_error( error ); }); // onError
+              } else {
+                obj_loader.load( selected_obj_url_file, async function( object ) {
+                  Obj = object;
+
+                  await process_obj();
+
+                  // Add 3D object to scene
+                  scene.add( Obj );
+                  Obj.position.set( 0, 0, 0 );
+                  camera.lookAt( Obj.position );
+
+                  finish_loading();
+                }, function ( xhr ) { // onProgress
+                }, function ( error ) { handle_error( error ); }); // onError
+              }
+            } else {
+              handle_error( 'Unsupported URL model!' );
+            }
+          } else {
+            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+              selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+            } else if (selected_url_file.startsWith('https://github.com') === true) {
+              selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+            }
+
+            // No extension checking for URL so it has to point to OBJ or ZIP file
+
+            // Check if a ZIP file
+            console.log( 'Checking if ZIP file...' );
+
+            try {
+              await fetch( selected_url_file ).then( async res => {
+                zip_file = await res.arrayBuffer();
+                const z_file = await fflate.unzipSync( new Uint8Array( zip_file ) );
+                await process_loaded_zip( z_file );
+                return loadZipFile();
+              });
+            } catch ( error1 ) {
+              console.log( error1 );
+              zip_file = null;
+
+              console.log( 'Checking if OBJ file...' );
+
+              obj_loader.load( selected_url_file, async function ( object ) {
+                Obj = object;
+
+                await process_obj();
+
+                // Add 3D object to scene
+                scene.add( Obj );
+                Obj.position.set( 0, 0, 0 );
+                camera.lookAt( Obj.position );
+
+                finish_loading();
+              }, function ( xhr ) { // onProgress
+              }, async function ( error2 ) { // onError
+                handle_error( error2 );
+              });
+            }
+          }
+        }
+      }
+
+      function set_texture_colorSpace( material ) {
+        if (material.map) material.map.colorSpace = THREE.SRGBColorSpace;
+        if (material.aoMap) material.aoMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.alphaMap) material.alphaMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.bumpMap) material.bumpMap.colorSpace = THREE.SRGBColorSpace;
+        if (material.lightMap) material.lightMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.emissiveMap) material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+        if (material.normalMap) material.normalMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.specularMap) material.specularMap.colorSpace = THREE.SRGBColorSpace;
+        if (material.metalnessMap) material.metalnessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.roughnessMap) material.roughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.anisotropyMap) material.anisotropyMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.clearcoatMap) material.clearcoatMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.clearcoatNormalMap) material.clearcoatNormalMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.clearcoatRoughnessMap) material.clearcoatRoughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.iridescenceMap) material.iridescenceMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.iridescenceThicknessMap) material.iridescenceThicknessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.sheenColorMap) material.sheenColorMap.colorSpace = THREE.SRGBColorSpace;
+        if (material.sheenRoughnessMap) material.sheenRoughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.specularColorMap) material.specularColorMap.colorSpace = THREE.SRGBColorSpace;
+        if (material.specularIntensityMap) material.specularIntensityMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.thicknessMap) material.thicknessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.transmissionMap) material.transmissionMap.colorSpace = THREE.LinearSRGBColorSpace;
+      }
+
+      async function finish_loading() {
+        enable_disable( false );
+
+        set_initial_scale();
+        resize();
+
+        let object_is_mesh = false;
+
+        Obj.traverse( function( child ) {
+          if (child.isMesh) object_is_mesh = true;
+        });
+
+        if (object_is_mesh === false) {
+          document.getElementById('btn_flat').disabled = true;
+          document.getElementById('btn_wireframe').disabled = true;
+          disabled_changed();
+        }
+
+        console.timeEnd( 'Loading Time' );
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_message').style.display = 'none';
+
+        render_requested = true;
+        mouse_wheel = false;
+        first_run = true;
+        fr_count = 0;
+        count = 0;
+        render();
+
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+      }
+
+      function log_info() {
+        console.log( 'Memory: ', renderer.info.memory );
+        console.log( 'Render: ', renderer.info.render );
+      }
+
+      function handle_error( error ) {
+        if (isMobile === false) {
+          document.getElementById('div_message').innerText = 'Check the console for any error messages';
+          document.getElementById('div_message').style.display = '';
+        }
+
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+
+        mouse_wheel = true;
+        render_requested = false;
+        enable_disable( true );
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      function show_wireframe() {
+        if (Obj) {
+          if (wireframe_enabled === true) {
+            document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+            wireframe_enabled = false;
+          } else {
+            document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
+            wireframe_enabled = true;
+          }
+
+          Obj.traverse( function( child ) {
+            if (child.isMesh) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  mtl.wireframe = wireframe_enabled;
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                child.material.wireframe = wireframe_enabled;
+                child.material.needsUpdate = true;
+              }
+            }
+
+            mouse_wheel = true;
+      	  });
+        }
+      }
+
+      function set_flat() {
+        if (flat_shading_enabled === true) {
+          document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+          flat_shading_enabled = false;
+        } else {
+          document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+          flat_shading_enabled = true;
+        }
+
+        // Go through all children of the loaded object and search for a Mesh
+        Obj.traverse( function( child ) {
+          // This will allow us to check if the child is an instance of the Mesh constructor
+          if (child.isMesh) {
+            if (Array.isArray( child.material )) {
+              child.material.forEach( mtl => {
+                mtl.flatShading = flat_shading_enabled;
+                mtl.needsUpdate = true;
+              });
+            } else {
+              child.material.flatShading = flat_shading_enabled;
+              child.material.needsUpdate = true;
+            }
+          }
+
+          mouse_wheel = true;
+        });
+      }
+
+      async function render() {
+        if (Obj) {
+          if (first_run === true || mouse_down === true || mouse_wheel === true) {
+            // If it might be slow to render initially
+            if (first_run === true) {
+              fr_count ++;
+              if (fr_count > 25) {
+                mouse_wheel = true;
+                first_run = false;
+                fr_count = 0;
+                count = 0;
+              }
+            } else {
+              if (mouse_wheel === true) {
+                if (count > 15) {
+                  mouse_wheel = false;
+                  count = 0;
+                } else {
+                  count ++;
+                }
+              }
+            }
+
+            controls.update();
+
+            renderer.clear();
+            renderer.render( scene, camera );
+          }
+        }
+
+        if (render_requested === true) requestAnimationFrame( render );
+      }
+
+      async function reset_all( reset = false ) {
+        document.getElementById('back_color').value = '#000000';
+        document.getElementById('dli_val').innerText = 5;
+        document.getElementById('directional_light_intensity').value = 5;
+        document.getElementById('btn_url').style.backgroundColor = 'transparent';
+        document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+        document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+
+        if (scene) {
+          if (directionalLight) {
+            set_directional_light_intensity();
+          }
+        }
+
+        // Reset the view
+        if (reset === true) {
+          controls.reset();
+          set_back_color();
+        } else {
+          // Page (re)loading
+          if (scene) {
+            if (Obj) await scene_cleanup();
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+
+            renderer.clear();
+            renderer.dispose();
+          }
+
+          document.getElementById('file_input').value = '';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+          enable_disable( true );
+        }
+
+        disabled_changed();
+
+        mouse_wheel = true;
+      }
+
+      async function scene_cleanup() {
+        scene.remove( Obj );
+
+        renderer.clear();
+
+        if (wireframe_enabled === true) await show_wireframe();
+        if (flat_shading_enabled === true) await set_flat();
+
+        Obj.traverse( function( child ) {
+          if (child.isMesh || child.isPoints || child.isLine) {
+            if (child.material) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtrl => {
+                  for (const prop in mtrl) {
+                    texture_maps.forEach( tex_map => {
+                      if (prop === tex_map) {
+                        if (mtrl[ prop ]) mtrl[ prop ].dispose();
+                      }
+                    });
+                  };
+
+                  mtrl.dispose();
+                });
+              } else {
+                for (const prop in child.material) {
+                  texture_maps.forEach( tex_map => {
+                    if (prop === tex_map) {
+                      if (child.material[ prop ]) child.material[ prop ].dispose();
+                    }
+                  });
+                };
+
+                child.material.dispose();
+              }
+            }
+
+            child.geometry.dispose();
+          }
+    	  });
+
+        if (isMobile === false) renderer.info.reset();
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('directional_light_intensity').disabled = disable;
+        document.getElementById('back_color').disabled = disable;
+        document.getElementById('btn_flat').disabled = disable;
+        document.getElementById('btn_dc_dli').disabled = disable;
+        document.getElementById('btn_quick_x').disabled = disable;
+        document.getElementById('btn_wireframe').disabled = disable;
+        disabled_changed();
+
+        mouse_wheel = true;
+      }
+    </script>
+
+    <script>
+      async function document_ready() {
+        const WebGPU = await import( "three/addons/capabilities/WebGPU.min.js" );
+        const WebGL = await import( "three/addons/capabilities/WebGL.min.js" );
+
+        gpu = WebGPU[ 'default' ].isAvailable();
+        gl2 = WebGL[ 'default' ].isWebGL2Available();
+
+        if ( gpu === true ) {
+          console.log( 'WebGPU support detected' );
+          console.log( 'Using WebGPU Renderer' );
+          document.getElementById('div_message').innerText += ' - WebGPU';
+        } else if ( gl2 === true ) {
+          console.log( 'WebGPU support not detected' );
+          console.log( 'WebGL2 support detected' );
+          document.getElementById('div_message').innerText += ' - WebGL2';
+        } else {
+          document.getElementById('div_message').innerText = 'No WebGPU or WebGL2 detected!';
+          document.getElementById('btn_url').disabled = true;
+          document.getElementById('file_input').disabled = true;
+          document.getElementById('btn_full_screen').disabled = true;
+          document.getElementById('btn_menu_location').disabled = true;
+
+          document.body.appendChild( WebGPU[ 'default' ].getErrorMessage() );
+          throw new Error( 'No WebGPU or WebGL2 support detected' );
+        }
+
+        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
+          (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        map_strings = [ 'bump', 'map_bump', 'disp', 'map_disp', 'norm', 'map_kn', 'map_d', 'map_ka', 'map_kd',
+  				'map_ke', 'map_emissive', 'map_ks', 'map_ns', 'map_pa', 'map_pi', 'map_pit', 'map_px', 'map_pm', 'map_pr',
+	  			'map_psc', 'map_psr', 'map_pcc', 'map_pcn', 'map_pcr', 'map_pth', 'map_ptr', 'map_psi', 'map_psp', 'pl_map'
+        ];
+
+        texture_maps = [ 'map', 'aoMap', 'alphaMap', 'bumpMap', 'displacementMap', 'envMap', 'lightMap', 'emissiveMap', 'normalMap',
+          'metalnessMap', 'roughnessMap', 'anisotropyMap', 'clearcoatMap', 'clearcoatNormalMap', 'clearcoatRoughnessMap',
+          'iridescenceMap', 'iridescenceThicknessMap', 'sheenColorMap', 'sheenRoughnessMap', 'specularMap',
+          'specularColorMap', 'specularIntensityMap', 'thicknessMap', 'transmissionMap'
+        ];
+      }
+
+      function disabled_changed() {
+        $('button').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+
+        $('input[type=color]').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+      }
+    </script>
+  </body>
+</html>
