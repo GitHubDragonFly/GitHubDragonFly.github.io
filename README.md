@@ -380,6 +380,7 @@ Number Type Converter
   - Some viewers also offer setting the following exported textures features:
     - Resolution: 128, 256, 512, 768, 1k, 1.2k, 1.5k, 1.7k, 2k, 3k, 4k
     - Y-flip, which is intended for 3DM / DAE / OBJ / USDZ exports
+  - ASSIMP, GLTF and GLTFS viewers can also export model maps (textures) only, defaulting to PNG if no other format is selected
   - GLTFS Viewer seems to do OK job in exporting still models with `pbrSpecularGlossiness` but would suggest that you use [gltf.report](https://gltf.report/) instead
   - Experiment with all exporters available by exporting the original model as well as its exported versions:
     - Considering how many export options are available in any viewer, a certain combination might just work properly
