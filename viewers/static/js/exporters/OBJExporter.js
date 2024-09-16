@@ -654,7 +654,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.map, maxTextureSize );
+								map_to_process = decompress( mat.map.clone(), maxTextureSize );
 
 							}
 
@@ -699,7 +699,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.specularMap, maxTextureSize );
+								map_to_process = decompress( mat.specularMap.clone(), maxTextureSize );
 
 							}
 
@@ -746,7 +746,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.emissiveMap, maxTextureSize );
+								map_to_process = decompress( mat.emissiveMap.clone(), maxTextureSize );
 
 							}
 
@@ -793,7 +793,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.bumpMap, maxTextureSize );
+								map_to_process = decompress( mat.bumpMap.clone(), maxTextureSize );
 
 							}
 
@@ -856,7 +856,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.lightMap, maxTextureSize );
+								map_to_process = decompress( mat.lightMap.clone(), maxTextureSize );
 
 							}
 
@@ -905,7 +905,7 @@
 
 								if ( map_to_process.isCompressedTexture === true ) {
 
-									map_to_process = decompress( mat.metalnessMap, maxTextureSize );
+									map_to_process = decompress( mat.metalnessMap.clone(), maxTextureSize );
 
 								}
 
@@ -974,7 +974,7 @@
 
 								if ( map_to_process.isCompressedTexture === true ) {
 
-									map_to_process = decompress( mat.roughnessMap, maxTextureSize );
+									map_to_process = decompress( mat.roughnessMap.clone(), maxTextureSize );
 
 								}
 
@@ -1041,7 +1041,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.displacementMap, maxTextureSize );
+								map_to_process = decompress( mat.displacementMap.clone(), maxTextureSize );
 
 							}
 
@@ -1088,7 +1088,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.normalMap, maxTextureSize );
+								map_to_process = decompress( mat.normalMap.clone(), maxTextureSize );
 
 							}
 
@@ -1135,7 +1135,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.alphaMap, maxTextureSize );
+								map_to_process = decompress( mat.alphaMap.clone(), maxTextureSize );
 
 							}
 
@@ -1182,7 +1182,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.aoMap, maxTextureSize );
+								map_to_process = decompress( mat.aoMap.clone(), maxTextureSize );
 
 							}
 
@@ -1229,7 +1229,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.anisotropyMap, maxTextureSize );
+								map_to_process = decompress( mat.anisotropyMap.clone(), maxTextureSize );
 
 							}
 
@@ -1276,7 +1276,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.clearcoatMap, maxTextureSize );
+								map_to_process = decompress( mat.clearcoatMap.clone(), maxTextureSize );
 
 							}
 
@@ -1323,7 +1323,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.clearcoatNormalMap, maxTextureSize );
+								map_to_process = decompress( mat.clearcoatNormalMap.clone(), maxTextureSize );
 
 							}
 
@@ -1370,7 +1370,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.clearcoatRoughnessMap, maxTextureSize );
+								map_to_process = decompress( mat.clearcoatRoughnessMap.clone(), maxTextureSize );
 
 							}
 
@@ -1417,7 +1417,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.iridescenceMap, maxTextureSize );
+								map_to_process = decompress( mat.iridescenceMap.clone(), maxTextureSize );
 
 							}
 
@@ -1464,7 +1464,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.iridescenceThicknessMap, maxTextureSize );
+								map_to_process = decompress( mat.iridescenceThicknessMap.clone(), maxTextureSize );
 
 							}
 
@@ -1511,7 +1511,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.sheenColorMap, maxTextureSize );
+								map_to_process = decompress( mat.sheenColorMap.clone(), maxTextureSize );
 
 							}
 
@@ -1558,7 +1558,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.sheenRoughnessMap, maxTextureSize );
+								map_to_process = decompress( mat.sheenRoughnessMap.clone(), maxTextureSize );
 
 							}
 
@@ -1605,7 +1605,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.specularIntensityMap, maxTextureSize );
+								map_to_process = decompress( mat.specularIntensityMap.clone(), maxTextureSize );
 
 							}
 
@@ -1652,7 +1652,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.specularColorMap, maxTextureSize );
+								map_to_process = decompress( mat.specularColorMap.clone(), maxTextureSize );
 
 							}
 
@@ -1699,7 +1699,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.thicknessMap, maxTextureSize );
+								map_to_process = decompress( mat.thicknessMap.clone(), maxTextureSize );
 
 							}
 
@@ -1746,7 +1746,7 @@
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.transmissionMap, maxTextureSize );
+								map_to_process = decompress( mat.transmissionMap.clone(), maxTextureSize );
 
 							}
 
