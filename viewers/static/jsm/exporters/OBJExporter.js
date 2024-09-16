@@ -1,15 +1,37 @@
 import {
+	CanvasTexture,
 	Color,
+	LinearFilter,
+	LinearMipmapLinearFilter,
+	MathUtils,
 	Matrix3,
+	Mesh,
+	PerspectiveCamera,
+	PlaneGeometry,
+	RepeatWrapping,
+	Scene,
+	ShaderMaterial,
+	SRGBColorSpace,
+	Uniform,
 	Vector2,
 	Vector3
 } from "three";
 
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/utils/TextureUtils.min.js";
-
 class OBJExporter {
 
-	parse( object, onDone, options = {} ) {
+	parseAsync( object, options ) {
+
+		const scope = this;
+
+		return new Promise( function ( resolve, reject ) {
+
+			scope.parse( object, resolve, reject, options );
+
+		} );
+
+	}
+
+	async parse( object, onLoad, onError, options = {} ) {
 
 		const defaultOptions = {
 			filename: 'model',
@@ -22,6 +44,13 @@ class OBJExporter {
 		const map_flip_required = options.map_flip_required;
 		const maxTextureSize = options.maxTextureSize;
 		const filename = options.filename;
+
+		const scope = this;
+
+		scope._renderer = null;
+		scope.fullscreenQuad = null;
+		scope.fullscreenQuadGeometry = null;
+		scope.fullscreenQuadMaterial = null;
 
 		let output = '';
 		let indexVertex = 0;
@@ -48,9 +77,18 @@ class OBJExporter {
 			const geometry = mesh.geometry;
 			const normalMatrixWorld = new Matrix3();
 
-			if ( geometry.isBufferGeometry !== true ) {
+			if ( ! geometry.isBufferGeometry ) {
 
-				throw new Error( 'THREE.OBJExporter: Geometry is not THREE.BufferGeometry.' );
+				if ( typeof onError === 'function' ) {
+
+					onError( 'THREE.OBJExporter: Geometry is not of type THREE.BufferGeometry.' );
+					return [];
+
+				} else {
+
+					throw new Error( 'THREE.OBJExporter: Geometry is not of type THREE.BufferGeometry.' );
+
+				}
 
 			}
 
@@ -212,15 +250,15 @@ class OBJExporter {
 
 				for ( let i = 0, l = normals.count; i < l; i ++, nbNormals ++ ) {
 
-					normal.x = normals.getX( i );
-					normal.y = normals.getY( i );
-					normal.z = normals.getZ( i );
+					normal.x = normals.getX( i ) * ( mesh.scale.x || 1.0 );
+					normal.y = normals.getY( i ) * ( mesh.scale.y || 1.0 );
+					normal.z = normals.getZ( i ) * ( mesh.scale.z || 1.0 );
 
 					// transform the normal to world space
 					normal.applyMatrix3( normalMatrixWorld ).normalize();
 
 					// transform the normal to export format
-					output += 'vn ' + normal.x * mesh.scale.x + ' ' + normal.y * mesh.scale.y + ' ' + normal.z * mesh.scale.z + '\n';
+					output += 'vn ' + normal.x + ' ' + normal.y + ' ' + normal.z + '\n';
 
 				}
 
@@ -308,9 +346,18 @@ class OBJExporter {
 			const geometry = line.geometry;
 			const type = line.type;
 
-			if ( geometry.isBufferGeometry !== true ) {
+			if ( ! geometry.isBufferGeometry ) {
 
-				throw new Error( 'THREE.OBJExporter: Geometry is not of type THREE.BufferGeometry.' );
+				if ( typeof onError === 'function' ) {
+
+					onError( 'THREE.OBJExporter: Geometry is not of type THREE.BufferGeometry.' );
+					return [];
+
+				} else {
+
+					throw new Error( 'THREE.OBJExporter: Geometry is not of type THREE.BufferGeometry.' );
+
+				}
 
 			}
 
@@ -422,9 +469,18 @@ class OBJExporter {
 			let nbVertex = 0;
 			const geometry = points.geometry;
 
-			if ( geometry.isBufferGeometry !== true ) {
+			if ( ! geometry.isBufferGeometry ) {
 
-				throw new Error( 'THREE.OBJExporter: Geometry is not of type THREE.BufferGeometry.' );
+				if ( typeof onError === 'function' ) {
+
+					onError( 'THREE.OBJExporter: Geometry is not of type THREE.BufferGeometry.' );
+					return [];
+
+				} else {
+
+					throw new Error( 'THREE.OBJExporter: Geometry is not of type THREE.BufferGeometry.' );
+
+				}
 
 			}
 
@@ -535,28 +591,28 @@ class OBJExporter {
 			const ext = 'png';
 			const image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJP', '.PJPEG', '.BMP', '.GIF', '.SVG', '.WEBP' ];
 
-			Object.keys( materials ).forEach( ( key ) => {
+			for ( const key of Object.keys( materials ) ) {
 
 				if ( Array.isArray( materials[ key ] )) {
 
-					materials[ key ].forEach( ( mtl ) => {
+					materials[ key ].forEach( async ( mtl ) => {
 
 						map_Px_set = false;
-						set_mtl_params_textures( mtl );
+						await set_mtl_params_textures( mtl );
 
 					});
 
 				} else {
 
 					map_Px_set = false;
-					set_mtl_params_textures( materials[ key ] );
+					await set_mtl_params_textures( materials[ key ] );
 
 				}
 
-			});
+			}
 
 			// set MTL parameters and textures
-			function set_mtl_params_textures( mat) {
+			async function set_mtl_params_textures( mat) {
 
 				let name = ( mat.name && mat.name !== '' ) ? ( image_extensions.some( ext => mat.name.toUpperCase().endsWith( ext ) ) ? mat.name.substring( 0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : 'material' + mat.id;
 				name = name.replaceAll( '#', '' );
@@ -661,7 +717,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.map, maxTextureSize );
+							map_to_process = await scope.decompress( mat.map.clone(), maxTextureSize );
 
 						}
 
@@ -685,7 +741,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Kd -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -706,7 +762,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.specularMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.specularMap.clone(), maxTextureSize );
 
 						}
 
@@ -732,7 +788,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Ks -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -753,7 +809,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.emissiveMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.emissiveMap.clone(), maxTextureSize );
 
 						}
 
@@ -779,7 +835,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Ke -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -800,7 +856,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.bumpMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.bumpMap.clone(), maxTextureSize );
 
 						}
 
@@ -826,7 +882,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								if ( mat.bumpScale === 1 ) {
@@ -863,7 +919,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.lightMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.lightMap.clone(), maxTextureSize );
 
 						}
 
@@ -889,7 +945,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'Pbr_pl_map -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -912,7 +968,7 @@ class OBJExporter {
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.metalnessMap, maxTextureSize );
+								map_to_process = await scope.decompress( mat.metalnessMap.clone(), maxTextureSize );
 
 							}
 
@@ -938,7 +994,7 @@ class OBJExporter {
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( map_to_process.image, ext )
+										data: await imageToData( map_to_process.image, ext )
 									});
 
 									if ( mat.roughnessMap && mat.roughnessMap === mat.metalnessMap ) {
@@ -981,7 +1037,7 @@ class OBJExporter {
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = decompress( mat.roughnessMap, maxTextureSize );
+								map_to_process = await scope.decompress( mat.roughnessMap.clone(), maxTextureSize );
 
 							}
 
@@ -1007,7 +1063,7 @@ class OBJExporter {
 									textures.push( {
 										name,
 										ext,
-										data: imageToData( map_to_process.image, ext )
+										data: await imageToData( map_to_process.image, ext )
 									});
 
 									if ( mat.metalnessMap && mat.metalnessMap === mat.roughnessMap ) {
@@ -1048,7 +1104,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.displacementMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.displacementMap.clone(), maxTextureSize );
 
 						}
 
@@ -1074,7 +1130,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'disp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1095,7 +1151,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.normalMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.normalMap.clone(), maxTextureSize );
 
 						}
 
@@ -1121,7 +1177,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'norm -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1142,7 +1198,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.alphaMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.alphaMap.clone(), maxTextureSize );
 
 						}
 
@@ -1168,7 +1224,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_d -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1189,7 +1245,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.aoMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.aoMap.clone(), maxTextureSize );
 
 						}
 
@@ -1215,7 +1271,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Ka -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1236,7 +1292,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.anisotropyMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.anisotropyMap.clone(), maxTextureSize );
 
 						}
 
@@ -1262,7 +1318,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Pa -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1283,7 +1339,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.clearcoatMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.clearcoatMap.clone(), maxTextureSize );
 
 						}
 
@@ -1309,7 +1365,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Pcc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1330,7 +1386,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.clearcoatNormalMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.clearcoatNormalMap.clone(), maxTextureSize );
 
 						}
 
@@ -1356,7 +1412,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Pcn -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1377,7 +1433,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.clearcoatRoughnessMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.clearcoatRoughnessMap.clone(), maxTextureSize );
 
 						}
 
@@ -1403,7 +1459,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Pcr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1424,7 +1480,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.iridescenceMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.iridescenceMap.clone(), maxTextureSize );
 
 						}
 
@@ -1450,7 +1506,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Pi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1471,7 +1527,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.iridescenceThicknessMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.iridescenceThicknessMap.clone(), maxTextureSize );
 
 						}
 
@@ -1497,7 +1553,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Pit -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1518,7 +1574,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.sheenColorMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.sheenColorMap.clone(), maxTextureSize );
 
 						}
 
@@ -1544,7 +1600,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Psc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1565,7 +1621,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.sheenRoughnessMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.sheenRoughnessMap.clone(), maxTextureSize );
 
 						}
 
@@ -1591,7 +1647,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Psr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1612,7 +1668,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.specularIntensityMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.specularIntensityMap.clone(), maxTextureSize );
 
 						}
 
@@ -1638,7 +1694,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Psi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1659,7 +1715,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.specularColorMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.specularColorMap.clone(), maxTextureSize );
 
 						}
 
@@ -1685,7 +1741,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Psp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1706,7 +1762,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.thicknessMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.thicknessMap.clone(), maxTextureSize );
 
 						}
 
@@ -1732,7 +1788,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Pth -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1753,7 +1809,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = decompress( mat.transmissionMap, maxTextureSize );
+							map_to_process = await scope.decompress( mat.transmissionMap.clone(), maxTextureSize );
 
 						}
 
@@ -1779,7 +1835,7 @@ class OBJExporter {
 								textures.push( {
 									name,
 									ext,
-									data: imageToData( map_to_process.image, ext )
+									data: await imageToData( map_to_process.image, ext )
 								});
 
 								mtlOutput += 'map_Ptr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1802,9 +1858,16 @@ class OBJExporter {
 
 			Promise.all( textures ).then( () => {
 
-				if ( typeof onDone === 'function' ) {
+				if ( scope._renderer !== null ) {
 
-					onDone( { obj: output, mtl: mtlOutput, tex: textures } );
+					scope._renderer.dispose();
+					scope._renderer = null;
+
+				}
+
+				if ( typeof onLoad === 'function' ) {
+
+					onLoad( { obj: output, mtl: mtlOutput, tex: textures } );
 
 				} else {
 
@@ -1816,9 +1879,16 @@ class OBJExporter {
 
 		} else {
 
-			if ( typeof onDone === 'function' ) {
+			if ( scope._renderer !== null ) {
 
-				onDone( { obj: output } );
+				scope._renderer.dispose();
+				scope._renderer = null;
+
+			}
+
+			if ( typeof onLoad === 'function' ) {
+
+				onLoad( { obj: output } );
 
 			} else {
 
@@ -1830,40 +1900,49 @@ class OBJExporter {
 
 		// the following functions were adopted from ColladaExporter.js
 
-		function imageToData( image, ext ) {
+		async function imageToData( image, ext ) {
 
 			let canvas, ctx;
 
-			canvas = canvas || document.createElement( 'canvas' );
+			if ( typeof HTMLCanvasElement !== 'undefined' && image instanceof HTMLCanvasElement ) {
 
-			canvas.width = Math.min( image.width, maxTextureSize );
-			canvas.height = Math.min( image.height, maxTextureSize );
-
-			ctx = ctx || canvas.getContext( '2d' );
-
-			if ( map_flip_required === true ) {
-
-				// Flip image vertically
-
-				ctx.translate( 0, canvas.height );
-				ctx.scale( 1, - 1 );
-
-			}
-
-			// this seems to also work fine for exporting TGA images as PNG
-			if ( image instanceof ImageData ) {
-
-				ctx.putImageData( image, 0, 0 );
-
-			} else if ( image.data && image.data.constructor === Uint8Array ) {
-
-				let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
-
-				ctx.putImageData( imgData, 0, 0 );
+				canvas = image;
 
 			} else {
 
-				ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+				canvas = canvas || document.createElement( 'canvas' );
+
+				canvas.width = Math.min( image.width, maxTextureSize );
+				canvas.height = Math.min( image.height, maxTextureSize );
+
+				ctx = ctx || canvas.getContext( '2d' );
+
+				if ( map_flip_required === true ) {
+
+					// Flip image vertically
+
+					ctx.translate( 0, canvas.height );
+					ctx.scale( 1, - 1 );
+
+				}
+
+				// this seems to also work fine for exporting TGA images as PNG
+
+				if ( image instanceof ImageData ) {
+
+					ctx.putImageData( image, 0, 0 );
+
+				} else if ( image.data && image.data.constructor === Uint8Array ) {
+
+					let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
+
+					ctx.putImageData( imgData, 0, 0 );
+
+				} else {
+
+					ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+
+				}
 
 			}
 
@@ -1889,6 +1968,222 @@ class OBJExporter {
 			return buf;
 
 		}
+
+	}
+
+	// modified decompress function from TextureUtils.js
+
+	async decompress( texture, maxTextureSize = Infinity ) {
+
+		console.log( 'THREE.OBJExporter: Decompressing texture...' );
+
+		const scope = this;
+
+		let readableTexture;
+
+		let width = texture.image.width;
+		let height = texture.image.height;
+
+		let resize = false;
+
+		// Dual check to find out what "three" is mapped to - "three.module.js" or "three.webgpu.js"
+		// Currently, WebGLRenderer import should not be available in "three.webgpu.js"
+
+		if ( scope._renderer === null ) {
+
+			try {
+
+				const { WebGLRenderer } = await import( "three" );
+				scope._renderer = new WebGLRenderer( { antialias: false } );
+
+			} catch ( error ) {}
+
+			// If WebGLRenderer import was not provided then check for WebGPURenderer
+
+			if ( scope._renderer === null ) {
+
+				try {
+
+					const { WebGPURenderer } = await import( "three" );
+					scope._renderer = new WebGPURenderer( { antialias: false } );
+					await scope._renderer.init();
+
+				} catch ( error ) {}
+
+			}
+
+		}
+
+		const _camera = new PerspectiveCamera();
+		const _scene = new Scene();
+
+		if ( scope._renderer.isWebGPURenderer ) {
+
+			// Set the texture as the scene's background
+			_scene.background = texture;
+			_scene.backgroundIntensity = 1.0;
+			_scene.background.needsUpdate = true;
+
+		} else {
+
+			if ( scope.fullscreenQuadGeometry === null ) scope.fullscreenQuadGeometry = new PlaneGeometry( 2, 2, 1, 1 );
+
+			if ( scope.fullscreenQuadMaterial === null ) {
+
+				scope.fullscreenQuadMaterial = new ShaderMaterial( {
+
+					uniforms: { blitTexture: new Uniform( texture ) },
+					vertexShader: `
+					varying vec2 vUv;
+					void main(){
+						vUv = uv;
+						gl_Position = vec4(position.xy * 1.0,0.,.999999);
+					}`,
+					fragmentShader: `
+					uniform sampler2D blitTexture; 
+					varying vec2 vUv;
+					void main(){ 
+						gl_FragColor = vec4(vUv.xy, 0, 1);
+						
+						#ifdef IS_SRGB
+						gl_FragColor = LinearTosRGB( texture2D( blitTexture, vUv) );
+						#else
+						gl_FragColor = texture2D( blitTexture, vUv);
+						#endif
+					}`
+
+				} );
+
+			}
+
+			scope.fullscreenQuadMaterial.uniforms.blitTexture.value = texture;
+			scope.fullscreenQuadMaterial.needsUpdate = true;
+
+			if ( scope.fullscreenQuad === null ) {
+
+				scope.fullscreenQuad = new Mesh( scope.fullscreenQuadGeometry, scope.fullscreenQuadMaterial );
+
+			}
+
+			scope.fullscreenQuad.frustrumCulled = false;
+
+		}
+
+		if ( scope._renderer.isWebGPURenderer ) {
+
+			// WebGPU currently does not seem to like non-power-of-two textures
+
+			if ( ! MathUtils.isPowerOfTwo( width ) || ! MathUtils.isPowerOfTwo( height )) {
+
+				if ( ! MathUtils.isPowerOfTwo( width ) ) width = MathUtils.ceilPowerOfTwo( width );
+				if ( ! MathUtils.isPowerOfTwo( height ) ) height = MathUtils.ceilPowerOfTwo( height );
+
+				resize = true;
+
+			}
+
+		} else {
+
+			if ( scope.fullscreenQuad !== null ) _scene.add( scope.fullscreenQuad );
+
+		}
+
+		scope._renderer.setSize( Math.min( width, maxTextureSize ), Math.min( height, maxTextureSize ) );
+
+		await new Promise( resolve => {
+
+			if ( scope._renderer.isWebGPURenderer ) {
+
+				scope._renderer.clearAsync();
+				scope._renderer.renderAsync( _scene, _camera );
+
+			} else {
+
+				scope._renderer.clear();
+				scope._renderer.render( _scene, _camera );
+
+			}
+
+			resolve( readableTexture = new CanvasTexture( scope._renderer.domElement ) );
+
+		});
+
+		if ( scope._renderer.isWebGPURenderer && scope._renderer._quad ) {
+
+			if ( scope._renderer._quad.material ) scope._renderer._quad.material.dispose();
+			if ( scope._renderer._quad.geometry ) scope._renderer._quad.geometry.dispose();
+
+		}
+
+		// Resize back to original texture size if needed
+
+		if ( scope._renderer.isWebGPURenderer && resize === true ) {
+
+			await new Promise( resolve => {
+
+				let canvas = document.createElement( 'canvas' );
+				canvas.width = texture.image.width;
+				canvas.height = texture.image.height;
+
+				let ctx = canvas.getContext( '2d' );
+
+				let img = new Image();
+
+				img.onload = function() {
+
+					ctx.drawImage( this, 0, 0, canvas.width, canvas.height );
+					resolve( readableTexture.image = canvas );
+
+				}
+
+				img.src = readableTexture.image.toDataURL( 'image/png', 1 );
+
+			});
+
+		}
+
+		readableTexture.colorSpace = texture.colorSpace || SRGBColorSpace;
+		readableTexture.minFilter = texture.minFilter || LinearMipmapLinearFilter;
+		readableTexture.magFilter = texture.magFilter || LinearFilter;
+		readableTexture.wrapS = texture.wrapS || RepeatWrapping;
+		readableTexture.wrapT = texture.wrapT || RepeatWrapping;
+		readableTexture.name = texture.name;
+
+		readableTexture.needsUpdate = true;
+
+		if ( scope.fullscreenQuad !== null ) {
+
+			_scene.remove( scope.fullscreenQuad );
+
+			if ( scope.fullscreenQuad.material && scope.fullscreenQuad.material.uniforms ) {
+
+				Object.keys( scope.fullscreenQuad.material.uniforms ).forEach( ( key ) => {
+
+					if ( scope.fullscreenQuad.material.uniforms[ key ].value ) {
+
+						let kv = scope.fullscreenQuad.material.uniforms[ key ].value;
+						if ( kv.type && kv.type === 1009 ) kv.dispose();
+
+					}
+
+				});
+
+				scope.fullscreenQuad.material.dispose();
+
+			}
+
+			scope.fullscreenQuad.geometry.dispose();
+			scope.fullscreenQuad = null;
+
+		} else {
+
+			_scene.background.dispose();
+
+		}
+
+		texture.dispose();
+
+		return readableTexture;
 
 	}
 
