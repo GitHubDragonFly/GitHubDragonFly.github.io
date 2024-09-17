@@ -1904,45 +1904,37 @@ class OBJExporter {
 
 			let canvas, ctx;
 
-			if ( typeof HTMLCanvasElement !== 'undefined' && image instanceof HTMLCanvasElement ) {
+			canvas = canvas || document.createElement( 'canvas' );
 
-				canvas = image;
+			canvas.width = Math.min( image.width, maxTextureSize );
+			canvas.height = Math.min( image.height, maxTextureSize );
+
+			ctx = ctx || canvas.getContext( '2d' );
+
+			if ( map_flip_required === true ) {
+
+				// Flip image vertically
+
+				ctx.translate( 0, canvas.height );
+				ctx.scale( 1, - 1 );
+
+			}
+
+			// this seems to also work fine for exporting TGA images as PNG
+
+			if ( image instanceof ImageData ) {
+
+				ctx.putImageData( image, 0, 0 );
+
+			} else if ( image.data && image.data.constructor === Uint8Array ) {
+
+				let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
+
+				ctx.putImageData( imgData, 0, 0 );
 
 			} else {
 
-				canvas = canvas || document.createElement( 'canvas' );
-
-				canvas.width = Math.min( image.width, maxTextureSize );
-				canvas.height = Math.min( image.height, maxTextureSize );
-
-				ctx = ctx || canvas.getContext( '2d' );
-
-				if ( map_flip_required === true ) {
-
-					// Flip image vertically
-
-					ctx.translate( 0, canvas.height );
-					ctx.scale( 1, - 1 );
-
-				}
-
-				// this seems to also work fine for exporting TGA images as PNG
-
-				if ( image instanceof ImageData ) {
-
-					ctx.putImageData( image, 0, 0 );
-
-				} else if ( image.data && image.data.constructor === Uint8Array ) {
-
-					let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
-
-					ctx.putImageData( imgData, 0, 0 );
-
-				} else {
-
-					ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
-
-				}
+				ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
 
 			}
 
@@ -1981,6 +1973,9 @@ class OBJExporter {
 
 		let readableTexture;
 
+		let offset = texture.offset;
+		let repeat = texture.repeat;
+
 		let width = texture.image.width;
 		let height = texture.image.height;
 
@@ -2018,6 +2013,9 @@ class OBJExporter {
 		const _scene = new Scene();
 
 		if ( scope._renderer.isWebGPURenderer ) {
+
+			texture.offset = new Vector2( 0, 0 );
+			texture.repeat = new Vector2( 1, -1 );
 
 			// Set the texture as the scene's background
 			_scene.background = texture;
@@ -2125,12 +2123,12 @@ class OBJExporter {
 				canvas.width = texture.image.width;
 				canvas.height = texture.image.height;
 
-				let ctx = canvas.getContext( '2d' );
+				let ctx = canvas.getContext( '2d', { willReadFrequently: true } );
 
 				let img = new Image();
 
 				img.onload = function() {
-
+	
 					ctx.drawImage( this, 0, 0, canvas.width, canvas.height );
 					resolve( readableTexture.image = canvas );
 
@@ -2147,6 +2145,8 @@ class OBJExporter {
 		readableTexture.magFilter = texture.magFilter || LinearFilter;
 		readableTexture.wrapS = texture.wrapS || RepeatWrapping;
 		readableTexture.wrapT = texture.wrapT || RepeatWrapping;
+		readableTexture.offset = new Vector2( offset.x, offset.y );
+		readableTexture.repeat = new Vector2( repeat.x, repeat.y );
 		readableTexture.name = texture.name;
 
 		readableTexture.needsUpdate = true;
