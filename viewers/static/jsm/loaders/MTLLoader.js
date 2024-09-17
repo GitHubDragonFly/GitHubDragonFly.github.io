@@ -8,7 +8,7 @@ import {
 	MeshPhongMaterial,
 	MeshPhysicalMaterial,
 	RepeatWrapping,
-	NoColorSpace,
+	Texture,
 	TextureLoader,
 	Vector2
 } from "three";
@@ -360,7 +360,7 @@ class MaterialCreator {
 			if ( params[ mapType ] ) return; // Keep the first encountered texture
 
 			const texParams = scope.getTextureParams( original_mat[ prop ] );
-			const map = scope.loadTexture( resolveURL( scope.baseUrl, value ) );
+			const map = scope.loadTexture( resolveURL( scope.baseUrl, value ), undefined, materialName );
 
 			map.repeat.copy( texParams.scale );
 			map.offset.copy( texParams.offset );
@@ -372,8 +372,6 @@ class MaterialCreator {
 
 			map.wrapS = texParams.wrapS; // map.wrapS = scope.wrap;
 			map.wrapT = texParams.wrapT; // map.wrapT = scope.wrap;
-
-			map.colorSpace = NoColorSpace;
 
 			params[ mapType ] = map;
 
@@ -934,7 +932,7 @@ class MaterialCreator {
 
 		const texture = loader.load( url );
 
-		if ( ! texture ) texture = new THREE.Texture();
+		if ( ! texture ) texture = new Texture();
 
 		return texture;
 
