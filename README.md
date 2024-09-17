@@ -117,6 +117,8 @@ Number Type Converter
   - Some viewers might be slow to load some models, usually if using `WASM` of some library
 - Currently experimental three.js `WebGPU` support is included in experimental `GLTF WebGPU` and `OBJ+MTL WebGPU` viewers:
   - Maybe use Chrome browser and enable its `WebGPU experimental features` to test these viewers (and your computer)
+  - Chrome browser seems to have no issues handling these viewers features
+  - Safari browser currently has an issue setting hdr / exr background and environment
   - Mobile versions of these viewers are available but not properly tested yet
 - Memory handling should be good, relatively speaking:
   - With every next model loaded the previous model geometries / materials are being disposed of
