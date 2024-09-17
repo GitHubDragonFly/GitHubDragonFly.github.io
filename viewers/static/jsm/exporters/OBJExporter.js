@@ -2009,13 +2009,19 @@ class OBJExporter {
 
 		}
 
+		scope._renderer.outputColorSpace = texture.colorSpace;
+
 		const _camera = new PerspectiveCamera();
 		const _scene = new Scene();
 
 		if ( scope._renderer.isWebGPURenderer ) {
 
-			texture.offset = new Vector2( 0, 0 );
-			texture.repeat = new Vector2( 1, -1 );
+			if ( offset.x !== 0 || offset.y !== 0 || repeat.x !== 1 || repeat.y !== 1 ) {
+
+				texture.offset = new Vector2( 0, 0 );
+				texture.repeat = new Vector2( 1, 1 );
+
+			}
 
 			// Set the texture as the scene's background
 			_scene.background = texture;
