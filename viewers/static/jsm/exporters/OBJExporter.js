@@ -2128,7 +2128,7 @@ class OBJExporter {
 				let img = new Image();
 
 				img.onload = function() {
-	
+
 					ctx.drawImage( this, 0, 0, canvas.width, canvas.height );
 					resolve( readableTexture.image = canvas );
 
