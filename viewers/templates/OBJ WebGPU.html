@@ -1575,9 +1575,6 @@
           <option title="PLY - Polygon File Format ascii" value="ply" onclick="export_ply( false );">PLY_a</option>
           <option title="PLY - Polygon File Format binary" value="ply" onclick="export_ply( true );">PLY_b</option>
           <option title="STL - Stereolithography Format" value="stl" onclick="export_stl();">STL</option>
-          <option title="Animated Graphics Exports" value="ani" disabled>- ANI -</option>
-          <option title="GIF - Animated GIF" value="gif" onclick="export_animated_gif();">GIF</option>
-          <option title="PNG - Animated PNG (APNG)" value="apng" onclick="export_animated_png();">PNG</option>
         </select>
         <select title="Maximum Exported Texture Resolution and Y flip" id="export_tex_res" disabled>
           <option title="Original" value="original" onclick="tex_res = Infinity; tex_flip = false;" selected>None</option>
@@ -1774,7 +1771,7 @@
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
 
         window.addEventListener( 'pointerdown', ( event ) => { mouse_down = true; }, false);
-        window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'pointerup', ( event ) => { mouse_down = false;  mouse_wheel = true; }, false);
         window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
         window.addEventListener( 'keydown', ( event ) => {
           if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
@@ -1871,8 +1868,8 @@
       var original_uvs, original_attr_colors, xtra_smooth_enabled;
       var original_color, original_color_array, wireframe_enabled;
       var original_side, original_side_array, link, count = 0;
-      var flat_shading_enabled, bgnd_linear_gradient, physical_mtl, textures;
-      var url_tga_loaded, current_texture, animated_gif_texture, map_strings;
+      var flat_shading_enabled, bgnd_linear_gradient, physical_mtl;
+      var url_tga_loaded, current_texture, map_strings, textures;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
       var lines_visible, lines_present, filename, outline_material, slider_height = 0;
       var vertex_colors_enabled, original_vertex_colors, original_vertex_color_array;
@@ -2095,277 +2092,31 @@
         }
       }
 
-      async function export_animated_gif() {
-        document.getElementById('export_names').selectedIndex = 0;
-
-        gif_export = true;
-
-        set_filename();
-
-        if (!link) {
-          link = document.createElement( 'a' );
-          link.style.display = 'none';
-          document.body.appendChild( link );
-        }
-
-        // Generate
-
-        let fx = Math.ceil( ( renderer.domElement.width - 500 ) / 2.0 );
-        let fy = Math.ceil( ( renderer.domElement.height - 500 ) / 2.0 );
-
-        let frames = 211;
-        let gif_frames = [];
-
-        await generateGIF( render, frames, fx, fy, gif_frames );
-      }
-
-      function generateGIF( renderFunction, frames, frame_x, frame_y, gif_frames ) {
-        let canvas;
-
-        if (navigator.userAgent.indexOf('Safari') !== -1) {
-          canvas = document.createElement( 'canvas' );
-          canvas.width = 500;
-          canvas.height = 500;
-        } else {
-          canvas = new OffscreenCanvas( 500, 500 );
-        }
-
-        let context = canvas.getContext( '2d', { willReadFrequently: true } );
-
-        let pl = document.getElementById( 'progress_label' );
-
-        let before_last = frames - 2;
-        let current = 0;
-
-        async function addFrame() {
-          if (current <= frames) {
-            if (current > 0) {
-              context.clearRect( 0, 0, 500, 500 );
-
-              renderFunction();
-
-              context.drawImage( renderer.domElement, frame_x, frame_y, 500, 500, 0, 0, 500, 500 );
-              gif_frames.push( context.getImageData( 0, 0, 500, 500 ).data );
-
-              progress.value = current / frames;
-              pl.innerHTML = parseInt( progress.value * 100 ) + '%';
-
-              if (current === before_last) {
-                document.getElementById('div_loading').innerHTML = pw;
-                document.getElementById('div_loading').style.display = 'block';
-              }
-
-              setTimeout( addFrame, 0 );
-            } else {
-              document.getElementById('fixed_menu').style.display = 'none';
-              document.getElementById('animation_progress').style.display = 'block';
-              document.getElementById('div_gif_rectangle').style.display = 'block';
-
-              if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
-
-              setTimeout( addFrame, 100 );
-            }
-          } else {
-            // Download
-            let blob = await gif_encode( gif_frames );
-
-            document.getElementById('div_loading').innerHTML = '';
-            document.getElementById('div_loading').style.display = 'none';
-
-            context = null;
-            canvas = null;
-
-            zip.file( filename + '.gif', blob );
-            await process_export_zip( '_GIF' );
-
-            progress.value = 0;
-            pl.innerHTML = '';
-            document.getElementById('fixed_menu').style.display = 'block';
-            document.getElementById('animation_progress').style.display = 'none';
-            document.getElementById('div_gif_rectangle').style.display = 'none';
-
-            if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
-
-            gif_export = false;
-
-            if (render_requested === true) render();
-
-            return;
-          }
-
-          current ++;
-        }
-
-        addFrame();
-      }
-
-      function gif_encode( gif_frames ) {
-        let buffer = new Uint8ClampedArray( 187500000 ); // 500 * 500 * 150 * 5
-        let pixels = new Uint8ClampedArray( 250000 ); // 500 * 500
-        let writer = new gif_writer( buffer, 500, 500, { loop: 0 } );
-
-        // Skip the first frame since it might be all zeros due to rendering
-        // Any subsequent frame that might be all zeros will throw an error
-        for ( let i = 1; i < gif_frames.length; i++ ) {
-          let data = gif_frames[ i ];
-          let palette = [];
-
-          for ( var j = 0, k = 0, jl = data.length; j < jl; j += 4, k ++ ) {
-            let r = Math.floor( data[ j + 0 ] * 0.1 ) * 10;
-            let g = Math.floor( data[ j + 1 ] * 0.1 ) * 10;
-            let b = Math.floor( data[ j + 2 ] * 0.1 ) * 10;
-            let color = r << 16 | g << 8 | b << 0;
-
-            let index = palette.indexOf( color );
-
-            if (index === -1) {
-              pixels[ k ] = palette.length;
-              palette.push( color );
-            } else {
-              pixels[ k ] = index;
-            }
-          }
-
-          // Force palette to be power of 2
-          let powof2 = 1;
-          while ( powof2 < palette.length ) powof2 <<= 1;
-          if (powof2 > 256) powof2 = 256;
-          palette.length = powof2;
-
-          let options = { palette: new Uint32Array( palette ), delay: 4 };
-
-          writer.addFrame( 0, 0, 500, 500, pixels, options );
-        }
-
-        return new Blob( [ buffer.subarray( 0, writer.end() ) ], { type: 'image/gif' } );
-      }
-
-      async function export_animated_png() {
-        document.getElementById('export_names').selectedIndex = 0;
-
-        set_filename();
-
-        if (!link) {
-          link = document.createElement( 'a' );
-          link.style.display = 'none';
-          document.body.appendChild( link );
-        }
-
-        // Generate
-
-        let fx = Math.ceil( ( renderer.domElement.width - 500 ) / 2.0 );
-        let fy = Math.ceil( ( renderer.domElement.height - 500 ) / 2.0 );
-
-        let frames_count = 126;
-        let delay = 75;
-        let png_frames = [];
-
-        await generateAPNG( render, frames_count, fx, fy, png_frames, delay );
-      }
-
-      function generateAPNG( renderFunction, frames, frame_x, frame_y, png_frames, delay ) {
-        let canvas;
-
-        if (navigator.userAgent.indexOf('Safari') !== -1) {
-          canvas = document.createElement( 'canvas' );
-          canvas.width = 500;
-          canvas.height = 500;
-        } else {
-          canvas = new OffscreenCanvas( 500, 500 );
-        }
-
-        let context = canvas.getContext( '2d', { willReadFrequently: true } );
-
-        let pl = document.getElementById( 'progress_label' );
-
-        let frame_delay = [];
-        let before_last = frames - 2;
-        let current = 0;
-
-        async function addFrame() {
-          if (current <= frames) {
-            if (current === 1) {
-              // Skip the first frame since it might be all zeros due to rendering
-              // Set the progress value and trigger rendering
-              progress.value = current / frames;
-              renderFunction();
-
-              setTimeout( addFrame, 10 );
-            } else if (current > 0) {
-              context.clearRect( 0, 0, 500, 500 );
-
-              renderFunction();
-
-              context.drawImage( renderer.domElement, frame_x, frame_y, 500, 500, 0, 0, 500, 500 );
-              png_frames.push( context.getImageData( 0, 0, 500, 500 ).data );
-              frame_delay.push( delay );
-
-              progress.value = current / frames;
-              pl.innerHTML = parseInt( progress.value * 100 ) + '%';
-
-              if (current === before_last) {
-                document.getElementById('div_loading').innerHTML = pw;
-                document.getElementById('div_loading').style.display = 'block';
-              }
-
-              setTimeout( addFrame, 0 );
-            } else {
-              document.getElementById('fixed_menu').style.display = 'none';
-              document.getElementById('animation_progress').style.display = 'block';
-              document.getElementById('div_gif_rectangle').style.display = 'block';
-
-              if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
-
-              setTimeout( addFrame, 100 );
-            }
-          } else {
-            // Download
-
-            // For Lossy PNG consider replacing 0 with 256
-            let apng = await UPNG.encode( png_frames, 500, 500, 0, frame_delay );
-
-            document.getElementById('div_loading').innerHTML = '';
-            document.getElementById('div_loading').style.display = 'none';
-
-            context = null;
-            canvas = null;
-
-            let blob = new Blob( [ new Uint8Array( apng ) ], { type: 'image/png' } );
-
-            zip.file( filename + '.png', blob );
-            await process_export_zip( '_APNG' );
-
-            progress.value = 0;
-            pl.innerHTML = '';
-            document.getElementById('fixed_menu').style.display = 'block';
-            document.getElementById('animation_progress').style.display = 'none';
-            document.getElementById('div_gif_rectangle').style.display = 'none';
-
-            if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
-
-            if (render_requested === true) render();
-
-            return;
-          }
-
-          current ++;
-        }
-
-        addFrame();
-      }
-
       function reset_scene_params() {
         if (scene) {
-          if (scene.environment) {
-            scene.environment.dispose();
-            scene.environment = null;
+          if (gpu === false) {
+            if (scene.environment) {
+              scene.environment.dispose();
+              scene.environment = null;
+            }
+
+            if (scene.background) {
+              if (!scene.background.isColor) scene.background.dispose();
+              scene.background = null;
+            }
+          } else {
+            if (scene.environmentNode) {
+              scene.environmentNode.dispose();
+              scene.environmentNode = null;
+            }
+
+            if (scene.backgroundNode) {
+              if (!scene.backgroundNode.isColor) scene.backgroundNode.dispose();
+              scene.backgroundNode = null;
+            }
           }
 
-          if (scene.background) {
-            if (!scene.background.isColor) scene.background.dispose();
-            scene.background = null;
-          }
-
+          scene.backgroundBlurriness = 0.00001;
           scene.environmentIntensity = 1.0;
         }
       }
@@ -2550,8 +2301,13 @@
               texture.mapping = THREE.EquirectangularReflectionMapping;
               texture.needsUpdate = true;
 
-              scene.background = texture.clone();
-              scene.environment = texture.clone();
+              if (gpu === false) {
+                scene.background = texture.clone();
+                scene.environment = texture.clone();
+              } else {
+                scene.backgroundNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+                scene.environmentNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+              }
 
               mouse_wheel = true;
 
@@ -2676,11 +2432,22 @@
               texture.colorSpace = THREE.SRGBColorSpace;
 
               if (equi_enabled === true) {
-                texture.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = texture.clone();
-                scene.environment = texture.clone();
+                if (gpu === false) {
+                  texture.mapping = THREE.EquirectangularReflectionMapping;
+                  texture.needsUpdate = true;
+
+                  scene.background = texture.clone();
+                  scene.environment = texture.clone();
+                } else {
+                  scene.backgroundNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+                  scene.environmentNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+                }
               } else {
-                scene.background = texture.clone();
+                if (gpu === false) {
+                  scene.background = texture.clone();
+                } else {
+                  scene.backgroundNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+                }
               }
 
               mouse_wheel = true;
@@ -2725,10 +2492,21 @@
 
               if (equi_enabled === true) {
                 texture.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = texture.clone();
-                scene.environment = texture.clone();
+                texture.needsUpdate = true;
+
+                if (gpu === false) {
+                  scene.background = texture.clone();
+                  scene.environment = texture.clone();
+                } else {
+                  scene.backgroundNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+                  scene.environmentNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+                }
               } else {
-                scene.background = texture.clone();
+                if (gpu === false) {
+                  scene.background = texture.clone();
+                } else {
+                  scene.backgroundNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+                }
               }
 
               mouse_wheel = true;
@@ -2781,9 +2559,15 @@
           texture.colorSpace = THREE.SRGBColorSpace;
           texture.needsUpdate = true;
 
-          scene.background = texture.clone();
-          scene.environment = texture.clone();
-          scene.environmentIntensity = 0.15;
+          if (gpu === false) {
+            scene.background = texture.clone();
+            scene.environment = texture.clone();
+            scene.environmentIntensity = 0.15;
+          } else {
+						scene.backgroundNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+            scene.environmentNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+            scene.environmentIntensity = 0.15;
+          }
 
           texture.dispose();
 
@@ -3260,7 +3044,6 @@
         polar_grid_visible = false;
         render_requested = false;
         current_texture = -1;
-        animated_gif_texture = false;
         initial_rotation = new THREE.Vector3();
         bounding_box = new THREE.Box3();
 
@@ -4314,10 +4097,6 @@
 
             if (current_texture > -1) {
               if (selected_obj_url_file !== null) {
-                if (textures[ current_texture ].num_frames && textures[ current_texture ].num_frames > 1) {
-                  animated_gif_texture = true;
-                }
-
                 textures[ current_texture ].colorSpace = THREE.SRGBColorSpace;
                 textures[ current_texture ].wrapS = THREE.RepeatWrapping;
                 textures[ current_texture ].wrapT = THREE.RepeatWrapping;
@@ -4367,28 +4146,6 @@
                       child.material.needsUpdate = true;
                     }
                   });
-                } else if (typeof curr_tex === 'string' && curr_tex.endsWith('.GIF')) {
-                  let tex = gif_loader.load( textures[ curr_tex ] );
-                  tex.colorSpace = THREE.SRGBColorSpace;
-                  tex.wrapS = THREE.RepeatWrapping;
-                  tex.wrapT = THREE.RepeatWrapping;
-
-                  await new Promise(resolve => setTimeout( resolve, 1000 )); // adjust timing if necessary
-
-                  if (tex.num_frames > 1) animated_gif_texture = true;
-
-                  // Apply texture
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      mtl.map = tex;
-                      mtl.needsUpdate = true;
-                    });
-                  } else {
-                    child.material.map = tex;
-                    child.material.needsUpdate = true;
-                  }
-
-                  tex.dispose();
                 } else {
                   texture_loader.load( textures[ curr_tex ], function( texture ) {
                     texture.colorSpace = THREE.SRGBColorSpace;
@@ -4651,7 +4408,6 @@
         document.getElementById('btn_lines').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_mtl_side').innerHTML = 'OS';
         current_texture = -1;
-        animated_gif_texture = false;
         document.getElementById('btn_textures').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_textures').innerHTML = 'T';
         xtra_smooth_enabled = false;
