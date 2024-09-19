@@ -26,7 +26,75 @@ import {
 	Quaternion,
 } from "three";
 
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/utils/TextureUtils.min.js";
+async function import_decompress() {
+
+	try {
+
+		const { WebGLRenderer } = await import( "three" );
+		const { decompress } = await import( "three/addons/utils/TextureUtils.js" );
+
+		const renderer = new WebGLRenderer( { antialias: true } );
+
+		return { decompress, renderer };
+
+	} catch ( error ) { /* just continue */ }
+
+	try {
+
+		const { CanvasTexture, NodeMaterial, QuadMesh, WebGPURenderer, texture, uv } = await import( "three" );
+
+		const renderer = new WebGPURenderer( { antialias: true } );
+		await renderer.init();
+
+		/* Modified decompress function from TextureUtilsGPU.js file */
+
+		const _quadMesh = /*@__PURE__*/ new QuadMesh();
+
+		function decompress( blitTexture, maxTextureSize = Infinity, renderer = null ) {
+
+			const material = new NodeMaterial();
+			material.fragmentNode = texture( blitTexture ).uv( uv().flipY() );
+
+			const width = Math.min( blitTexture.image.width, maxTextureSize );
+			const height = Math.min( blitTexture.image.height, maxTextureSize );
+
+			renderer.setSize( width, height );
+			renderer.outputColorSpace = blitTexture.colorSpace;
+
+			_quadMesh.material = material;
+			_quadMesh.render( renderer );
+
+			const canvas = document.createElement( 'canvas' );
+			const context = canvas.getContext( '2d' );
+
+			canvas.width = width;
+			canvas.height = height;
+
+			context.drawImage( renderer.domElement, 0, 0, width, height );
+		
+			const readableTexture = new CanvasTexture( canvas );
+		
+			readableTexture.minFilter = blitTexture.minFilter;
+			readableTexture.magFilter = blitTexture.magFilter;
+			readableTexture.wrapS = blitTexture.wrapS;
+			readableTexture.wrapT = blitTexture.wrapT;
+			readableTexture.colorSpace = blitTexture.colorSpace;
+			readableTexture.name = blitTexture.name;
+
+			return readableTexture;
+
+		}
+
+		return { decompress, renderer };
+
+	} catch ( error ) {
+
+		/* should not really get here */
+		throw new Error( 'THREE.GLTFExporter: Could not import decompress function!' );
+
+	}
+
+}
 
 /**
  * The KHR_mesh_quantization extension allows these extra attribute component types
@@ -481,6 +549,9 @@ class GLTFWriter {
 
 	constructor() {
 
+		this.decompress = null;
+		this.renderer = null;
+
 		this.plugins = [];
 
 		this.options = {};
@@ -528,6 +599,11 @@ class GLTFWriter {
 	* @param  {Object} options options
 	*/
 	async write( input, onDone, options = {} ) {
+
+		const { decompress, renderer } = await import_decompress();
+
+		this.decompress = decompress;
+		this.renderer = renderer;
 
 		this.options = Object.assign( {
 			// default options
@@ -847,13 +923,13 @@ class GLTFWriter {
 
 		if ( metalnessMap.isCompressedTexture === true ) {
 
-			metalnessMap = decompress( metalnessMap );
+			metalnessMap = this.decompress( metalnessMap, this.options.maxTextureSize, this.renderer );
 
 		}
 
 		if ( roughnessMap.isCompressedTexture === true ) {
 
-			roughnessMap = decompress( roughnessMap );
+			roughnessMap = this.decompress( roughnessMap, this.options.maxTextureSize, this.renderer );
 
 		}
 
@@ -1259,7 +1335,7 @@ class GLTFWriter {
 
 			const cachedImages = cache.images.get( image );
 
-			const key = mimeType + ':flipY/' + flipY.toString();
+			const key = flipY ? mimeType + ':flipY/' + flipY.toString() : mimeType;
 
 			if ( cachedImages[ key ] !== undefined ) return cachedImages[ key ];
 
@@ -1403,7 +1479,7 @@ class GLTFWriter {
 		// make non-readable textures (e.g. CompressedTexture) readable by blitting them into a new texture
 		if ( map.isCompressedTexture === true ) {
 
-			map = decompress( map, options.maxTextureSize );
+			map = writer.decompress( map, options.maxTextureSize, writer.renderer );
 
 		}
 
