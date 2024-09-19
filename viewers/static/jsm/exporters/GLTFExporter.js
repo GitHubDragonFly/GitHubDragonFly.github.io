@@ -46,20 +46,30 @@ async function import_decompress() {
 		const renderer = new WebGPURenderer( { antialias: true } );
 		await renderer.init();
 
-		/* Modified decompress function from TextureUtilsGPU.js file */
+		/* Modified decompress function from TextureUtilsGPU.js file (non-async) */
 
 		const _quadMesh = /*@__PURE__*/ new QuadMesh();
 
 		function decompress( blitTexture, maxTextureSize = Infinity, renderer = null ) {
 
-			const material = new NodeMaterial();
-			material.fragmentNode = texture( blitTexture ).uv( uv().flipY() );
+			const blitTexture_clone = blitTexture.clone();
 
-			const width = Math.min( blitTexture.image.width, maxTextureSize );
-			const height = Math.min( blitTexture.image.height, maxTextureSize );
+			if ( blitTexture_clone.offset.x !== 0 || blitTexture_clone.offset.y !== 0 ||
+				blitTexture_clone.repeat.x !== 1 || blitTexture_clone.repeat.y !== 1 ) {
+
+				blitTexture_clone.offset.set( 0, 0 );
+				blitTexture_clone.repeat.set( 1, 1 );
+
+			}
+
+			const material = new NodeMaterial();
+			material.fragmentNode = texture( blitTexture_clone ).uv( uv().flipY() );
+
+			const width = Math.min( blitTexture_clone.image.width, maxTextureSize );
+			const height = Math.min( blitTexture_clone.image.height, maxTextureSize );
 
 			renderer.setSize( width, height );
-			renderer.outputColorSpace = blitTexture.colorSpace;
+			renderer.outputColorSpace = blitTexture_clone.colorSpace;
 
 			_quadMesh.material = material;
 			_quadMesh.render( renderer );
@@ -71,15 +81,21 @@ async function import_decompress() {
 			canvas.height = height;
 
 			context.drawImage( renderer.domElement, 0, 0, width, height );
-		
+
 			const readableTexture = new CanvasTexture( canvas );
-		
+
+			/* set to the original texture parameters */
+
+			readableTexture.offset.set( blitTexture.offset.x, blitTexture.offset.y );
+			readableTexture.repeat.set( blitTexture.repeat.x, blitTexture.repeat.y );
+			readableTexture.colorSpace = blitTexture.colorSpace;
 			readableTexture.minFilter = blitTexture.minFilter;
 			readableTexture.magFilter = blitTexture.magFilter;
 			readableTexture.wrapS = blitTexture.wrapS;
 			readableTexture.wrapT = blitTexture.wrapT;
-			readableTexture.colorSpace = blitTexture.colorSpace;
 			readableTexture.name = blitTexture.name;
+
+			blitTexture_clone.dispose();
 
 			return readableTexture;
 
