@@ -270,7 +270,7 @@
         <label for="btn_url" title="Get remote image via URL"></label>
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="btn_file_input" title="Browse Local Files"></label>
-        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".dds, .dib, .ico, .tga, .tif, .tiff, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" />
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".dds, .dib, .ico, .ktx2, .tga, .tif, .tiff, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" />
         <label for="btn_file_image_input" title="Background Image" style="display: none;">BGND</label>
         <button title="Background Image" id="btn_file_image_input" style="display: none; min-width: 54px;" onclick="document.getElementById('file_image_input').click();">Browse</button>
         <input type="file" id="file_image_input" style="display: none;" onchange="set_scene_image();" accept=".exr, .hdr, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" />
@@ -602,12 +602,12 @@
     </script>
 
     <script>
-      var THREE, img_obj, manager, renderer, render_requested, scene, camera, loader;
-      var texture_loader, dds_loader, tiff_loader, tga_loader, exr_loader, rgbe_loader;
-      var controls, mouse_down, mouse_wheel, events_initialized, slider_height = 0;
-      var gui, gui_set = false, guiExposure, params, toneMappingOptions, count = 0;
-      var grid, polar_grid, grid_visible, polar_grid_visible, zip;
-      var ambientLight, directionalLight, isMobile, filename;
+      var THREE, renderer, render_requested, scene, camera, loader, texture_loader;
+      var dds_loader, ktx2_loader, tiff_loader, tga_loader, exr_loader, rgbe_loader;
+      var manager, controls, mouse_down, mouse_wheel, events_initialized, count = 0;
+      var img_obj, gui, gui_set = false, guiExposure, params, toneMappingOptions;
+      var grid, polar_grid, grid_visible, polar_grid_visible, slider_height = 0;
+      var ambientLight, directionalLight, isMobile, filename, zip;
       var ww = window.innerWidth, wh = window.innerHeight;
       var rot_x = 0, rot_y = 0, rot_z = 0, bounding_box, gif_export;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
@@ -1548,25 +1548,19 @@
         mouse_wheel = true;
       }
 
-      async function convert_dds_to_png( url ) {
+      async function convert_dds_ktx2_to_png( url ) {
         const { decompress } = await import( "three/addons/utils/TextureUtils.min.js" );
 
-        let file_loader = new THREE.FileLoader( manager );
-        file_loader.setResponseType( 'arraybuffer' );
-
-        let array_buffer;
+        let tex;
 
         await new Promise( resolve => {
-          file_loader.load( url, function( file_data ) {
-            resolve( array_buffer = new Uint8Array( file_data ) );
+          loader.load( url, function( texture ) {
+            resolve( tex = texture.clone() );
+            texture.dispose();
           });
         });
 
-        let dds = await loader.parse( array_buffer.buffer, true  );
-
-        // convert DDS to PNG
-        tex = new THREE.CompressedTexture( dds.mipmaps, dds.width, dds.height, dds.format );
-        tex.needsUpdate = true;
+        // convert to PNG
 
         let canvas_tex = await decompress( tex );
 
@@ -1575,7 +1569,8 @@
         await new Promise( resolve => {
           texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), function( texture ) {
             texture.needsUpdate = true;
-            resolve( new_texture = texture );
+            resolve( new_texture = texture.clone() );
+            texture.dispose();
           });
         });
 
@@ -1689,8 +1684,8 @@
       const createExtrudedImageMesh = async ( { url, depth = 0.1, quadPerPixel = false } ) => {
         let tex;
 
-        if (loader === dds_loader) {
-          tex = await convert_dds_to_png( url );
+        if (loader === dds_loader || loader === ktx2_loader) {
+          tex = await convert_dds_ktx2_to_png( url );
           tex.flipY = true;
         } else {
           tex = await loader.loadAsync( url );
@@ -1716,7 +1711,7 @@
 
       async function set_loader( fn_uc ) {
         let image_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.ICO', '.JPG', '.JPEG', '.JFIF',
-          '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.TIF', '.TIFF', '.WEBP' ];
+          '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.TIF', '.TIFF', '.WEBP' ];
 
         if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) {
           if (fn_uc.endsWith( '.TIF' ) || fn_uc.endsWith( '.TIFF' )) {
@@ -1733,6 +1728,16 @@
             }
 
             loader = tga_loader;
+          } else if (fn_uc.endsWith( '.KTX2' )) {
+            if (ktx2_loader === undefined) {
+              const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
+              ktx2_loader = new KTX2Loader( manager );
+              ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/libs/basis/" );
+              ktx2_loader.detectSupport( renderer );
+              await ktx2_loader.init();
+            }
+
+            loader = ktx2_loader;
           } else if (fn_uc.endsWith( '.DDS' )) {
             if (dds_loader === undefined) {
               const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
@@ -1812,6 +1817,21 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+          renderer.setPixelRatio( window.devicePixelRatio < 1.5 ? window.devicePixelRatio : 2.0 );
+          renderer.toneMapping = THREE.NeutralToneMapping;
+          renderer.toneMappingExposure = 1.0;
+          renderer.setSize( ww, wh );
+          renderer.info.autoReset = false;
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
+          renderer.autoClear = false;
+
+          document.body.appendChild( renderer.domElement );
+        }
+
         if (url_loading === false) {
           // Loaded file
           let local_file = document.getElementById('file_input').files[ 0 ];
@@ -1829,21 +1849,6 @@
           // Reset the file input
           document.getElementById('file_input').value = '';
           url_loading = false;
-        }
-
-        if (renderer === undefined) {
-          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
-          renderer.setPixelRatio( window.devicePixelRatio < 1.5 ? window.devicePixelRatio : 2.0 );
-          renderer.toneMapping = THREE.NeutralToneMapping;
-          renderer.toneMappingExposure = 1.0;
-          renderer.setSize( ww, wh );
-          renderer.info.autoReset = false;
-          renderer.shadowMap.enabled = true;
-          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
-          renderer.autoClear = false;
-
-          document.body.appendChild( renderer.domElement );
         }
 
         if (scene === undefined) scene = new THREE.Scene();
@@ -1964,6 +1969,11 @@
         count = 0;
 
         render();
+
+        if (ktx2_loader) {
+          ktx2_loader.dispose();
+          ktx2_loader = undefined;
+        }
 
         if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
       }
