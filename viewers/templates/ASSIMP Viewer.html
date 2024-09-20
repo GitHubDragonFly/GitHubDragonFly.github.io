@@ -1340,6 +1340,7 @@
             }
 
             let str = '_MAPS';
+            if (tex_flip === true) str += '_Y';
             str += (tex_fmt === '') ? ' png' : ' ' + tex_fmt;
 
             await process_zip( str );
@@ -1800,8 +1801,8 @@
               tex.mapping = THREE.EquirectangularReflectionMapping;
               tex.needsUpdate = true;
 
-              scene.background = tex;
-              scene.environment = tex;
+              scene.background = tex.clone();
+              scene.environment = tex.clone();
 
               mouse_wheel = true;
 
@@ -1909,14 +1910,15 @@
 
               if (equi_enabled === true) {
                 hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = hdrJpgEquirectangularMap;
-                scene.environment = hdrJpgEquirectangularMap;
+                scene.background = hdrJpgEquirectangularMap.clone();
+                scene.environment = hdrJpgEquirectangularMap.clone();
               } else {
-                scene.background = hdrJpgEquirectangularMap;
+                scene.background = hdrJpgEquirectangularMap.clone();
               }
 
               mouse_wheel = true;
 
+              hdrJpgEquirectangularMap.dispose();
               texture.renderTarget.texture.dispose();
               texture.renderTarget.dispose();
               texture.dispose();
@@ -2051,14 +2053,15 @@
 
               if (equi_enabled === true) {
                 hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = hdrJpgEquirectangularMap;
-                scene.environment = hdrJpgEquirectangularMap;
+                scene.background = hdrJpgEquirectangularMap.clone();
+                scene.environment = hdrJpgEquirectangularMap.clone();
               } else {
-                scene.background = hdrJpgEquirectangularMap;
+                scene.background = hdrJpgEquirectangularMap.clone();
               }
 
               mouse_wheel = true;
 
+              hdrJpgEquirectangularMap.dispose();
               texture.renderTarget.texture.dispose();
               texture.renderTarget.dispose();
               texture.dispose();
@@ -2109,12 +2112,15 @@
           while( i-- ) { gradient.addColorStop( gradient_colors[ 0 ][ i ], gradient_colors[ 1 ][ i ] ); }
           context.fillStyle = gradient;
           context.fillRect( 0, 0, ww, wh );
+
           let texture = new THREE.Texture( canvas );
           texture.mapping = THREE.EquirectangularReflectionMapping;
           texture.needsUpdate = true;
+
           scene.background = texture.clone();
           scene.environment = texture.clone();
           scene.environmentIntensity = 0.05;
+
           texture.dispose();
 
           document.getElementById('file_image_input').value = '';
@@ -3162,9 +3168,10 @@
                     texture.colorSpace = THREE.SRGBColorSpace;
                     texture.wrapS = THREE.RepeatWrapping;
                     texture.wrapT = THREE.RepeatWrapping;
+                    texture.needsUpdate = true;
 
                     // Apply texture
-                    child.material.map = texture;
+                    child.material.map = texture.clone();
                     child.material.needsUpdate = true;
 
                     texture.dispose();
@@ -3232,11 +3239,12 @@
               texture.colorSpace = THREE.SRGBColorSpace;
               texture.wrapS = THREE.RepeatWrapping;
               texture.wrapT = THREE.RepeatWrapping;
+              texture.needsUpdate = true;
 
               // Apply texture
               draco_material = new THREE.MeshPhongMaterial({
                 side: THREE.DoubleSide,
-                map: texture,
+                map: texture.clone(),
                 opacity: 1,
                 receiveShadow: true,
                 castShadow: true,
@@ -3263,10 +3271,11 @@
             draco_texture.colorSpace = THREE.SRGBColorSpace;
             draco_texture.wrapS = THREE.RepeatWrapping;
             draco_texture.wrapT = THREE.RepeatWrapping;
+            draco_texture.needsUpdate = true;
 
             draco_material = new THREE.MeshPhongMaterial({
               side: THREE.DoubleSide,
-              map: draco_texture,
+              map: draco_texture.clone(),
               opacity: 1,
               receiveShadow: true,
               castShadow: true,
@@ -3399,10 +3408,11 @@
               draco_texture.colorSpace = THREE.SRGBColorSpace;
               draco_texture.wrapS = THREE.RepeatWrapping;
               draco_texture.wrapT = THREE.RepeatWrapping;
+              draco_texture.needsUpdate = true;
 
               draco_material = new THREE.MeshPhongMaterial({
                 side: THREE.DoubleSide,
-                map: draco_texture,
+                map: draco_texture.clone(),
                 opacity: 1,
                 receiveShadow: true,
                 castShadow: true,
@@ -4195,6 +4205,7 @@
 
       async function texture_only_export( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
+        const { dedup } = await import( "@gltf-transform/functions" );
         const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
 
         const io = new WebIO();
@@ -4204,116 +4215,104 @@
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
-        if (tex_fmt !== '') {
-          const textures = doc.getRoot().listTextures();
+        await doc.transform(
+          dedup( { textures: true } )
+        );
 
-          if (textures.length === 0) {
-            throw new Error( 'No textures found to export!' );
-          }
+        const textures = doc.getRoot().listTextures();
 
-          if (tex_fmt.startsWith( 'ktx' )) {
-            const { listTextureSlots } = await import( "@gltf-transform/functions" );
-            const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
-            const { encodeToKTX2 } = await import( "ktx2-encoder" );
+        if (textures.length === 0) {
+          throw new Error( 'No textures found to export!' );
+        }
 
-            const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
-            let file_reader, i = 1;
+        let file_reader, i = 1;
 
-            for (const texture of textures) {
-              const slots = await listTextureSlots( texture );
-              const size = await texture.getSize();
+        if (tex_fmt.startsWith( 'ktx' )) {
+          const { listTextureSlots } = await import( "@gltf-transform/functions" );
+          const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
+          const { encodeToKTX2 } = await import( "ktx2-encoder" );
 
-              const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
-
-              // check if texture dimensions are multiples of 4
-              const width_p2 = size[ 0 ] % 4 === 0;
-              const height_p2 = size[ 1 ] % 4 === 0;
-
-              if (!width_p2 || !height_p2) {
-                // this should produce minimal scale down
-                const width = width_p2 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
-                const height = height_p2 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
-
-                if (file_reader === undefined) file_reader = new FileReader();
-
-                await new Promise( resolve => {
-                  file_reader.onload = function( e ) {
-                    const img = new Image();
-
-                    img.onload = async function() {
-                      const canvas = document.createElement('canvas');
-
-                      canvas.width = width;
-                      canvas.height = height;
-
-                      const ctx = canvas.getContext('2d');
-                      ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
-
-                      const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
-                      const a2b = atob( base64data );
-                      const buff = new Uint8Array( a2b.length );
-
-                      for ( let i = 0, l = buff.length; i < l; i ++ ) {
-                        buff[ i ] = a2b.charCodeAt( i );
-                      }
-
-                      await encodeToKTX2( buff, { isUASTC: uastc } )
-                      .then( ktx_texture => {
-                        texture.setImage( ktx_texture );
-                        texture.setMimeType( 'image/ktx2' );
-                        let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
-                        let blob = new Blob( [ texture[ attr ].image ], { type: 'image/ktx2' } );
-                        resolve( zip.file( texture[ attr ].image.name ? texture[ attr ].image.name : 'image' + i + '.ktx2', blob ) );
-                      });
-                    }
-
-                    img.src = e.target.result;
-                  }
-
-                  file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
-                });
-              } else {
-                await encodeToKTX2( texture.getImage(), { isUASTC: uastc } )
-                .then( ktx_texture => {
-                  texture.setImage( ktx_texture );
-                  texture.setMimeType( 'image/ktx2' );
-                  let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
-                  let blob = new Blob( [ texture[ attr ].image ], { type: 'image/ktx2' } );
-                  zip.file( texture[ attr ].image.name ? texture[ attr ].image.name : 'image' + i + '.ktx2', blob );
-                });
-              }
-
-              i ++;
-            }
-          } else {
-            const { compressTexture } = await import( "@gltf-transform/functions" );
-            let i = 1;
-
-            for (const texture of textures) {
-              await compressTexture( texture, { targetFormat: 'webp' } );
-              let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
-              let blob = new Blob( [ texture[ attr ].image ], { type: 'image/webp' } );
-              zip.file( texture[ attr ].image.name ? texture[ attr ].image.name : 'image' + i + '.webp', blob );
-
-              i ++;
-            }
-          }
-        } else {
-          const textures = doc.getRoot().listTextures();
-
-          if (textures.length === 0) {
-            throw new Error( 'No textures found to export!' );
-          }
-
-          const { compressTexture } = await import( "@gltf-transform/functions" );
-
-          let i = 1;
+          const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
 
           for (const texture of textures) {
-            await compressTexture( texture, { targetFormat: 'png' } );
+            const slots = await listTextureSlots( texture );
+            const size = await texture.getSize();
+
+            const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
+
+            // check if texture dimensions are multiples of 4
+            const width_is_m4 = size[ 0 ] % 4 === 0;
+            const height_is_m4 = size[ 1 ] % 4 === 0;
+
+            let width, height;
+
+            if (!width_is_m4 || !height_is_m4) {
+              // this should produce minimal scale down
+              width = width_is_m4 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+              height = height_is_m4 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
+            } else {
+              width = size[ 0 ];
+              height = size[ 1 ];
+            }
+
+            if (file_reader === undefined) file_reader = new FileReader();
+
+            await new Promise( resolve => {
+              file_reader.onload = function( e ) {
+                const img = new Image();
+
+                img.onload = async function() {
+                  const canvas = document.createElement('canvas');
+
+                  canvas.width = width;
+                  canvas.height = height;
+
+                  const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+                  if (tex_flip === true) {
+                    // Flip image vertically
+                    ctx.translate( 0, canvas.height );
+                    ctx.scale( 1, -1 );
+                  }
+
+                  ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                  const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                  const a2b = atob( base64data );
+                  const buff = new Uint8Array( a2b.length );
+
+                  for ( let i = 0, l = buff.length; i < l; i ++ ) {
+                    buff[ i ] = a2b.charCodeAt( i );
+                  }
+
+                  await encodeToKTX2( buff, { isUASTC: uastc } )
+                  .then( ktx_texture => {
+                    texture.setImage( ktx_texture );
+                    texture.setMimeType( 'image/ktx2' );
+                    let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
+                    let blob = new Blob( [ texture[ attr ].image ], { type: 'image/ktx2' } );
+                    resolve( zip.file( 'image' + i + '.ktx2', blob ) );
+                  });
+                }
+
+                img.src = e.target.result;
+              }
+
+              file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
+            });
+
+            i ++;
+          }
+        } else {
+          const { compressTexture } = await import( "@gltf-transform/functions" );
+
+          let fmt = (tex_fmt === '') ? 'png' : tex_fmt;
+
+          for (const texture of textures) {
+            await compressTexture( texture, { targetFormat: fmt } );
             let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
-            let blob = new Blob( [ texture[ attr ].image ], { type: 'image/png' } );
-            zip.file( texture[ attr ].image.name ? texture[ attr ].image.name : 'image' + i + '.png', blob );
+            let blob = new Blob( [ texture[ attr ].image ], { type: 'image/' + fmt } );
+            await transform_texture( blob, i, '.' + fmt );
 
             i ++;
           }
@@ -4322,6 +4321,38 @@
         for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
         for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
         for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+      }
+
+      async function transform_texture( blob, index, format = '.png' ) {
+        if (tex_flip === true) {
+          let img = new Image();
+
+          await new Promise( resolve => {
+            img.onload = function() {
+              let canvas = document.createElement('canvas');
+
+              canvas.width = Math.min( img.naturalWidth, tex_res );
+              canvas.height = Math.min( img.naturalHeight, tex_res );
+
+              const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+              // Flip image vertically
+              ctx.translate( 0, canvas.height );
+              ctx.scale( 1, -1 );
+
+              ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+              canvas.toBlob( canvas_blob => {
+                resolve( zip.file( 'image' + index + format, canvas_blob ) );
+              }, 'image/' + format, 1 );
+            }
+
+            img.src = URL.createObjectURL( blob );
+            URL.revokeObjectURL( blob );
+          });
+        } else {
+          zip.file( 'image' + index + format, blob );
+        }
       }
 
       async function finish_loading() {

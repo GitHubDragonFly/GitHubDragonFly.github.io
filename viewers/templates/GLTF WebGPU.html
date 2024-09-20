@@ -13,7 +13,11 @@
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.webgpu.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/",
-          "meshoptimizer": "https://esm.sh/meshoptimizer@0.20.0"
+          "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@3.10.1",
+          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@3.10.1",
+          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@3.10.1",
+          "meshoptimizer": "https://esm.sh/meshoptimizer@0.20.0",
+          "ktx2-encoder": "https://esm.sh/ktx2-encoder@0.0.0-experimental.5"
         }
       }
     </script>
@@ -21,9 +25,13 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
+    <!-- For encoding GLB exports with draco compression -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
+
     <script type="module">
       import * as three_js from "three";
       import * as fflate_js from "three/addons/libs/fflate.module.min.js";
+      import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.min.js';
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
       import { KTX2Loader } from "three/addons/loaders/KTX2Loader.min.js";
       import { DRACOLoader } from "three/addons/loaders/DRACOLoader.min.js";
@@ -33,6 +41,7 @@
 
       THREE = three_js;
       fflate = fflate_js;
+      skeletonUtils = SkeletonUtils;
 
       default_camera = new THREE.Object3D();
 
@@ -350,9 +359,13 @@
         </select>
         <select title="Export" id="export_names" style="min-width: 90px;" disabled>
           <option title="Export Formats" value="export" selected disabled>Export</option>
+          <option title="Export Model Textures only with selected format and generic names, defaults to PNG format if None is selected" value="maps" onclick="export_maps();">MAPS</option>
+          <option title="3D Formats" value="3dformats" disabled>- 3D -</option>
           <option title="BIM - Dotbim File Format" value="bim" onclick="export_bim()">BIM</option>
-          <option title="GLB - GL Transmission Format binary regular export" value="glb" onclick="export_gltf( true );">GLB</option>
-          <option title="GLB - GL Transmission Format ascii regular export" value="gltf" onclick="export_gltf();">GLTF</option>
+          <option title="GLB - GL Transmission Format binary regular export with optional texture compression" value="glb" onclick="export_gltf( true );">GLB</option>
+          <option title="GLB - GL Transmission Format binary regular export with DRACO and optional texture compression" value="glbdraco" onclick="export_gltf( true, true );">GLB_d</option>
+          <option title="GLB - GL Transmission Format binary regular export with Meshopt and optional texture compression" value="glbmeshopt" onclick="export_gltf( true, false, true );">GLB_m</option>
+          <option title="GLTF - GL Transmission Format ascii regular export" value="gltf" onclick="export_gltf();">GLTF</option>
           <option title="JSON - Three.js Format" value="json" onclick="export_json();">JSON</option>
           <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
           <option title="PLY - Polygon File Format ascii" value="ply" onclick="export_ply( false );">PLY_a</option>
@@ -387,6 +400,13 @@
           <option title="2k (2048x2048) Y flipped" value="2k_flipped" onclick="tex_res = 2048; tex_flip = true;">2k Y</option>
           <option title="3k (3072x3072) Y flipped" value="3k_flipped" onclick="tex_res = 3072; tex_flip = true;">3k Y</option>
           <option title="4k (4096x4096) Y flipped" value="4k_flipped" onclick="tex_res = 4096; tex_flip = true;">4k Y</option>
+        </select>
+        <select title="Exported Texture Format for GLB exports" id="export_tex_fmt" disabled>
+          <option title="Original" value="original" onclick="tex_fmt = '';" selected>None</option>
+          <option title="WEBP" value="webp" onclick="tex_fmt = 'webp';">WEBP</option>
+          <option title="KTX2 ETC1S + UASTC" value="ktx2" onclick="tex_fmt = 'ktx2';">KTX2</option>
+          <option title="KTX2 ETC1S Only" value="ktx2e" onclick="tex_fmt = 'ktx2e';">KTX2e</option>
+          <option title="KTX2 UASTC Only" value="ktx2u" onclick="tex_fmt = 'ktx2u';">KTX2u</option>
         </select>
         <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; width: 40px;" disabled>RST</button>
         <button title="Toggle Full Screen" id="btn_full_screen" onclick="full_screen();" style="background-color: transparent; min-width: 24px;"><p class="full_screen"></p></button>
@@ -752,10 +772,10 @@
     </script>
 
     <script>
-      var THREE, manager, g_loader, gltf_loader, ktx2_loader, texture_loader, clock;
-      var fflate, draco_loader, tga_loader, dds_loader, exr_loader, rgbe_loader;
+      var THREE, fflate, manager, g_loader, gltf_loader, ktx2_loader, texture_loader;
+      var skeletonUtils, draco_loader, tga_loader, dds_loader, exr_loader, rgbe_loader;
       var gpu, gl2, renderer, scene, scenes, default_camera, camera, cameras, cam_id;
-      var controls, orb_controls, gizmo, orb_controls_gizmo, count = 0;
+      var controls, orb_controls, gizmo, orb_controls_gizmo, clock, count = 0;
       var grid, polar_grid, grid_visible, polar_grid_visible, object_is_points;
       var animations, animation_mixer, current_animation, extras, current_extra;
       var gltf_obj, parser, current_side, resource_path, edges, edges_visible;
@@ -763,7 +783,7 @@
       var gui, gui_set = false, guiExposure, params, toneMappingOptions, draco_material;
       var variants, variant_materials, current_variant, variants_available, link;
       var ambientLight, directionalLight, isMobile, equi_enabled, depthTest_enabled;
-      var ww = window.innerWidth, wh = window.innerHeight, tex_res, tex_flip;
+      var ww = window.innerWidth, wh = window.innerHeight, tex_res, tex_flip, tex_fmt;
       var animation_running, extra_running, gif_export;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation, texture_maps;
       var render_requested, flat_shading_enabled, filename;
@@ -978,7 +998,7 @@
         }
       }
 
-      async function export_gltf( binary = false ) {
+      async function export_gltf( binary = false, draco = false, meshopt = false ) {
         if (gltf_obj) {
           await start_export();
 
@@ -988,12 +1008,22 @@
 
           let options = {	binary: binary, maxTextureSize: tex_res };
 
-          gltf_exporter.parse( gltf_obj.clone(), async json => {
+          gltf_exporter.parse( skeletonUtils.clone( gltf_obj ), async json => {
             let blob;
 
             if (binary === true) {
               try {
-                blob = new Blob( [ new Uint8Array( json ) ], { type: 'application/octet-stream' } );
+                let type = 'application/octet-stream';
+
+                if (draco === true) {
+                  blob = new Blob( [ await draco_compress( new Uint8Array( json ) ) ], { type: type } );
+                } else if (meshopt === true) {
+                  blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: type } );
+                } else if (tex_fmt !== '') {
+                  blob = new Blob( [ await texture_compress( new Uint8Array( json ) ) ], { type: type } );
+                } else {
+                  blob = new Blob( [ new Uint8Array( json ) ], { type: type } );
+                }
               } catch (error) {
                 handle_export_error( error );
                 return;
@@ -1002,6 +1032,12 @@
               zip.file( filename + '.glb', blob );
 
               let str = '_GLB';
+              if (draco === true) {
+                str += '_DRACO';
+              } else if (meshopt === true) {
+                str += '_MESHOPT';
+              }
+              if (tex_fmt !== '') str += ' ' + tex_fmt;
               if (tex_res !== Infinity) str += ' (' + tex_res + ')';
 
               await process_zip( str );
@@ -1032,6 +1068,33 @@
           zip.file( filename + '.json', blob );
 
           await process_zip( '_JSON' );
+        }
+      }
+
+      async function export_maps() {
+        if (gltf_obj) {
+          await start_export();
+
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
+
+          let options = {	binary: true, maxTextureSize: tex_res };
+
+          gltf_exporter.parse( skeletonUtils.clone( gltf_obj ), async json => {
+            try {
+              await texture_only_export( new Uint8Array( json ) );
+            } catch (error) {
+              handle_export_error( error );
+              return;
+            }
+
+            let str = '_MAPS';
+            if (tex_flip === true) str += '_Y';
+            str += (tex_fmt === '') ? ' png' : ' ' + tex_fmt;
+
+            await process_zip( str );
+          }, function( error ) { handle_export_error( error ); }, options);
         }
       }
 
@@ -1733,12 +1796,12 @@
           if (gpu === false) {
             scene.background = texture.clone();
             scene.environment = texture.clone();
-            scene.environmentIntensity = 0.15;
           } else {
             scene.backgroundNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
             scene.environmentNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
-            scene.environmentIntensity = 0.15;
           }
+
+          scene.environmentIntensity = 0.15;
 
           texture.dispose();
 
@@ -1991,6 +2054,7 @@
       function animate_gltf() {
         if (animation_running === true) {
           animation_mixer.clipAction( animations[ current_animation ] ).stop();
+          animation_mixer.clipAction( animations[ current_animation ] ).reset();
 
           if (current_animation === animations.length - 1) {
             document.getElementById('btn_animate').style.backgroundColor = '#d1cefc';
@@ -2138,6 +2202,7 @@
         mouse_wheel = true;
         tex_flip = false;
         tex_res = Infinity;
+        tex_fmt = '';
         guiExposure = null;
         local_files = null;
         local_bin_files = [];
@@ -2357,10 +2422,15 @@
 
         for (const key in mtl) {
           nodeMaterial[ key ] = mtl[ key ];
+          if (mtl[ key ] && mtl[ key ].isTexture) mtl[ key ].dispose();
         }
 
-        nodeMaterial.castShadow = true;
-        nodeMaterial.receiveShadow = true;
+        mtl.dispose();
+
+        if (! nodeMaterial.isMeshStandardMaterial) {
+          nodeMaterial.castShadow = true;
+          nodeMaterial.receiveShadow = true;
+        }
 
         return nodeMaterial;
       }
@@ -2532,9 +2602,10 @@
                     texture.colorSpace = THREE.SRGBColorSpace;
                     texture.wrapS = THREE.RepeatWrapping;
                     texture.wrapT = THREE.RepeatWrapping;
+                    texture.needsUpdate = true;
 
                     // Apply texture
-                    child.material.map = texture;
+                    child.material.map = texture.clone();
                     child.material.needsUpdate = true;
 
                     texture.dispose();
@@ -2602,14 +2673,13 @@
               texture.colorSpace = THREE.SRGBColorSpace;
               texture.wrapS = THREE.RepeatWrapping;
               texture.wrapT = THREE.RepeatWrapping;
+              texture.needsUpdate = true;
 
               // Apply texture
               draco_material = new THREE.MeshStandardNodeMaterial({
                 side: THREE.DoubleSide,
-                map: texture,
+                map: texture.clone(),
                 opacity: 1,
-                receiveShadow: true,
-                castShadow: true,
                 transparent: true,
                 vertexColors: geometry.hasAttribute( 'color' )
               });
@@ -2633,13 +2703,12 @@
             draco_texture.colorSpace = THREE.SRGBColorSpace;
             draco_texture.wrapS = THREE.RepeatWrapping;
             draco_texture.wrapT = THREE.RepeatWrapping;
+            draco_texture.needsUpdate = true;
 
             draco_material = new THREE.MeshStandardNodeMaterial({
               side: THREE.DoubleSide,
-              map: draco_texture,
+              map: draco_texture.clone(),
               opacity: 1,
-              receiveShadow: true,
-              castShadow: true,
               transparent: true,
               vertexColors: geometry.hasAttribute( 'color' )
             });
@@ -2844,13 +2913,12 @@
               draco_texture.colorSpace = THREE.SRGBColorSpace;
               draco_texture.wrapS = THREE.RepeatWrapping;
               draco_texture.wrapT = THREE.RepeatWrapping;
+              draco_texture.needsUpdate = true;
 
               draco_material = new THREE.MeshStandardNodeMaterial({
                 side: THREE.DoubleSide,
-                map: draco_texture,
+                map: draco_texture.clone(),
                 opacity: 1,
-                receiveShadow: true,
-                castShadow: true,
                 transparent: true,
                 vertexColors: vertex_colors_enabled
               });
@@ -3003,6 +3071,538 @@
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
+      }
+
+      /* Encode with draco compression - geometry */
+
+      async function draco_compress( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer" );
+        const { dedup, flatten, instance, join, palette, prune, simplify, unpartition, weld } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+        io.registerDependencies({
+          'draco3d.encoder': DracoEncoderModule(),
+        });
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          unpartition(),
+          palette({ min: 5 }),
+          dedup( { textures: true } ),
+          prune(),
+          instance( { min: 2 } ),
+          flatten(),
+          join(),
+          weld( { tolerance: 0, toleranceNormal: 0.1 } ),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+        );
+
+        if (tex_fmt !== '') {
+          const textures = doc.getRoot().listTextures();
+
+          if (tex_fmt.startsWith( 'ktx' )) {
+            const { listTextureSlots } = await import( "@gltf-transform/functions" );
+            const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
+            const { encodeToKTX2 } = await import( "ktx2-encoder" );
+
+            const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+            for (const texture of textures) {
+              const slots = await listTextureSlots( texture );
+              const size = await texture.getSize();
+
+              const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
+
+              // check if texture dimensions are multiples of 4
+              const width_p2 = size[ 0 ] % 4 === 0;
+              const height_p2 = size[ 1 ] % 4 === 0;
+
+              if (!width_p2 || !height_p2) {
+                // this should produce minimal scale down
+                const width = width_p2 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+                const height = height_p2 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
+
+                const file_reader = new FileReader();
+
+                await new Promise( resolve => {
+                  file_reader.onload = function( e ) {
+                    const img = new Image();
+
+                    img.onload = async function() {
+                      const canvas = document.createElement('canvas');
+
+                      canvas.width = width;
+                      canvas.height = height;
+
+                      const ctx = canvas.getContext('2d');
+                      ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                      const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                      const a2b = atob( base64data );
+                      const buff = new Uint8Array( a2b.length );
+
+                      for ( let i = 0, l = buff.length; i < l; i ++ ) {
+                        buff[ i ] = a2b.charCodeAt( i );
+                      }
+
+                      await encodeToKTX2( buff, { isUASTC: uastc } )
+                      .then( ktx_texture => {
+                        texture.setImage( ktx_texture );
+                        texture.setMimeType( 'image/ktx2' );
+                        resolve( doc.createExtension( KHRTextureBasisu ).setRequired( true ) );
+                      });
+                    }
+
+                    img.src = e.target.result;
+                  }
+
+                  file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
+                });
+              } else {
+                await encodeToKTX2( texture.getImage(), { isUASTC: uastc } )
+                .then( ktx_texture => {
+                  texture.setImage( ktx_texture );
+                  texture.setMimeType( 'image/ktx2' );
+                  doc.createExtension( KHRTextureBasisu ).setRequired( true );
+                });
+              }
+            }
+          } else {
+            const { compressTexture } = await import( "@gltf-transform/functions" );
+            const { EXTTextureWebP } = await import( "@gltf-transform/extensions" );
+
+            for (const texture of textures) {
+              await compressTexture( texture, { targetFormat: tex_fmt } );
+              doc.createExtension( EXTTextureWebP ).setRequired( true );
+              io.registerExtensions( [ EXTTextureWebP ] );
+            }
+          }
+        }
+
+        doc.createExtension( KHRDracoMeshCompression )
+        .setRequired( true )
+        .setEncoderOptions({
+          method: KHRDracoMeshCompression.EncoderMethod.EDGEBREAKER,
+          encodeSpeed: 5,
+        });
+
+        const compressedArrayBuffer = io.writeBinary( doc );
+
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
+      }
+
+      /* Encode with meshopt compression - geometry, morphs, animations */
+
+      async function meshopt_compress( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { MeshoptEncoder, MeshoptSimplifier } = await import( "meshoptimizer" );
+        const { dedup, flatten, instance, join, meshopt, palette, prune, simplify, unpartition, weld } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
+
+        await MeshoptEncoder.ready;
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+        io.registerDependencies({
+          'meshopt.encoder': MeshoptEncoder,
+        });
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          unpartition(),
+          palette({ min: 5 }),
+          dedup( { textures: true } ),
+          prune(),
+          instance( { min: 2 } ),
+          flatten(),
+          join(),
+          weld( { tolerance: 0, toleranceNormal: 0.1 } ),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } ),
+          meshopt( { encoder: MeshoptEncoder, level: 'high' } )
+        );
+
+        if (tex_fmt !== '') {
+          const textures = doc.getRoot().listTextures();
+
+          if (tex_fmt.startsWith( 'ktx' )) {
+            const { listTextureSlots } = await import( "@gltf-transform/functions" );
+            const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
+            const { encodeToKTX2 } = await import( "ktx2-encoder" );
+
+            const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+            for (const texture of textures) {
+              const slots = await listTextureSlots( texture );
+              const size = await texture.getSize();
+
+              const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
+
+              // check if texture dimensions are multiples of 4
+              const width_p2 = size[ 0 ] % 4 === 0;
+              const height_p2 = size[ 1 ] % 4 === 0;
+
+              if (!width_p2 || !height_p2) {
+                // this should produce minimal scale down
+                const width = width_p2 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+                const height = height_p2 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
+
+                const file_reader = new FileReader();
+
+                await new Promise( resolve => {
+                  file_reader.onload = function( e ) {
+                    const img = new Image();
+
+                    img.onload = async function() {
+                      const canvas = document.createElement('canvas');
+
+                      canvas.width = width;
+                      canvas.height = height;
+
+                      const ctx = canvas.getContext('2d');
+                      ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                      const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                      const a2b = atob( base64data );
+                      const buff = new Uint8Array( a2b.length );
+
+                      for ( let i = 0, l = buff.length; i < l; i ++ ) {
+                        buff[ i ] = a2b.charCodeAt( i );
+                      }
+
+                      await encodeToKTX2( buff, { isUASTC: uastc } )
+                      .then( ktx_texture => {
+                        texture.setImage( ktx_texture );
+                        texture.setMimeType( 'image/ktx2' );
+                        resolve( doc.createExtension( KHRTextureBasisu ).setRequired( true ) );
+                      });
+                    }
+
+                    img.src = e.target.result;
+                  }
+
+                  file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
+                });
+              } else {
+                await encodeToKTX2( texture.getImage(), { isUASTC: uastc } )
+                .then( ktx_texture => {
+                  texture.setImage( ktx_texture );
+                  texture.setMimeType( 'image/ktx2' );
+                  doc.createExtension( KHRTextureBasisu ).setRequired( true );
+                });
+              }
+            }
+          } else {
+            const { compressTexture } = await import( "@gltf-transform/functions" );
+            const { EXTTextureWebP } = await import( "@gltf-transform/extensions" );
+
+            for (const texture of textures) {
+              await compressTexture( texture, { targetFormat: tex_fmt } );
+              doc.createExtension( EXTTextureWebP ).setRequired( true );
+              io.registerExtensions( [ EXTTextureWebP ] );
+            }
+          }
+        }
+
+        doc.createExtension( EXTMeshoptCompression )
+        .setRequired( true )
+        .setEncoderOptions({
+          method: EXTMeshoptCompression.EncoderMethod.QUANTIZE,  // or EXTMeshoptCompression.EncoderMethod.FILTER
+        });
+
+        io.registerExtensions( [ EXTMeshoptCompression ] );
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
+      }
+
+      /* Encode textures only with either of WEBP or KTX2 compression */
+
+      async function texture_compress( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer" );
+        const { dedup, flatten, instance, join, meshopt, palette, prune, simplify, unpartition, weld } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          unpartition(),
+          palette({ min: 5 }),
+          dedup( { textures: true } ),
+          prune(),
+          instance( { min: 2 } ),
+          flatten(),
+          join(),
+          weld( { tolerance: 0, toleranceNormal: 0.1 } ),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+        );
+
+        if (tex_fmt !== '') {
+          const textures = doc.getRoot().listTextures();
+
+          if (tex_fmt.startsWith( 'ktx' )) {
+            const { listTextureSlots } = await import( "@gltf-transform/functions" );
+            const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
+            const { encodeToKTX2 } = await import( "ktx2-encoder" );
+
+            const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+            for (const texture of textures) {
+              const slots = await listTextureSlots( texture );
+              const size = await texture.getSize();
+
+              const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
+
+              // check if texture dimensions are multiples of 4
+              const width_p2 = size[ 0 ] % 4 === 0;
+              const height_p2 = size[ 1 ] % 4 === 0;
+
+              if (!width_p2 || !height_p2) {
+                // this should produce minimal scale down
+                const width = width_p2 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+                const height = height_p2 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
+
+                const file_reader = new FileReader();
+
+                await new Promise( resolve => {
+                  file_reader.onload = function( e ) {
+                    const img = new Image();
+
+                    img.onload = async function() {
+                      const canvas = document.createElement('canvas');
+
+                      canvas.width = width;
+                      canvas.height = height;
+
+                      const ctx = canvas.getContext('2d');
+                      ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                      const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                      const a2b = atob( base64data );
+                      const buff = new Uint8Array( a2b.length );
+
+                      for ( let i = 0, l = buff.length; i < l; i ++ ) {
+                        buff[ i ] = a2b.charCodeAt( i );
+                      }
+
+                      await encodeToKTX2( buff, { isUASTC: uastc } )
+                      .then( ktx_texture => {
+                        texture.setImage( ktx_texture );
+                        texture.setMimeType( 'image/ktx2' );
+                        resolve( doc.createExtension( KHRTextureBasisu ).setRequired( true ) );
+                      });
+                    }
+
+                    img.src = e.target.result;
+                  }
+
+                  file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
+                });
+              } else {
+                await encodeToKTX2( texture.getImage(), { isUASTC: uastc } )
+                .then( ktx_texture => {
+                  texture.setImage( ktx_texture );
+                  texture.setMimeType( 'image/ktx2' );
+                  doc.createExtension( KHRTextureBasisu ).setRequired( true );
+                });
+              }
+            }
+          } else {
+            const { compressTexture } = await import( "@gltf-transform/functions" );
+            const { EXTTextureWebP } = await import( "@gltf-transform/extensions" );
+
+            for (const texture of textures) {
+              await compressTexture( texture, { targetFormat: tex_fmt } );
+              doc.createExtension( EXTTextureWebP ).setRequired( true );
+              io.registerExtensions( [ EXTTextureWebP ] );
+            }
+          }
+        }
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
+      }
+
+      /* Export textures only as either PNG or WEBP or KTX2 */
+
+      async function texture_only_export( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { dedup } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          dedup( { textures: true } )
+        );
+
+        const textures = doc.getRoot().listTextures();
+
+        if (textures.length === 0) {
+          throw new Error( 'No textures found to export!' );
+        }
+
+        let file_reader, i = 1;
+
+        if (tex_fmt.startsWith( 'ktx' )) {
+          const { listTextureSlots } = await import( "@gltf-transform/functions" );
+          const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
+          const { encodeToKTX2 } = await import( "ktx2-encoder" );
+
+          const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+          for (const texture of textures) {
+            const slots = await listTextureSlots( texture );
+            const size = await texture.getSize();
+
+            const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
+
+            // check if texture dimensions are multiples of 4
+            const width_is_m4 = size[ 0 ] % 4 === 0;
+            const height_is_m4 = size[ 1 ] % 4 === 0;
+
+            let width, height;
+
+            if (!width_is_m4 || !height_is_m4) {
+              // this should produce minimal scale down
+              width = width_is_m4 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+              height = height_is_m4 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
+            } else {
+              width = size[ 0 ];
+              height = size[ 1 ];
+            }
+
+            if (file_reader === undefined) file_reader = new FileReader();
+
+            await new Promise( resolve => {
+              file_reader.onload = function( e ) {
+                const img = new Image();
+
+                img.onload = async function() {
+                  const canvas = document.createElement('canvas');
+
+                  canvas.width = width;
+                  canvas.height = height;
+
+                  const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+                  if (tex_flip === true) {
+                    // Flip image vertically
+                    ctx.translate( 0, canvas.height );
+                    ctx.scale( 1, -1 );
+                  }
+
+                  ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                  const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                  const a2b = atob( base64data );
+                  const buff = new Uint8Array( a2b.length );
+
+                  for ( let i = 0, l = buff.length; i < l; i ++ ) {
+                    buff[ i ] = a2b.charCodeAt( i );
+                  }
+
+                  await encodeToKTX2( buff, { isUASTC: uastc } )
+                  .then( ktx_texture => {
+                    texture.setImage( ktx_texture );
+                    texture.setMimeType( 'image/ktx2' );
+                    let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
+                    let blob = new Blob( [ texture[ attr ].image ], { type: 'image/ktx2' } );
+                    resolve( zip.file( 'image' + i + '.ktx2', blob ) );
+                  });
+                }
+
+                img.src = e.target.result;
+              }
+
+              file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
+            });
+
+            i ++;
+          }
+        } else {
+          const { compressTexture } = await import( "@gltf-transform/functions" );
+
+          let fmt = (tex_fmt === '') ? 'png' : tex_fmt;
+
+          for (const texture of textures) {
+            await compressTexture( texture, { targetFormat: fmt } );
+            let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
+            let blob = new Blob( [ texture[ attr ].image ], { type: 'image/' + fmt } );
+            await transform_texture( blob, i, '.' + fmt );
+
+            i ++;
+          }
+        }
+
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+      }
+
+      async function transform_texture( blob, index, format = '.png' ) {
+        if (tex_flip === true) {
+          let img = new Image();
+
+          await new Promise( resolve => {
+            img.onload = function() {
+              let canvas = document.createElement('canvas');
+
+              canvas.width = Math.min( img.naturalWidth, tex_res );
+              canvas.height = Math.min( img.naturalHeight, tex_res );
+
+              const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+              // Flip image vertically
+              ctx.translate( 0, canvas.height );
+              ctx.scale( 1, -1 );
+
+              ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+              canvas.toBlob( canvas_blob => {
+                resolve( zip.file( 'image' + index + format, canvas_blob ) );
+              }, 'image/' + format, 1 );
+            }
+
+            img.src = URL.createObjectURL( blob );
+            URL.revokeObjectURL( blob );
+          });
+        } else {
+          zip.file( 'image' + index + format, blob );
+        }
       }
 
       function update_line_visibility() {
@@ -3459,6 +4059,7 @@
         document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
 
         document.getElementById('export_tex_res').selectedIndex = 0;
+        document.getElementById('export_tex_fmt').selectedIndex = 0;
 
         // Reset camera and vertex colors related values
         if (cameras) {
@@ -3698,6 +4299,7 @@
         document.getElementById('reset').disabled = disable;
         document.getElementById('export_names').disabled = disable;
         document.getElementById('export_tex_res').disabled = disable;
+        document.getElementById('export_tex_fmt').disabled = disable;
         disabled_changed();
 
         mouse_wheel = true;
@@ -3749,11 +4351,13 @@
           PointsMaterial: THREE.PointsNodeMaterial, ShadowMaterial: THREE.ShadowNodeMaterial, SpriteMaterial: THREE.SpriteNodeMaterial
         };
 
+        $('#export_tex_fmt').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#export_tex_res').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#model_scale').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
 
         if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile === true) {
+          $('#export_tex_fmt').change( function() { $(this).children(':selected').click(); });
           $('#export_tex_res').change( function() { $(this).children(':selected').click(); });
           $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
