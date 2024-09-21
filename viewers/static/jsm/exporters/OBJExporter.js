@@ -1,17 +1,13 @@
 import {
 	CanvasTexture,
 	Color,
-	LinearFilter,
-	LinearMipmapLinearFilter,
 	MathUtils,
 	Matrix3,
 	Mesh,
 	PerspectiveCamera,
 	PlaneGeometry,
-	RepeatWrapping,
 	Scene,
 	ShaderMaterial,
-	SRGBColorSpace,
 	Uniform,
 	Vector2,
 	Vector3
@@ -2146,13 +2142,13 @@ class OBJExporter {
 
 		}
 
-		readableTexture.colorSpace = texture.colorSpace || SRGBColorSpace;
-		readableTexture.minFilter = texture.minFilter || LinearMipmapLinearFilter;
-		readableTexture.magFilter = texture.magFilter || LinearFilter;
-		readableTexture.wrapS = texture.wrapS || RepeatWrapping;
-		readableTexture.wrapT = texture.wrapT || RepeatWrapping;
 		readableTexture.offset = new Vector2( offset.x, offset.y );
 		readableTexture.repeat = new Vector2( repeat.x, repeat.y );
+		readableTexture.colorSpace = texture.colorSpace;
+		readableTexture.minFilter = texture.minFilter;
+		readableTexture.magFilter = texture.magFilter;
+		readableTexture.wrapS = texture.wrapS;
+		readableTexture.wrapT = texture.wrapT;
 		readableTexture.name = texture.name;
 
 		readableTexture.needsUpdate = true;
