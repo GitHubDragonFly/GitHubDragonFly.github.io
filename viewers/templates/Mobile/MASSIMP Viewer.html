@@ -210,7 +210,7 @@
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
-            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="20" step="0.05" value="1" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
+            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="30" step="0.05" value="1" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
             <span id="dli_val">1</span>
           </div>
         </button>
@@ -350,10 +350,10 @@
     <script>
       var g_loader, ktx2_loader, texture_loader, gltf_loader, draco_loader, tga_loader, dds_loader;
       var THREE, fflate, manager, renderer, scene, render_requested, bounding_box;
-      var animations, animation_running, animation_mixer, current_animation, merge_vertices;
+      var animations, animation_running, animation_mixer, current_animation;
       var vrm, vrm_registered = false, current_vrm, first_run = false, fr_count = 0, clock;
       var parser, gltf_VideoTextureExtension, isMobile, texture_maps, dds_flip = true;
-      var default_camera, camera, cameras, cam_id, vertexColors_removed;
+      var default_camera, camera, cameras, cam_id, merge_vertices;
       var gltf_obj, assimp_load, resource_path, wireframe_enabled;
       var variants, variant_materials, current_variant, variants_available;
       var controls, mouse_down, mouse_wheel, events_initialized, draco_material;
@@ -492,7 +492,7 @@
       async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
-        if (scene) {
+        if (scene !== undefined) {
           mouse_wheel = true;
 
           if (gltf_obj) await scene_cleanup();
@@ -544,7 +544,6 @@
         animation_running = false;
         wireframe_enabled = false;
         flat_shading_enabled = false;
-        vertexColors_removed = false;
         bounding_box = new THREE.Box3();
 
         document.getElementById('btn_animate').style.backgroundColor = 'transparent';
@@ -830,8 +829,8 @@
             texture.mapping = THREE.EquirectangularReflectionMapping;
             texture.needsUpdate = true;
 
-            scene.environment = texture;
-            scene.environmentIntensity = 0.25;
+            scene.environment = texture.clone();
+            scene.environmentIntensity = 0.15;
 
             mouse_wheel = true;
 
@@ -848,20 +847,6 @@
           if (selected_gltf_file !== null) loadFile();
           else if (selected_draco_file !== null) loadDRACO();
         }
-      }
-
-      function check_vertex_colors( geometry ) {
-        if (geometry.attributes.color.array.some( c => c < 1.0 )) {
-          if (!geometry.attributes.color.array.some( c => c > 0 )) {
-            geometry.deleteAttribute( 'color' );
-            vertexColors_removed = true;
-          }
-        } else {
-          geometry.deleteAttribute( 'color' );
-          vertexColors_removed = true;
-        }
-
-        return geometry;
       }
 
       function loadFile() {
@@ -914,18 +899,13 @@
 
           gltf_obj.traverse( async function( child ) {
             if ( child.isLineSegments || child.isConditionalLine ) {
+              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+              child.geometry.normalizeNormals();
               child.geometry.computeBoundingBox();
               child.geometry.computeBoundingSphere();
-              child.geometry.computeVertexNormals();
-              child.geometry.normalizeNormals();
             }
 
             if (child.isMesh || child.isPoints) {
-              // White is the default color so check if all white or black
-              if (child.geometry.hasAttribute( 'color' ) === true) {
-                child.geometry = await check_vertex_colors( child.geometry );
-              }
-
               if (assimp_load === true) {
                 child.geometry.deleteAttribute('normal');
                 child.geometry = merge_vertices( child.geometry, 1e-6 );
@@ -964,10 +944,6 @@
 
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
-                  if (mtl.vertexColors === true && vertexColors_removed === true) {
-                    mtl.vertexColors = false;
-                  }
-
                   if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
 
                   if ( mtl.transmission && mtl.transmission > 0 ) {
@@ -1011,10 +987,6 @@
                   mtl.needsUpdate = true;
                 });
               } else {
-                if (child.material.vertexColors === true && vertexColors_removed === true) {
-                  child.material.vertexColors = false;
-                }
-
                 if (child.isPoints === true) child.material.size = isMobile === true ? 0.8 : 1.25;
 
                 if ( child.material.transmission && child.material.transmission > 0 ) {
@@ -1125,11 +1097,6 @@
 
         draco_loader.load( URL.createObjectURL( local_files[ selected_draco_file ] ), async function( geometry ) {
           URL.revokeObjectURL( local_files[ selected_draco_file ] );
-
-          // White is the default color so check if all white or black
-          if (geometry.hasAttribute( 'color' ) === true) {
-            geometry = await check_vertex_colors( geometry );
-          }
 
           if (!geometry.attributes.normal) geometry.computeVertexNormals();
           geometry.normalizeNormals();
@@ -1313,11 +1280,6 @@
 
           if (selected_gltf_url_file.toUpperCase().endsWith('.DRC')) {
             draco_loader.load( selected_gltf_url_file, async function( geometry ) {
-              // White is the default color so check if all white or black
-              if (geometry.hasAttribute( 'color' ) === true) {
-                geometry = await check_vertex_colors( geometry );
-              }
-
               if (!geometry.attributes.normal) geometry.computeVertexNormals();
               geometry.normalizeNormals();
 
@@ -1403,11 +1365,6 @@
                 }
 
                 if (child.isMesh || child.isPoints) {
-                  // White is the default color so check if all white or black
-                  if (child.geometry.hasAttribute( 'color' ) === true) {
-                    child.geometry = await check_vertex_colors( child.geometry );
-                  }
-
                   if (assimp_load === true) {
                     child.geometry.deleteAttribute('normal');
                     child.geometry = merge_vertices( child.geometry, 1e-6 );
@@ -1446,10 +1403,6 @@
 
                   if (Array.isArray( child.material )) {
                     child.material.forEach( mtl => {
-                      if (mtl.vertexColors === true && vertexColors_removed === true) {
-                        mtl.vertexColors = false;
-                      }
-
                       if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
 
                       if ( mtl.transmission && mtl.transmission > 0 ) {
@@ -1493,10 +1446,6 @@
                       mtl.needsUpdate = true;
                     });
                   } else {
-                    if (child.material.vertexColors === true && vertexColors_removed === true) {
-                      child.material.vertexColors = false;
-                    }
-
                     if (child.isPoints === true) child.material.size = isMobile === true ? 0.8 : 1.25;
 
                     if ( child.material.transmission && child.material.transmission > 0 ) {
@@ -1778,7 +1727,7 @@
           }
         } else {
           // Page (re)loading
-          if (scene) {
+          if (scene !== undefined) {
             if (scene.environment) {
               scene.environment.dispose();
               scene.environment = null;
