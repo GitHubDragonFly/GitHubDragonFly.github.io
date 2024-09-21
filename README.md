@@ -118,9 +118,11 @@ Number Type Converter
 - Currently experimental three.js `WebGPU` support is included in experimental `GLTF WebGPU` and `OBJ+MTL WebGPU` viewers:
   - Use either Chrome or Safari browser with its `WebGPU experimental features` enabled to test these viewers (and your computer):
     - Not really sure yet if WebGPU in Firefox Nightly browser works properly
-  - Both viewers also have some export options available:
-    -  `GLTF WebGPU` viewer can be used to optimize and compress GLTF / GLB models
+  - Both viewers are customized and also have some export options available:
+    -  `GLTF WebGPU` viewer can also be used to optimize and compress GLTF / GLB models
   - Mobile versions of these viewers are available but not properly tested yet
+  - Standalone versions of these viewers, using official imports, are available in the `viewers/webgpu/` folder:
+    - Export functionality is not included in these viewers
 - Memory handling should be good, relatively speaking:
   - With every next model loaded the previous model geometries / materials are being disposed of
   - Viewers are webpages so it might be easier to refresh the whole page before loading the next model
