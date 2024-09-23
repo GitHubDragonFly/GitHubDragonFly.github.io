@@ -99,7 +99,6 @@ GitHub repositories offer an option, 3 dots button in the top right corner of th
  - `https://github.com/gkjohnson/3d-demo-data/tree/main/models`
  - `https://github.com/ue4plugins/GLTFWebViewer/tree/main/public/assets`
  - `https://github.com/josdirksen/learning-threejs/tree/master/assets/models`
- - `https://github.com/buildingsmart-private/IfcDoc/tree/master/IfcKit/examples`
  - `https://github.com/mikelovesrobots/mmmm`
  - `https://github.com/xeolabs/xeogl/tree/master/examples/models`
  - `https://github.com/joewalnes/gcode-viewer/tree/master/web/examples`
