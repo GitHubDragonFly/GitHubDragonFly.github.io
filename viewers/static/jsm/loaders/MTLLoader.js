@@ -771,6 +771,7 @@ class MaterialCreator {
 
 		} else {
 
+			if ( params.specular ) delete params[ 'specular' ];
 			if ( refraction_present === true ) params.ior = refraction_value;
 			if ( params.iridescence ) params.iridescenceThicknessRange = iridescenceThicknessRange;
 
