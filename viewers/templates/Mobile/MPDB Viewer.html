@@ -11,8 +11,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.167.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.0/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
         }
       }
     </script>
@@ -27,19 +27,7 @@
       THREE = three_js;
 
       manager = new THREE.LoadingManager();
-
-      manager.onProgress = async function( item, loaded, total ) {
-        if ( loaded === total ) {
-          console.timeEnd( 'Loading Time' );
-          document.getElementById('div_loading').style.display = 'none';
-          enable_disable( false );
-          render_requested = true;
-          mouse_wheel = true;
-          render();
-
-          if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
-        }
-      }
+      manager.onLoad = function() { mouse_wheel = true; }
 
       pdb_loader = new PDBLoader( manager );
 
@@ -184,7 +172,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>PDB Viewer (r167)</title>
+    <title>PDB Viewer (r168)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -198,8 +186,8 @@
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
-            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="20" step="0.05" value="3" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
-            <span id="dli_val">3</span>
+            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="20" step="0.05" value="2.25" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
+            <span id="dli_val">2.25</span>
           </div>
         </button>
         <label for="btn_dc_dli" title="Directional Light Intensity"></label>
@@ -265,7 +253,7 @@
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
 
         window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
-        window.addEventListener( 'pointerup', (event) => { mouse_down = false; }, false);
+        window.addEventListener( 'pointerup', (event) => { mouse_down = false; mouse_wheel = true; }, false);
         window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
         window.addEventListener( 'keydown', ( event ) => {
           if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
@@ -353,7 +341,7 @@
       async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
-        if (scene) {
+        if (scene !== undefined) {
           mouse_wheel = true;
 
           if (pdb_obj) await scene_cleanup();
@@ -381,7 +369,9 @@
         color = new THREE.Color();
         root = new THREE.Group();
         boxGeometry = new THREE.BoxGeometry( 1, 1, 1 );
+        boxMaterial = new THREE.MeshPhongMaterial( { color: 0xFFFFFF, specular: 0x7C7C7C, shininess: 30 } );
         sphereGeometry = new THREE.IcosahedronGeometry( 1, 2 );
+        sphereMaterial = new THREE.MeshPhongMaterial( { specular: 0x7C7C7C, shininess: 30 } );
 
         console.time( 'Loading Time' );
         document.body.style.backgroundImage = 'none';
@@ -426,6 +416,7 @@
           labelRenderer.setSize( ww, wh );
           labelRenderer.domElement.style.position = 'absolute';
           labelRenderer.domElement.style.top = '0px';
+          labelRenderer.domElement.style.zIndex = '0';
           labelRenderer.domElement.style.pointerEvents = 'none';
 
           document.body.appendChild( labelRenderer.domElement );
@@ -444,7 +435,7 @@
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 3 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2.25 );
           directionalLight.position.set( 0, 250, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
@@ -469,44 +460,19 @@
           //controls.maxDistance = 500;
         }
 
-        if (scene.environment === null) {
-          let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/water.jpg';
-
-          new THREE.TextureLoader().load( url, async function( texture ) {
-            texture.mapping = THREE.EquirectangularReflectionMapping;
-            texture.needsUpdate = true;
-
-            scene.environment = texture;
-            scene.environmentIntensity = 0.25;
-
-            mouse_wheel = true;
-
-            texture.dispose();
-          }, function ( xhr ) {
-          }, function ( error ) {
-            console.log( 'Error Loading Scene Environment Image File!' );
-            console.log( error );
-          });
-        }
-
         // Load PDB file
         selected_pdb_file !== null ? loadFile() : loadURLFile();
       }
 
       function loadFile(){
-        pdb_loader.load( URL.createObjectURL( selected_pdb_file ), function( pdb ) {
+        pdb_loader.load( URL.createObjectURL( selected_pdb_file ), async function( pdb ) {
           URL.revokeObjectURL( selected_pdb_file );
 
-          set_atoms_labels_bonds( pdb );
+          await set_atoms_labels_bonds( pdb );
 
           pdb_obj = root;
 
-          // Add pdb_obj to the scene
-          scene.add( pdb_obj );
-          camera.lookAt( pdb_obj.position );
-
-          set_initial_scale();
-          resize();
+          await finish_loading();
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
           handle_error( error );
@@ -526,22 +492,54 @@
 
           // No extension checking for URL so it has to point to PDB model
 
-          pdb_loader.load( selected_url_file, function( pdb ) {
-            set_atoms_labels_bonds( pdb );
+          pdb_loader.load( selected_url_file, async function( pdb ) {
+            await set_atoms_labels_bonds( pdb );
 
             pdb_obj = root;
 
-            // Add pdb_obj to the scene
-            scene.add( pdb_obj );
-            camera.lookAt( pdb_obj.position );
-
-            set_initial_scale();
-            resize();
+            await finish_loading();
           }, function ( xhr ) { // onProgress
           }, function ( error ) { // onError
             handle_error( error );
           });
         }
+      }
+
+      async function finish_loading() {
+        // Add pdb_obj to the scene
+        scene.add( pdb_obj );
+        camera.lookAt( pdb_obj.position );
+
+        set_initial_scale();
+        resize();
+
+        enable_disable( false );
+
+        console.timeEnd( 'Loading Time' );
+        document.getElementById('div_loading').style.display = 'none';
+
+        render_requested = true;
+        mouse_wheel = true;
+        render();
+
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+      }
+
+      function log_info() {
+        console.log( 'Memory: ', renderer.info.memory );
+        console.log( 'Render: ', renderer.info.render );
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        mouse_wheel = true;
+        render_requested = false;
+        enable_disable( true );
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
       }
 
       function set_atoms_labels_bonds( pdb ) {
@@ -561,9 +559,11 @@
         // Add atoms and atomic text to the model group
         positions = geometryAtoms.getAttribute( 'position' );
         colors = geometryAtoms.getAttribute( 'color' );
+
+        let instanced_atoms = {};
         let positions_count = positions.count;
 
-        for ( let i = 0; i < positions.count; i ++ ) {
+        for ( var i = 0; i < positions.count; i ++ ) {
           position.x = positions.getX( i );
           position.y = positions.getY( i );
           position.z = positions.getZ( i );
@@ -572,24 +572,18 @@
           color.g = colors.getY( i );
           color.b = colors.getZ( i );
 
-          let object = new THREE.Mesh(
-            sphereGeometry,
-            new THREE.MeshStandardMaterial({
-              color: color,
-              transparent: true,
-              metalness: 0.8,
-              roughness: 0.4
-            })
-          );
+          let m4 = new THREE.Matrix4();
+          m4.makeScale( 25, 25, 25 );
+          m4.setPosition( position.multiplyScalar( 75 ) );
 
-          object[ 'name' ] = 'atom_' + i;
+          let hex_string = color.getHexString();
 
-          object.position.copy( position );
-          object.position.multiplyScalar( 75 );
-          object.scale.multiplyScalar( 25 );
+          if (!instanced_atoms[ hex_string ]) {
+            instanced_atoms[ hex_string ] = { count: 0, color: new THREE.Color( color.r, color.g, color.b ), matrix_array: [] };
+          }
 
-          atoms.push( object );
-          root.add( object );
+          instanced_atoms[ hex_string ].count ++;
+          instanced_atoms[ hex_string ].matrix_array.push( m4 );
 
           let atom = json.atoms[ i ];
 
@@ -603,40 +597,48 @@
           text.textContent = atom[ 4 ];
 
           let label = new css2d_object( text );
-
-          label.position.copy( object.position );
+          label.position.copy( position );
           labels.push( label );
 
-          // Don't automatically add labels if atom count > 100
-          if (positions_count < 100) root.add( label );
+          // Don't automatically show labels if atom count > 200
+          if (positions_count < 200) root.add( label );
+        }
+
+        for ( const key of Object.keys( instanced_atoms ) ) {
+          let object = new THREE.InstancedMesh( sphereGeometry, sphereMaterial, instanced_atoms[ key ].count );
+          let i = 0;
+
+          for ( const matrix of instanced_atoms[ key ].matrix_array ) {
+            object.setMatrixAt( i, matrix );
+            object.instanceMatrix.needsUpdate = true;
+
+            object.setColorAt( i, instanced_atoms[ key ].color );
+            object.instanceColor.needsUpdate = true;
+
+            i ++;
+          }
+
+          atoms.push( object );
+          root.add( object );
         }
 
         // Add bonds between atoms to the model group
         positions = geometryBonds.getAttribute( 'position' );
 
-        for ( let j = 0; j < positions.count; j += 2 ) {
-          start.x = positions.getX( j );
-          start.y = positions.getY( j );
-          start.z = positions.getZ( j );
+        for ( var i = 0; i < positions.count; i += 2 ) {
+          start.x = positions.getX( i );
+          start.y = positions.getY( i );
+          start.z = positions.getZ( i );
 
-          end.x = positions.getX( j + 1 );
-          end.y = positions.getY( j + 1 );
-          end.z = positions.getZ( j + 1 );
+          end.x = positions.getX( i + 1 );
+          end.y = positions.getY( i + 1 );
+          end.z = positions.getZ( i + 1 );
 
           start.multiplyScalar( 75 );
           end.multiplyScalar( 75 );
 
-          let object = new THREE.Mesh(
-            boxGeometry,
-            new THREE.MeshStandardMaterial({
-              color: 0xFFFFFF,
-              transparent: true,
-              metalness: 0.8,
-              roughness: 0.4
-            })
-          );
-
-          object[ 'name' ] = 'bond_' + parseInt( j / 2 );
+          let object = new THREE.Mesh( boxGeometry, boxMaterial );
+          object[ 'name' ] = 'bond_' + parseInt( i / 2 );
 
           object.position.copy( start );
           object.position.lerp( end, 0.5 );
@@ -644,7 +646,9 @@
           object.lookAt( end );
 
           bonds.push( object );
-          root.add( object );
+
+          // Don't automatically show labels if atom count > 200
+          if (positions_count < 200) root.add( object );
         }
 
         // Scale and add model groups to the scene
@@ -652,11 +656,11 @@
 
         atoms_visible = true;
         document.getElementById('btn_atoms').style.backgroundColor = 'lightgreen';
-        bonds_visible = true;
-        document.getElementById('btn_bonds').style.backgroundColor = 'lightgreen';
 
-        // Don't automatically show labels if atom count > 100
-        if (positions_count < 100) {
+        // Don't automatically show labels and bonds if atom count > 200
+        if (positions_count < 200) {
+          bonds_visible = true;
+          document.getElementById('btn_bonds').style.backgroundColor = 'lightgreen';
           labels_visible = true;
           document.getElementById('btn_labels').style.backgroundColor = 'lightgreen';
         }
@@ -712,23 +716,6 @@
         mouse_wheel = true;
       }
 
-      function log_info() {
-        console.log( 'Memory: ', renderer.info.memory );
-        console.log( 'Render: ', renderer.info.render );
-      }
-
-      function handle_error( error ) {
-        console.timeEnd( 'Loading Time' );
-        console.log( 'Error loading model!' );
-        console.log( error );
-        mouse_wheel = true;
-        render_requested = false;
-        enable_disable( true );
-
-        document.getElementById('div_loading').style.display = 'none';
-        document.getElementById('div_error').style.display = 'block';
-      }
-
       async function render() {
         if (pdb_obj) {
           if (mouse_down === true || mouse_wheel === true) {
@@ -755,14 +742,14 @@
 
       async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
-        document.getElementById('dli_val').innerText = 3;
-        document.getElementById('directional_light_intensity').value = 3;
+        document.getElementById('dli_val').innerText = 2.25;
+        document.getElementById('directional_light_intensity').value = 2.25;
         document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_atoms').style.backgroundColor = 'transparent';
         document.getElementById('btn_bonds').style.backgroundColor = 'transparent';
         document.getElementById('btn_labels').style.backgroundColor = 'transparent';
 
-        if (scene) {
+        if (scene !== undefined) {
           if (directionalLight) {
             set_directional_light_intensity();
           }
@@ -774,12 +761,7 @@
           set_back_color();
         } else {
           // Page (re)loading
-          if (scene) {
-            if (scene.environment) {
-              scene.environment.dispose();
-              scene.environment = null;
-            }
-
+          if (scene !== undefined) {
             if (pdb_obj) await scene_cleanup();
 
             while (scene.children.length > 0) {
