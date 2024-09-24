@@ -1,19 +1,104 @@
 import {
-	CanvasTexture,
 	Color,
-	MathUtils,
 	Matrix3,
-	Mesh,
-	PerspectiveCamera,
-	PlaneGeometry,
-	Scene,
-	ShaderMaterial,
-	Uniform,
 	Vector2,
 	Vector3
 } from "three";
 
+async function import_decompress() {
+
+	try {
+
+		const { WebGLRenderer } = await import( "three" );
+		const { decompress } = await import( "three/addons/utils/TextureUtils.js" );
+
+		const renderer = new WebGLRenderer( { antialias: true } );
+
+		return { decompress, renderer };
+
+	} catch ( error ) { /* just continue */ }
+
+	try {
+
+		const { CanvasTexture, NodeMaterial, QuadMesh, WebGPURenderer, texture, uv } = await import( "three" );
+
+		const renderer = new WebGPURenderer( { antialias: true } );
+		await renderer.init();
+
+		/* Modified decompress function from TextureUtilsGPU.js file (non-async) */
+
+		const _quadMesh = /*@__PURE__*/ new QuadMesh();
+
+		function decompress( blitTexture, maxTextureSize = Infinity, renderer = null ) {
+
+			const blitTexture_clone = blitTexture.clone();
+
+			if ( blitTexture_clone.offset.x !== 0 || blitTexture_clone.offset.y !== 0 ||
+				blitTexture_clone.repeat.x !== 1 || blitTexture_clone.repeat.y !== 1 ) {
+
+				blitTexture_clone.offset.set( 0, 0 );
+				blitTexture_clone.repeat.set( 1, 1 );
+
+			}
+
+			const material = new NodeMaterial();
+			material.fragmentNode = texture( blitTexture_clone ).uv( uv().flipY() );
+
+			const width = Math.min( blitTexture_clone.image.width, maxTextureSize );
+			const height = Math.min( blitTexture_clone.image.height, maxTextureSize );
+
+			renderer.setSize( width, height );
+			renderer.outputColorSpace = blitTexture_clone.colorSpace;
+
+			_quadMesh.material = material;
+			_quadMesh.render( renderer );
+
+			const canvas = document.createElement( 'canvas' );
+			const context = canvas.getContext( '2d' );
+
+			canvas.width = width;
+			canvas.height = height;
+
+			context.drawImage( renderer.domElement, 0, 0, width, height );
+
+			const readableTexture = new CanvasTexture( canvas );
+
+			/* set to the original texture parameters */
+
+			readableTexture.offset.set( blitTexture.offset.x, blitTexture.offset.y );
+			readableTexture.repeat.set( blitTexture.repeat.x, blitTexture.repeat.y );
+			readableTexture.colorSpace = blitTexture.colorSpace;
+			readableTexture.minFilter = blitTexture.minFilter;
+			readableTexture.magFilter = blitTexture.magFilter;
+			readableTexture.wrapS = blitTexture.wrapS;
+			readableTexture.wrapT = blitTexture.wrapT;
+			readableTexture.name = blitTexture.name;
+
+			blitTexture_clone.dispose();
+
+			return readableTexture;
+
+		}
+
+		return { decompress, renderer };
+
+	} catch ( error ) {
+
+		/* should not really get here */
+		throw new Error( 'THREE.OBJExporter: Could not import decompress function!' );
+
+	}
+
+}
+
 class OBJExporter {
+
+	constructor() {
+
+		this.decompress = null;
+		this.renderer = null;
+
+	}
 
 	parseAsync( object, options ) {
 
@@ -29,6 +114,13 @@ class OBJExporter {
 
 	async parse( object, onLoad, onError, options = {} ) {
 
+		const scope = this;
+
+		const { decompress, renderer } = await import_decompress();
+
+		scope.decompress = decompress;
+		scope.renderer = renderer;
+
 		const defaultOptions = {
 			filename: 'model',
 			map_flip_required: false,
@@ -40,13 +132,6 @@ class OBJExporter {
 		const map_flip_required = options.map_flip_required;
 		const maxTextureSize = options.maxTextureSize;
 		const filename = options.filename;
-
-		const scope = this;
-
-		scope._renderer = null;
-		scope.fullscreenQuad = null;
-		scope.fullscreenQuadGeometry = null;
-		scope.fullscreenQuadMaterial = null;
 
 		let output = '';
 		let indexVertex = 0;
@@ -713,7 +798,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.map.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.map.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -758,7 +843,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.specularMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.specularMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -805,7 +890,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.emissiveMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.emissiveMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -852,7 +937,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.bumpMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.bumpMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -915,7 +1000,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.lightMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.lightMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -964,7 +1049,7 @@ class OBJExporter {
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = await scope.decompress( mat.metalnessMap.clone(), maxTextureSize );
+								map_to_process = await scope.decompress( mat.metalnessMap.clone(), maxTextureSize, scope.renderer );
 
 							}
 
@@ -1033,7 +1118,7 @@ class OBJExporter {
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = await scope.decompress( mat.roughnessMap.clone(), maxTextureSize );
+								map_to_process = await scope.decompress( mat.roughnessMap.clone(), maxTextureSize, scope.renderer );
 
 							}
 
@@ -1100,7 +1185,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.displacementMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.displacementMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1147,7 +1232,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.normalMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.normalMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1194,7 +1279,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.alphaMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.alphaMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1241,7 +1326,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.aoMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.aoMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1288,7 +1373,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.anisotropyMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.anisotropyMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1335,7 +1420,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.clearcoatMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.clearcoatMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1382,7 +1467,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.clearcoatNormalMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.clearcoatNormalMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1429,7 +1514,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.clearcoatRoughnessMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.clearcoatRoughnessMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1476,7 +1561,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.iridescenceMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.iridescenceMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1523,7 +1608,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.iridescenceThicknessMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.iridescenceThicknessMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1570,7 +1655,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.sheenColorMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.sheenColorMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1617,7 +1702,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.sheenRoughnessMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.sheenRoughnessMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1664,7 +1749,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.specularIntensityMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.specularIntensityMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1711,7 +1796,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.specularColorMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.specularColorMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1758,7 +1843,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.thicknessMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.thicknessMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1805,7 +1890,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.transmissionMap.clone(), maxTextureSize );
+							map_to_process = await scope.decompress( mat.transmissionMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1854,10 +1939,10 @@ class OBJExporter {
 
 			Promise.all( textures ).then( () => {
 
-				if ( scope._renderer !== null ) {
+				if ( scope.renderer !== null ) {
 
-					scope._renderer.dispose();
-					scope._renderer = null;
+					scope.renderer.dispose();
+					scope.renderer = null;
 
 				}
 
@@ -1875,10 +1960,10 @@ class OBJExporter {
 
 		} else {
 
-			if ( scope._renderer !== null ) {
+			if ( scope.renderer !== null ) {
 
-				scope._renderer.dispose();
-				scope._renderer = null;
+				scope.renderer.dispose();
+				scope.renderer = null;
 
 			}
 
@@ -1956,236 +2041,6 @@ class OBJExporter {
 			return buf;
 
 		}
-
-	}
-
-	// modified decompress function from TextureUtils.js
-
-	async decompress( texture, maxTextureSize = Infinity ) {
-
-		console.log( 'THREE.OBJExporter: Decompressing texture...' );
-
-		const scope = this;
-
-		let readableTexture;
-
-		let offset = texture.offset;
-		let repeat = texture.repeat;
-
-		let width = texture.image.width;
-		let height = texture.image.height;
-
-		let resize = false;
-
-		// Dual check to find out what "three" is mapped to - "three.module.js" or "three.webgpu.js"
-		// Currently, WebGLRenderer import should not be available in "three.webgpu.js"
-
-		if ( scope._renderer === null ) {
-
-			try {
-
-				const { WebGLRenderer } = await import( "three" );
-				scope._renderer = new WebGLRenderer( { antialias: false } );
-
-			} catch ( error ) {}
-
-			// If WebGLRenderer import was not provided then check for WebGPURenderer
-
-			if ( scope._renderer === null ) {
-
-				try {
-
-					const { WebGPURenderer } = await import( "three" );
-					scope._renderer = new WebGPURenderer( { antialias: false } );
-					await scope._renderer.init();
-
-				} catch ( error ) {}
-
-			}
-
-		}
-
-		scope._renderer.outputColorSpace = texture.colorSpace;
-
-		const _camera = new PerspectiveCamera();
-		const _scene = new Scene();
-
-		if ( scope._renderer.isWebGPURenderer ) {
-
-			if ( offset.x !== 0 || offset.y !== 0 || repeat.x !== 1 || repeat.y !== 1 ) {
-
-				texture.offset = new Vector2( 0, 0 );
-				texture.repeat = new Vector2( 1, 1 );
-
-			}
-
-			// Set the texture as the scene's background
-			_scene.background = texture;
-			_scene.backgroundIntensity = 1.0;
-			_scene.background.needsUpdate = true;
-
-		} else {
-
-			if ( scope.fullscreenQuadGeometry === null ) scope.fullscreenQuadGeometry = new PlaneGeometry( 2, 2, 1, 1 );
-
-			if ( scope.fullscreenQuadMaterial === null ) {
-
-				scope.fullscreenQuadMaterial = new ShaderMaterial( {
-
-					uniforms: { blitTexture: new Uniform( texture ) },
-					vertexShader: `
-					varying vec2 vUv;
-					void main(){
-						vUv = uv;
-						gl_Position = vec4(position.xy * 1.0,0.,.999999);
-					}`,
-					fragmentShader: `
-					uniform sampler2D blitTexture; 
-					varying vec2 vUv;
-					void main(){ 
-						gl_FragColor = vec4(vUv.xy, 0, 1);
-						
-						#ifdef IS_SRGB
-						gl_FragColor = LinearTosRGB( texture2D( blitTexture, vUv) );
-						#else
-						gl_FragColor = texture2D( blitTexture, vUv);
-						#endif
-					}`
-
-				} );
-
-			}
-
-			scope.fullscreenQuadMaterial.uniforms.blitTexture.value = texture;
-			scope.fullscreenQuadMaterial.needsUpdate = true;
-
-			if ( scope.fullscreenQuad === null ) {
-
-				scope.fullscreenQuad = new Mesh( scope.fullscreenQuadGeometry, scope.fullscreenQuadMaterial );
-
-			}
-
-			scope.fullscreenQuad.frustrumCulled = false;
-
-		}
-
-		if ( scope._renderer.isWebGPURenderer ) {
-
-			// WebGPU currently does not seem to like non-power-of-two textures
-
-			if ( ! MathUtils.isPowerOfTwo( width ) || ! MathUtils.isPowerOfTwo( height )) {
-
-				if ( ! MathUtils.isPowerOfTwo( width ) ) width = MathUtils.ceilPowerOfTwo( width );
-				if ( ! MathUtils.isPowerOfTwo( height ) ) height = MathUtils.ceilPowerOfTwo( height );
-
-				resize = true;
-
-			}
-
-		} else {
-
-			if ( scope.fullscreenQuad !== null ) _scene.add( scope.fullscreenQuad );
-
-		}
-
-		scope._renderer.setSize( Math.min( width, maxTextureSize ), Math.min( height, maxTextureSize ) );
-
-		await new Promise( resolve => {
-
-			if ( scope._renderer.isWebGPURenderer ) {
-
-				scope._renderer.clearAsync();
-				scope._renderer.renderAsync( _scene, _camera );
-
-			} else {
-
-				scope._renderer.clear();
-				scope._renderer.render( _scene, _camera );
-
-			}
-
-			resolve( readableTexture = new CanvasTexture( scope._renderer.domElement ) );
-
-		});
-
-		if ( scope._renderer.isWebGPURenderer && scope._renderer._quad ) {
-
-			if ( scope._renderer._quad.material ) scope._renderer._quad.material.dispose();
-			if ( scope._renderer._quad.geometry ) scope._renderer._quad.geometry.dispose();
-
-		}
-
-		// Resize back to original texture size if needed
-
-		if ( scope._renderer.isWebGPURenderer && resize === true ) {
-
-			await new Promise( resolve => {
-
-				let canvas = document.createElement( 'canvas' );
-				canvas.width = texture.image.width;
-				canvas.height = texture.image.height;
-
-				let ctx = canvas.getContext( '2d', { willReadFrequently: true } );
-
-				let img = new Image();
-
-				img.onload = function() {
-
-					ctx.drawImage( this, 0, 0, canvas.width, canvas.height );
-					resolve( readableTexture.image = canvas );
-
-				}
-
-				img.src = readableTexture.image.toDataURL( 'image/png', 1 );
-
-			});
-
-		}
-
-		readableTexture.offset = new Vector2( offset.x, offset.y );
-		readableTexture.repeat = new Vector2( repeat.x, repeat.y );
-		readableTexture.colorSpace = texture.colorSpace;
-		readableTexture.minFilter = texture.minFilter;
-		readableTexture.magFilter = texture.magFilter;
-		readableTexture.wrapS = texture.wrapS;
-		readableTexture.wrapT = texture.wrapT;
-		readableTexture.name = texture.name;
-
-		readableTexture.needsUpdate = true;
-
-		if ( scope.fullscreenQuad !== null ) {
-
-			_scene.remove( scope.fullscreenQuad );
-
-			if ( scope.fullscreenQuad.material && scope.fullscreenQuad.material.uniforms ) {
-
-				Object.keys( scope.fullscreenQuad.material.uniforms ).forEach( ( key ) => {
-
-					if ( scope.fullscreenQuad.material.uniforms[ key ].value ) {
-
-						let kv = scope.fullscreenQuad.material.uniforms[ key ].value;
-						if ( kv.type && kv.type === 1009 ) kv.dispose();
-
-					}
-
-				});
-
-				scope.fullscreenQuad.material.dispose();
-
-			}
-
-			scope.fullscreenQuad.geometry.dispose();
-			scope.fullscreenQuad = null;
-
-		} else {
-
-			_scene.background.dispose();
-
-		}
-
-		texture.dispose();
-
-		return readableTexture;
 
 	}
 
