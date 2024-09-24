@@ -350,6 +350,8 @@
         </select>
         <select title="Export" id="export_names" style="min-width: 90px;" disabled>
           <option title="Export Formats" value="export" selected disabled>Export</option>
+          <option title="Export Model Textures only with selected format and generic names, defaults to PNG format if None is selected" value="maps" onclick="export_maps();">MAPS</option>
+          <option title="3D Formats" value="3dformats" disabled>- 3D -</option>
           <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
           <option title="BIM - Dotbim File Format" value="bim" onclick="export_bim()">BIM</option>
           <option title="DAE - Collada Format regular export" value="dae" onclick="export_dae();">DAE</option>
@@ -845,26 +847,22 @@
           link.download = filename + ext + '.zip';
           link.click();
 
-          document.getElementById('div_loading').innerHTML = '';
-          document.getElementById('div_loading').style.display = 'none';
-          document.getElementById('fixed_menu').style.display = 'block';
-
-          if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'block';
-
-          render_requested = true;
-          mouse_wheel = true;
-          render();
-
-          zip = new JSZip();
-          document.body.removeChild( link );
-          link = undefined;
+          finish_export();
         });
       }
 
       function handle_export_error( error ) {
-        alert( 'Export error!' );
-        console.log( error );
+        if (error.message === 'No textures found to export!') {
+          alert( error.message );
+        } else {
+          alert( 'Export error!' );
+          console.log( error );
+        }
 
+        finish_export();
+      }
+
+      function finish_export() {
         document.getElementById('div_loading').innerHTML = '';
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('fixed_menu').style.display = 'block';
@@ -875,6 +873,7 @@
         mouse_wheel = true;
         render();
 
+        zip = new JSZip();
         document.body.removeChild( link );
         link = undefined;
       }
@@ -1276,6 +1275,32 @@
         }
       }
 
+      async function export_maps() {
+        if (mesh) {
+          await start_export();
+
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
+
+          let options = {	binary: true, maxTextureSize: tex_res };
+
+          gltf_exporter.parse( skeletonUtils.clone( mesh ), async json => {
+            try {
+              await texture_only_export( new Uint8Array( json ) );
+            } catch (error) {
+              handle_export_error( error );
+              return;
+            }
+
+            let str = '_MAPS';
+            str += (tex_fmt === '') ? ' png' : ' ' + tex_fmt;
+
+            await process_zip( str );
+          }, function( error ) { handle_export_error( error ); }, options);
+        }
+      }
+
       async function export_animated_gif() {
         document.getElementById('export_names').selectedIndex = 0;
 
@@ -1543,13 +1568,14 @@
             scene.background.dispose();
             scene.background = null;
           }
+
+          scene.environmentIntensity = 1.0;
         }
       }
 
       async function set_back_color() {
         await reset_scene_params();
 
-        scene.environmentIntensity = 1.0;
         bgnd_linear_gradient = false;
         document.body.style.backgroundImage = 'none';
         document.getElementById('file_image_input').value = '';
@@ -1810,7 +1836,7 @@
           if (document.getElementById('file_image_input').value !== '') {
             set_scene_image();
           } else {
-            let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/opengameart/smoke1.png';
+            let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/water.jpg';
 
             set_bgenv_message();
 
@@ -1819,8 +1845,8 @@
               tex.mapping = THREE.EquirectangularReflectionMapping;
               tex.needsUpdate = true;
 
-              scene.background = tex;
-              scene.environment = tex;
+              scene.background = tex.clone();
+              scene.environment = tex.clone();
 
               mouse_wheel = true;
 
@@ -1966,15 +1992,16 @@
 
               if (equi_enabled === true) {
                 hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = hdrJpgEquirectangularMap;
-                scene.environment = hdrJpgEquirectangularMap;
+                scene.background = hdrJpgEquirectangularMap.clone();
+                scene.environment = hdrJpgEquirectangularMap.clone();
                 if (params.setEnvMap === true) set_envMap( true );
               } else {
-                scene.background = hdrJpgEquirectangularMap;
+                scene.background = hdrJpgEquirectangularMap.clone();
               }
 
               mouse_wheel = true;
 
+              hdrJpgEquirectangularMap.dispose();
               texture.renderTarget.texture.dispose();
               texture.renderTarget.dispose();
               texture.dispose();
@@ -2110,15 +2137,16 @@
 
               if (equi_enabled === true) {
                 hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = hdrJpgEquirectangularMap;
-                scene.environment = hdrJpgEquirectangularMap;
+                scene.background = hdrJpgEquirectangularMap.clone();
+                scene.environment = hdrJpgEquirectangularMap.clone();
                 if (params.setEnvMap === true) set_envMap( true );
               } else {
-                scene.background = hdrJpgEquirectangularMap;
+                scene.background = hdrJpgEquirectangularMap.clone();
               }
 
               mouse_wheel = true;
 
+              hdrJpgEquirectangularMap.dispose();
               texture.renderTarget.texture.dispose();
               texture.renderTarget.dispose();
               texture.dispose();
@@ -2152,7 +2180,6 @@
 
         if (bgnd_linear_gradient === true) {
           bgnd_linear_gradient = false;
-          scene.environmentIntensity = 1.0;
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
         } else {
           bgnd_linear_gradient = true;
@@ -2478,7 +2505,7 @@
         document.getElementById('div_message').innerHTML = 'Loading ... ' + pw;
         document.getElementById('div_message').style.display = '';
 
-        if (scene) {
+        if (scene !== undefined) {
           document.getElementById('file_image_input').value = '';
 
           if (polar_grid_visible) show_polar_grid();
@@ -3134,28 +3161,93 @@
       }
 
       function set_texture_options( material ) {
-        if (material.map) material.map.colorSpace = THREE.SRGBColorSpace;
-        if (material.aoMap) material.aoMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.alphaMap) material.alphaMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.bumpMap) material.bumpMap.colorSpace = THREE.SRGBColorSpace;
-        if (material.lightMap) material.lightMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.emissiveMap) material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
-        if (material.normalMap) material.normalMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.specularMap) material.specularMap.colorSpace = THREE.SRGBColorSpace;
-        if (material.metalnessMap) material.metalnessMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.roughnessMap) material.roughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.anisotropyMap) material.anisotropyMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.clearcoatMap) material.clearcoatMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.clearcoatNormalMap) material.clearcoatNormalMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.clearcoatRoughnessMap) material.clearcoatRoughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.iridescenceMap) material.iridescenceMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.iridescenceThicknessMap) material.iridescenceThicknessMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.sheenColorMap) material.sheenColorMap.colorSpace = THREE.SRGBColorSpace;
-        if (material.sheenRoughnessMap) material.sheenRoughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.specularColorMap) material.specularColorMap.colorSpace = THREE.SRGBColorSpace;
-        if (material.specularIntensityMap) material.specularIntensityMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.thicknessMap) material.thicknessMap.colorSpace = THREE.LinearSRGBColorSpace;
-        if (material.transmissionMap) material.transmissionMap.colorSpace = THREE.LinearSRGBColorSpace;
+        if (material.map && (!material.map.colorSpace || material.map.colorSpace === 'NoColorSpace')) {
+          material.map.colorSpace = THREE.SRGBColorSpace;
+        }
+
+        if (material.aoMap && (!material.aoMap.colorSpace || material.aoMap.colorSpace === 'NoColorSpace')) {
+          material.aoMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.alphaMap && (!material.alphaMap.colorSpace || material.alphaMap.colorSpace === 'NoColorSpace')) {
+          material.alphaMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.bumpMap && (!material.bumpMap.colorSpace || material.bumpMap.colorSpace === 'NoColorSpace')) {
+          material.bumpMap.colorSpace = THREE.SRGBColorSpace;
+        }
+
+        if (material.lightMap && (!material.lightMap.colorSpace || material.lightMap.colorSpace === 'NoColorSpace')) {
+          material.lightMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.emissiveMap && (!material.emissiveMap.colorSpace || material.emissiveMap.colorSpace === 'NoColorSpace')) {
+          material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
+        }
+
+        if (material.normalMap && (!material.normalMap.colorSpace || material.normalMap.colorSpace === 'NoColorSpace')) {
+          material.normalMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.specularMap && (!material.specularMap.colorSpace || material.specularMap.colorSpace === 'NoColorSpace')) {
+          material.specularMap.colorSpace = THREE.SRGBColorSpace;
+        }
+
+        if (material.metalnessMap && (!material.metalnessMap.colorSpace || material.metalnessMap.colorSpace === 'NoColorSpace')) {
+          material.metalnessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.roughnessMap && (!material.roughnessMap.colorSpace || material.roughnessMap.colorSpace === 'NoColorSpace')) {
+          material.roughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.anisotropyMap && (!material.anisotropyMap.colorSpace || material.anisotropyMap.colorSpace === 'NoColorSpace')) {
+          material.anisotropyMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.clearcoatMap && (!material.clearcoatMap.colorSpace || material.clearcoatMap.colorSpace === 'NoColorSpace')) {
+          material.clearcoatMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.clearcoatNormalMap && (!material.clearcoatNormalMap.colorSpace || material.clearcoatNormalMap.colorSpace === 'NoColorSpace')) {
+          material.clearcoatNormalMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.clearcoatRoughnessMap && (!material.clearcoatRoughnessMap.colorSpace || material.clearcoatRoughnessMap.colorSpace === 'NoColorSpace')) {
+          material.clearcoatRoughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.iridescenceMap && (!material.iridescenceMap.colorSpace || material.iridescenceMap.colorSpace === 'NoColorSpace')) {
+          material.iridescenceMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.iridescenceThicknessMap && (!material.iridescenceThicknessMap.colorSpace || material.iridescenceThicknessMap.colorSpace === 'NoColorSpace')) {
+          material.iridescenceThicknessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.sheenColorMap && (!material.sheenColorMap.colorSpace || material.sheenColorMap.colorSpace === 'NoColorSpace')) {
+          material.sheenColorMap.colorSpace = THREE.SRGBColorSpace;
+        }
+
+        if (material.sheenRoughnessMap && (!material.sheenRoughnessMap.colorSpace || material.sheenRoughnessMap.colorSpace === 'NoColorSpace')) {
+          material.sheenRoughnessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.specularColorMap && (!material.specularColorMap.colorSpace || material.specularColorMap.colorSpace === 'NoColorSpace')) {
+          material.specularColorMap.colorSpace = THREE.SRGBColorSpace;
+        }
+
+        if (material.specularIntensityMap && (!material.specularIntensityMap.colorSpace || material.specularIntensityMap.colorSpace === 'NoColorSpace')) {
+          material.specularIntensityMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.thicknessMap && (!material.thicknessMap.colorSpace || material.thicknessMap.colorSpace === 'NoColorSpace')) {
+          material.thicknessMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
+
+        if (material.transmissionMap && (!material.transmissionMap.colorSpace || material.transmissionMap.colorSpace === 'NoColorSpace')) {
+          material.transmissionMap.colorSpace = THREE.LinearSRGBColorSpace;
+        }
 
         material.vertexColors = vertex_colors_enabled;
         material.format = THREE.RGBAFormat;
@@ -3749,6 +3841,160 @@
         return compressedArrayBuffer;
       }
 
+      /* Export textures only as either PNG or WEBP or KTX2 */
+
+      async function texture_only_export( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { dedup } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          dedup( { textures: true } )
+        );
+
+        const textures = doc.getRoot().listTextures();
+
+        if (textures.length === 0) {
+          throw new Error( 'No textures found to export!' );
+        }
+
+        let file_reader, i = 1;
+
+        if (tex_fmt.startsWith( 'ktx' )) {
+          const { listTextureSlots } = await import( "@gltf-transform/functions" );
+          const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
+          const { encodeToKTX2 } = await import( "ktx2-encoder" );
+
+          const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+          for (const texture of textures) {
+            const slots = await listTextureSlots( texture );
+            const size = await texture.getSize();
+
+            const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
+
+            // check if texture dimensions are multiples of 4
+            const width_is_m4 = size[ 0 ] % 4 === 0;
+            const height_is_m4 = size[ 1 ] % 4 === 0;
+
+            let width, height;
+
+            if (!width_is_m4 || !height_is_m4) {
+              // this should produce minimal scale down
+              width = width_is_m4 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+              height = height_is_m4 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
+            } else {
+              width = size[ 0 ];
+              height = size[ 1 ];
+            }
+
+            if (file_reader === undefined) file_reader = new FileReader();
+
+            await new Promise( resolve => {
+              file_reader.onload = function( e ) {
+                const img = new Image();
+
+                img.onload = async function() {
+                  const canvas = document.createElement('canvas');
+
+                  canvas.width = width;
+                  canvas.height = height;
+
+                  const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+                  if (tex_flip === true) {
+                    // Flip image vertically
+                    ctx.translate( 0, canvas.height );
+                    ctx.scale( 1, -1 );
+                  }
+
+                  ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                  const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                  const a2b = atob( base64data );
+                  const buff = new Uint8Array( a2b.length );
+
+                  for ( let i = 0, l = buff.length; i < l; i ++ ) {
+                    buff[ i ] = a2b.charCodeAt( i );
+                  }
+
+                  await encodeToKTX2( buff, { isUASTC: uastc } )
+                  .then( ktx_texture => {
+                    texture.setImage( ktx_texture );
+                    texture.setMimeType( 'image/ktx2' );
+                    let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
+                    let blob = new Blob( [ texture[ attr ].image ], { type: 'image/ktx2' } );
+                    resolve( zip.file( 'image' + i + '.ktx2', blob ) );
+                  });
+                }
+
+                img.src = e.target.result;
+              }
+
+              file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
+            });
+
+            i ++;
+          }
+        } else {
+          const { compressTexture } = await import( "@gltf-transform/functions" );
+
+          let fmt = (tex_fmt === '') ? 'png' : tex_fmt;
+
+          for (const texture of textures) {
+            await compressTexture( texture, { targetFormat: fmt } );
+            let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
+            let blob = new Blob( [ texture[ attr ].image ], { type: 'image/' + fmt } );
+            await transform_texture( blob, i, '.' + fmt );
+
+            i ++;
+          }
+        }
+
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+      }
+
+      async function transform_texture( blob, index, format = '.png' ) {
+        if (tex_flip === true) {
+          let img = new Image();
+
+          await new Promise( resolve => {
+            img.onload = function() {
+              let canvas = document.createElement('canvas');
+
+              canvas.width = Math.min( img.naturalWidth, tex_res );
+              canvas.height = Math.min( img.naturalHeight, tex_res );
+
+              const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+              // Flip image vertically
+              ctx.translate( 0, canvas.height );
+              ctx.scale( 1, -1 );
+
+              ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+              canvas.toBlob( canvas_blob => {
+                resolve( zip.file( 'image' + index + format, canvas_blob ) );
+              }, 'image/' + format, 1 );
+            }
+
+            img.src = URL.createObjectURL( blob );
+            URL.revokeObjectURL( blob );
+          });
+        } else {
+          zip.file( 'image' + index + format, blob );
+        }
+      }
+
       function update_line_visibility() {
         if (lines_visible === true) {
           lines_visible = false;
@@ -4289,7 +4535,7 @@
         document.getElementById('export_tex_res').selectedIndex = 0;
         document.getElementById('export_tex_fmt').selectedIndex = 0;
 
-        if (scene) await reset_scene_params();
+        if (scene !== undefined) await reset_scene_params();
 
         if (gui_set === true) {
           gui_reset();
@@ -4317,7 +4563,7 @@
           set_ambient_light_intensity();
         } else {
           // Page (re)loading
-          if (scene) {
+          if (scene !== undefined) {
             if (mesh) await scene_cleanup();
 
             if (gui) gui.dispose();

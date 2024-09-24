@@ -354,6 +354,8 @@
         </select>
         <select title="Export" id="export_names" style="min-width: 90px;" disabled>
           <option title="Export Formats" value="export" selected disabled>Export</option>
+          <option title="Export Model Textures only with selected format and generic names, defaults to PNG format if None is selected" value="maps" onclick="export_maps();">MAPS</option>
+          <option title="3D Formats" value="3dformats" disabled>- 3D -</option>
           <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
           <option title="BIM - Dotbim File Format" value="bim" onclick="export_bim()">BIM</option>
           <option title="DAE - Collada Format regular export" value="dae" onclick="export_dae();">DAE</option>
@@ -838,26 +840,22 @@
           link.download = filename + ext + '.zip';
           link.click();
 
-          document.getElementById('div_loading').innerHTML = '';
-          document.getElementById('div_loading').style.display = 'none';
-          document.getElementById('fixed_menu').style.display = 'block';
-
-          if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
-
-          render_requested = true;
-          mouse_wheel = true;
-          render();
-
-          zip = new JSZip();
-          document.body.removeChild( link );
-          link = undefined;
+          finish_export();
         });
       }
 
       function handle_export_error( error ) {
-        alert( 'Export error!' );
-        console.log( error );
+        if (error.message === 'No textures found to export!') {
+          alert( error.message );
+        } else {
+          alert( 'Export error!' );
+          console.log( error );
+        }
 
+        finish_export();
+      }
+
+      function finish_export() {
         document.getElementById('div_loading').innerHTML = '';
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('fixed_menu').style.display = 'block';
@@ -868,6 +866,7 @@
         mouse_wheel = true;
         render();
 
+        zip = new JSZip();
         document.body.removeChild( link );
         link = undefined;
       }
@@ -1202,6 +1201,32 @@
 
             await process_zip( str );
           }, function( error ) { handle_export_error( error ); }, options );
+        }
+      }
+
+      async function export_maps() {
+        if (fbx_obj) {
+          await start_export();
+
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
+
+          let options = {	binary: true, maxTextureSize: tex_res };
+
+          gltf_exporter.parse( skeletonUtils.clone( fbx_obj ), async json => {
+            try {
+              await texture_only_export( new Uint8Array( json ) );
+            } catch (error) {
+              handle_export_error( error );
+              return;
+            }
+
+            let str = '_MAPS';
+            str += (tex_fmt === '') ? ' png' : ' ' + tex_fmt;
+
+            await process_zip( str );
+          }, function( error ) { handle_export_error( error ); }, options);
         }
       }
 
@@ -2292,7 +2317,7 @@
         document.getElementById('div_message').innerHTML = 'Loading ... ' + pw;
         document.getElementById('div_message').style.display = '';
 
-        if (scene) {
+        if (scene !== undefined) {
           document.getElementById('file_image_input').value = '';
 
           mouse_wheel = true;
@@ -3252,6 +3277,160 @@
         return compressedArrayBuffer;
       }
 
+      /* Export textures only as either PNG or WEBP or KTX2 */
+
+      async function texture_only_export( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { dedup } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          dedup( { textures: true } )
+        );
+
+        const textures = doc.getRoot().listTextures();
+
+        if (textures.length === 0) {
+          throw new Error( 'No textures found to export!' );
+        }
+
+        let file_reader, i = 1;
+
+        if (tex_fmt.startsWith( 'ktx' )) {
+          const { listTextureSlots } = await import( "@gltf-transform/functions" );
+          const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
+          const { encodeToKTX2 } = await import( "ktx2-encoder" );
+
+          const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+          for (const texture of textures) {
+            const slots = await listTextureSlots( texture );
+            const size = await texture.getSize();
+
+            const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
+
+            // check if texture dimensions are multiples of 4
+            const width_is_m4 = size[ 0 ] % 4 === 0;
+            const height_is_m4 = size[ 1 ] % 4 === 0;
+
+            let width, height;
+
+            if (!width_is_m4 || !height_is_m4) {
+              // this should produce minimal scale down
+              width = width_is_m4 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+              height = height_is_m4 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
+            } else {
+              width = size[ 0 ];
+              height = size[ 1 ];
+            }
+
+            if (file_reader === undefined) file_reader = new FileReader();
+
+            await new Promise( resolve => {
+              file_reader.onload = function( e ) {
+                const img = new Image();
+
+                img.onload = async function() {
+                  const canvas = document.createElement('canvas');
+
+                  canvas.width = width;
+                  canvas.height = height;
+
+                  const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+                  if (tex_flip === true) {
+                    // Flip image vertically
+                    ctx.translate( 0, canvas.height );
+                    ctx.scale( 1, -1 );
+                  }
+
+                  ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                  const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                  const a2b = atob( base64data );
+                  const buff = new Uint8Array( a2b.length );
+
+                  for ( let i = 0, l = buff.length; i < l; i ++ ) {
+                    buff[ i ] = a2b.charCodeAt( i );
+                  }
+
+                  await encodeToKTX2( buff, { isUASTC: uastc } )
+                  .then( ktx_texture => {
+                    texture.setImage( ktx_texture );
+                    texture.setMimeType( 'image/ktx2' );
+                    let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
+                    let blob = new Blob( [ texture[ attr ].image ], { type: 'image/ktx2' } );
+                    resolve( zip.file( 'image' + i + '.ktx2', blob ) );
+                  });
+                }
+
+                img.src = e.target.result;
+              }
+
+              file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
+            });
+
+            i ++;
+          }
+        } else {
+          const { compressTexture } = await import( "@gltf-transform/functions" );
+
+          let fmt = (tex_fmt === '') ? 'png' : tex_fmt;
+
+          for (const texture of textures) {
+            await compressTexture( texture, { targetFormat: fmt } );
+            let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
+            let blob = new Blob( [ texture[ attr ].image ], { type: 'image/' + fmt } );
+            await transform_texture( blob, i, '.' + fmt );
+
+            i ++;
+          }
+        }
+
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+      }
+
+      async function transform_texture( blob, index, format = '.png' ) {
+        if (tex_flip === true) {
+          let img = new Image();
+
+          await new Promise( resolve => {
+            img.onload = function() {
+              let canvas = document.createElement('canvas');
+
+              canvas.width = Math.min( img.naturalWidth, tex_res );
+              canvas.height = Math.min( img.naturalHeight, tex_res );
+
+              const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+              // Flip image vertically
+              ctx.translate( 0, canvas.height );
+              ctx.scale( 1, -1 );
+
+              ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+              canvas.toBlob( canvas_blob => {
+                resolve( zip.file( 'image' + index + format, canvas_blob ) );
+              }, 'image/' + format, 1 );
+            }
+
+            img.src = URL.createObjectURL( blob );
+            URL.revokeObjectURL( blob );
+          });
+        } else {
+          zip.file( 'image' + index + format, blob );
+        }
+      }
+
       function show_polar_grid() {
         if (polar_grid_visible === true) {
           scene.remove( polar_grid );
@@ -3815,7 +3994,7 @@
         document.getElementById('export_tex_res').selectedIndex = 0;
         document.getElementById('export_tex_fmt').selectedIndex = 0;
 
-        if (scene) await reset_scene_params();
+        if (scene !== undefined) await reset_scene_params();
 
         if (gui_set === true) {
           gui_reset();
@@ -3842,7 +4021,7 @@
           set_ambient_light_intensity();
         } else {
           // Page (re)loading
-          if (scene) {
+          if (scene !== undefined) {
             if (fbx_obj) await scene_cleanup();
 
             if (gui) gui.dispose();
