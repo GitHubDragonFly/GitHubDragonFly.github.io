@@ -3054,6 +3054,160 @@
         return compressedArrayBuffer;
       }
 
+      /* Export textures only as either PNG or WEBP or KTX2 */
+
+      async function texture_only_export( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { dedup } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          dedup( { textures: true } )
+        );
+
+        const textures = doc.getRoot().listTextures();
+
+        if (textures.length === 0) {
+          throw new Error( 'No textures found to export!' );
+        }
+
+        let file_reader, i = 1;
+
+        if (tex_fmt.startsWith( 'ktx' )) {
+          const { listTextureSlots } = await import( "@gltf-transform/functions" );
+          const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
+          const { encodeToKTX2 } = await import( "ktx2-encoder" );
+
+          const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+          for (const texture of textures) {
+            const slots = await listTextureSlots( texture );
+            const size = await texture.getSize();
+
+            const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
+
+            // check if texture dimensions are multiples of 4
+            const width_is_m4 = size[ 0 ] % 4 === 0;
+            const height_is_m4 = size[ 1 ] % 4 === 0;
+
+            let width, height;
+
+            if (!width_is_m4 || !height_is_m4) {
+              // this should produce minimal scale down
+              width = width_is_m4 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+              height = height_is_m4 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
+            } else {
+              width = size[ 0 ];
+              height = size[ 1 ];
+            }
+
+            if (file_reader === undefined) file_reader = new FileReader();
+
+            await new Promise( resolve => {
+              file_reader.onload = function( e ) {
+                const img = new Image();
+
+                img.onload = async function() {
+                  const canvas = document.createElement('canvas');
+
+                  canvas.width = width;
+                  canvas.height = height;
+
+                  const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+                  if (tex_flip === true) {
+                    // Flip image vertically
+                    ctx.translate( 0, canvas.height );
+                    ctx.scale( 1, -1 );
+                  }
+
+                  ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                  const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                  const a2b = atob( base64data );
+                  const buff = new Uint8Array( a2b.length );
+
+                  for ( let i = 0, l = buff.length; i < l; i ++ ) {
+                    buff[ i ] = a2b.charCodeAt( i );
+                  }
+
+                  await encodeToKTX2( buff, { isUASTC: uastc } )
+                  .then( ktx_texture => {
+                    texture.setImage( ktx_texture );
+                    texture.setMimeType( 'image/ktx2' );
+                    let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
+                    let blob = new Blob( [ texture[ attr ].image ], { type: 'image/ktx2' } );
+                    resolve( zip.file( 'image' + i + '.ktx2', blob ) );
+                  });
+                }
+
+                img.src = e.target.result;
+              }
+
+              file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
+            });
+
+            i ++;
+          }
+        } else {
+          const { compressTexture } = await import( "@gltf-transform/functions" );
+
+          let fmt = (tex_fmt === '') ? 'png' : tex_fmt;
+
+          for (const texture of textures) {
+            await compressTexture( texture, { targetFormat: fmt } );
+            let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
+            let blob = new Blob( [ texture[ attr ].image ], { type: 'image/' + fmt } );
+            await transform_texture( blob, i, '.' + fmt );
+
+            i ++;
+          }
+        }
+
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+      }
+
+      async function transform_texture( blob, index, format = '.png' ) {
+        if (tex_flip === true) {
+          let img = new Image();
+
+          await new Promise( resolve => {
+            img.onload = function() {
+              let canvas = document.createElement('canvas');
+
+              canvas.width = Math.min( img.naturalWidth, tex_res );
+              canvas.height = Math.min( img.naturalHeight, tex_res );
+
+              const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+              // Flip image vertically
+              ctx.translate( 0, canvas.height );
+              ctx.scale( 1, -1 );
+
+              ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+              canvas.toBlob( canvas_blob => {
+                resolve( zip.file( 'image' + index + format, canvas_blob ) );
+              }, 'image/' + format, 1 );
+            }
+
+            img.src = URL.createObjectURL( blob );
+            URL.revokeObjectURL( blob );
+          });
+        } else {
+          zip.file( 'image' + index + format, blob );
+        }
+      }
+
       function handle_error( error ) {
         document.getElementById('div_message').innerText = 'Check the console for any error messages';
         document.getElementById('div_message').style.display = '';
