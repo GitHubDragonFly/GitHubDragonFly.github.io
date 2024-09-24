@@ -361,7 +361,9 @@
           <option title="Export Formats" value="export" selected disabled>Export</option>
           <option title="Export Model Textures only with selected format and generic names, defaults to PNG format if None is selected" value="maps" onclick="export_maps();">MAPS</option>
           <option title="3D Formats" value="3dformats" disabled>- 3D -</option>
+          <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
           <option title="BIM - Dotbim File Format" value="bim" onclick="export_bim()">BIM</option>
+          <option title="DAE - Collada Format" value="dae" onclick="export_dae();">DAE</option>
           <option title="GLB - GL Transmission Format binary regular export with optional texture compression" value="glb" onclick="export_gltf( true );">GLB</option>
           <option title="GLB - GL Transmission Format binary regular export with DRACO and optional texture compression" value="glbdraco" onclick="export_gltf( true, true );">GLB_d</option>
           <option title="GLB - GL Transmission Format binary regular export with Meshopt and optional texture compression" value="glbmeshopt" onclick="export_gltf( true, false, true );">GLB_m</option>
@@ -995,6 +997,79 @@
         }
       }
 
+      async function export_dae() {
+        if (gltf_obj) {
+          await start_export();
+
+          const { ColladaExporter } = await import( "../static/jsm/exporters/ColladaExporter.min.js" );
+
+          let dae_exporter = new ColladaExporter( manager );
+
+          let result = await dae_exporter.parse( gltf_obj.clone() );
+
+          zip.file( filename + '.dae', result.data );
+
+          if (result.textures && result.textures.length > 0) {
+            let processed_index = 0;
+
+            if (tex_res !== Infinity || tex_flip === true) {
+              result.textures.forEach( tex => {
+                let blob = new Blob( [ tex.data ], { type: 'image/png' } );
+
+                let img = new Image();
+
+                img.onload = async function() {
+                  let canvas = document.createElement('canvas');
+
+                  canvas.width = Math.min( img.naturalWidth, tex_res );
+                  canvas.height = Math.min( img.naturalHeight, tex_res );
+
+                  const ctx = canvas.getContext( '2d' );
+
+                  if (tex_flip === true) {
+                    // Flip image vertically
+                    ctx.translate( 0, canvas.height );
+                    ctx.scale( 1, -1 );
+                  }
+
+                  ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                  await new Promise( resolve => canvas.toBlob( resolve ) ).then( async function( canvas_blob ) {
+                    zip.file( `${ tex.name }.${ tex.ext }`, canvas_blob );
+
+                    if (processed_index === result.textures.length - 1) {
+                      let str = '_DAE';
+                      if (tex_flip === true) str += '_Y';
+                      if (tex_res !== Infinity) str += ' (' + tex_res + ')';
+                      await process_zip( str );
+                    }
+                  });
+
+                  processed_index += 1;
+                }
+
+                img.src = URL.createObjectURL( blob );
+                URL.revokeObjectURL( blob );
+              });
+            } else {
+              result.textures.forEach( async tex => {
+                let blob = new Blob( [ tex.data ], { type: 'image/png' } );
+
+                zip.file( `${ tex.name }.${ tex.ext }`, blob );
+
+                if (processed_index === result.textures.length - 1) {
+                  await process_zip( '_DAE' );
+                }
+
+                processed_index += 1;
+              });
+            }
+          } else {
+            await process_zip( '_DAE' );
+          }
+        }
+      }
+
       async function export_gltf( binary = false, draco = false, meshopt = false ) {
         if (gltf_obj) {
           await start_export();
@@ -1071,6 +1146,29 @@
           zip.file( filename + '.json', blob );
 
           await process_zip( '_JSON' );
+        }
+      }
+
+      async function export_3dm() {
+        if (gltf_obj) {
+          await start_export();
+
+          const { Rhino3dmExporter } = await import( "../static/jsm/exporters/3DMExporter.min.js" );
+
+          let rhino_exporter = new Rhino3dmExporter( manager );
+
+          let options = { vertexColorsCorrection: 0, maxTextureSize: tex_res, map_flip_required: tex_flip };
+
+          rhino_exporter.parse( gltf_obj.clone(), async function( arrayBuffer ) {
+            let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
+
+            zip.file( filename + '.3dm', blob );
+
+            let str = '_3DM';
+            if (tex_flip === true) str += '_Y';
+            if (tex_res !== Infinity) str += ' (' + tex_res + ')';
+            await process_zip( str );
+          }, function( error ) { handle_export_error( error ); }, options );
         }
       }
 
