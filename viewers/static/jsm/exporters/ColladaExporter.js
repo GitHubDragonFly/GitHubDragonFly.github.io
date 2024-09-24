@@ -661,6 +661,13 @@ class ColladaExporter {
 			textures
 		};
 
+		if ( scope.renderer !== null ) {
+
+			scope.renderer.dispose();
+			scope.renderer = null;
+
+		}
+
 		if ( typeof onDone === 'function' ) {
 
 			requestAnimationFrame( () => onDone( res ) );

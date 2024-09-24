@@ -751,6 +751,13 @@ class Rhino3dmExporter {
 
 		parse_objects();
 
+		if ( scope.renderer !== null ) {
+
+			scope.renderer.dispose();
+			scope.renderer = null;
+
+		}
+
 		if ( rhino_count === 0 && points_count === 0 ) {
 
 			if ( typeof onError === 'function' ) {
