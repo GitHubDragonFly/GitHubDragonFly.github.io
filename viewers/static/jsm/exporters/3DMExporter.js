@@ -5,10 +5,95 @@ import {
 	Matrix4
 } from "three";
 
-import { decompress } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/utils/TextureUtils.min.js";
-import { deinterleaveAttribute } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/utils/BufferGeometryUtils.min.js";
+import { deinterleaveAttribute } from "three/addons/utils/BufferGeometryUtils.min.js";
 
 import * as rhino3dm from "https://cdn.jsdelivr.net/npm/rhino3dm@8.6.1/rhino3dm.module.min.js";
+
+async function import_decompress() {
+
+	try {
+
+		const { WebGLRenderer } = await import( "three" );
+		const { decompress } = await import( "three/addons/utils/TextureUtils.min.js" );
+
+		const renderer = new WebGLRenderer( { antialias: true } );
+
+		return { decompress, renderer };
+
+	} catch ( error ) { /* just continue */ }
+
+	try {
+
+		const { CanvasTexture, NodeMaterial, QuadMesh, WebGPURenderer, texture, uv } = await import( "three" );
+
+		const renderer = new WebGPURenderer( { antialias: true } );
+		await renderer.init();
+
+		/* Modified decompress function from TextureUtilsGPU.js file (non-async) */
+
+		const _quadMesh = /*@__PURE__*/ new QuadMesh();
+
+		function decompress( blitTexture, maxTextureSize = Infinity, renderer = null ) {
+
+			const blitTexture_clone = blitTexture.clone();
+
+			if ( blitTexture_clone.offset.x !== 0 || blitTexture_clone.offset.y !== 0 ||
+				blitTexture_clone.repeat.x !== 1 || blitTexture_clone.repeat.y !== 1 ) {
+
+				blitTexture_clone.offset.set( 0, 0 );
+				blitTexture_clone.repeat.set( 1, 1 );
+
+			}
+
+			const material = new NodeMaterial();
+			material.fragmentNode = texture( blitTexture_clone ).uv( uv().flipY() );
+
+			const width = Math.min( blitTexture_clone.image.width, maxTextureSize );
+			const height = Math.min( blitTexture_clone.image.height, maxTextureSize );
+
+			renderer.setSize( width, height );
+			renderer.outputColorSpace = blitTexture_clone.colorSpace;
+
+			_quadMesh.material = material;
+			_quadMesh.render( renderer );
+
+			const canvas = document.createElement( 'canvas' );
+			const context = canvas.getContext( '2d' );
+
+			canvas.width = width;
+			canvas.height = height;
+
+			context.drawImage( renderer.domElement, 0, 0, width, height );
+
+			const readableTexture = new CanvasTexture( canvas );
+
+			/* set to the original texture parameters */
+
+			readableTexture.offset.set( blitTexture.offset.x, blitTexture.offset.y );
+			readableTexture.repeat.set( blitTexture.repeat.x, blitTexture.repeat.y );
+			readableTexture.colorSpace = blitTexture.colorSpace;
+			readableTexture.minFilter = blitTexture.minFilter;
+			readableTexture.magFilter = blitTexture.magFilter;
+			readableTexture.wrapS = blitTexture.wrapS;
+			readableTexture.wrapT = blitTexture.wrapT;
+			readableTexture.name = blitTexture.name;
+
+			blitTexture_clone.dispose();
+
+			return readableTexture;
+
+		}
+
+		return { decompress, renderer };
+
+	} catch ( error ) {
+
+		/* should not really get here */
+		throw new Error( 'THREE.OBJExporter: Could not import decompress function!' );
+
+	}
+
+}
 
 /**		!!! Work in progress !!!
 *
@@ -57,11 +142,19 @@ class Rhino3dmExporter {
 
 		this.manager = manager || DefaultLoadingManager;
 
+		this.decompress = null;
+		this.renderer = null;
+
 	}
 
 	async parse( scene, onDone, onError, options = {} ) {
 
 		const scope = this;
+
+		const { decompress, renderer } = await import_decompress();
+
+		scope.decompress = decompress;
+		scope.renderer = renderer;
 
 		const Module = await rhino3dm[ 'default' ]();
 
@@ -168,7 +261,8 @@ class Rhino3dmExporter {
 			if ( material.flatShading !== undefined ) rhino_material.disableLighting = material.flatShading;
 			if ( material.refractionFactor !== undefined ) rhino_material.indexOfRefraction = material.refractionFactor;
 
-			if ( material.type === 'MeshStandardMaterial' || material.type === 'MeshPhysicalMaterial' ) {
+			if ( material.isMeshStandardMaterial || material.isMeshPhysicalMaterial ||
+				material.type === 'MeshStandardMaterial' || material.type === 'MeshPhysicalMaterial' ) {
 
 				rhino_material.toPhysicallyBased();
 
@@ -318,8 +412,6 @@ class Rhino3dmExporter {
 				tex.type = map_type;
 				tex.uuid = texture.uuid;
 
-				texture = texture.clone();
-
 				tex.center = texture.center;
 				tex.offset = texture.offset;
 				tex.repeat = texture.repeat;
@@ -339,7 +431,7 @@ class Rhino3dmExporter {
 
 					if ( texture.isCompressedTexture === true ) {
 
-						texture = decompress( texture, maxTextureSize );
+						texture = scope.decompress( texture, maxTextureSize, scope.renderer );
 
 					}
 
@@ -354,38 +446,39 @@ class Rhino3dmExporter {
 
 			}
 
-			if ( material.type === 'MeshStandardMaterial' || material.type === 'MeshPhysicalMaterial' ) {
+			if ( material.isMeshStandardMaterial || material.isMeshPhysicalMaterial ||
+				material.type === 'MeshStandardMaterial' || material.type === 'MeshPhysicalMaterial' ) {
 
-				if ( material.map ) add_texture( material.map, 'PBR_BaseColor' );
-				if ( material.aoMap ) add_texture( material.aoMap, 'PBR_AmbientOcclusion' );
-				if ( material.alphaMap ) add_texture( material.alphaMap, 'PBR_Alpha' );
-				if ( material.bumpMap ) add_texture( material.bumpMap, 'Bump' );
-				if ( material.emissiveMap ) add_texture( material.emissiveMap, 'PBR_Emission' );
-				if ( material.anisotropyMap ) add_texture( material.anisotropyMap, 'PBR_Anisotropic' );
-				if ( material.clearcoatMap ) add_texture( material.clearcoatMap, 'PBR_Clearcoat' );
-				if ( material.clearcoatNormalMap ) add_texture( material.clearcoatNormalMap, 'PBR_ClearcoatBump' );
-				if ( material.clearcoatRoughnessMap ) add_texture( material.clearcoatRoughnessMap, 'PBR_ClearcoatRoughness' );
-				if ( material.displacementMap ) add_texture( material.displacementMap, 'PBR_Displacement' );
-				if ( material.metalnessMap ) add_texture( material.metalnessMap, 'PBR_Metallic' );
-				if ( material.roughnessMap ) add_texture( material.roughnessMap, 'PBR_Roughness' );
-				if ( material.sheenColorMap ) add_texture( material.sheenColorMap, 'PBR_Sheen' );
-				if ( material.specularColorMap ) add_texture( material.specularColorMap, 'PBR_Specular' );
-				if ( material.transmissionMap ) add_texture( material.transmissionMap, 'Opacity' );
-				if ( material.thicknessMap ) add_texture( material.thicknessMap, 'PBR_Subsurface' );
-				if ( material.normalMap ) add_texture( material.normalMap, 'PBR_Other_Normal' );
-				if ( material.anisotropyMap ) add_texture( material.anisotropyMap, 'PBR_Other_Anisotropy' );
-				if ( material.iridescenceMap ) add_texture( material.iridescenceMap, 'PBR_Other_Iridescence' );
-				if ( material.iridescenceThicknessMap ) add_texture( material.iridescenceThicknessMap, 'PBR_Other_IridescenceThickness' );
-				if ( material.sheenColorMap ) add_texture( material.sheenColorMap, 'PBR_Other_SheenColor' );
-				if ( material.sheenRoughnessMap ) add_texture( material.sheenRoughnessMap, 'PBR_Other_SheenRoughness' );
-				if ( material.specularIntensityMap ) add_texture( material.specularIntensityMap, 'PBR_Other_SpecularIntensity' );
+				if ( material.map ) add_texture( material.map.clone(), 'PBR_BaseColor' );
+				if ( material.aoMap ) add_texture( material.aoMap.clone(), 'PBR_AmbientOcclusion' );
+				if ( material.alphaMap ) add_texture( material.alphaMap.clone(), 'PBR_Alpha' );
+				if ( material.bumpMap ) add_texture( material.bumpMap.clone(), 'Bump' );
+				if ( material.emissiveMap ) add_texture( material.emissiveMap.clone(), 'PBR_Emission' );
+				if ( material.anisotropyMap ) add_texture( material.anisotropyMap.clone(), 'PBR_Anisotropic' );
+				if ( material.clearcoatMap ) add_texture( material.clearcoatMap.clone(), 'PBR_Clearcoat' );
+				if ( material.clearcoatNormalMap ) add_texture( material.clearcoatNormalMap.clone(), 'PBR_ClearcoatBump' );
+				if ( material.clearcoatRoughnessMap ) add_texture( material.clearcoatRoughnessMap.clone(), 'PBR_ClearcoatRoughness' );
+				if ( material.displacementMap ) add_texture( material.displacementMap.clone(), 'PBR_Displacement' );
+				if ( material.metalnessMap ) add_texture( material.metalnessMap.clone(), 'PBR_Metallic' );
+				if ( material.roughnessMap ) add_texture( material.roughnessMap.clone(), 'PBR_Roughness' );
+				if ( material.sheenColorMap ) add_texture( material.sheenColorMap.clone(), 'PBR_Sheen' );
+				if ( material.specularColorMap ) add_texture( material.specularColorMap.clone(), 'PBR_Specular' );
+				if ( material.transmissionMap ) add_texture( material.transmissionMap.clone(), 'Opacity' );
+				if ( material.thicknessMap ) add_texture( material.thicknessMap.clone(), 'PBR_Subsurface' );
+				if ( material.normalMap ) add_texture( material.normalMap.clone(), 'PBR_Other_Normal' );
+				if ( material.anisotropyMap ) add_texture( material.anisotropyMap.clone(), 'PBR_Other_Anisotropy' );
+				if ( material.iridescenceMap ) add_texture( material.iridescenceMap.clone(), 'PBR_Other_Iridescence' );
+				if ( material.iridescenceThicknessMap ) add_texture( material.iridescenceThicknessMap.clone(), 'PBR_Other_IridescenceThickness' );
+				if ( material.sheenColorMap ) add_texture( material.sheenColorMap.clone(), 'PBR_Other_SheenColor' );
+				if ( material.sheenRoughnessMap ) add_texture( material.sheenRoughnessMap.clone(), 'PBR_Other_SheenRoughness' );
+				if ( material.specularIntensityMap ) add_texture( material.specularIntensityMap.clone(), 'PBR_Other_SpecularIntensity' );
 
 			} else {
 
-				if ( material.map ) add_texture( material.map, 'Diffuse' );
-				if ( material.alphaMap ) add_texture( material.alphaMap, 'Transparency' );
-				if ( material.bumpMap ) add_texture( material.bumpMap, 'Bump' );
-				if ( material.envMap ) add_texture( material.envMap, 'Emap' );
+				if ( material.map ) add_texture( material.map.clone(), 'Diffuse' );
+				if ( material.alphaMap ) add_texture( material.alphaMap.clone(), 'Transparency' );
+				if ( material.bumpMap ) add_texture( material.bumpMap.clone(), 'Bump' );
+				if ( material.envMap ) add_texture( material.envMap.clone(), 'Emap' );
 
 			}
 
@@ -510,7 +603,7 @@ class Rhino3dmExporter {
 
 								if ( object.isMesh ) {
 
-									process_material( material.clone(), object.material.length > 1 );
+									process_material( material, object.material.length > 1 );
 									rhino_file.objects().add( rhino_object, rhino_attributes );
 
 								}
@@ -521,7 +614,7 @@ class Rhino3dmExporter {
 
 							if ( object.isMesh ) {
 
-								process_material( object.material.clone() );
+								process_material( object.material );
 								rhino_file.objects().add( rhino_object, rhino_attributes );
 
 							}
@@ -534,13 +627,13 @@ class Rhino3dmExporter {
 
 							for ( const material of object.material ) {
 
-								process_material( material.clone(), object.material.length > 1 );
+								process_material( material, object.material.length > 1 );
 
 							}
 
 						} else {
 
-							process_material( object.material.clone() );
+							process_material( object.material );
 
 						}
 
