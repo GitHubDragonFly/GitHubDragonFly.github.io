@@ -65,9 +65,7 @@ import {
 	VectorKeyframeTrack
 } from "three";
 
-import { toTrianglesDrawMode } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/utils/BufferGeometryUtils.min.js";
-
-var ddsTextureFlip = true;
+import { toTrianglesDrawMode } from "three/addons/utils/BufferGeometryUtils.min.js";
 
 class GLTFLoader extends Loader {
 
@@ -78,6 +76,7 @@ class GLTFLoader extends Loader {
 		this.dracoLoader = null;
 		this.ktx2Loader = null;
 		this.meshoptDecoder = null;
+		this.ddsTextureFlip = true;
 		this.animationPointerResolver = null;
 
 		this.pluginCallbacks = [];
@@ -290,7 +289,7 @@ class GLTFLoader extends Loader {
 
 	setDDSTextureFlip( flip = true ) {
 
-		ddsTextureFlip = flip;
+		this.ddsTextureFlip = flip;
 
 	}
 
@@ -397,6 +396,7 @@ class GLTFLoader extends Loader {
 			manager: this.manager,
 			ktx2Loader: this.ktx2Loader,
 			meshoptDecoder: this.meshoptDecoder,
+			ddsTextureFlip: this.ddsTextureFlip,
 			animationPointerResolver: this.animationPointerResolver,
 
 		} );
@@ -4203,7 +4203,7 @@ class GLTFParser {
 
 			if ( texture.name !== '' && texture.name.toLowerCase().endsWith( '.dds' ) === true ) {
 
-				texture.repeat.y = ddsTextureFlip === true ? -1 : 1;
+				texture.repeat.y = options.ddsTextureFlip === true ? -1 : 1;
 
 			}
 
