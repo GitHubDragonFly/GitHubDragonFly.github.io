@@ -16,10 +16,10 @@
           "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/decode.min.js",
           "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/encode.min.js",
           "@monogrid/gainmap-js/libultrahdr": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/libultrahdr.min.js",
-          "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@3.10.1",
-          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@3.10.1",
-          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@3.10.1",
-          "meshoptimizer": "https://esm.sh/meshoptimizer@0.20.0"
+          "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.0.2",
+          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.0.2",
+          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.0.2",
+          "meshoptimizer": "https://esm.sh/meshoptimizer@0.21.0"
         }
       }
     </script>
@@ -852,11 +852,17 @@
               if (meshopt === true) {
                 blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: type } );
               } else {
-                blob = new Blob( [ json ], { type: type } );
+                blob = new Blob( [ await simplify( new Uint8Array( json ) ) ], { type: type } );
               }
 
               zip.file( filename + '.glb', blob );
-              await process_zip( '_GLB' + ( meshopt === true ? '_MESHOPT' : '' ) );
+
+              let str = '_GLB';
+              if (meshopt === true) {
+                str += '_MESHOPT';
+              }
+
+              await process_zip( str );
             } else {
               let string = JSON.stringify( json, null, 2 );
               blob = new Blob( [ string ], { type: 'text/plain' } );
@@ -1919,7 +1925,7 @@
         }
 
         if (tex === undefined) {
-          let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/opengameart/smoke1.png';
+          let url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/water.jpg';
 
           hdrJPGLoader.load( url, async function( texture ) {
             tex = await texture.toDataTexture();
@@ -2201,25 +2207,64 @@
         document.getElementById('div_error').style.display = 'block';
       }
 
-      /* Encode GLB exports with meshopt compression - geometry, morphs, animations */
+      /* Simplify */
+
+      async function simplify( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { dedup, flatten, join, prune, unpartition } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          unpartition(),
+          dedup(),
+          prune(),
+          flatten(),
+          join()
+        );
+
+        const compressedArrayBuffer = io.writeBinary( doc );
+
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
+      }
+
+      /* Encode with meshopt compression - geometry, morphs, animations */
 
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
         const { MeshoptEncoder } = await import( "meshoptimizer" );
-        const { meshopt } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
+        const { dedup, flatten, join, meshopt, prune, unpartition } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
 
         await MeshoptEncoder.ready;
 
-        const io = new WebIO()
-        .registerExtensions( KHRONOS_EXTENSIONS )
-        .registerDependencies({
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+        io.registerDependencies({
           'meshopt.encoder': MeshoptEncoder,
         });
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
-        await doc.transform( meshopt( { encoder: MeshoptEncoder, level: 'high' } ) );
+        await doc.transform(
+          unpartition(),
+          dedup(),
+          prune(),
+          flatten(),
+          join(),
+          meshopt( { encoder: MeshoptEncoder, level: 'high' } )
+        );
 
         doc.createExtension( EXTMeshoptCompression )
         .setRequired( true )
@@ -2230,6 +2275,9 @@
         io.registerExtensions( [ EXTMeshoptCompression ] );
 
         const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
 
         return compressedArrayBuffer;
       }
