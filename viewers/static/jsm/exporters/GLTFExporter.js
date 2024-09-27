@@ -2731,6 +2731,8 @@ class GLTFMaterialsClearcoatExtension {
 				texCoord: material.clearcoatNormalMap.channel
 			};
 
+			if ( material.clearcoatNormalScale.x !== 1 ) clearcoatNormalMapDef.scale = material.clearcoatNormalScale.x;
+
 			writer.applyTextureTransform( clearcoatNormalMapDef, material.clearcoatNormalMap );
 			extensionDef.clearcoatNormalTexture = clearcoatNormalMapDef;
 
