@@ -321,7 +321,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>PDB Viewer (r168)</title>
+    <title>PDB Viewer (r169)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -832,7 +832,9 @@
 
           let options = { filename: filename };
 
-          await obj_exporter.parse( pdb_obj.clone(), async function( exported ) {
+          let mesh_clone = await create_meshes();
+
+          await obj_exporter.parse( mesh_clone, async function( exported ) {
             zip.file( filename + '.obj', exported[ 'obj' ] );
 
             if (exported[ 'mtl' ]) {
@@ -867,7 +869,9 @@
 
           let ply_exporter = new PLYExporter( manager );
 
-          ply_exporter.parse( pdb_obj.clone(), async function( json ) {
+          let mesh_clone = await create_meshes();
+
+          ply_exporter.parse( mesh_clone, async function( json ) {
             let blob;
 
             if (binary === true) {
@@ -893,7 +897,9 @@
 
           let stl_exporter = new STLExporter( manager );
 
-          let string = stl_exporter.parse( pdb_obj.clone() ).split( ',' );
+          let mesh_clone = await create_meshes();
+
+          let string = stl_exporter.parse( mesh_clone ).split( ',' );
           let blob = new Blob( [ string ], { type: 'text/plain' } );
 
           zip.file( filename + '.stl', blob );
@@ -910,7 +916,9 @@
 
           let dae_exporter = new ColladaExporter( manager );
 
-          let result = await dae_exporter.parse( pdb_obj.clone() );
+          let mesh_clone = await create_meshes();
+
+          let result = await dae_exporter.parse( mesh_clone );
 
           zip.file( filename + '.dae', result.data );
 
@@ -942,7 +950,9 @@
 
           let options = { binary: binary, maxTextureSize: 1024 };
 
-          gltf_exporter.parse( pdb_obj.clone(), async json => {
+          let mesh_clone = await create_meshes();
+
+          gltf_exporter.parse( mesh_clone, async json => {
             let blob;
 
             if (binary === true) {
@@ -992,7 +1002,9 @@
 
           let options = {	binary: true, maxTextureSize: 1024 };
 
-          gltf_exporter.parse( pdb_obj.clone(), function( json ) {
+          let mesh_clone = await create_meshes();
+
+          gltf_exporter.parse( mesh_clone, function( json ) {
             // Use ASSIMPJS to export files
             assimpjs().then( async function( ajs ) {
               let result = ajs.ConvertFile( filename, format, new Uint8Array( json ), undefined, undefined );
@@ -1030,7 +1042,9 @@
         if (pdb_obj) {
           await start_export();
 
-          let json = JSON.stringify( pdb_obj.clone().toJSON() );
+          let mesh_clone = await create_meshes();
+
+          let json = JSON.stringify( mesh_clone.toJSON() );
           let blob = new Blob( [ json ], { type: 'text/plain' } );
 
           zip.file( filename + '.json', blob );
@@ -1047,7 +1061,9 @@
 
           let usdz_exporter = new USDZExporter( manager );
 
-          await usdz_exporter.parse( pdb_obj.clone(), async function( arraybuffer ) {
+          let mesh_clone = await create_meshes();
+
+          await usdz_exporter.parse( mesh_clone, async function( arraybuffer ) {
             let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
 
             zip.file( filename + '.usdz', blob );
@@ -1065,7 +1081,9 @@
 
           let rhino_exporter = new Rhino3dmExporter( manager );
 
-          rhino_exporter.parse( pdb_obj.clone(), async function( arrayBuffer ) {
+          let mesh_clone = await create_meshes();
+
+          rhino_exporter.parse( mesh_clone, async function( arrayBuffer ) {
             let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
 
             zip.file( filename + '.3dm', blob );
@@ -2531,6 +2549,52 @@
         }
 
         mouse_wheel = true;
+      }
+
+      // Logic from three.js SceneUtils.js function createMeshesFromInstancedMesh( instancedMesh )
+
+      async function create_meshes() {
+        const { mergeVertices } = await import( "three/addons/utils/BufferGeometryUtils.min.js" );
+
+        let meshes = new THREE.Group();
+
+        let m_meshes = pdb_obj.clone();
+        m_meshes.updateMatrixWorld( true, true );
+
+        m_meshes.traverse( function( child ) {
+          if (child.isInstancedMesh) {
+            // GLB export includes DRACO compression on indexed geometries
+            if (!child.geometry.index) {
+              child.geometry = mergeVertices( child.geometry );
+              child.geometry.computeVertexNormals();
+              child.geometry.normalizeNormals();
+            }
+
+            for ( let i = 0; i < child.count; i += 1 ) {
+              let child_clone = new THREE.Mesh( child.geometry, child.material );
+
+              if (child.instanceColor) {
+                let colors = [];
+
+                for ( let k = 0; k < child_clone.geometry.attributes.position.array.length; k += 3 ) {
+                  colors.push( child.instanceColor.array[ 0 ], child.instanceColor.array[ 1 ], child.instanceColor.array[ 2 ] );
+                }
+
+                child_clone.geometry.setAttribute('color', new THREE.Float32BufferAttribute( colors, 3 ));
+              }
+
+              if (child.name && child.name !== '') child_clone.name = child.name;
+
+              child.getMatrixAt( i, child_clone.matrix );
+              child_clone.matrix.decompose( child_clone.position, child_clone.quaternion, child_clone.scale );
+
+              meshes.add( child_clone );
+              meshes.updateMatrixWorld( true, true );
+            }
+          }
+        });
+
+        return meshes;
       }
 
       /* Encode with draco compression - geometry */
