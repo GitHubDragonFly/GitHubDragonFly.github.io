@@ -11,8 +11,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.168.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.168.0/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
         }
       }
     </script>
@@ -22,7 +22,8 @@
     <script type="module">
       import * as three_js from "three";
       import { PDBLoader } from "three/addons/loaders/PDBLoader.min.js";
-      import { CSS2DObject, CSS2DRenderer } from "three/addons/renderers/CSS2DRenderer.min.js";
+      import { FontLoader } from "three/addons/loaders/FontLoader.min.js";
+      import { TextGeometry } from "three/addons/geometries/TextGeometry.min.js";
 
       THREE = three_js;
 
@@ -31,8 +32,13 @@
 
       pdb_loader = new PDBLoader( manager );
 
-      css2d_object = CSS2DObject;
-      css2d_renderer = CSS2DRenderer;
+      font_loader = new FontLoader( manager );
+
+      await font_loader.load( "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/fonts/optimer_bold.typeface.json", function( font ) {
+        label_font = font;
+      });
+
+      labelGeometry = TextGeometry;
     </script>
 
     <style>
@@ -277,7 +283,6 @@
           wh = window.innerHeight;
 
           renderer.setSize( ww, wh );
-          labelRenderer.setSize( ww, wh );
 
           camera.aspect = ww / wh;
           camera.updateProjectionMatrix();
@@ -288,14 +293,14 @@
     </script>
 
     <script>
-      var THREE, manager, pdb_loader, pdb_obj, scene, camera, controls;
-      var renderer, labelRenderer, css2d_renderer, css2d_object;
-      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
-      var directionalLight, bounding_box, render_requested;
+      var THREE, manager, pdb_loader, pdb_obj, font_loader, label_font;
+      var scene, camera, controls, renderer, render_requested;
+      var mouse_down, mouse_wheel, reset_rotation;
+      var directionalLight, bounding_box, events_initialized;
       var ww = window.innerWidth, wh = window.innerHeight;
       var root, position, color, offset, start, end;
-      var boxGeometry, boxMaterial, sphereGeometry;
-      var sphereMaterial, geometryAtoms, geometryBonds;
+      var boxGeometry, boxMaterial, sphereGeometry, sphereMaterial;
+      var labelGeometry, labelMaterial, geometryAtoms, geometryBonds;
       var atoms, labels, bonds, positions, colors, json;
       var atoms_visible, labels_visible, bonds_visible;
       var url_displayed = false, url_loading = false, isMobile;
@@ -369,10 +374,14 @@
         end = new THREE.Vector3();
         color = new THREE.Color();
         root = new THREE.Group();
+
         boxGeometry = new THREE.BoxGeometry( 1, 1, 1 );
-        boxMaterial = new THREE.MeshPhongMaterial( { specular: 0x7C7C7C, shininess: 30 } );
+        boxMaterial = new THREE.MeshPhongMaterial( { specular: 0x7C7C7C, shininess: 20 } );
+
         sphereGeometry = new THREE.IcosahedronGeometry( 1, 2 );
-        sphereMaterial = new THREE.MeshPhongMaterial( { specular: 0x7C7C7C, shininess: 40 } );
+        sphereMaterial = new THREE.MeshPhongMaterial( { specular: 0x7C7C7C, shininess: 30 } );
+
+        labelMaterial = new THREE.MeshStandardMaterial( { metalness: 0.6, roughness: 1 } );
 
         console.time( 'Loading Time' );
         document.body.style.backgroundImage = 'none';
@@ -410,17 +419,6 @@
           renderer.autoClear = false;
 
           document.body.appendChild( renderer.domElement );
-        }
-
-        if (labelRenderer === undefined) {
-          labelRenderer = new css2d_renderer();
-          labelRenderer.setSize( ww, wh );
-          labelRenderer.domElement.style.position = 'absolute';
-          labelRenderer.domElement.style.top = '0px';
-          labelRenderer.domElement.style.zIndex = '0';
-          labelRenderer.domElement.style.pointerEvents = 'none';
-
-          document.body.appendChild( labelRenderer.domElement );
         }
 
         if (scene === undefined) scene = new THREE.Scene();
@@ -569,15 +567,13 @@
         colors = geometryAtoms.getAttribute( 'color' );
 
         let instanced_atoms = {};
+        let instanced_labels = {};
         let positions_count = positions.count;
 
         console.log('atoms count: ', positions_count);
 
         // Try to unclutter atoms depending on their number
         let scale = positions_count < 200 ? 25 : (positions_count < 750 ? 20 : (positions_count < 1500 ? 15 : (positions_count < 15000 ? 11 : 7)));
-
-        // Try to unclutter labels depending on the number of atoms
-        let font_size = positions_count < 200 ? '120%' : (positions_count < 750 ? '110%' : (positions_count < 1500 ? '95%' : (positions_count < 15000 ? '85%' : '70%')));
 
         for ( var i = 0; i < positions.count; i ++ ) {
           position.x = positions.getX( i );
@@ -588,36 +584,33 @@
           color.g = colors.getY( i );
           color.b = colors.getZ( i );
 
+          let atom = json.atoms[ i ];
+
           let m4 = new THREE.Matrix4();
           m4.makeScale( scale, scale, scale );
           m4.setPosition( position.multiplyScalar( 75 ) );
 
-          let hex_string = color.getHexString();
+          let atom_string = atom[ 4 ];
 
-          if (!instanced_atoms[ hex_string ]) {
-            instanced_atoms[ hex_string ] = { count: 0, color: new THREE.Color( color.r, color.g, color.b ), matrix_array: [] };
+          if (!instanced_atoms[ atom_string ]) {
+            instanced_atoms[ atom_string ] = {
+              count: 0,
+              color: new THREE.Color( color.r, color.g, color.b ),
+              matrix_array: []
+            };
+
+            instanced_labels[ atom_string ] = {
+              count: 0,
+              color: new THREE.Color( 'rgb( ' + `${atom[ 3 ][ 0 ]}` + ', ' + `${atom[ 3 ][ 1 ]}` + ', ' + `${atom[ 3 ][ 2 ]}` + ' )' ),
+              matrix_array: []
+            };
           }
 
-          instanced_atoms[ hex_string ].count ++;
-          instanced_atoms[ hex_string ].matrix_array.push( m4 );
+          instanced_atoms[ atom_string ].count ++;
+          instanced_atoms[ atom_string ].matrix_array.push( m4 );
 
-          let atom = json.atoms[ i ];
-
-          let text = document.createElement( 'div' );
-
-          text.className = 'label';
-          text.style.zIndex = '-1';
-          text.style.color = 'rgb(' + atom[ 3 ][ 0 ] + ',' + atom[ 3 ][ 1 ] + ',' + atom[ 3 ][ 2 ] + ')';
-          text.style.textShadow = '1px 1px 1px #000';
-          text.style.fontSize = font_size;
-          text.textContent = atom[ 4 ];
-
-          let label = new css2d_object( text );
-          label.position.copy( position );
-          labels.push( label );
-
-          // Don't automatically show labels if atom count > 200
-          if (positions_count < 200) root.add( label );
+          instanced_labels[ atom_string ].count ++;
+          instanced_labels[ atom_string ].matrix_array.push( m4 );
         }
 
         for ( const key of Object.keys( instanced_atoms ) ) {
@@ -636,6 +629,46 @@
 
           atoms.push( object );
           root.add( object );
+        }
+
+        for ( const key of Object.keys( instanced_labels ) ) {
+          let textGeo = new labelGeometry( key, {
+            font: label_font,
+            size: 1,
+            depth: 0.025,
+            curveSegments: 4,
+            bevelEnabled: false
+          } );
+
+          textGeo.computeBoundingBox();
+
+          let centerOffset_x = - 0.25 * ( textGeo.boundingBox.max.x - textGeo.boundingBox.min.x ) * 75;
+          let centerOffset_y = 0.25 * ( textGeo.boundingBox.max.y - textGeo.boundingBox.min.y ) * 75;
+
+          let object = new THREE.InstancedMesh( textGeo, labelMaterial, instanced_labels[ key ].count );
+
+          let i = 0;
+
+          for ( const matrix of instanced_labels[ key ].matrix_array ) {
+            // Adjust the matrix so labels show in front of atoms
+            let v3 = new THREE.Vector3().setFromMatrixPosition( matrix );
+            matrix.setPosition( v3.x + centerOffset_x, v3.y - 0.5 * centerOffset_y, v3.z + 1.5 * centerOffset_y );
+
+            object.setMatrixAt( i, matrix );
+            object.instanceMatrix.needsUpdate = true;
+
+            object.setColorAt( i, instanced_labels[ key ].color );
+            object.instanceColor.needsUpdate = true;
+
+            i ++;
+          }
+
+          object.renderOrder = 0;
+
+          labels.push( object );
+
+          // Don't automatically include labels if atom count > 200
+          if (positions_count < 200) root.add( object );
         }
 
         // Add bonds between atoms to the model group
@@ -749,13 +782,11 @@
           if (mouse_down === true || mouse_wheel === true) {
             controls.update();
 
-            if (labels_visible === true) labelRenderer.render( scene, camera );
-
             renderer.clear();
             renderer.render( scene, camera );
 
             if (mouse_wheel === true) {
-              if (count > 10) {
+              if (count > 15) {
                 mouse_wheel = false;
                 count = 0;
               } else {
