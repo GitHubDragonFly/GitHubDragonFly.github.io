@@ -361,6 +361,7 @@
           <option title="PLY - Polygon File Format ascii" value="ply" onclick="export_ply( false );">PLY_a</option>
           <option title="PLY - Polygon File Format binary" value="ply" onclick="export_ply( true );">PLY_b</option>
           <option title="STL - Stereolithography Format" value="stl" onclick="export_stl();">STL</option>
+          <option title="USDZ - Universal Scene Description Format" value="usdz" onclick="export_usdz();">USDZ</option>
           <option title="ASSIMP Export Formats" value="assimp" disabled>ASSIMP</option>
           <option title="FBX - Filmbox Format" value="fbx" onclick="export_assimp( 'fbx' );">FBX</option>
           <option title="ASSJSON - Assimp JSON Format" value="assjson" onclick="export_assimp( 'assjson' );">JSON</option>
@@ -959,7 +960,7 @@
                 } else if (meshopt === true) {
                   blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: type } );
                 } else {
-                  blob = new Blob( [ new Uint8Array( json ) ], { type: type } );
+                  blob = new Blob( [ await simplify( new Uint8Array( json ) ) ], { type: type } );
                 }
               } catch ( error ) {
                 handle_export_error( error );
@@ -1063,6 +1064,41 @@
 
             await process_zip( '_3DM' );
           }, function( error ) { handle_export_error( error ); }, options );
+        }
+      }
+
+      async function export_usdz() {
+        if (ifc_obj) {
+          await start_export();
+
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+          const { GLTFLoader } = await import( "../static/jsm/loaders/GLTFLoader.min.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
+
+          let glb_options = { binary: true, maxTextureSize: 1024 };
+
+          gltf_exporter.parse( ifc_obj.clone(), async function( json ) {
+            let blob = new Blob( [ await simplify( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
+
+            new GLTFLoader().load( URL.createObjectURL( blob ), async function( gltf ) {
+              URL.revokeObjectURL( blob );
+
+              const { USDZExporter } = await import( "../static/jsm/exporters/USDZExporter.min.js" );
+
+              let usdz_exporter = new USDZExporter( manager );
+
+              let usdz_options = { maxTextureSize: 1024 };
+
+              await usdz_exporter.parse( gltf.scene, async function( arraybuffer ) {
+                let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
+
+                zip.file( filename + '.usdz', blob );
+
+                await process_zip( '_USDZ' );
+              }, function( error ) { handle_export_error( error ); }, usdz_options );
+            });
+          }, function( error ) { handle_export_error( error ); }, glb_options );
         }
       }
 
@@ -2418,6 +2454,38 @@
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
+      }
+
+      /* Simplify */
+
+      async function simplify( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer" );
+        const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
+        const { dedup, flatten, instance, join, prune, palette, simplify, unpartition, weld } = await import( "@gltf-transform/functions" );
+
+        const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          unpartition(),
+          palette({ min: 5 }),
+          dedup(),
+          prune(),
+          instance( { min: 2 } ),
+          flatten(),
+          join(),
+          weld( { tolerance: 0, toleranceNormal: 0.1 } ),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+        );
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
       }
 
       /* Encode GLB with draco compression - geometry */
