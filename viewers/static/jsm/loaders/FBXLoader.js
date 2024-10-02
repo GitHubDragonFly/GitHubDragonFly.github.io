@@ -673,13 +673,17 @@ class FBXTreeParser {
 
 		}
 
-		if ( materialNode.TransparencyFactor && ( materialNode.TransparencyFactor.value < 1 || ! materialNode.Opacity ) ) {
+		parameters.opacity = ( materialNode.TransparencyFactor ? parseFloat( materialNode.TransparencyFactor.value ) : 1 );
 
-			parameters.opacity = 1 - parseFloat( materialNode.TransparencyFactor.value );
+		if ( parameters.opacity === 1 || parameters.opacity === 0 ) {
 
-		} else if ( materialNode.Opacity ) {
+			parameters.opacity = ( materialNode.Opacity ? parseFloat( materialNode.Opacity.value ) : null );
 
-			parameters.opacity = parseFloat( materialNode.Opacity.value );
+			if ( parameters.opacity === null ) {
+
+				parameters.opacity = ( materialNode.TransparentColor ? parseFloat( materialNode.TransparentColor.value[ 0 ] ) : 1 );
+
+			}
 
 		}
 
