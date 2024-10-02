@@ -673,7 +673,11 @@ class FBXTreeParser {
 
 		}
 
-		if ( materialNode.Opacity ) {
+		if ( materialNode.TransparencyFactor && ( materialNode.TransparencyFactor.value < 1 || ! materialNode.Opacity ) ) {
+
+			parameters.opacity = 1 - parseFloat( materialNode.TransparencyFactor.value );
+
+		} else if ( materialNode.Opacity ) {
 
 			parameters.opacity = parseFloat( materialNode.Opacity.value );
 
