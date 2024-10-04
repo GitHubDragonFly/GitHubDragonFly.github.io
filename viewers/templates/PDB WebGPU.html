@@ -11,11 +11,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.min.js",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.webgpu.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
-          "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/decode.min.js",
-          "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/encode.min.js",
-          "@monogrid/gainmap-js/libultrahdr": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/libultrahdr.min.js",
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.0.2",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.0.2",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.0.2",
@@ -330,7 +327,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>PDB Viewer (r169)</title>
+    <title>PDB WebGPU (r169)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -430,8 +427,7 @@
         <label for="ambient_light_color" title="Ambient Light Color">AL<input type="color" title="Ambient Light Color" id="ambient_light_color" onchange="set_ambient_light_color();" disabled /></label>
         <label for="directional_light_color" title="Directional Light Color">DL<input type="color" title="Directional Light Color" id="directional_light_color" onchange="set_directional_light_color();" disabled /></label>
         <label for="hemisphere_light_color" title="Hemisphere Light Color">HL<input type="color" title="Hemisphere Light Color" id="hemisphere_light_color" onchange="set_hemisphere_light_color();" disabled /></label>
-        <label for="back_color" title="Background Color">B<input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled /></label>
-        <button title="Toggle Wireframe" id="btn_wireframe" onclick="show_wireframe();" style="min-width: 22px;" disabled >W</button>
+        <label for="back_color" title="Background Color">BG<input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled /></label>
         <button title="Toggle Grid - 200 x 200" id="btn_grid" onclick="show_grid();" disabled>#</button>
         <button title="Toggle Polar Grid - radius 100" id="btn_polar_grid" onclick="show_polar_grid();" style="min-width: 24px;" disabled><p class="polar"></p></button>
         <button title="Atoms" id="btn_atoms" onclick="show_atoms();" style="min-width: 48px;" disabled>atoms</button>
@@ -740,11 +736,11 @@
     </script>
 
     <script>
-      var THREE, manager, pdb_loader, pdb_obj, font_loader, label_font, render_requested;
-      var scene, camera, renderer, texture_loader, exr_loader, rgbe_loader, hdrJPGLoader;
+      var THREE, manager, gpu, gl2, pdb_loader, pdb_obj, font_loader, label_font;
+      var scene, camera, renderer, texture_loader, exr_loader, rgbe_loader, render_requested;
       var controls, orb_controls, gizmo, orb_controls_gizmo, count = 0, tex, link, isMobile;
       var gui, gui_legend, gui_set = false, guiExposure = null, params, toneMappingOptions;
-      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
+      var mouse_down, mouse_wheel, reset_rotation, events_initialized, node_materials;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
@@ -754,7 +750,7 @@
       var atoms, labels, bonds, atoms_visible, labels_visible, bonds_visible, geometryAtoms, geometryBonds;
       var boxGeometry, boxMaterial, sphereGeometry, sphereMaterial, labelGeometry, labelMaterial;
       var url_displayed = false, url_loading = false, menu_location_bottom = false, equi_enabled;
-      var selected_pdb_file, selected_url_file = '', filename, zip, slider_height = 0, wireframe_enabled;
+      var selected_pdb_file, selected_url_file = '', filename, zip, slider_height = 0;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
@@ -1413,15 +1409,30 @@
 
       function reset_scene_params() {
         if (scene) {
-          if (scene.environment) {
-            scene.environment.dispose();
-            scene.environment = null;
+          if (gpu === false) {
+            if (scene.environment) {
+              scene.environment.dispose();
+              scene.environment = null;
+            }
+          } else {
+            if (scene.environmentNode) {
+              scene.environmentNode.dispose();
+              scene.environmentNode = null;
+            }
+
+            if (scene.backgroundNode) {
+              if (!scene.backgroundNode.isColor) scene.backgroundNode.dispose();
+              scene.backgroundNode = null;
+            }
           }
 
           if (scene.background) {
-            scene.background.dispose();
+            if (!scene.background.isColor) scene.background.dispose();
             scene.background = null;
           }
+
+          scene.backgroundBlurriness = 0.00001;
+          scene.environmentIntensity = 1.0;
         }
       }
 
@@ -1431,8 +1442,16 @@
         bgnd_linear_gradient = false;
         document.body.style.backgroundImage = 'none';
         document.getElementById('file_image_input').value = '';
-        document.body.style.backgroundColor = document.getElementById('back_color').value;
         document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+
+        let bg_colors = document.getElementById('back_color').value;
+
+        scene.background = new THREE.Color().setRGB(
+          parseInt( bg_colors.substring( 1, 3 ), 16 ) / 255.0,
+          parseInt( bg_colors.substring( 3, 5 ), 16 ) / 255.0,
+          parseInt( bg_colors.substring( 5 ), 16 ) / 255.0
+        );
+
         mouse_wheel = true;
       }
 
@@ -1508,12 +1527,6 @@
 
         if (equi_enabled === false) {
           if (gui_set === false) {
-            gui.add( params, 'setEnvMap' )
-            .onChange( function ( value ) {
-              set_envMap( value );
-              mouse_wheel = true;
-            });
-
             gui.add( params, 'toneMapping', Object.keys( toneMappingOptions ) )
             .onChange( function () {
               updateGUI();
@@ -1521,9 +1534,15 @@
               mouse_wheel = true;
             });
 
+            gui.add( params, 'envMapIntensity', 0, 5 )
+            .onChange( function ( value ) {
+              scene.environmentIntensity = value;
+              mouse_wheel = true;
+            });
+
             gui.add( params, 'backBlurriness', 0, 1 )
             .onChange( function ( value ) {
-              scene.backgroundBlurriness = value;
+              scene.backgroundBlurriness = value === 0 ? 0.00001 : value;
               mouse_wheel = true;
             });
 
@@ -1542,7 +1561,6 @@
           set_gui_position();
 
           bgnd_linear_gradient = false;
-          document.body.style.backgroundColor = '#000000';
 
           document.getElementById('back_color').disabled = true;
           document.getElementById('back_color').value = '#000000';
@@ -1560,22 +1578,23 @@
 
             set_bgenv_message();
 
-            hdrJPGLoader.load( url, async function( texture ) {
-              let tex = await texture.toDataTexture();
-              tex.mapping = THREE.EquirectangularReflectionMapping;
-              tex.needsUpdate = true;
+            texture_loader.load( url, async function( texture ) {
+              texture.mapping = THREE.EquirectangularReflectionMapping;
+              texture.needsUpdate = true;
 
-              scene.background = tex;
-              scene.environment = tex;
+              if (gpu === false) {
+                scene.background = texture.clone();
+                scene.environment = texture.clone();
+              } else {
+                scene.backgroundNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+                scene.environmentNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+              }
 
               mouse_wheel = true;
 
               set_bgenv_message( true );
 
-              texture.renderTarget.texture.dispose();
-              texture.renderTarget.dispose();
               texture.dispose();
-              tex.dispose();
             }, function ( xhr ) {
             }, function ( error ) {
               document.getElementById('div_message').innerText = 'Error loading image';
@@ -1584,8 +1603,9 @@
             });
           }
 
-          scene.backgroundBlurriness = params.backBlurriness;
+          scene.environmentIntensity = params.envMapIntensity;
           scene.backgroundIntensity = params.backIntensity;
+          scene.backgroundBlurriness = params.backBlurriness === 0 ? 0.00001 : params.backBlurriness;
         } else {
           if (gui) gui_reset();
 
@@ -1594,8 +1614,8 @@
             set_scene_image();
           }
 
-          scene.backgroundBlurriness = 0;
-          scene.backgroundIntensity = 1.1;
+          scene.backgroundBlurriness = 0.00001;
+          scene.backgroundIntensity = 1.0;
 
           document.getElementById('back_color').disabled = false;
           document.getElementById('btn_bgnd_linear_gradient').disabled = false;
@@ -1609,33 +1629,18 @@
         mouse_wheel = true;
       }
 
-      function set_envMap( set_env_map = false ) {
-        if (pdb_obj) {
-          pdb_obj.traverse( ( child ) => {
-            if (child.isMesh) {
-              child.material.envMap = set_env_map ? scene.environment : null;
-              child.material.needsUpdate = true;
-            }
-
-            mouse_wheel = true;
-          });
-        }
-      }
-
       function gui_reset() {
         params.toneMapping = 'Neutral';
         renderer.toneMapping = THREE.NeutralToneMapping;
         renderer.toneMappingExposure = 1.0;
+        params.envMapIntensity = 0.5;
         params.backBlurriness = 0.0;
         params.backIntensity = 1.0;
-        params.setEnvMap = false;
         params.exposure = 1.0;
 
         mouse_wheel = true;
 
         gui.reset();
-
-        set_envMap( false );
 
         gui.domElement.style.display = 'none';
 
@@ -1668,13 +1673,11 @@
           document.getElementById('div_message').style.display = '';
         }
 
-        set_gui_position();
+        if (gui) set_gui_position();
       }
 
       async function set_scene_image( reset = false ) {
-        let fii = document.getElementById('file_image_input').files[ 0 ];
-
-        if (params.setEnvMap === true) set_envMap( false );
+        const fii = document.getElementById('file_image_input').files[ 0 ];
 
         await reset_scene_params();
 
@@ -1682,61 +1685,28 @@
           if (reset === false) set_bgenv_message();
 
           bgnd_linear_gradient = false;
-          document.body.style.backgroundImage = 'none';
-          document.body.style.backgroundColor = '#000000';
           document.getElementById('back_color').value = '#000000';
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
 
           let fn_uc = fii.name.toUpperCase();
 
-          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.SVG') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
-            hdrJPGLoader.load( URL.createObjectURL( fii ) , async function( texture ) {
-              URL.revokeObjectURL( fii );
-
-              let hdrJpgEquirectangularMap = await texture.toDataTexture();
-
-              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
-                const repeat_x = hdrJpgEquirectangularMap.image.width / 2048;
-                const repeat_y = hdrJpgEquirectangularMap.image.height / 2048;
-
-                hdrJpgEquirectangularMap.repeat.set( repeat_x, repeat_y );
-              }
-
-              hdrJpgEquirectangularMap.needsUpdate = true;
-
-              if (equi_enabled === true) {
-                hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = hdrJpgEquirectangularMap;
-                scene.environment = hdrJpgEquirectangularMap;
-                if (params.setEnvMap === true) set_envMap( true );
-              } else {
-                scene.background = hdrJpgEquirectangularMap;
-              }
-
-              mouse_wheel = true;
-
-              texture.renderTarget.texture.dispose();
-              texture.renderTarget.dispose();
-              texture.dispose();
-
-              set_bgenv_message( true );
-            }, function ( xhr ) {
-            }, function ( error ) {
-              document.getElementById('div_message').innerText = 'Error loading image';
-              console.log( 'Error loading Background Image File!' );
-              console.log( error );
-
-              URL.revokeObjectURL( fii );
-            });
-          } else if (fn_uc.endsWith('.SVG')) {
+          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
             texture_loader.load( URL.createObjectURL( fii ) , function( texture ) {
               URL.revokeObjectURL( fii );
 
+              texture.colorSpace = THREE.SRGBColorSpace;
+
               if (equi_enabled === true) {
                 texture.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = texture.clone();
-                scene.environment = texture.clone();
-                if (params.setEnvMap === true) set_envMap( true );
+                texture.needsUpdate = true;
+
+                if (gpu === false) {
+                  scene.background = texture.clone();
+                  scene.environment = texture.clone();
+                } else {
+                  scene.backgroundNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+                  scene.environmentNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+                }
               } else {
                 scene.background = texture.clone();
               }
@@ -1755,12 +1725,6 @@
               URL.revokeObjectURL( fii );
             });
           } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
-            const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
-            const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
-
-            // Encode a Gain map from EXR or HDR file
-            // See the code example at: https://github.com/MONOGRID/gainmap-js
-
             let loader;
 
             if (fn_uc.endsWith('.EXR')) {
@@ -1776,106 +1740,44 @@
               if (rgbe_loader === undefined) {
                 const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
                 rgbe_loader = new RGBELoader();
-                rgbe_loader.setDataType( THREE.FloatType );
-                manager.addHandler( /\.hdr$/i, rgbe_loader );
+                rgbe_loader.setDataType( THREE.HalfFloatType );
               }
 
               loader = rgbe_loader;
             }
 
-            const image = await loader.loadAsync( URL.createObjectURL( fii ) );
-            URL.revokeObjectURL( fii );
+            loader.load( URL.createObjectURL( fii ), function( texture ) {
+              URL.revokeObjectURL( fii );
 
-            const textureMax = findTextureMinMax( image );
-
-            // Encode the gainmap
-            const encodingResult = encode({
-              image,
-              maxContentBoost: Math.max.apply( this, textureMax ) // this will encode the full HDR range
-            });
-
-            // obtain the RAW RGBA SDR buffer and create an ImageData
-            const sdrImageData = new ImageData( encodingResult.sdr.toArray(), encodingResult.sdr.width, encodingResult.sdr.height );
-            // obtain the RAW RGBA Gain map buffer and create an ImageData
-            const gainMapImageData = new ImageData( encodingResult.gainMap.toArray(), encodingResult.gainMap.width, encodingResult.gainMap.height );
-
-            // parallel compress the RAW buffers into the specified mimeType
-            const mimeType = 'image/jpeg';
-            const quality = 1.0;
-
-            const [sdr, gainMap] = await Promise.all([
-              compress({
-                source: sdrImageData,
-                mimeType,
-                quality,
-                flipY: true // output needs to be flipped
-              }),
-              compress({
-                source: gainMapImageData,
-                mimeType,
-                quality,
-                flipY: true // output needs to be flipped
-              })
-            ]);
-
-            // obtain the metadata which will be embedded into and XMP tag inside the final JPEG file
-            const metadata = encodingResult.getMetadata();
-
-            // embed the compressed images + metadata into a single JPEG file
-            const jpeg = await encodeJPEGMetadata({
-              ...encodingResult,
-              ...metadata,
-              sdr,
-              gainMap
-            });
-
-            // jpeg will be a Uint8Array
-            const jpeg_file = new File( [ jpeg ], 'file.jpg' );
-
-            // load the encoded jpeg with HDRJPGLoader
-
-            hdrJPGLoader.load( URL.createObjectURL( jpeg_file ), async function( texture ) {
-              URL.revokeObjectURL( jpeg_file );
-
-              let hdrJpgEquirectangularMap = await texture.toDataTexture();
-
-              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
-                const repeat_x = hdrJpgEquirectangularMap.image.width / 2048;
-                const repeat_y = hdrJpgEquirectangularMap.image.height / 2048;
-
-                hdrJpgEquirectangularMap.repeat.set( repeat_x, repeat_y );
-              }
-
-              hdrJpgEquirectangularMap.needsUpdate = true;
+              texture.colorSpace = THREE.SRGBColorSpace;
 
               if (equi_enabled === true) {
-                hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = hdrJpgEquirectangularMap;
-                scene.environment = hdrJpgEquirectangularMap;
-                if (params.setEnvMap === true) set_envMap( true );
+                texture.mapping = THREE.EquirectangularReflectionMapping;
+                texture.needsUpdate = true;
+
+                if (gpu === false) {
+                  scene.background = texture.clone();
+                  scene.environment = texture.clone();
+                } else {
+                  scene.backgroundNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+                  scene.environmentNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+                }
               } else {
-                scene.background = hdrJpgEquirectangularMap;
+                scene.background = texture.clone();
               }
 
               mouse_wheel = true;
 
-              set_bgenv_message( true );
-
-              texture.renderTarget.texture.dispose();
-              texture.renderTarget.dispose();
               texture.dispose();
 
-              // encoder must be manually disposed when no longer needed
-              image.dispose();
-              encodingResult.gainMap.dispose();
-              encodingResult.sdr.dispose();
+              set_bgenv_message( true );
             }, function ( xhr ) {
             }, function ( error ) {
               document.getElementById('div_message').innerText = 'Error loading image';
               console.log( 'Error loading Background Image File!' );
               console.log( error );
 
-              URL.revokeObjectURL( jpeg_file );
+              URL.revokeObjectURL( fii );
             });
           } else {
             console.log( 'Not a valid image file!' );
@@ -2122,9 +2024,9 @@
         if (params === undefined) {
           params = {
             toneMapping: 'Neutral',
+            envMapIntensity: 0.5,
             backBlurriness: 0,
             backIntensity: 1.0,
-            setEnvMap: false,
             exposure: 1.0
           };
         }
@@ -2159,7 +2061,6 @@
         labels_visible = false;
         bonds_visible = false;
         equi_enabled = false;
-        wireframe_enabled = false;
         bounding_box = new THREE.Box3();
         position = new THREE.Vector3();
         offset = new THREE.Vector3();
@@ -2169,12 +2070,17 @@
         root = new THREE.Group();
 
         boxGeometry = new THREE.BoxGeometry( 1, 1, 1 );
-        boxMaterial = new THREE.MeshStandardMaterial( { metalness: 0.3, roughness: 0.8 } );
+        boxMaterial = new THREE.MeshStandardNodeMaterial( { metalness: 0.3, roughness: 0.7 } );
 
         sphereGeometry = new THREE.IcosahedronGeometry( 1, 2 );
-        sphereMaterial = new THREE.MeshStandardMaterial( { metalness: 0.5, roughness: 0.5 } );
+        sphereMaterial = new THREE.MeshStandardNodeMaterial( { metalness: 0.5, roughness: 0.5 } );
 
-        labelMaterial = new THREE.MeshStandardMaterial( { metalness: 0.6, roughness: 1 } );
+        labelMaterial = new THREE.MeshStandardNodeMaterial( {
+          emissive: new THREE.Color( 0.1, 0.1, 0.1 ),
+          emissiveIntensity: 0.35,
+          metalness: 0.5,
+          roughness: 0.9
+        } );
 
         document.getElementById('btn_atoms').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_labels').style.backgroundColor = '#d1cefc';
@@ -2206,33 +2112,46 @@
         }
 
         if (renderer === undefined) {
-          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
-          renderer.setPixelRatio( window.devicePixelRatio );
+          try {
+            renderer = new THREE.WebGPURenderer( { antialias: true, alpha: true, logarithmicDetphBuffer: true } );
+            await renderer.init();
+          } catch ( error ) {
+            handle_error( error );
+            return;
+          }
+
+          renderer.setPixelRatio( window.devicePixelRatio < 1.5 ? window.devicePixelRatio : 2.0 );
+          renderer.outputColorSpace = THREE.SRGBColorSpace;
           renderer.toneMapping = THREE.NeutralToneMapping;
-          renderer.toneMappingExposure = 1;
+          renderer.toneMappingExposure = 1.0;
           renderer.setSize( ww, wh );
-          renderer.info.autoReset = false;
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
           renderer.autoClear = false;
 
           document.body.appendChild( renderer.domElement );
         }
 
-        if (hdrJPGLoader === undefined) {
-          const { HDRJPGLoader } = await import( "@monogrid/gainmap-js/decode" );
-          hdrJPGLoader = new HDRJPGLoader( renderer );
-        }
-
         if (scene === undefined) scene = new THREE.Scene();
+
+        scene.backgroundBlurriness = 0.00001;
+        scene.backgroundIntensity = 1.0;
+        scene.background = new THREE.Color( 'black' );
+
         if (pdb_obj === undefined) pdb_obj = new THREE.Object3D();
 
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         // Create a grid helper for use with Orbit Controls
-        if (polar_grid === undefined) polar_grid = new THREE.PolarGridHelper( 100, 10 );
-        if (grid === undefined) grid = new THREE.GridHelper( 200, 200, 'yellow' );
+        if (polar_grid === undefined) {
+          polar_grid = new THREE.PolarGridHelper( 100, 10 );
+          if (node_materials[ polar_grid.material.type ]) polar_grid.material = switch_material( polar_grid.material );
+        }
+
+        if (grid === undefined) {
+          grid = new THREE.GridHelper( 200, 200, 'yellow' );
+          if (node_materials[ grid.material.type ]) grid.material = switch_material( grid.material );
+        }
 
         if (camera === undefined) {
           camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 10000 );
@@ -2281,6 +2200,24 @@
 
         // Load PDB file
         selected_pdb_file !== null ? loadFile() : loadURLFile();
+      }
+
+      function switch_material( mtl ) {
+        let nodeMaterial = new node_materials[ mtl.type ]();
+
+        for (const key in mtl) {
+          nodeMaterial[ key ] = mtl[ key ];
+          if (mtl[ key ] && mtl[ key ].isTexture) mtl[ key ].dispose();
+        }
+
+        mtl.dispose();
+
+        if (! nodeMaterial.isMeshStandardMaterial) {
+          nodeMaterial.castShadow = true;
+          nodeMaterial.receiveShadow = true;
+        }
+
+        return nodeMaterial;
       }
 
       function loadFile(){
@@ -2528,11 +2465,11 @@
           'Ne': 'Atomic number: 10\nAtomic mass: 20.1797\nGroup 18: Noble Gases\nElectrons: 2, 8',
           'Na': 'Atomic number: 11\nAtomic mass: 22.98976\nGroup 1: Alkali metals\nElectrons: 2, 8, 1',
           'Mg': 'Atomic number: 12\nAtomic mass: 24.305\nGroup 2: Alkaline earth metals\nElectrons: 2, 8, 2',
-          'Al': 'Atomic number: 13\nAtomic mass: 26.9815386\nGroup 13: Boron group\nElectrons: 2, 8, 3',
-          'Si': 'Atomic number: 14\nAtomic mass: 28.0855\nGroup 14: Carbon group (tetrels)\nElectrons: 2, 8, 4',
-          'P': 'Atomic number: 15\nAtomic mass: 30.973762\nGroup 15: Nitrogen Family (pnictogens)\nElectrons: 2, 8, 5',
-          'S': 'Atomic number: 16\nAtomic mass: 32.065\nGroup 16: Oxygen Family (chalcogens)\nElectrons: 2, 8, 6',
-          'Cl': 'Atomic number: 17\nAtomic mass: 35.453\nGroup 17: Halogens\nElectrons: 2, 8, 7',
+          'Al': 'Aluminium',
+          'Si': 'Silicon',
+          'P': 'Phosphorus',
+          'S': 'Sulfur',
+          'Cl': 'Chlorine',
           'Ar': 'Argon',
           'K': 'Potassium',
           'Ca': 'Calcium',
@@ -2840,11 +2777,9 @@
 
           atoms.forEach( element => {
             element.material.transparent = enable_opacity;
-            element.material.wireframe = wireframe_enabled;
             element.visible = true;
           });
 
-          if (equi_enabled === true) set_envMap( params.setEnvMap );
           set_model_opacity();
         }
 
@@ -2879,11 +2814,9 @@
 
           bonds.forEach( element => {
             element.material.transparent = enable_opacity;
-            element.material.wireframe = wireframe_enabled;
             element.visible = true;
           });
 
-          if (equi_enabled === true) set_envMap( params.setEnvMap );
           set_model_opacity();
         }
 
@@ -3107,26 +3040,6 @@
         mouse_wheel = true;
       }
 
-      function show_wireframe() {
-        if (pdb_obj) {
-          if (wireframe_enabled === true) {
-            document.getElementById('btn_wireframe').style.backgroundColor = '#d1cefc';
-            wireframe_enabled = false;
-          } else {
-            document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
-            wireframe_enabled = true;
-          }
-
-          pdb_obj.traverse( ( child ) => {
-            if (child.isMesh) {
-              child.material.wireframe = wireframe_enabled;
-            }
-
-            mouse_wheel = true;
-          });
-        }
-      }
-
       async function render() {
         if (document.getElementById('animation_progress').style.display === 'none') {
           if (render_requested === true) requestAnimationFrame( render );
@@ -3225,9 +3138,7 @@
         document.getElementById('dlight').checked = false;
         radio_changed();
 
-        // Reset wireframe and opacity values
-        wireframe_enabled = false;
-        document.getElementById('btn_wireframe').style.backgroundColor = '#d1cefc';
+        // Reset opacity values
         enable_opacity = false;
         document.getElementById('model_opacity').value = 1;
         document.getElementById('model_opacity').disabled = true;
@@ -3304,7 +3215,6 @@
 
         renderer.clear();
 
-        if (wireframe_enabled === true) await show_wireframe();
         if (atoms_visible === true) await show_atoms();
         if (bonds_visible === true) await show_bonds();
         if (labels_visible === true) await show_labels();
@@ -3352,10 +3262,7 @@
 
         await gui_legend_reset();
 
-        if (isMobile === false) {
-          renderer.info.reset();
-          renderer.resetState();
-        }
+        if (isMobile === false) renderer.info.reset();
       }
 
       function enable_disable( disable = false ) {
@@ -3382,7 +3289,6 @@
         document.getElementById('btn_dc_dli').disabled = disable;
         document.getElementById('btn_equi').disabled = disable;
         document.getElementById('btn_quick_x').disabled = disable;
-        document.getElementById('btn_wireframe').disabled = disable;
         document.getElementById('btn_dc_opacity').disabled = disable;
         document.getElementById('btn_bgnd_linear_gradient').disabled = disable;
         document.getElementById('btn_polar_grid').disabled = disable;
@@ -3396,10 +3302,43 @@
     </script>
 
     <script>
-      function document_ready() {
+      async function document_ready() {
+        const WebGPU = await import( "three/addons/capabilities/WebGPU.min.js" );
+        const WebGL = await import( "three/addons/capabilities/WebGL.min.js" );
+
+        gpu = WebGPU[ 'default' ].isAvailable();
+        gl2 = WebGL[ 'default' ].isWebGL2Available();
+
+        if ( gpu === true ) {
+          console.log( 'WebGPU support detected' );
+          console.log( 'Using WebGPU Renderer' );
+          document.getElementById('div_message').innerText += ' - WebGPU';
+        } else if ( gl2 === true ) {
+          console.log( 'WebGPU support not detected' );
+          console.log( 'WebGL2 support detected' );
+          document.getElementById('div_message').innerText += ' - WebGL2';
+        } else {
+          document.getElementById('div_message').innerText = 'No WebGPU or WebGL2 detected!';
+          document.getElementById('btn_url').disabled = true;
+          document.getElementById('file_input').disabled = true;
+          document.getElementById('btn_full_screen').disabled = true;
+          document.getElementById('btn_menu_location').disabled = true;
+
+          document.body.appendChild( WebGPU[ 'default' ].getErrorMessage() );
+          throw new Error( 'No WebGPU or WebGL2 support detected' );
+        }
+
         isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
           (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        node_materials = { MeshBasicMaterial: THREE.MeshBasicNodeMaterial, MeshLambertMaterial: THREE.MeshLambertNodeMaterial,
+          MeshMatcapMaterial: THREE.MeshMatcapNodeMaterial, MeshNormalMaterial: THREE.MeshNormalNodeMaterial,
+          MeshPhongMaterial: THREE.MeshPhongNodeMaterial, MeshPhysicalMaterial: THREE.MeshPhysicalNodeMaterial,
+          MeshStandardMaterial: THREE.MeshStandardNodeMaterial, MeshToonMaterial: THREE.MeshToonNodeMaterial,
+          LineBasicMaterial: THREE.LineBasicNodeMaterial, LineDashedMaterial: THREE.LineDashedNodeMaterial,
+          PointsMaterial: THREE.PointsNodeMaterial, ShadowMaterial: THREE.ShadowNodeMaterial, SpriteMaterial: THREE.SpriteNodeMaterial
+        };
 
         $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#model_scale').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
