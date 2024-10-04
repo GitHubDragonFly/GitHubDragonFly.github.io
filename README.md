@@ -115,13 +115,13 @@ Number Type Converter
     - Mobile viewers show it as the `Browse` button
 - Any of the viewers might have bugs and interface / library related limitations
   - Some viewers might be slow to load some models, usually if using `WASM` of some library
-- Currently experimental three.js `WebGPU` support is included in experimental `GLTF WebGPU` and `OBJ+MTL WebGPU` viewers:
+- Currently experimental three.js `WebGPU` support is included in experimental `GLTF WebGPU` and `OBJ+MTL WebGPU` and `PDB WebGPU` viewers:
   - Use either Chrome or Safari browser with its `WebGPU experimental features` enabled to test these viewers (and your computer):
-    - Not really sure yet if WebGPU in Firefox Nightly browser works properly
-  - Both viewers are customized and also have some export options available:
+    - Not really sure if WebGPU in Firefox Nightly browser works properly yet
+  - All viewers are customized and also have some export options available:
     -  `GLTF WebGPU` viewer can also be used to optimize and compress GLTF / GLB models
   - Mobile versions of these viewers are available but not properly tested yet
-  - Standalone versions of these viewers, using official imports, are available in the `viewers/webgpu/` folder:
+  - Standalone versions of `GLTF WebGPU` and `OBJ+MTL WebGPU` viewers, using official imports, are available in the `viewers/webgpu/` folder:
     - Export functionality is not included in these viewers
 - Memory handling should be good, relatively speaking:
   - With every next model loaded the previous model geometries / materials are being disposed of
@@ -386,6 +386,7 @@ Number Type Converter
     - Resolution: 128, 256, 512, 768, 1k, 1.2k, 1.5k, 1.7k, 2k, 3k, 4k
     - Y-flip, which is intended for 3DM / DAE / OBJ / USDZ exports
   - ASSIMP, GLTF and GLTFS viewers can also export model maps (textures) only, defaulting to PNG if no other format is selected
+  - PDB Viewer will export all visible objects, any combination of `atoms` and `bonds` and `labels`
   - GLTFS Viewer seems to do OK job in exporting still models with `pbrSpecularGlossiness` but would suggest that you use [gltf.report](https://gltf.report/) instead
   - Experiment with all exporters available by exporting the original model as well as its exported versions:
     - Considering how many export options are available in any viewer, a certain combination might just work properly
