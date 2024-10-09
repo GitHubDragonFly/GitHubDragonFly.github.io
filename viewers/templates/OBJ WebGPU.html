@@ -12,6 +12,7 @@
       {
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.webgpu.min.js",
+          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.webgpu.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.0.2",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.0.2",
@@ -2356,6 +2357,7 @@
       async function set_back_color() {
         await reset_scene_params();
 
+        bgnd_linear_gradient = false;
         document.body.style.backgroundImage = 'none';
         document.getElementById('file_image_input').value = '';
         document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
@@ -2472,12 +2474,6 @@
 
         if (equi_enabled === false) {
           if (gui_set === false) {
-            gui.add( params, 'setEnvMap' )
-            .onChange( function ( value ) {
-              set_envMap( value );
-              mouse_wheel = true;
-            });
-
             gui.add( params, 'toneMapping', Object.keys( toneMappingOptions ) )
             .onChange( function () {
               updateGUI();
@@ -2580,36 +2576,6 @@
         mouse_wheel = true;
       }
 
-      function set_envMap( set_env_map = false ) {
-        if (Obj) {
-          Obj.traverse( ( child ) => {
-            if (child.isMesh && child.material) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtrl => {
-                  if (set_env_map === true) {
-                    mtrl.envMap = scene.environment;
-                  } else {
-                    mtrl.envMap = null;
-                  }
-
-                  mtrl.needsUpdate = true;
-                });
-              } else {
-                if (set_env_map === true) {
-                  child.material.envMap = scene.environment;
-                } else {
-                  child.material.envMap = null;
-                }
-
-                child.material.needsUpdate = true;
-              }
-            }
-
-            mouse_wheel = true;
-          });
-        }
-      }
-
       function gui_reset() {
         gui.reset();
 
@@ -2619,12 +2585,9 @@
         params.envMapIntensity = 0.5;
         params.backBlurriness = 0;
         params.backIntensity = 1.0;
-        params.setEnvMap = false;
         params.exposure = 1.0;
 
         mouse_wheel = true;
-
-        set_envMap( false );
 
         document.getElementById('gui_position').style.display = 'none';
 
@@ -2936,103 +2899,54 @@
         mouse_wheel = true;
       }
 
-      // modified decompress function from TextureUtils.js
+      // internally used modified decompress function from TextureUtilsGPu.js
 
-      async function decompress( texture, maxTextureSize = Infinity, renderer = null ) {
+      async function decompress( blitTexture ) {
+        let _quadMesh = /*@__PURE__*/ new THREE.QuadMesh();
 
-        let _renderer = renderer;
-        let resize = false;
+        let _renderer = new THREE.WebGPURenderer( { antialias: true } );
+        await _renderer.init();
 
-        texture.colorSpace = THREE.SRGBColorSpace;
-        texture.needsUpdate = true;
+        let blitTexture_clone = blitTexture.clone();
 
-        // WebGPU currently does not seem to like non-power-of-two textures
+        blitTexture_clone.offset.set( 0, 0 );
+        blitTexture_clone.repeat.set( 1, 1 );
 
-        let width = texture.image.width;
-        let height = texture.image.height;
+        let material = new THREE.NodeMaterial();
+        material.fragmentNode = THREE.texture( blitTexture_clone ).uv( THREE.uv().flipY() );
 
-        if ( ! THREE.MathUtils.isPowerOfTwo( width ) || ! THREE.MathUtils.isPowerOfTwo( height )) {
+        _renderer.setSize( blitTexture_clone.image.width, blitTexture_clone.image.height );
+        _renderer.outputColorSpace = blitTexture_clone.colorSpace;
 
-          if ( ! THREE.MathUtils.isPowerOfTwo( width ) ) width = THREE.MathUtils.ceilPowerOfTwo( width );
-          if ( ! THREE.MathUtils.isPowerOfTwo( height ) ) height = THREE.MathUtils.ceilPowerOfTwo( height );
+        _quadMesh.material = material;
+        _quadMesh.render( _renderer );
 
-          resize = true;
+        let canvas = document.createElement( 'canvas' );
+        let context = canvas.getContext( '2d' );
 
-        }
+        canvas.width = blitTexture_clone.image.width;
+        canvas.height = blitTexture_clone.image.height;
 
-        const _camera = new THREE.PerspectiveCamera();
+        context.drawImage( _renderer.domElement, 0, 0, canvas.width, canvas.height );
 
-        // Set the texture as scene's background
+        let readableTexture = new THREE.CanvasTexture( canvas );
 
-        const _scene = new THREE.Scene();
-        _scene.background = texture;
+        /* set to the original texture parameters */
 
-        if ( ! _renderer ) {
+        readableTexture.offset.set( blitTexture.offset.x, blitTexture.offset.y );
+        readableTexture.repeat.set( blitTexture.repeat.x, blitTexture.repeat.y );
+        readableTexture.colorSpace = blitTexture.colorSpace;
+        readableTexture.minFilter = blitTexture.minFilter;
+        readableTexture.magFilter = blitTexture.magFilter;
+        readableTexture.wrapS = blitTexture.wrapS;
+        readableTexture.wrapT = blitTexture.wrapT;
+        readableTexture.name = blitTexture.name;
 
-          if ( THREE.WebGPURenderer ) {
-
-            _renderer = new THREE.WebGPURenderer( { antialias: false } );
-            await _renderer.init();
-
-          } else {
-
-            _renderer = new THREE.WebGLRenderer( { antialias: false } );
-
-          }
-
-        }
-
-        _renderer.setSize( Math.min( width, maxTextureSize ), Math.min( height, maxTextureSize ) );
-        _renderer.clear();
-        _renderer.render( _scene, _camera );
-
-        let readableTexture = new THREE.CanvasTexture( _renderer.domElement );
-
-        // Resize back to original texture size
-
-        if (resize === true) {
-
-          await new Promise( resolve => {
-
-            let canvas = document.createElement( 'canvas' );
-            canvas.width = texture.image.width;
-            canvas.height = texture.image.height;
-
-            let ctx = canvas.getContext( '2d' );
-
-            let img = new Image();
-
-            img.onload = function() {
-
-              ctx.drawImage(this, 0, 0, canvas.width, canvas.height);
-              resolve( readableTexture.image = canvas );
-
-            }
-
-            img.src = readableTexture.image.toDataURL( 'image/png', 1 );
-
-          });
-
-        }
-
-        readableTexture.colorSpace = THREE.SRGBColorSpace;
-        readableTexture.minFilter = texture.minFilter || THREE.LinearMipmapLinearFilter;
-        readableTexture.magFilter = texture.magFilter || THREE.LinearFilter;
-        readableTexture.wrapS = texture.wrapS || THREE.RepeatWrapping;
-        readableTexture.wrapT = texture.wrapT || THREE.RepeatWrapping;
-        readableTexture.name = texture.name;
-        readableTexture.needsUpdate = true;
-
-        if ( _renderer ) {
-          _scene.background.dispose();
-          texture.dispose();
-
-          _renderer.dispose();
-          _renderer = null;
-        }
+        blitTexture_clone.dispose();
+        _renderer.dispose();
+        _renderer = null;
 
         return readableTexture;
-
       }
 
       async function process_loaded_zip( z_file ) {
@@ -3200,7 +3114,6 @@
 
         if (params === undefined) {
           params = {
-            setEnvMap: false,
             toneMapping: 'Neutral',
             envMapIntensity: 0.5,
             backBlurriness: 0.0,
