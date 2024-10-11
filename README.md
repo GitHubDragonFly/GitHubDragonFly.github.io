@@ -9,9 +9,10 @@ Pictures or intro video might not reflect the current looks of any GUI.
 
 This website is designed to serve as a hub with links to:
   - My repositories
-  - Number Type Converter
+  - Number Type Converter up to 128-bit
   - [nunuStudio](https://github.com/tentone/nunuStudio/tree/master/source/page/src/examples) games and experiences examples
-  - FREE online in-browser [three.js](https://threejs.org) based `3D Model` and `Texture` viewers.
+  - FREE online in-browser [three.js](https://threejs.org) based `3D Model` and `Texture` viewers
+  - Three.js based `Cube Shading`, `Celestial Bodies` and `IMG2MESH` pages
 
 Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations:
   - See screenshots below for different appearances of the main menu page
