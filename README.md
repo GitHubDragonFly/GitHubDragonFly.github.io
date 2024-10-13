@@ -426,6 +426,7 @@ Number Type Converter
   - `OL` - outline effect (available in MMD viewers only)
   - `OS` - material side - Original (OS), Front (FS), Back (BS), Double (DS)
   - `PM` - show model as points (PLY+STL, PRWM and VTK viewers)
+  - `PP` - WebGPU emissive bloom post processing
   - `VC` - vertex colors
     - `!` - random vertex colors
   - `XS` - xtra smooth (available in OBJ Viewer only)
