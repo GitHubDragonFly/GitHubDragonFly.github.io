@@ -11,7 +11,8 @@
 		<script type="importmap">
 			{
 				"imports": {
-					"three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.min.js",
+					"three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.webgpu.min.js",
+					"three/tsl": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.webgpu.min.js",
 					"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/"
 				}
 			}
@@ -32,63 +33,99 @@
 
 		<script type="module">
 			import * as THREE from "three";
+			import WebGL from "three/addons/capabilities/WebGL.min.js";
+			import WebGPU from "three/addons/capabilities/WebGPU.min.js";
 			import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+			let gpu = WebGPU.isAvailable();
+			let gl2 = WebGL.isWebGL2Available();
+
+			if ( gpu === true ) {
+				console.log( 'WebGPU support detected' );
+			} else if ( gl2 === true ) {
+				console.log( 'WebGL2 support detected' );
+			} else {
+				document.body.appendChild( WebGPU.getErrorMessage() );
+				throw new Error( 'No WebGPU or WebGL2 support detected' );
+			}
 
 			const isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
 				(/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
 				(navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
 
+			const bump_url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_bump_roughness_clouds_4096.jpg';
+			const normal_url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_normal_2048.jpg';
+
 			// Function to create planets and celestial bodies
-			function createCelestialBody( name = '', size, textureUrl, position ) {
-				const geometry = new THREE.SphereGeometry( size, 64, 32 );
+			async function createCelestialBody( name = '', size, textureUrl, position ) {
+				let geometry = new THREE.SphereGeometry( size, 64, 32 );
 
-				const bump_url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_bump_roughness_clouds_4096.jpg';
-				const normal_url = 'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_normal_2048.jpg';
+				let map = new THREE.TextureLoader().load( textureUrl );
 
-				const map = new THREE.TextureLoader().load( textureUrl );
-
-				const material = new THREE.MeshStandardMaterial({
+				let material = new THREE.MeshStandardNodeMaterial({
 					map: map,
 					bumpMap: name === 'Earth' ? new THREE.TextureLoader().load( bump_url ) : null,
-					roughnessMap: name === 'Earth' ? new THREE.TextureLoader().load( bump_url ) : map,
+					emissive: name === 'Sun' ? new THREE.Color( 1, 1, 1 ) : new THREE.Color( 0, 0, 0 ),
+					emissiveMap: name === 'Sun' ? map : null,
+					roughnessMap: name === 'Earth' ? new THREE.TextureLoader().load( bump_url ) : name === 'Moon' ? map : null,
 					normalMap: name === 'Earth' ? new THREE.TextureLoader().load( normal_url ) : null,
 					side: THREE.DoubleSide,
-					metalness: 0.25,
-					roughness: name === 'Earth' ? 0.5 : 0.25
+					metalness: name === 'Sun' ? 0 : 0.25,
+					roughness: name === 'Earth' ? 0.5 : name === 'Moon' ? 0.25 : 0
 				});
 
-				const body = new THREE.Mesh( geometry, material );
+				map.dispose();
+
+				let body = new THREE.Mesh( geometry, material );
 				body.position.set( position.x, position.y, position.z );
+				body.name = name;
 				scene.add( body );
-				return body;
 			}
 
 			let scene = new THREE.Scene();
 
-			let camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 10000 );
-			isMobile === true ? camera.position.set( 0, 0, 25 ) : camera.position.set( 0, 0, 12 );
-			scene.add( camera );
+			await createCelestialBody(
+				'Sun',
+				5,
+				'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_clouds_2048.png', 
+				{ x: 25, y: 5, z: 50 }
+			);
 
-			let renderer = new THREE.WebGLRenderer( { antialias: true } );
-			renderer.setPixelRatio( window.devicePixelRatio );
-			renderer.toneMapping = THREE.NeutralToneMapping;
-			renderer.toneMappingExposure = 1.0;
-			renderer.setSize( innerWidth, innerHeight );
-			document.body.appendChild( renderer.domElement );
-
-			const earth = createCelestialBody(
+			await createCelestialBody(
 				'Earth',
-				3,
+				2.25,
 				'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/earth_atmos_4096.jpg', 
 				{ x: -4, y: 3, z: 0 }
 			);
 
-			const moon = createCelestialBody(
+			await createCelestialBody(
 				'Moon',
-				0.7,
+				0.5,
 				'https://raw.githubusercontent.com/mrdoob/three.js/master/examples/textures/planets/moon_1024.jpg', 
-				{ x: 4, y: 3, z: 0 }
+				{ x: 2.5, y: 3, z: 0 }
 			);
+
+			let camera = new THREE.PerspectiveCamera( 45, window.innerWidth / window.innerHeight, 1, 10000 );
+			isMobile === true ? camera.position.set( 0, 0, 50 ) : camera.position.set( 0, 0, 12 );
+			scene.add( camera );
+
+			let renderer;
+
+			try {
+				renderer = new THREE.WebGPURenderer( { antialias: true, alpha: true } );
+				await renderer.init();
+			} catch ( error ) {
+				throw new Error( error.message );
+			}
+
+			renderer.setPixelRatio( window.devicePixelRatio < 1.5 ? window.devicePixelRatio : 2.0 );
+			renderer.toneMapping = THREE.NeutralToneMapping;
+			renderer.toneMappingExposure = 1.0;
+			renderer.setSize( innerWidth, innerHeight );
+			renderer.shadowMap.enabled = true;
+			renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+			document.body.appendChild( renderer.domElement );
 
 			window.addEventListener("resize", (event) => {
 				camera.aspect = innerWidth / innerHeight;
@@ -104,10 +141,10 @@
 			controls.keyPanSpeed = 0.6;
 			controls.panSpeed = 0.6;
 
-			let light = new THREE.DirectionalLight( 0xffffff, 6 );
-			light.position.set( 10, 8, 15 );
-			let ambient_light = new THREE.AmbientLight( 0xffffff, 0.1 );
-			ambient_light.position.set( -3, 3, -8 );
+			let light = new THREE.DirectionalLight( 0xffffff, 5 );
+			light.position.set( 25, 5, 50 );
+			let ambient_light = new THREE.AmbientLight( 0xffffff, 0.075 );
+			ambient_light.position.set( -3, 3, -25 );
 			scene.add( light, ambient_light );
 
 			let tex = new THREE.CubeTextureLoader().load([
@@ -124,14 +161,26 @@
 				tex.dispose();
 			}, () => { console.log( 'Textures loaded' ) }, () => { console.log( 'Error loading textures' ) });
 
+			const { pass, mrt, output, bloom, emissive } = await import( 'three/tsl' );
+
+			let scenePass = pass( scene, camera );
+			scenePass.setMRT( mrt( { output, emissive } ) );
+
+			let outputPass = scenePass.getTextureNode();
+			let emissivePass = scenePass.getTextureNode( 'emissive' );
+			let bloomPass = bloom( emissivePass, 1.0, 0.25 );
+
+			let postProcessing = new THREE.PostProcessing( renderer );
+			postProcessing.outputNode = outputPass.add( bloomPass );
+
 			renderer.setAnimationLoop(() => {
 				controls.update();
 
 				scene.rotation.y -= 0.00005; // Scene rotation
-				earth.rotation.y += 0.0005; // Earth rotation
-				moon.rotation.y -= 0.001; // Moon rotation
+				scene.getObjectByName( 'Earth' ).rotation.y += 0.0005; // Earth rotation
+				scene.getObjectByName( 'Moon' ).rotation.y -= 0.001; // Moon rotation
 
-				renderer.render(scene, camera);
+				postProcessing.render();
 			});
 		</script>
 	</body>
