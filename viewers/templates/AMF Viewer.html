@@ -30,6 +30,28 @@
     <!-- For encoding GLB exports with draco compression -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
+    <script>
+      var THREE, fflate, manager, rgbe_loader, amf_loader, amf_obj;
+      var texture_loader, exr_loader, rgbe_loader, hdrJPGLoader;
+      var renderer, scene, camera, render_requested, edges, edges_visible;
+      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
+      var controls, orb_controls, gizmo, orb_controls_gizmo, count = 0;
+      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
+      var grid, polar_grid, grid_visible, polar_grid_visible;
+      var ambientLight, hemisphereLight, directionalLight;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
+      var bounding_box, filename, gif_export, zip, link;
+      var bgnd_linear_gradient, flat_shading_enabled, isMobile;
+      var initial_opacity, initial_opacity_array, enable_opacity;
+      var initial_transparency, initial_transparency_array, equi_enabled;
+      var selected_amf_file, selected_url_file = '', outline_material, wireframe_enabled;
+      var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
+      var vertex_colors_enabled, random_vertex_colors_enabled, original_vertex_color_array, random_vertex_color_array;
+
+      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
+    </script>
+
     <script type="module">
       import * as three_js from "three";
       import * as fflate_js from "three/addons/libs/fflate.module.min.js";
@@ -75,7 +97,7 @@
           mouse_wheel = true;
           render();
 
-          if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 100 ) );
+          if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
         }
       }
 
@@ -757,26 +779,6 @@
     </script>
 
     <script>
-      var THREE, fflate, manager, rgbe_loader, amf_loader, amf_obj;
-      var texture_loader, exr_loader, rgbe_loader, hdrJPGLoader;
-      var renderer, scene, camera, render_requested, edges, edges_visible;
-      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
-      var controls, orb_controls, gizmo, orb_controls_gizmo, count = 0;
-      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
-      var grid, polar_grid, grid_visible, polar_grid_visible;
-      var ambientLight, hemisphereLight, directionalLight;
-      var ww = window.innerWidth, wh = window.innerHeight;
-      var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
-      var bounding_box, filename, gif_export, zip, link;
-      var bgnd_linear_gradient, flat_shading_enabled, isMobile;
-      var initial_opacity, initial_opacity_array, enable_opacity;
-      var initial_transparency, initial_transparency_array, equi_enabled;
-      var selected_amf_file, selected_url_file = '', outline_material, wireframe_enabled;
-      var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
-      var vertex_colors_enabled, random_vertex_colors_enabled, original_vertex_color_array, random_vertex_color_array;
-
-      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
-
       function start_export() {
         if (!link) {
           link = document.createElement( 'a' );
@@ -2381,19 +2383,19 @@
         const { WebIO } = await import( "@gltf-transform/core" );
         const { MeshoptSimplifier } = await import( "meshoptimizer" );
         const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { dedup, flatten, join, prune, simplify, unpartition } = await import( "@gltf-transform/functions" );
+        const { dedup, flatten, join, prune, simplify, sparse } = await import( "@gltf-transform/functions" );
 
         const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
         await doc.transform(
-          unpartition(),
           dedup(),
-          prune(),
           flatten(),
           join(),
-          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
+          prune(),
+          sparse( { ratio: 0.2 } )
         );
 
         const compressedArrayBuffer = await io.writeBinary( doc );
@@ -2408,7 +2410,9 @@
 
       async function draco_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer" );
         const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression } = await import( "@gltf-transform/extensions" );
+        const { dedup, flatten, join, prune, simplify, sparse } = await import( "@gltf-transform/functions" );
 
         const io = new WebIO()
         .registerExtensions( KHRONOS_EXTENSIONS )
@@ -2417,6 +2421,15 @@
         });
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          dedup(),
+          flatten(),
+          join(),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
+          prune(),
+          sparse( { ratio: 0.2 } )
+        );
 
         doc.createExtension( KHRDracoMeshCompression )
         .setRequired( true )
@@ -2434,9 +2447,9 @@
 
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { MeshoptEncoder } = await import( "meshoptimizer" );
-        const { meshopt } = await import( "@gltf-transform/functions" );
+        const { MeshoptEncoder, MeshoptSimplifier } = await import( "meshoptimizer" );
         const { KHRONOS_EXTENSIONS, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
+        const { dedup, flatten, join, meshopt, prune, simplify, sparse } = await import( "@gltf-transform/functions" );
 
         await MeshoptEncoder.ready;
 
@@ -2449,6 +2462,16 @@
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
         await doc.transform( meshopt( { encoder: MeshoptEncoder, level: 'high' } ) );
+
+        await doc.transform(
+          dedup(),
+          flatten(),
+          join(),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
+          prune(),
+          sparse( { ratio: 0.2 } ),
+          meshopt( { encoder: MeshoptEncoder, level: 'high' } )
+        );
 
         doc.createExtension( EXTMeshoptCompression )
         .setRequired( true )
