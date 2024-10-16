@@ -19,7 +19,8 @@
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.0.2",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.0.2",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.0.2",
-          "meshoptimizer": "https://esm.sh/meshoptimizer@0.21.0"
+          "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.21.0/meshopt_encoder.module.min.js",
+          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.21.0/meshopt_simplifier.module.min.js"
         }
       }
     </script>
@@ -29,6 +30,27 @@
 
     <!-- For encoding GLB exports with draco compression -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
+
+    <script>
+      var THREE, manager, ply_loader, stl_loader, texture_loader, tga_loader, dds_loader;
+      var merge_vertices, gif_loader, gif_writer, exr_loader, rgbe_loader, hdrJPGLoader;
+      var fflate, renderer, scene, camera, mesh, triangles_count, edges, edges_visible, render_requested;
+      var controls, orb_controls, gizmo, orb_controls_gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
+      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions, outline_material;
+      var mouse_down, mouse_wheel, reset_rotation, events_initialized, link, isMobile;
+      var original_model, points_model, object_is_points, sampler, equi_enabled;
+      var ambientLight, hemisphereLight, directionalLight;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
+      var mesh_present, bounding_box, filename, gif_export, zip;
+      var flat_shading_enabled, enable_opacity, bgnd_linear_gradient, point_size;
+      var material, textures, current_texture, animated_gif_texture, url_tga_loaded, count = 0;
+      var url_displayed = false, url_loading = false, menu_location_bottom = false, url_ply, slider_height = 0;
+      var selected_ply_file, selected_stl_file, selected_url_file = '', selected_url_ply_file, selected_url_stl_file;
+      var vertex_colors_enabled, original_vertex_color_array, random_vertex_colors_enabled, random_vertex_color_array;
+
+      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
+    </script>
 
     <script type="module">
       import * as three_js from "three";
@@ -743,25 +765,6 @@
     </script>
 
     <script>
-      var THREE, manager, ply_loader, stl_loader, texture_loader, tga_loader, dds_loader;
-      var merge_vertices, gif_loader, gif_writer, exr_loader, rgbe_loader, hdrJPGLoader;
-      var fflate, renderer, scene, camera, mesh, triangles_count, edges, edges_visible, render_requested;
-      var controls, orb_controls, gizmo, orb_controls_gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
-      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions, outline_material;
-      var mouse_down, mouse_wheel, reset_rotation, events_initialized, link, isMobile;
-      var original_model, points_model, object_is_points, sampler, equi_enabled;
-      var ambientLight, hemisphereLight, directionalLight;
-      var ww = window.innerWidth, wh = window.innerHeight;
-      var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
-      var mesh_present, bounding_box, filename, gif_export, zip;
-      var flat_shading_enabled, enable_opacity, bgnd_linear_gradient, point_size;
-      var material, textures, current_texture, animated_gif_texture, url_tga_loaded, count = 0;
-      var url_displayed = false, url_loading = false, menu_location_bottom = false, url_ply, slider_height = 0;
-      var selected_ply_file, selected_stl_file, selected_url_file = '', selected_url_ply_file, selected_url_stl_file;
-      var vertex_colors_enabled, original_vertex_color_array, random_vertex_colors_enabled, random_vertex_color_array;
-
-      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
-
       function start_export() {
         if (!link) {
           link = document.createElement( 'a' );
@@ -2673,22 +2676,33 @@
 
       async function simplify( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
         const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { dedup, flatten, join, prune, simplify, unpartition } = await import( "@gltf-transform/functions" );
+        const { dedup, flatten, join, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
 
         const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
-        await doc.transform(
-          unpartition(),
-          dedup(),
-          prune(),
-          flatten(),
-          join(),
-          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
-        );
+        if (object_is_points === true) {
+          await doc.transform(
+            dedup(),
+            flatten(),
+            join(),
+            prune(),
+            sparse( { ratio: 0.2 } )
+          );
+        } else {
+          await doc.transform(
+            dedup(),
+            flatten(),
+            join(),
+            weld(),
+            simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
+            prune(),
+            sparse( { ratio: 0.2 } )
+          );
+        }
 
         const compressedArrayBuffer = await io.writeBinary( doc );
 
@@ -2702,8 +2716,8 @@
 
       async function draco_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer" );
-        const { dedup, flatten, join, prune, simplify, unpartition, weld } = await import( "@gltf-transform/functions" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
+        const { dedup, flatten, join, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
         const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression } = await import( "@gltf-transform/extensions" );
 
         const io = new WebIO()
@@ -2714,15 +2728,25 @@
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
-        await doc.transform(
-          unpartition(),
-          dedup(),
-          prune(),
-          flatten(),
-          join(),
-          weld( { tolerance: 0, toleranceNormal: 0.1 } ),
-          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
-        );
+        if (object_is_points === true) {
+          await doc.transform(
+            dedup(),
+            flatten(),
+            join(),
+            prune(),
+            sparse( { ratio: 0.2 } )
+          );
+        } else {
+          await doc.transform(
+            dedup(),
+            flatten(),
+            join(),
+            weld(),
+            simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
+            prune(),
+            sparse( { ratio: 0.2 } )
+          );
+        }
 
         doc.createExtension( KHRDracoMeshCompression )
         .setRequired( true )
@@ -2743,8 +2767,9 @@
 
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { MeshoptEncoder } = await import( "meshoptimizer" );
-        const { dedup, flatten, join, meshopt, prune, unpartition, weld } = await import( "@gltf-transform/functions" );
+        const { MeshoptEncoder } = await import( "meshoptimizer_encoder" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
+        const { dedup, flatten, join, meshopt, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
         const { KHRONOS_EXTENSIONS, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
 
         await MeshoptEncoder.ready;
@@ -2757,15 +2782,27 @@
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
-        await doc.transform(
-          unpartition(),
-          dedup(),
-          prune(),
-          flatten(),
-          join(),
-          weld( { tolerance: 0, toleranceNormal: 0.1 } ),
-          meshopt( { encoder: MeshoptEncoder, level: 'high' } )
-        );
+        if (object_is_points === true) {
+          await doc.transform(
+            dedup(),
+            flatten(),
+            join(),
+            prune(),
+            sparse( { ratio: 0.2 } ),
+            meshopt( { encoder: MeshoptEncoder, level: 'high' } )
+          );
+        } else {
+          await doc.transform(
+            dedup(),
+            flatten(),
+            join(),
+            weld(),
+            simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
+            prune(),
+            sparse( { ratio: 0.2 } ),
+            meshopt( { encoder: MeshoptEncoder, level: 'high' } )
+          );
+        }
 
         doc.createExtension( EXTMeshoptCompression )
         .setRequired( true )

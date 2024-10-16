@@ -19,13 +19,34 @@
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.0.2",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.0.2",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.0.2",
-          "meshoptimizer": "https://esm.sh/meshoptimizer@0.21.0"
+          "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.21.0/meshopt_encoder.module.min.js"
         }
       }
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+
+    <script>
+      var THREE, manager, texture_loader, ldraw_loader, renderer, exr_loader, rgbe_loader, hdrJPGLoader;
+      var scene, camera, ldraw_obj, edges, edges_visible, render_requested;
+      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
+      var controls, orb_controls, gizmo, orb_controls_gizmo, link;
+      var grid, polar_grid, grid_visible, polar_grid_visible, isMobile;
+      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
+      var ambientLight, hemisphereLight, directionalLight;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var rot_x = 0, rot_y = 0, rot_z = 0, count = 0;
+      var bounding_box, lines_visible, filename, zip;
+      var construction_steps_present, c_steps, count_up, equi_enabled;
+      var initial_transparency, initial_transparency_array, wireframe_enabled;
+      var initial_opacity, initial_opacity_array, enable_opacity, outline_material;
+      var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
+      var selected_ldraw_file, selected_ldraw_url_file, selected_url_file = '', gif_export, bgnd_linear_gradient;
+      var vertex_colors_enabled, random_vertex_colors_enabled, original_vertex_color_array, random_vertex_color_array;
+
+      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
+    </script>
 
     <script type="module">
       import * as three_js from "three";
@@ -721,25 +742,6 @@
     </script>
 
     <script>
-      var THREE, manager, texture_loader, ldraw_loader, renderer, exr_loader, rgbe_loader, hdrJPGLoader;
-      var scene, camera, ldraw_obj, edges, edges_visible, render_requested;
-      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
-      var controls, orb_controls, gizmo, orb_controls_gizmo, link;
-      var grid, polar_grid, grid_visible, polar_grid_visible, isMobile;
-      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
-      var ambientLight, hemisphereLight, directionalLight;
-      var ww = window.innerWidth, wh = window.innerHeight;
-      var rot_x = 0, rot_y = 0, rot_z = 0, count = 0;
-      var bounding_box, lines_visible, filename, zip;
-      var construction_steps_present, c_steps, count_up, equi_enabled;
-      var initial_transparency, initial_transparency_array, wireframe_enabled;
-      var initial_opacity, initial_opacity_array, enable_opacity, outline_material;
-      var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
-      var selected_ldraw_file, selected_ldraw_url_file, selected_url_file = '', gif_export, bgnd_linear_gradient;
-      var vertex_colors_enabled, random_vertex_colors_enabled, original_vertex_color_array, random_vertex_color_array;
-
-      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
-
       function start_export() {
         if (!link) {
           link = document.createElement( 'a' );
@@ -940,7 +942,7 @@
               if (meshopt === true) {
                 blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: type } );
               } else {
-                blob = new Blob( [ json ], { type: type } );
+                blob = new Blob( [ await simplify( new Uint8Array( json ) ) ], { type: type } );
               }
 
               zip.file( filename + '.glb', blob );
@@ -2454,21 +2456,19 @@
 
       async function simplify( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer" );
         const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { dedup, flatten, join, prune, simplify, unpartition } = await import( "@gltf-transform/functions" );
+        const { dedup, flatten, join, prune, sparse } = await import( "@gltf-transform/functions" );
 
         const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
         await doc.transform(
-          unpartition(),
           dedup(),
-          prune(),
           flatten(),
           join(),
-          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+          prune(),
+          sparse( { ratio: 0.2 } )
         );
 
         const compressedArrayBuffer = await io.writeBinary( doc );
@@ -2483,24 +2483,31 @@
 
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { MeshoptEncoder } = await import( "meshoptimizer" );
-        const { dedup, meshopt, prune, unpartition } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
+        const { MeshoptEncoder } = await import( "meshoptimizer_encoder" );
+        const { dedup, flatten, instance, join, meshopt, palette, prune, sparse, weld } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshoptCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
 
         await MeshoptEncoder.ready;
 
-        const io = new WebIO()
-        .registerExtensions( KHRONOS_EXTENSIONS )
-        .registerDependencies({
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+        io.registerDependencies({
           'meshopt.encoder': MeshoptEncoder,
         });
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
         await doc.transform(
-          unpartition(),
           dedup(),
+          instance( { min: 5 } ),
+          palette( { min: 5 } ),
+          flatten(),
+          join(),
+          weld(),
           prune(),
+          sparse( { ratio: 0.2 } ),
           meshopt( { encoder: MeshoptEncoder, level: 'high' } )
         );
 

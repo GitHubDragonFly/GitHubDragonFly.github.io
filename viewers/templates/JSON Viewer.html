@@ -19,7 +19,8 @@
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.0.2",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.0.2",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.0.2",
-          "meshoptimizer": "https://esm.sh/meshoptimizer@0.21.0",
+          "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.21.0/meshopt_encoder.module.min.js",
+          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.21.0/meshopt_simplifier.module.min.js",
           "ktx2-encoder": "https://esm.sh/ktx2-encoder@0.0.0-experimental.5"
         }
       }
@@ -30,6 +31,36 @@
 
     <!-- For encoding GLB exports with draco compression -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
+
+    <script>
+      var THREE, manager, file_loader, texture_loader, json_loader, bg_loader;
+      var fflate, exr_loader, rgbe_loader, hdrJPGLoader, object_is_points;
+      var renderer, scene, camera, mesh, edges, edges_visible, render_requested;
+      var merge_vertices, bounding_box, clock, tex_res, tex_flip, tex_fmt;
+      var animations, animation_mixer, animation_running, current_animation;
+      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
+      var extras, extra_running, current_extra, link, isMobile;
+      var controls, orb_controls, gizmo, orb_controls_gizmo;
+      var mouse_down, mouse_wheel, reset_rotation, count = 0;
+      var equi_enabled, wireframe_enabled, outline_material;
+      var grid, polar_grid, grid_visible, polar_grid_visible;
+      var ambientLight, hemisphereLight, directionalLight;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
+      var loader, fd, material, textures, buffer_geometry;
+      var initial_transparency, initial_transparency_array;
+      var original_side, original_side_array, gif_export, zip;
+      var initial_opacity, initial_opacity_array, enable_opacity;
+      var original_color, original_color_array, flat_shading_enabled;
+      var selected_json_file, selected_url_file = '', events_initialized;
+      var filename, lines_visible, lines_present, bgnd_linear_gradient, texture_maps;
+      var url_displayed = false, url_loading = false, menu_location_bottom = false;
+      var current_colors, vertex_colors_enabled, random_vertex_colors_enabled;
+      var bones, bones_exist, skeleton_helper, skeleton_visible, skeleton_demo;
+      var skeleton_demo_running, sk_count, skeletonUtils, slider_height = 0;
+
+      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
+    </script>
 
     <script type="module">
       import * as three_js from "three";
@@ -779,34 +810,6 @@
     </script>
 
     <script>
-      var THREE, manager, file_loader, texture_loader, json_loader, bg_loader;
-      var fflate, exr_loader, rgbe_loader, hdrJPGLoader, object_is_points;
-      var renderer, scene, camera, mesh, edges, edges_visible, render_requested;
-      var merge_vertices, bounding_box, clock, tex_res, tex_flip, tex_fmt;
-      var animations, animation_mixer, animation_running, current_animation;
-      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
-      var extras, extra_running, current_extra, link, isMobile;
-      var controls, orb_controls, gizmo, orb_controls_gizmo;
-      var mouse_down, mouse_wheel, reset_rotation, count = 0;
-      var equi_enabled, wireframe_enabled, outline_material;
-      var grid, polar_grid, grid_visible, polar_grid_visible;
-      var ambientLight, hemisphereLight, directionalLight;
-      var ww = window.innerWidth, wh = window.innerHeight;
-      var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
-      var loader, fd, material, textures, buffer_geometry;
-      var initial_transparency, initial_transparency_array;
-      var original_side, original_side_array, gif_export, zip;
-      var initial_opacity, initial_opacity_array, enable_opacity;
-      var original_color, original_color_array, flat_shading_enabled;
-      var selected_json_file, selected_url_file = '', events_initialized;
-      var filename, lines_visible, lines_present, bgnd_linear_gradient, texture_maps;
-      var url_displayed = false, url_loading = false, menu_location_bottom = false;
-      var current_colors, vertex_colors_enabled, random_vertex_colors_enabled;
-      var bones, bones_exist, skeleton_helper, skeleton_visible, skeleton_demo;
-      var skeleton_demo_running, sk_count, skeletonUtils, slider_height = 0;
-
-      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
-
       function start_export() {
         if (!link) {
           link = document.createElement( 'a' );
@@ -3438,26 +3441,25 @@
 
       async function simplify( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer" );
         const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { dedup, flatten, join, prune, resample, simplify, unpartition } = await import( "@gltf-transform/functions" );
+        const { dedup, flatten, join, prune, resample, sparse } = await import( "@gltf-transform/functions" );
 
         const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
         await doc.transform(
-          unpartition(),
           dedup(),
-          prune(),
-          resample(),
           flatten(),
           join(),
-          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+          resample(),
+          prune(),
+          sparse( { ratio: 0.2 } )
         );
 
         const compressedArrayBuffer = await io.writeBinary( doc );
 
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
         for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
         for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
 
@@ -3468,8 +3470,8 @@
 
       async function draco_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer" );
-        const { dedup, flatten, instance, join, palette, prune, resample, simplify, unpartition, weld } = await import( "@gltf-transform/functions" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
+        const { dedup, flatten, instance, join, palette, prune, resample, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
         const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
 
         const io = new WebIO();
@@ -3483,27 +3485,29 @@
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
         await doc.transform(
-          unpartition(),
-          palette({ min: 5 }),
           dedup(),
-          prune(),
-          resample(),
           instance( { min: 2 } ),
+          palette( { min: 5 } ),
           flatten(),
           join(),
-          weld( { tolerance: 0, toleranceNormal: 0.1 } ),
-          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+          weld(),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
+          resample(),
+          prune(),
+          sparse( { ratio: 0.2 } )
         );
 
-        if (tex_fmt !== '') {
-          const textures = doc.getRoot().listTextures();
+        const textures = doc.getRoot().listTextures();
 
+        if (textures.length > 0 && tex_fmt !== '') {
           if (tex_fmt.startsWith( 'ktx' )) {
             const { listTextureSlots } = await import( "@gltf-transform/functions" );
             const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
             const { encodeToKTX2 } = await import( "ktx2-encoder" );
 
             const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+            let file_reader;
 
             for (const texture of textures) {
               const slots = await listTextureSlots( texture );
@@ -3512,15 +3516,11 @@
               const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
 
               // check if texture dimensions are multiples of 4
-              const width_p2 = size[ 0 ] % 4 === 0;
-              const height_p2 = size[ 1 ] % 4 === 0;
+              const width_is_m4 = size[ 0 ] % 4 === 0;
+              const height_is_m4 = size[ 1 ] % 4 === 0;
 
-              if (!width_p2 || !height_p2) {
-                // this should produce minimal scale down
-                const width = width_p2 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
-                const height = height_p2 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
-
-                const file_reader = new FileReader();
+              if (!width_is_m4 || !height_is_m4) {
+                if (file_reader === undefined) file_reader = new FileReader();
 
                 await new Promise( resolve => {
                   file_reader.onload = function( e ) {
@@ -3529,8 +3529,8 @@
                     img.onload = async function() {
                       const canvas = document.createElement('canvas');
 
-                      canvas.width = width;
-                      canvas.height = height;
+                      canvas.width = width_is_m4 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+                      canvas.height = height_is_m4 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
 
                       const ctx = canvas.getContext('2d');
                       ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
@@ -3599,8 +3599,9 @@
 
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
-        const { MeshoptEncoder, MeshoptSimplifier } = await import( "meshoptimizer" );
-        const { dedup, flatten, instance, join, meshopt, palette, prune, resample, simplify, unpartition, weld } = await import( "@gltf-transform/functions" );
+        const { MeshoptEncoder } = await import( "meshoptimizer_encoder" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
+        const { dedup, flatten, instance, join, meshopt, palette, prune, resample, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
         const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
 
         await MeshoptEncoder.ready;
@@ -3616,28 +3617,30 @@
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
         await doc.transform(
-          unpartition(),
-          palette({ min: 5 }),
           dedup(),
-          prune(),
-          resample(),
-          instance( { min: 2 } ),
+          instance( { min: 5 } ),
+          palette( { min: 5 } ),
           flatten(),
           join(),
-          weld( { tolerance: 0, toleranceNormal: 0.1 } ),
-          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } ),
+          weld(),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
+          resample(),
+          prune(),
+          sparse( { ratio: 0.2 } ),
           meshopt( { encoder: MeshoptEncoder, level: 'high' } )
         );
 
-        if (tex_fmt !== '') {
-          const textures = doc.getRoot().listTextures();
+        const textures = doc.getRoot().listTextures();
 
+        if (textures.length > 0 && tex_fmt !== '') {
           if (tex_fmt.startsWith( 'ktx' )) {
             const { listTextureSlots } = await import( "@gltf-transform/functions" );
             const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
             const { encodeToKTX2 } = await import( "ktx2-encoder" );
 
             const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+            let file_reader;
 
             for (const texture of textures) {
               const slots = await listTextureSlots( texture );
@@ -3646,15 +3649,11 @@
               const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
 
               // check if texture dimensions are multiples of 4
-              const width_p2 = size[ 0 ] % 4 === 0;
-              const height_p2 = size[ 1 ] % 4 === 0;
+              const width_is_m4 = size[ 0 ] % 4 === 0;
+              const height_is_m4 = size[ 1 ] % 4 === 0;
 
-              if (!width_p2 || !height_p2) {
-                // this should produce minimal scale down
-                const width = width_p2 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
-                const height = height_p2 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
-
-                const file_reader = new FileReader();
+              if (!width_is_m4 || !height_is_m4) {
+                if (file_reader === undefined) file_reader = new FileReader();
 
                 await new Promise( resolve => {
                   file_reader.onload = function( e ) {
@@ -3663,8 +3662,8 @@
                     img.onload = async function() {
                       const canvas = document.createElement('canvas');
 
-                      canvas.width = width;
-                      canvas.height = height;
+                      canvas.width = width_is_m4 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+                      canvas.height = height_is_m4 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
 
                       const ctx = canvas.getContext('2d');
                       ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
@@ -3733,7 +3732,7 @@
       async function texture_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
         const { MeshoptSimplifier } = await import( "meshoptimizer" );
-        const { dedup, flatten, instance, join, palette, prune, resample, simplify, unpartition, weld } = await import( "@gltf-transform/functions" );
+        const { dedup, flatten, instance, join, palette, prune, resample, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
         const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
 
         const io = new WebIO();
@@ -3744,27 +3743,29 @@
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
         await doc.transform(
-          unpartition(),
-          palette({ min: 5 }),
           dedup(),
-          prune(),
-          resample(),
           instance( { min: 2 } ),
+          palette( { min: 5 } ),
           flatten(),
           join(),
-          weld( { tolerance: 0, toleranceNormal: 0.1 } ),
-          simplify( { simplifier: MeshoptSimplifier, ratio: 0.75, error: 0.001 } )
+          weld(),
+          simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
+          resample(),
+          prune(),
+          sparse( { ratio: 0.2 } )
         );
 
-        if (tex_fmt !== '') {
-          const textures = doc.getRoot().listTextures();
+        const textures = doc.getRoot().listTextures();
 
+        if (textures.length > 0 && tex_fmt !== '') {
           if (tex_fmt.startsWith( 'ktx' )) {
             const { listTextureSlots } = await import( "@gltf-transform/functions" );
             const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
             const { encodeToKTX2 } = await import( "ktx2-encoder" );
 
             const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+            let file_reader;
 
             for (const texture of textures) {
               const slots = await listTextureSlots( texture );
@@ -3773,15 +3774,11 @@
               const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
 
               // check if texture dimensions are multiples of 4
-              const width_p2 = size[ 0 ] % 4 === 0;
-              const height_p2 = size[ 1 ] % 4 === 0;
+              const width_is_m4 = size[ 0 ] % 4 === 0;
+              const height_is_m4 = size[ 1 ] % 4 === 0;
 
-              if (!width_p2 || !height_p2) {
-                // this should produce minimal scale down
-                const width = width_p2 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
-                const height = height_p2 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
-
-                const file_reader = new FileReader();
+              if (!width_is_m4 || !height_is_m4) {
+                if (file_reader === undefined) file_reader = new FileReader();
 
                 await new Promise( resolve => {
                   file_reader.onload = function( e ) {
@@ -3790,8 +3787,8 @@
                     img.onload = async function() {
                       const canvas = document.createElement('canvas');
 
-                      canvas.width = width;
-                      canvas.height = height;
+                      canvas.width = width_is_m4 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+                      canvas.height = height_is_m4 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
 
                       const ctx = canvas.getContext('2d');
                       ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
