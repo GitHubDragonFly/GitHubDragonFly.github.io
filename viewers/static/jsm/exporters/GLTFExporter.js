@@ -2359,7 +2359,7 @@ class GLTFWriter {
 
 		this.serializeUserData( object, nodeDef );
 
-		if ( object.isMesh || object.isPoints || ( object.isLine && ! mesh.isConditionalLine ) ) {
+		if ( object.isMesh || object.isPoints || ( object.isLine && ! object.isConditionalLine ) ) {
 
 			const meshIndex = this.processMesh( object );
 
