@@ -33,13 +33,8 @@ async function import_decompress() {
 
 			const blitTexture_clone = blitTexture.clone();
 
-			if ( blitTexture_clone.offset.x !== 0 || blitTexture_clone.offset.y !== 0 ||
-				blitTexture_clone.repeat.x !== 1 || blitTexture_clone.repeat.y !== 1 ) {
-
-				blitTexture_clone.offset.set( 0, 0 );
-				blitTexture_clone.repeat.set( 1, 1 );
-
-			}
+			blitTexture_clone.offset.set( 0, 0 );
+			blitTexture_clone.repeat.set( 1, 1 );
 
 			const material = new NodeMaterial();
 			material.fragmentNode = texture( blitTexture_clone ).uv( uv().flipY() );
@@ -641,7 +636,7 @@ class OBJExporter {
 
 			}
 
-			if ( child.isLine === true || child.isLineSegments === true ) {
+			if ( ( child.isLine === true || child.isLineSegments === true ) && ! child.isConditionalLine ) {
 
 				parseLine( child.clone() );
 
