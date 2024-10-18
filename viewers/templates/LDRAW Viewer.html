@@ -27,6 +27,9 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
+    <!-- For encoding GLB exports with draco compression -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
+
     <script>
       var THREE, manager, texture_loader, ldraw_loader, renderer, exr_loader, rgbe_loader, hdrJPGLoader;
       var scene, camera, ldraw_obj, edges, edges_visible, render_requested;
@@ -367,7 +370,8 @@
           <option title="BIM - Dotbim File Format" value="bim" onclick="export_bim()">BIM</option>
           <option title="DAE - Collada Format" value="dae" onclick="export_dae();">DAE</option>
           <option title="GLB - GL Transmission Format binary" value="glb" onclick="export_gltf( true );">GLB</option>
-          <option title="GLB - GL Transmission Format binary with Meshopt compression" value="glbmeshopt" onclick="export_gltf( true, true );">GLB_m</option>
+          <option title="GLB - GL Transmission Format binary with DRACO compression" value="glbdraco" onclick="export_gltf( true, true );">GLB_d</option>
+          <option title="GLB - GL Transmission Format binary with Meshopt compression" value="glbmeshopt" onclick="export_gltf( true, false, true );">GLB_m</option>
           <option title="GLTF - GL Transmission Format ascii" value="gltf" onclick="export_gltf();">GLTF</option>
           <option title="JSON - Three.js Format" value="json" onclick="export_json();">JSON</option>
           <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
@@ -923,7 +927,7 @@
         }
       }
 
-      async function export_gltf( binary = false, meshopt = false ) {
+      async function export_gltf( binary = false, draco = false, meshopt = false ) {
         if (ldraw_obj) {
           await start_export();
 
@@ -931,7 +935,7 @@
 
           let gltf_exporter = new GLTFExporter( manager );
 
-          let options = { binary: binary, maxTextureSize: 1024 };
+          let options = { binary: binary };
 
           gltf_exporter.parse( ldraw_obj.clone(), async json => {
             let blob;
@@ -939,14 +943,24 @@
             if (binary === true) {
               let type = 'application/octet-stream';
 
-              if (meshopt === true) {
+              if (draco === true) {
+                blob = new Blob( [ await draco_compress( new Uint8Array( json ) ) ], { type: type } );
+              } else if (meshopt === true) {
                 blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: type } );
               } else {
                 blob = new Blob( [ await simplify( new Uint8Array( json ) ) ], { type: type } );
               }
 
               zip.file( filename + '.glb', blob );
-              await process_zip( '_GLB' + ( meshopt === true ? '_MESHOPT' : '' ) );
+
+              let str = '_GLB';
+              if (draco === true) {
+                str += '_DRACO';
+              } else if (meshopt === true) {
+                str += '_MESHOPT';
+              }
+
+              await process_zip( str );
             } else {
               let string = JSON.stringify( json, null, 2 );
               blob = new Blob( [ string ], { type: 'text/plain' } );
@@ -968,7 +982,7 @@
 
           let gltf_exporter = new GLTFExporter( manager );
 
-          let options = {	binary: true, maxTextureSize: 1024 };
+          let options = {	binary: true };
 
           // Export meshes only and skip lines
           let ldraw_clone = await create_meshes();
@@ -2457,21 +2471,57 @@
       async function simplify( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
         const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { dedup, flatten, join, prune, sparse } = await import( "@gltf-transform/functions" );
+        const { dedup, prune, unpartition } = await import( "@gltf-transform/functions" );
 
         const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
         await doc.transform(
+          unpartition(),
           dedup(),
-          flatten(),
-          join(),
-          prune(),
-          sparse( { ratio: 0.2 } )
+          prune()
         );
 
         const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
+      }
+
+      /* Encode with draco compression - geometry */
+
+      async function draco_compress( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { dedup, prune, unpartition, weld } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression } = await import( "@gltf-transform/extensions" );
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerDependencies({
+          'draco3d.encoder': DracoEncoderModule(),
+        });
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          unpartition(),
+          dedup(),
+          weld(),
+          prune()
+        );
+
+        doc.createExtension( KHRDracoMeshCompression )
+        .setRequired( true )
+        .setEncoderOptions({
+          method: KHRDracoMeshCompression.EncoderMethod.EDGEBREAKER,
+          encodeSpeed: 5,
+        });
+
+        const compressedArrayBuffer = io.writeBinary( doc );
 
         for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
         for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
@@ -2484,15 +2534,14 @@
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
         const { MeshoptEncoder } = await import( "meshoptimizer_encoder" );
-        const { dedup, flatten, instance, join, meshopt, palette, prune, sparse, weld } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, EXTMeshoptCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+        const { dedup, meshopt, prune, unpartition, weld } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
 
         await MeshoptEncoder.ready;
 
         const io = new WebIO();
 
         io.registerExtensions( KHRONOS_EXTENSIONS );
-        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
         io.registerDependencies({
           'meshopt.encoder': MeshoptEncoder,
         });
@@ -2500,14 +2549,10 @@
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
         await doc.transform(
+          unpartition(),
           dedup(),
-          instance( { min: 5 } ),
-          palette( { min: 5 } ),
-          flatten(),
-          join(),
           weld(),
           prune(),
-          sparse( { ratio: 0.2 } ),
           meshopt( { encoder: MeshoptEncoder, level: 'high' } )
         );
 
