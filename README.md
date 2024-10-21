@@ -124,6 +124,14 @@ Number Type Converter
   - Mobile versions of these viewers are available but not properly tested yet
   - Standalone versions of `GLTF WebGPU` and `OBJ+MTL WebGPU` viewers, using official imports, are available in the `viewers/webgpu/` folder:
     - Export functionality is not included in these viewers
+  - Emissive bloom post processing, the `PP` button, is currently available in standalone and desktop versions of GLTF and OBJ+MTL WebGPU viewers:
+    - This emissive bloom effect can only be applied to a model which has a built-in emissive component
+    - It should only work with an unmodified originally loaded model:
+      - Manipulating any of the following will disable the bloom effect until their original values are restored:
+        - `equirectangular background` and `gradient color background`
+        - `edges`, `wireframe` and `opacity`
+      - Manipulating any of the following will require model reset in order to use the bloom effect:
+        - `material side`, `flatShading` and `xtra smooth`
 - Memory handling should be good, relatively speaking:
   - With every next model loaded the previous model geometries / materials are being disposed of
   - Viewers are webpages so it might be easier to refresh the whole page before loading the next model
