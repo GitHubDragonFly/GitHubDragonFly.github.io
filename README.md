@@ -116,22 +116,23 @@ Number Type Converter
     - Mobile viewers show it as the `Browse` button
 - Any of the viewers might have bugs and interface / library related limitations
   - Some viewers might be slow to load some models, usually if using `WASM` of some library
-- Currently experimental three.js `WebGPU` support is included in experimental `GLTF WebGPU` and `OBJ+MTL WebGPU` and `PDB WebGPU` viewers:
+- Currently experimental three.js `WebGPU` support is included in experimental `GLTF WebGPU`, `OBJ+MTL WebGPU` and `PDB WebGPU` viewers:
   - Use either Chrome or Safari browser with its `WebGPU experimental features` enabled to test these viewers (and your computer):
     - Not really sure if WebGPU in Firefox Nightly browser works properly yet
-  - All viewers are customized and also have some export options available:
+  - All 3 viewers are customized and also have some export options available:
     -  `GLTF WebGPU` viewer can also be used to optimize and compress GLTF / GLB models
-  - Mobile versions of these viewers are available but not properly tested yet
-  - Standalone versions of `GLTF WebGPU` and `OBJ+MTL WebGPU` viewers, using official imports, are available in the `viewers/webgpu/` folder:
+  - Mobile versions of these 3 viewers are available but not properly tested yet
+  - Standalone versions of `GLTF WebGPU` and `OBJ+MTL WebGPU` viewers are available in the `viewers/webgpu/` folder:
+    - These viewers are using official three.js imports
     - Export functionality is not included in these viewers
-  - Emissive bloom post processing, the `PP` button, is currently available in standalone and desktop versions of GLTF and OBJ+MTL WebGPU viewers:
+  - Emissive bloom post processing effect, the `PP` button, is currently available in both standalone and desktop versions of GLTF and OBJ+MTL WebGPU viewers:
     - This emissive bloom effect can only be applied to a model which has a built-in emissive component
     - It should only work with an unmodified originally loaded model:
-      - Manipulating any of the following will disable the bloom effect until their original values are restored:
+      - Manipulating any of the following will disable the bloom effect until their initial values are restored:
         - `equirectangular background` and `gradient color background`
         - `edges`, `wireframe` and `opacity`
-      - Manipulating any of the following will require model reset in order to use the bloom effect:
-        - `material side`, `flatShading` and `xtra smooth`
+      - Manipulating any of the following will require a full model reset in order to use the bloom effect:
+        - `material side`, `flatShading`, `random vertex colors` and `xtra smooth`
 - Memory handling should be good, relatively speaking:
   - With every next model loaded the previous model geometries / materials are being disposed of
   - Viewers are webpages so it might be easier to refresh the whole page before loading the next model
