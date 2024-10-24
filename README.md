@@ -17,7 +17,8 @@ This website is designed to serve as a hub with links to:
 Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations:
   - See screenshots below for different appearances of the main menu page
   - Mobile viewers are available on desktop computers
-  - Desktop viewers can be opened on mobile devices (click on the `D` button)
+  - Desktop viewers can be opened on mobile devices by clicking the `D` button:
+    - Kind of intended for tablets, might look cluttered on mobile phones
   - As per the [PageSpeed Insights](https://pagespeed.web.dev/) basic tests, almost all the pages / code:
     - **Are highly performant**:
       - relatively scored depending on how busy and responsive `github` `cdn.jsdelivr.net` `esm.sh` networks are at the time of testing
