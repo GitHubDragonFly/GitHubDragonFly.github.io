@@ -17,7 +17,7 @@ This website is designed to serve as a hub with links to:
 Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations:
   - See screenshots below for different appearances of the main menu page
   - Mobile viewers are available on desktop computers
-  - Desktop viewers are NOT available on mobile devices (unless you enter any viewer's exact URL manually)
+  - Desktop viewers can be opened on mobile devices (click on the `D` button)
   - As per the [PageSpeed Insights](https://pagespeed.web.dev/) basic tests, almost all the pages / code:
     - **Are highly performant**:
       - relatively scored depending on how busy and responsive `github` `cdn.jsdelivr.net` `esm.sh` networks are at the time of testing
@@ -409,6 +409,7 @@ Number Type Converter
     - Considering how many export options are available in any viewer, a certain combination might just work properly
 - Buttons, where applicable:
   - `A` - animations
+  - `D` - open desktop version of the viewer (available in mobile viewers only)
   - `E` - edges
     - `EC` - edge color
   - `F` - flatShading
