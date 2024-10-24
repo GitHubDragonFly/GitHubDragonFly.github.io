@@ -132,7 +132,8 @@ Number Type Converter
     - These standalone viewers are using official three.js imports
     - Export functionality is not included in these standalone viewers
   - Emissive bloom post processing effect is currently available in both standalone and desktop versions of GLTF and OBJ+MTL WebGPU viewers (represented with the `PP` button):
-    - This emissive bloom effect can only be applied to a model which has a built-in emissive component
+    - This emissive bloom effect can only be applied to a model which has a built-in emissive component:
+      - Maybe try the [Emissive Strength Test](https://github.com/KhronosGroup/glTF-Sample-Models/blob/main/2.0/EmissiveStrengthTest/glTF-Binary/EmissiveStrengthTest.glb) GLB example from Khronos Group
     - It should only work with an unmodified originally loaded model:
       - Manipulating any of the following will disable the bloom effect until their initial values are restored:
         - `equirectangular background` and `gradient color background`
