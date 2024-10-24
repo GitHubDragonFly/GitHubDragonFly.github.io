@@ -129,9 +129,9 @@ Number Type Converter
     -  `GLTF WebGPU` viewer can also be used to optimize and compress GLTF / GLB models
   - Mobile versions of these 3 viewers are available but not properly tested yet
   - Standalone versions of `GLTF WebGPU` and `OBJ+MTL WebGPU` viewers are available in the `viewers/webgpu/` folder:
-    - These viewers are using official three.js imports
-    - Export functionality is not included in these viewers
-  - Emissive bloom post processing effect, the `PP` button, is currently available in both standalone and desktop versions of GLTF and OBJ+MTL WebGPU viewers:
+    - These standalone viewers are using official three.js imports
+    - Export functionality is not included in these standalone viewers
+  - Emissive bloom post processing effect is currently available in both standalone and desktop versions of GLTF and OBJ+MTL WebGPU viewers (represented with the `PP` button):
     - This emissive bloom effect can only be applied to a model which has a built-in emissive component
     - It should only work with an unmodified originally loaded model:
       - Manipulating any of the following will disable the bloom effect until their initial values are restored:
@@ -141,14 +141,14 @@ Number Type Converter
         - `material side`, `flatShading`, `random vertex colors` and `xtra smooth`
 - Memory handling should be good, relatively speaking:
   - With every next model loaded the previous model geometries / materials are being disposed of
-  - Viewers are webpages so it might be easier to refresh the whole page before loading the next model
+  - Viewers are webpages so it might be easier to just refresh the whole page before loading the next model
 - Desktop viewers should be usable on as low as 800 x 600 screen resolution:
   - Page zoom might need to be adjusted to keep controls uncluttered
   - There is a full-screen switching button which can also help or just use your browser shortcut keys
   - 640 x 480 screen resoultion should also work but might present a limited workspace and visibility
-  - Workaround for any low resolution is to use stripped down and mobile friendly viewers instead
+  - Workaround for any low desktop resolution is to use stripped down and mobile friendly viewers instead
 - Different [three.js](https://github.com/mrdoob/three.js) revisions are used throughout and with lots of customized code:
-  - Applicable to desktop usage - most viewers page title, when visible, should show what three.js revision is being used
+  - Applicable to desktop usage - the page title of most viewers, when visible, should show what three.js revision is being used
   - Most viewers currently use `importmap` and `module` imports:
     - If, for whatever reason, you might need a `non-module` version of three.js files then consider using the [Demoduler](https://boytchev.github.io/demoduler/) which might have some limitations
 - Error handling narrows down to showing the `ERROR!` message so check the console output for details
@@ -400,7 +400,7 @@ Number Type Converter
     - If applicable, will support exporting morph animations but will not export other animations
   - Some viewers also offer setting the following exported textures features:
     - Resolution: 128, 256, 512, 768, 1k, 1.2k, 1.5k, 1.7k, 2k, 3k, 4k
-    - Y-flip, which is intended for 3DM / DAE / OBJ / USDZ exports
+    - Y-flip, which is intended for `3DM`, `DAE`, `OBJ` and `USDZ` exports
   - ASSIMP, GLTF and GLTFS viewers can also export model maps (textures) only, defaulting to PNG if no other format is selected
   - PDB Viewer will export all visible objects, any combination of `atoms` and `bonds` and `labels`
   - GLTFS Viewer seems to do OK job in exporting still models with `pbrSpecularGlossiness` but would suggest that you use [gltf.report](https://gltf.report/) instead
@@ -472,8 +472,12 @@ Number Type Converter
     - It could possibly open and export current three.js JSON format, with limitations of r111
     - Some animations and/or skeletons might be off or missing
 - GLTF / FBX / DAE viewers will also include animations to exported JSON format
-- 3DS viewer is using MeshPhysicalMaterial instead of MeshPhongMaterial
-- Multiple viewers will also try mapping any valid `BGND` image as equirectangular when `Eq` is enabled:
+- PDB Viewer is using `lil-gui` as a passive `Atoms Legend` display:
+  - It will provide additional per atom info on mouse hover in desktop viewer
+  - Rely on this to reference atoms in the molecule by using their color:
+    - Enabling atoms `labels` instead will slow down the rendering when a molecule has a large number of atoms
+- 3DS Viewer is using MeshPhysicalMaterial instead of MeshPhongMaterial
+- Multiple desktop viewers will also try mapping any valid `BGND` image as equirectangular when `Eq` is enabled:
   - Maybe download the following three.js examples and load either of them locally via the `BGND` file input:
     - [land_ocean_ice_cloud_2048.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/land_ocean_ice_cloud_2048.jpg)
     - [2294472375_24a3b8ef46_o.jpg](https://github.com/mrdoob/three.js/blob/dev/examples/textures/2294472375_24a3b8ef46_o.jpg)
