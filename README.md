@@ -131,8 +131,10 @@ Number Type Converter
   - Mobile versions of these 3 viewers are available but not properly tested yet
   - Standalone versions of `GLTF WebGPU` and `OBJ+MTL WebGPU` viewers are available in the `viewers/webgpu/` folder:
     - These standalone viewers are using official three.js imports
+    - They additionally support drag-and-drop and ZIP files
     - Export functionality is not included in these standalone viewers
-  - Emissive bloom post processing effect is currently available in both standalone and desktop versions of GLTF and OBJ+MTL WebGPU viewers (represented with the `PP` button):
+  - Emissive bloom post processing effect (represented with the `PP` button):
+    - Currently available in both standalone and desktop versions of GLTF and OBJ+MTL WebGPU viewers
     - This emissive bloom effect can only be applied to a model which has a built-in emissive component:
       - Maybe try the [Emissive Strength Test](https://github.com/KhronosGroup/glTF-Sample-Models/blob/main/2.0/EmissiveStrengthTest/glTF-Binary/EmissiveStrengthTest.glb) GLB example from Khronos Group
     - It should only work with an unmodified originally loaded model:
@@ -298,8 +300,8 @@ Number Type Converter
   - do note that mobile Safari browser might be finicky about certain features
 - For quick testing of any viewer, see the `URLS4MODELS.md` file for corresponding URL examples
 - Some loading instructions are also available in [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) and [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repositories
-- Drag-and-drop is currently not supported in any viewer
-- ZIP file support is only available in OBJ+MTL Viewer
+- Drag-and-drop is currently only supporteded in standalone WebGPU viewers
+- ZIP file support is currently only available in OBJ+MTL Viewer and standalone WebGPU viewers
 - Import files locally from a file browser dialog:
   - All files have to be in the same folder
   - Some viewers might have some limitations
