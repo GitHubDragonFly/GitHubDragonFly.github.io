@@ -143,7 +143,7 @@ Number Type Converter
         - `equirectangular background` and `gradient color background`
         - `edges`, `wireframe` and `opacity`
       - Manipulating any of the following will require a full model reset in order to use the bloom effect:
-        - `material side`, `flatShading`, `random vertex colors` and `xtra smooth`
+        - `material side`, `flatShading` and `xtra smooth`
 - Memory handling should be good, relatively speaking:
   - With every next model loaded the previous model geometries / materials are being disposed of
   - Viewers are webpages so it might be easier to just refresh the whole page before loading the next model
