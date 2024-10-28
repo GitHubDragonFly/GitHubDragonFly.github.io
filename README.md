@@ -130,8 +130,9 @@ Number Type Converter
     -  `GLTF WebGPU` viewer can also be used to optimize and compress GLTF / GLB models
   - Mobile versions of these 3 viewers are available but not properly tested yet
   - Standalone versions of `GLTF WebGPU` and `OBJ+MTL WebGPU` viewers are available in the `viewers/webgpu/` folder:
-    - These standalone viewers are using official three.js imports
-    - They additionally support drag-and-drop and ZIP files
+    - `GLTF WebGPU` standalone viewer is using the official three.js `GLTF Loader` import
+    - `OBJ+MTL WebGPU` standalone viewer is using built-in custom version of `OBJ Loader` and `MTL Loader`
+    - Both viewers additionally support drag-and-drop and ZIP files
     - Export functionality is not included in these standalone viewers
   - Emissive bloom post processing effect (represented with the `PP` button):
     - Currently available in both standalone and desktop versions of GLTF and OBJ+MTL WebGPU viewers
