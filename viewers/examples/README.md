@@ -13,6 +13,9 @@ Cerberus examples:
 - Converted and modified to showcase multiple different `OBJ + MTL` loading options:
   - Can be loaded as ZIP files in the OBJ+MTL Viewer
 
+Damaged Helmet example from [three.js GLTF examples](https://github.com/mrdoob/three.js/tree/dev/examples/models/gltf/DamagedHelmet/glTF).
+- Zipped up for testing purposes
+
 Quarks atom is used in [Cube Shading](https://githubdragonfly.github.io/viewers/templates/Cube%20Shading.html) example:
 - Three.quarks: `https://github.com/Alchemist0823/three.quarks`
 - Sandbox Example: `https://codesandbox.io/p/sandbox/three-quarks-atom-particle-system-xp3fvz?file=%2Findex.html`
