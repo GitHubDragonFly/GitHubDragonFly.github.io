@@ -29,15 +29,17 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
-      var THREE, manager, gpu, gl2, pdb_loader, pdb_obj, font_loader, label_font;
-      var scene, camera, renderer, texture_loader, exr_loader, rgbe_loader, render_requested;
+      var THREE, uSync, manager, gpu, gl2, pdb_loader, pdb_obj, font_loader;
+      var renderer, texture_loader, exr_loader, rgbe_loader, render_requested;
       var controls, count = 0, tex, link, isMobile, node_materials;
-      var gui, gui_legend, gui_set = false, guiExposure = null, params, toneMappingOptions;
-      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
+      var scene, camera, params, toneMappingOptions, label_font;
+      var gui, gui_legend, gui_set = false, guiExposure = null;
+      var mouse_down, mouse_wheel, events_initialized, bounding_box;
+      var local_files, filesMap, zip_file, unzipped_files;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
-      var rot_x = 0, rot_y = 0, rot_z = 0, bounding_box, reflect;
+      var rot_x = 0, rot_y = 0, rot_z = 0, reset_rotation;
       var root, position, color, offset, start, end, enable_opacity;
       var json, positions, colors, atom_colors, gif_export, bgnd_linear_gradient;
       var atoms, labels, bonds, atoms_visible, labels_visible, bonds_visible, geometryAtoms, geometryBonds;
@@ -54,8 +56,10 @@
       import { PDBLoader } from "three/addons/loaders/PDBLoader.min.js";
       import { FontLoader } from "three/addons/loaders/FontLoader.min.js";
       import { TextGeometry } from "three/addons/geometries/TextGeometry.min.js";
+      import { unzipSync } from "three/addons/libs/fflate.module.min.js";
 
       THREE = three_js;
+      uSync = unzipSync;
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
@@ -66,9 +70,9 @@
 
       font_loader = new FontLoader( manager );
 
-      await font_loader.load( "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/fonts/optimer_bold.typeface.json", function( font ) {
-        label_font = font;
-      });
+      let font_url = "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/fonts/optimer_bold.typeface.json";
+
+      await font_loader.load( font_url, function( font ) { label_font = font; } );
 
       labelGeometry = TextGeometry;
 
@@ -222,6 +226,7 @@
         position: absolute;
         text-align: center;
         font-size: large;
+        display: none;
         height: 240px;
         width: 240px;
         top: 50%;
@@ -294,6 +299,17 @@
         -webkit-appearance: none;
         -moz-appearance: none;
         appearance: none;
+      }
+
+      #drop-container {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: whitesmoke;
+        background: rgba( 0, 0, 0, 1 );
       }
     </style>
 
@@ -424,6 +440,7 @@
       <progress id="progress" value="0" max="1"></progress>
     </div>
 
+    <div id="drop-container">Drop a PDB or ZIP file here</div>
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">PDB WebGPU</div>
     <div id="div_gif_rectangle" class="gif_rectangle"></div>
@@ -612,6 +629,23 @@
       }
 
       function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_dragndrop_listeners() {
+        document.getElementById('drop-container').addEventListener( 'dragover', ( event ) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+          document.getElementById('drop-container').style.background = 'rgba( 25, 25, 25, 1 )';
+        }, false);
+
+        document.getElementById('drop-container').addEventListener( 'dragleave', ( event ) => {
+          document.getElementById('drop-container').style.background = 'rgba( 0, 0, 0, 1 )';
+        }, false);
+
+        document.getElementById('drop-container').addEventListener( 'drop', ( event ) => {
+          event.preventDefault();
+          init( false, event.dataTransfer.files );
+        }, false);
+      }
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
@@ -1938,8 +1972,25 @@
         mouse_wheel = true;
       }
 
-      async function init(){
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+      async function process_loaded_zip() {
+        for ( const key of Object.keys( unzipped_files ) ) {
+          let key_uc = key.toUpperCase();
+
+          if (key_uc.endsWith('.PDB')) {
+            selected_pdb_file = 'blob:null/' + key;
+          }
+
+          let blob = new Blob( [ unzipped_files[ key ].buffer ], { type: 'application/octet-stream' } );
+          filesMap[ 'blob:null/' + key ] = URL.createObjectURL( blob );
+          URL.revokeObjectURL( blob );
+        }
+      }
+
+      async function init( reset = false, files = null ) {
+        if (reset === false && files === null && url_loading === false && document.getElementById('file_input').files.length === 0) return;
+
+        document.getElementById('drop-container').style.display = 'none';
+        document.getElementById('drop-container').style.background = 'rgba( 0, 0, 0, 1 )';
 
         document.getElementById('div_message').innerHTML = 'Loading ... ' + pw;
         document.getElementById('div_message').style.display = '';
@@ -1984,6 +2035,10 @@
         }
 
         selected_pdb_file = null;
+        local_files = null;
+        filesMap = {};
+        zip_file = null;
+        unzipped_files = {};
         mouse_down = false;
         mouse_wheel = true;
         grid_visible = false;
@@ -1995,7 +2050,6 @@
         labels = [];
         bonds = [];
         atom_colors = {};
-        reflect = false;
         gif_export = false;
         atoms_visible = false;
         labels_visible = false;
@@ -2028,12 +2082,21 @@
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
         if (url_loading === false) {
+          manager.setURLModifier( function( url ) {
+            const file = filesMap[ url ];
+            if ( file ) return file;
+            return url;
+          });
+
           // Loaded file
-          var fi = document.getElementById('file_input');
+          local_files = files !== null ? files : document.getElementById('file_input').files;
 
-          if (fi.files[ 0 ].name.toUpperCase().endsWith('.PDB')) selected_pdb_file = fi.files[ 0 ];
+          for (let i = 0; i < local_files.length; i++) {
+            if (local_files[ i ].name.toUpperCase().endsWith('.PDB')) { selected_pdb_file = i; }
+            else if (local_files[ i ].name.toUpperCase().endsWith('.ZIP') && zip_file === null) { zip_file = i; }
+          }
 
-          if (selected_pdb_file === null) {
+          if (selected_pdb_file === null && zip_file === null) {
             handle_error( 'No valid PDB file selected!' );
             return;
           }
@@ -2134,8 +2197,23 @@
           //controls.maxDistance = 500;
         }
 
-        // Load PDB file
-        selected_pdb_file !== null ? loadFile() : loadURLFile();
+        if (zip_file !== null) {
+          let file_loader = new THREE.FileLoader( manager );
+          file_loader.setResponseType( 'arraybuffer' );
+
+          file_loader.load( URL.createObjectURL( local_files[ zip_file ] ), async function( buffer ) {
+            URL.revokeObjectURL( local_files[ zip_file ] );
+
+            unzipped_files = await uSync( new Uint8Array( buffer ) );
+
+            await process_loaded_zip();
+
+            selected_pdb_file !== null ? loadFile() : handle_error( 'No valid PDB file found!' );
+          });
+        } else {
+          // Load PDB file
+          selected_pdb_file !== null ? loadFile() : loadURLFile();
+        }
       }
 
       function switch_material( mtl ) {
@@ -2157,8 +2235,8 @@
       }
 
       function loadFile(){
-        pdb_loader.load( URL.createObjectURL( selected_pdb_file ), async function( pdb ) {
-          URL.revokeObjectURL( selected_pdb_file );
+        pdb_loader.load( zip_file !== null ? selected_pdb_file : URL.createObjectURL( local_files[ selected_pdb_file ] ), async function( pdb ) {
+          if (zip_file === null) URL.revokeObjectURL( local_files[ selected_pdb_file ] );
 
           await set_atoms_labels_bonds( pdb );
 
@@ -2172,26 +2250,56 @@
         });
       }
 
-      function loadURLFile() {
+      async function loadURLFile() {
         if (selected_url_file !== '') {
+          if (selected_url_file.indexOf( ';' ) > -1 || selected_url_file.indexOf( ',' ) > -1 || selected_url_file.indexOf( ' ' ) > -1) {
+            alert( 'Please enter a single URL only, without spaces or commas or semicolons!' );
+            return;
+          }
+
           if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
             selected_url_file = selected_url_file.replace( 'www.dropbox.com', 'dl.dropbox.com' );
           } else if (selected_url_file.startsWith('https://github.com') === true) {
             selected_url_file = ( selected_url_file.replace( 'github.com', 'raw.githubusercontent.com' ) ).replace( 'blob/', '' );
           }
 
-          // No extension checking for URL so it has to point to PDB model
+          // No extension checking for URL so it has to point to PDB or ZIP file
 
-          pdb_loader.load( selected_url_file, async function( pdb ) {
-            await set_atoms_labels_bonds( pdb );
+          // Check if a ZIP file
+          console.log( 'Checking if ZIP file...' );
 
-            pdb_obj = root;
+          try {
+            await fetch( selected_url_file ).then( async res => {
+              zip_file = await res.arrayBuffer();
+              unzipped_files = await uSync( new Uint8Array( zip_file ) );
+              await process_loaded_zip();
 
-            await finish_loading();
-          }, function ( xhr ) { // onProgress
-          }, function ( error ) { // onError
-            handle_error( error );
-          });
+              manager.setURLModifier( function( url ) {
+                const file = filesMap[ url ];
+                if ( file ) return file;
+                return url;
+              });
+
+              return selected_pdb_file !== null ? loadFile() : handle_error( 'No valid PDB file found!' );
+            });
+          } catch ( error ) {
+            console.log( error );
+            console.log( 'Not a ZIP file' );
+            zip_file = null;
+
+            console.log( 'Trying PDB Loader...' );
+
+            pdb_loader.load( selected_url_file, async function( pdb ) {
+              await set_atoms_labels_bonds( pdb );
+
+              pdb_obj = root;
+
+              await finish_loading();
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              handle_error( error );
+            });
+          }
         }
       }
 
@@ -2395,7 +2503,7 @@
           'Ca': 'Atomic number: 20\nAtomic mass: 40.078\nGroup 2: Alkaline earth metal\nElectrons: 2, 8, 8, 2',
           'Sc': 'Atomic number: 21\nAtomic mass: 44.955912\nGroup 3: Transition metal (Scandium Family)\nElectrons: 2, 8, 9, 2',
           'Ti': 'Atomic number: 22\nAtomic mass: 47.867\nGroup 4: Transition metal\nElectrons: 2, 8, 10, 2',
-          'V': 'Atomic number: 23\nAtomic mass: 50.9415\nGroup 5: Vanadium Family\nElectrons: 2, 8, 11, 2',
+          'V': 'Atomic number: 23\nAtomic mass: 50.9415\nGroup 5: Vanadium Group\nElectrons: 2, 8, 11, 2',
           'Cr': 'Atomic number: 24\nAtomic mass: 51.9961\nGroup 6: Transition + refractory metal\nElectrons: 2, 8, 13, 1',
           'Mn': 'Atomic number: 25\nAtomic mass: 54.938\nGroup 7: Manganese Group\nElectrons: 2, 8, 13, 2',
           'Fe': 'Atomic number: 26\nAtomic mass: 55.845\nGroup 8: Iron Group (transition metal)\nElectrons: 2, 8, 14, 2',
@@ -2413,9 +2521,9 @@
           'Sr': 'Atomic number: 38\nAtomic mass: 87.62\nGroup 2: Alkaline earth metal\nElectrons: 2, 8, 18, 8, 2',
           'Y': 'Atomic number: 39\nAtomic mass: 88.90585\nGroup 3: Transition metal (Scandium Family)\nElectrons: 2, 8, 18, 9, 2',
           'Zr': 'Atomic number: 40\nAtomic mass: 91.224\nGroup 4: Transition metal\nElectrons: 2, 8, 18, 10, 2',
-          'Nb': 'Atomic number: 41\nAtomic mass: 92.90628',
-          'Mo': 'Atomic number: 42\nAtomic mass: 95.96',
-          'Tc': 'Atomic number: 43\nAtomic mass: 98',
+          'Nb': 'Atomic number: 41\nAtomic mass: 92.90628\nGroup 5: Vanadium Group\nElectrons: 2, 8, 18, 12, 1',
+          'Mo': 'Atomic number: 42\nAtomic mass: 95.96\nGroup 6: Transition + refractory metal\nElectrons: 2, 8, 18, 13, 1',
+          'Tc': 'Atomic number: 43\nAtomic mass: 97\nGroup 7: Manganese Group\nElectrons: 2, 8, 18, 13, 2',
           'Ru': 'Atomic number: 44\nAtomic mass: 101.07',
           'Rh': 'Atomic number: 45\nAtomic mass: 102.9055',
           'Pd': 'Atomic number: 46\nAtomic mass: 106.42',
@@ -3010,19 +3118,9 @@
       async function reset_only() {
         mouse_wheel = true;
 
-        if (polar_grid_visible === true) show_polar_grid();
-        if (grid_visible === true) show_grid();
+        if (selected_url_file !== '') url_loading = true;
 
-        await scene_cleanup();
-
-        await reset_all( true );
-
-        console.time( 'Loading Time' );
-
-        document.getElementById('div_loading').innerHTML = 'Reload';
-        document.getElementById('div_loading').style.display = 'block';
-
-        selected_pdb_file !== null ? loadFile() : loadURLFile();
+        init( true, local_files );
       }
 
       async function reset_all( reset = false ) {
@@ -3263,6 +3361,8 @@
         }
 
         gui_legend.close();
+
+        initialize_dragndrop_listeners();
 
         mouse_wheel = true;
       }
