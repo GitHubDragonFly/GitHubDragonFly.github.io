@@ -301,8 +301,8 @@ Number Type Converter
   - do note that mobile Safari browser might be finicky about certain features
 - For quick testing of any viewer, see the `URLS4MODELS.md` file for corresponding URL examples
 - Some loading instructions are also available in [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) and [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repositories
-- Drag-and-drop is currently only supporteded in standalone WebGPU viewers
-- ZIP file support is currently only available in OBJ+MTL Viewer and standalone WebGPU viewers
+- Drag-and-drop is currently only supporteded in current standalone and desktop WebGPU viewers
+- ZIP file support is currently only available in OBJ+MTL viewers and current standalone and desktop WebGPU viewers
 - Import files locally from a file browser dialog:
   - All files have to be in the same folder
   - Some viewers might have some limitations
