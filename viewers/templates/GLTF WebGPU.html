@@ -39,7 +39,7 @@
       var postProcessing, outputPass, bloomPass, bloom_enabled, emissive_present;
       var grid, polar_grid, grid_visible, polar_grid_visible, model_modified;
       var animations, animation_mixer, current_animation, extras, current_extra;
-      var gltf_obj, parser, current_side, resource_path, edges, edges_visible;
+      var gltf_obj, parser, current_side, edges, edges_visible;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, wireframe_enabled;
       var gui, gui_set = false, guiExposure, params, toneMappingOptions, draco_material;
       var variants, variant_materials, current_variant, variants_available, link;
@@ -49,13 +49,13 @@
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation, texture_maps;
       var render_requested, flat_shading_enabled, filename, enabled_features;
       var initial_opacity, initial_opacity_array, enable_opacity;
-      var initial_transparency, initial_transparency_array;
-      var original_side, original_side_array, bgnd_linear_gradient;
+      var initial_transparency, initial_transparency_array, node_materials;
+      var original_side, original_side_array, bgnd_linear_gradient, slider_height = 0;
       var lines_present, lines_visible, bounding_box, zip, outline_material;
       var vertex_colors_enabled, original_vertex_colors, original_vertex_color_array;
-      var local_files, local_files_indexes, local_bin_files, slider_height = 0;
+      var local_files, local_files_indexes, zip_file, unzipped_files, filesMap;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
-      var selected_gltf_file, selected_draco_file, selected_url_file = '', node_materials;
+      var selected_gltf_file, selected_draco_file, selected_url_file = '';
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
     </script>
@@ -237,6 +237,7 @@
         position: absolute;
         text-align: center;
         font-size: large;
+        display: none;
         height: 240px;
         width: 240px;
         top: 50%;
@@ -304,6 +305,17 @@
         -webkit-appearance: none;
         -moz-appearance: none;
         appearance: none;
+      }
+
+      #drop-container {
+        position: absolute;
+        width: 100%;
+        height: 100%;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        color: whitesmoke;
+        background: rgba( 0, 0, 0, 1 );
       }
     </style>
 
@@ -475,6 +487,7 @@
       <progress id="progress" value="0" max="1"></progress>
     </div>
 
+    <div id="drop-container">Drop GLTF v2.0 file(s) or a single ZIP file here</div>
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">GLTF WebGPU</div>
     <div id="div_gif_rectangle" class="gif_rectangle"></div>
@@ -664,6 +677,23 @@
 
       function clear_url() { document.getElementById('url_entry').value = ''; }
 
+      function initialize_dragndrop_listeners() {
+        document.getElementById('drop-container').addEventListener( 'dragover', ( event ) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
+          document.getElementById('drop-container').style.background = 'rgba( 25, 25, 25, 1 )';
+        }, false);
+
+        document.getElementById('drop-container').addEventListener( 'dragleave', ( event ) => {
+          document.getElementById('drop-container').style.background = 'rgba( 0, 0, 0, 1 )';
+        }, false);
+
+        document.getElementById('drop-container').addEventListener( 'drop', ( event ) => {
+          event.preventDefault();
+          init( false, event.dataTransfer.files );
+        }, false);
+      }
+
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
 
@@ -770,14 +800,6 @@
       }
 
       function set_filename() {
-        if (selected_gltf_file !== null) {
-          filename = local_files[ selected_gltf_file ].name.substring( 0, local_files[ selected_gltf_file ].name.lastIndexOf('.') );
-        } else if (selected_draco_file !== null) {
-          filename = local_files[ selected_draco_file ].name.substring( 0, local_files[ selected_draco_file ].name.lastIndexOf('.') );
-        } else {
-          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') );
-        }
-
         if (!filename || filename === '') {
           filename = 'Model';
         } else {
@@ -2235,8 +2257,44 @@
         mouse_wheel = true;
       }
 
-      async function init() {
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+      async function process_loaded_zip() {
+        let img_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF',
+          '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
+
+        for ( const key of Object.keys( unzipped_files ) ) {
+          let key_uc = key.toUpperCase();
+
+          if (key_uc.endsWith('.GLB') || key_uc.endsWith('.GLTF') || key_uc.endsWith('.VRM')) {
+            selected_gltf_file = 'blob:null/' + key;
+
+            filename = key.slice( 0, -4 );
+            if (filename.indexOf( '\\' )) filename = filename.substring( filename.lastIndexOf( '\\' ) + 1 );
+            if (filename.indexOf( '/' )) filename = filename.substring( filename.lastIndexOf( '/' ) + 1 );
+          }
+          else if (key_uc.endsWith('.DRC')) {
+            selected_draco_file = 'blob:null/' + key;
+
+            filename = key.slice( 0, -4 );
+            if (filename.indexOf( '\\' )) filename = filename.substring( filename.lastIndexOf( '\\' ) + 1 );
+            if (filename.indexOf( '/' )) filename = filename.substring( filename.lastIndexOf( '/' ) + 1 );
+          }
+          else {
+            if (local_files_indexes.length === 0 && img_extensions.some( ext => key_uc.endsWith( ext ) )) {
+              local_files_indexes.push( 'blob:null/' + key );
+            }
+          }
+
+          let blob = new Blob( [ unzipped_files[ key ].buffer ], { type: 'application/octet-stream' } );
+          filesMap[ 'blob:null/' + key ] = URL.createObjectURL( blob );
+          URL.revokeObjectURL( blob );
+        }
+      }
+
+      async function init( reset = false, files = null ) {
+        if (reset === false && files === null && url_loading === false && document.getElementById('file_input').files.length === 0) return;
+
+        document.getElementById('drop-container').style.display = 'none';
+        document.getElementById('drop-container').style.background = 'rgba( 0, 0, 0, 1 )';
 
         document.getElementById('div_message').innerHTML = 'Loading ... ' + pw;
         document.getElementById('div_message').style.display = '';
@@ -2299,6 +2357,9 @@
         selected_gltf_file = null;
         selected_draco_file = null;
         object_is_points = false;
+        unzipped_files = {};
+        zip_file = null;
+        filesMap = {};
         mouse_down = false;
         mouse_wheel = true;
         tex_flip = false;
@@ -2306,10 +2367,8 @@
         tex_fmt = '';
         guiExposure = null;
         local_files = null;
-        local_bin_files = [];
         local_files_indexes = [];
         current_side = 'OS';
-        resource_path = '';
         variants = null;
         variant_materials = {};
         cameras = null;
@@ -2367,41 +2426,48 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
+        manager.setURLModifier( function( url ) {
+          const file = filesMap[ url ];
+          if ( file ) return file;
+          return url;
+        });
+
         if (url_loading === false) {
-          let image_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF', '.KTX2',
+          let img_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF', '.KTX2',
             '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
 
           // Loaded file(s)
-          local_files = document.getElementById('file_input').files;
+          local_files = files !== null ? files : document.getElementById('file_input').files;
 
           for (let i = 0; i < local_files.length; i++) {
             let fn_uc = local_files[ i ].name.toUpperCase();
 
             if (fn_uc.endsWith('.GLB') || fn_uc.endsWith('.GLTF') || fn_uc.endsWith('.VRM')) {
+              filename = local_files[ i ].name.slice( 0, -4 );
               selected_gltf_file = i;
             }
-            else if (fn_uc.endsWith('.DRC')) { selected_draco_file = i; }
-            else if (fn_uc.endsWith('.BIN')) { local_bin_files.push( i ); }
-            else if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) { local_files_indexes.push( i ); }
+            else if (fn_uc.endsWith('.DRC')) {
+              filename = local_files[ i ].name.slice( 0, -4 );
+              selected_draco_file = i;
+            }
+            else if (fn_uc.endsWith('.ZIP') && zip_file === null) { zip_file = i; }
+            else {
+              if (local_files_indexes.length === 0 && img_extensions.some( ext => fn_uc.endsWith( ext ) )) {
+                local_files_indexes.push( i );
+              }
+
+              let url = URL.createObjectURL( local_files[ i ] );
+              URL.revokeObjectURL( local_files[ i ] );
+
+              let base = THREE.LoaderUtils.extractUrlBase( url );
+
+              filesMap[ base + local_files[ i ].name ] = url;
+            }
           };
 
-          if (selected_gltf_file === null && selected_draco_file === null) {
+          if (selected_gltf_file === null && selected_draco_file === null && zip_file === null) {
             handle_error( 'No valid GLTF or GLB or VRM or DRACO file selected!' );
             return;
-          }
-
-          if (local_bin_files.length > 0) {
-            local_bin_files.forEach( file_index => {
-              resource_path += local_files[ file_index ].name + ',' + URL.createObjectURL( local_files[ file_index ] ) + ',';
-              URL.revokeObjectURL( local_files[ file_index ] );
-            });
-          }
-
-          if (local_files_indexes.length > 0) {
-            local_files_indexes.forEach( file_index => {
-              resource_path += local_files[ file_index ].name + ',' + URL.createObjectURL( local_files[ file_index ] ) + ',';
-              URL.revokeObjectURL( local_files[ file_index ] );
-            });
           }
 
           selected_url_file = '';
@@ -2442,12 +2508,6 @@
           gltf_loader.setKTX2Loader( ktx2_loader );
           gltf_loader.setDRACOLoader( draco_loader );
           gltf_loader.setMeshoptDecoder( MeshoptDecoder );
-        }
-
-        if (selected_url_file === '') {
-          if (resource_path !== '') gltf_loader.setResourcePath( resource_path.substring( 0, resource_path.length - 1 ) );
-        } else {
-          gltf_loader.setResourcePath( '' );
         }
 
         if (clock === undefined) clock = new THREE.Clock();
@@ -2518,8 +2578,23 @@
           //controls.maxDistance = 500;
         }
 
-        // Load DRACO or GLTF file
-        (selected_gltf_file !== null) ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : loadURLFile() );
+        if (zip_file !== null) {
+          let file_loader = new THREE.FileLoader( manager );
+          file_loader.setResponseType( 'arraybuffer' );
+
+          file_loader.load( URL.createObjectURL( local_files[ zip_file ] ), async function( buffer ) {
+            URL.revokeObjectURL( local_files[ zip_file ] );
+
+            unzipped_files = await fflate.unzipSync( new Uint8Array( buffer ) );
+
+            await process_loaded_zip();
+
+            selected_gltf_file !== null ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : handle_error( 'No valid GLTF v2.0 file found!' ) );
+          });
+        } else {
+          // Load DRACO or GLTF file
+          (selected_gltf_file !== null) ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : loadURLFile() );
+        }
       }
 
       function switch_material( mtl ) {
@@ -2541,8 +2616,8 @@
       }
 
       function loadFile() {
-        gltf_loader.load( URL.createObjectURL( local_files[ selected_gltf_file ] ), async function( gltf ) {
-          URL.revokeObjectURL( local_files[ selected_gltf_file ] );
+        gltf_loader.load( zip_file !== null ? selected_gltf_file : URL.createObjectURL( local_files[ selected_gltf_file ] ), async function( gltf ) {
+          if (zip_file === null) URL.revokeObjectURL( local_files[ selected_gltf_file ] );
 
           parser = gltf.parser;
           scenes = gltf.scenes;
@@ -2696,7 +2771,7 @@
                 if (local_files_indexes.length > 0) {
                   let loader;
 
-                  let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
+                  let uc_name = (zip_file !== null ? local_files_indexes[ 0 ] : local_files[ local_files_indexes[ 0 ] ].name).toUpperCase();
                   let ext = uc_name.substring( uc_name.lastIndexOf( '.' ) + 1 );
 
                   switch ( ext ) {
@@ -2717,8 +2792,8 @@
                       break;
                   }
 
-                  loader.load( URL.createObjectURL( local_files[ local_files_indexes[ 0 ] ] ), function( texture ) {
-                    URL.revokeObjectURL( local_files[ local_files_indexes[ 0 ] ] );
+                  loader.load( zip_file !== null ? local_files_indexes[ 0 ] : URL.createObjectURL( local_files[ local_files_indexes[ 0 ] ] ), function( texture ) {
+                    if (zip_file === null) URL.revokeObjectURL( local_files[ local_files_indexes[ 0 ] ] );
 
                     texture.colorSpace = THREE.SRGBColorSpace;
                     texture.wrapS = THREE.RepeatWrapping;
@@ -2756,8 +2831,8 @@
       }
 
       function loadDRACO() {
-        draco_loader.load( URL.createObjectURL( local_files[ selected_draco_file ] ), function( geometry ) {
-          URL.revokeObjectURL( local_files[ selected_draco_file ] );
+        draco_loader.load( zip_file !== null ? selected_draco_file : URL.createObjectURL( local_files[ selected_draco_file ] ), function( geometry ) {
+          if (zip_file === null) URL.revokeObjectURL( local_files[ selected_draco_file ] );
 
           if (!geometry.attributes.normal) geometry.computeVertexNormals();
           geometry.normalizeNormals();
@@ -2767,7 +2842,7 @@
           if (local_files_indexes.length > 0) {
             let loader;
 
-            let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
+            let uc_name = (zip_file !== null ? local_files_indexes[ 0 ] : local_files[ local_files_indexes[ 0 ] ].name).toUpperCase();
             let ext = uc_name.substring( uc_name.lastIndexOf( '.' ) + 1 );
 
             switch ( ext ) {
@@ -2788,8 +2863,8 @@
                 break;
             }
 
-            loader.load( URL.createObjectURL( local_files[ local_files_indexes[ 0 ] ] ), function( texture ) {
-              URL.revokeObjectURL( local_files[ local_files_indexes[ 0 ] ] );
+            loader.load( zip_file !== null ? local_files_indexes[ 0 ] : URL.createObjectURL( local_files[ local_files_indexes[ 0 ] ] ), function( texture ) {
+              if (zip_file === null) URL.revokeObjectURL( local_files[ local_files_indexes[ 0 ] ] );
 
               texture.colorSpace = THREE.SRGBColorSpace;
               texture.wrapS = THREE.RepeatWrapping;
@@ -2859,226 +2934,246 @@
 
       async function loadURLFile() {
         if (selected_url_file !== '') {
+          if (selected_url_file.indexOf( ';' ) > -1 || selected_url_file.indexOf( ',' ) > -1 || selected_url_file.indexOf( ' ' ) > -1) {
+            alert( 'Please enter a single URL only, without spaces or commas or semicolons!' );
+            return;
+          }
+
           if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
             selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
           } else if (selected_url_file.startsWith('https://github.com') === true) {
             selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          // No extension checking for URL so it has to point to VRM or GLTF or GLB or DRC model
+          // No extension checking for URL so it has to point to a ZIP file or VRM or GLTF or GLB or DRC model
 
-          console.log( 'Trying GLTF Loader...' );
+          // Check if a ZIP file
+          console.log( 'Checking if ZIP file...' );
 
-          gltf_loader.load( selected_url_file, async gltf => {
-            parser = gltf.parser;
-            scenes = gltf.scenes;
-            cameras = gltf.cameras;
-            gltf_obj = gltf.scene;
+          try {
+            await fetch( selected_url_file ).then( async res => {
+              zip_file = await res.arrayBuffer();
+              unzipped_files = await fflate.unzipSync( new Uint8Array( zip_file ) );
+              await process_loaded_zip();
 
-            if (cameras && cameras.length > 0) {
-              document.getElementById('btn_cameras').disabled = false;
-              document.getElementById('btn_cameras').style.backgroundColor = 'lightgreen';
-            } else {
-              document.getElementById('btn_cameras').disabled = true;
-            }
+              return selected_gltf_file !== null ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : handle_error( 'No valid GLTF v2.0 file found!' ) );
+            });
+          } catch ( error ) {
+            console.log( 'Not a ZIP file' );
+            zip_file = null;
 
-            animations = gltf.animations;
+            console.log( 'Trying GLTF Loader...' );
 
-            if (animations.length > 0) {
-              animation_mixer = new THREE.AnimationMixer( gltf.scene );
-              current_animation = 0;
-              animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
-            }
+            gltf_loader.load( selected_url_file, async gltf => {
+              parser = gltf.parser;
+              scenes = gltf.scenes;
+              cameras = gltf.cameras;
+              gltf_obj = gltf.scene;
 
-            if (gltf.userData.gltfExtensions && gltf.userData.gltfExtensions[ 'KHR_materials_variants' ]) {
-              variants = gltf.userData.gltfExtensions[ 'KHR_materials_variants' ].variants.map( ( variant ) => variant.name );
-            }
+              if (cameras && cameras.length > 0) {
+                document.getElementById('btn_cameras').disabled = false;
+                document.getElementById('btn_cameras').style.backgroundColor = 'lightgreen';
+              } else {
+                document.getElementById('btn_cameras').disabled = true;
+              }
 
-            if (variants) {
-              current_variant = 0;
-              variants_available = true;
-              document.getElementById('btn_variants').disabled = false;
-              document.getElementById('btn_variants').innerHTML = 'V0';
-              document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
-            }
+              animations = gltf.animations;
 
-            let child_count = 1;
+              if (animations.length > 0) {
+                animation_mixer = new THREE.AnimationMixer( gltf.scene );
+                current_animation = 0;
+                animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+              }
 
-            gltf_obj.traverse( async function( child ) {
-              if (child.isMesh || child.isPoints || child.isLine) {
-                if (child.name === '') child.name = 'child_' + child_count;
+              if (gltf.userData.gltfExtensions && gltf.userData.gltfExtensions[ 'KHR_materials_variants' ]) {
+                variants = gltf.userData.gltfExtensions[ 'KHR_materials_variants' ].variants.map( ( variant ) => variant.name );
+              }
 
-                if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                child.geometry.normalizeNormals();
+              if (variants) {
+                current_variant = 0;
+                variants_available = true;
+                document.getElementById('btn_variants').disabled = false;
+                document.getElementById('btn_variants').innerHTML = 'V0';
+                document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
+              }
 
-                child.geometry.computeBoundingBox();
-                child.geometry.computeBoundingSphere();
+              let child_count = 1;
 
-                if (child.geometry.hasAttribute( 'color' )) {
-                  vertex_colors_enabled = true;
-                  document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                }
+              gltf_obj.traverse( async function( child ) {
+                if (child.isMesh || child.isPoints || child.isLine) {
+                  if (child.name === '') child.name = 'child_' + child_count;
 
-                if (child.isLine) {
-                  lines_present = lines_visible = true;
-                  document.getElementById('btn_lines').disabled = false;
-                  document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
-                }
+                  if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+                  child.geometry.normalizeNormals();
 
-                if (child.isMesh) {
-                  if (child.isSkinnedMesh) child.frustumCulled = false;
+                  child.geometry.computeBoundingBox();
+                  child.geometry.computeBoundingSphere();
 
-                  if (variants_available === true && child.material && child.userData.gltfExtensions) {
-                    if (node_materials[ child.material.type ]) child.material = switch_material( child.material );
+                  if (child.geometry.hasAttribute( 'color' )) {
+                    vertex_colors_enabled = true;
+                    document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                  }
 
-                    variant_materials[ child.id ] = {};
-                    const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
+                  if (child.isLine) {
+                    lines_present = lines_visible = true;
+                    document.getElementById('btn_lines').disabled = false;
+                    document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
+                  }
 
-                    for (let i = 0; i < variants.length; i++) {
-                      const mapping = meshVariants.mappings.find( ( mapping ) => mapping.variants.includes( i ) );
+                  if (child.isMesh) {
+                    if (child.isSkinnedMesh) child.frustumCulled = false;
 
-                      if (mapping) {
-                        await parser.getDependency( 'material', mapping.material ).then( function( material ) {
-                          if (node_materials[ material.type ]) material = switch_material( material );
-                          variant_materials[ child.id ][ variants[ i ] ] = material;
-                          if (i === 0) child.material = material;
-                        });
+                    if (variants_available === true && child.material && child.userData.gltfExtensions) {
+                      if (node_materials[ child.material.type ]) child.material = switch_material( child.material );
+
+                      variant_materials[ child.id ] = {};
+                      const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
+
+                      for (let i = 0; i < variants.length; i++) {
+                        const mapping = meshVariants.mappings.find( ( mapping ) => mapping.variants.includes( i ) );
+
+                        if (mapping) {
+                          await parser.getDependency( 'material', mapping.material ).then( function( material ) {
+                            if (node_materials[ material.type ]) material = switch_material( material );
+                            variant_materials[ child.id ][ variants[ i ] ] = material;
+                            if (i === 0) child.material = material;
+                          });
+                        }
                       }
                     }
+                  } else if (child.isPoints) {
+                    object_is_points = true;
+                    child.sizeAttenuation = true;
+                    child.sortPoints = true;
                   }
-                } else if (child.isPoints) {
-                  object_is_points = true;
-                  child.sizeAttenuation = true;
-                  child.sortPoints = true;
-                }
 
-                // Check for morph targets
-                if (child.morphTargetDictionary) {
-                  Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
-                    extras.push( [ child.id, key, index ] );
-                  });
-                }
+                  // Check for morph targets
+                  if (child.morphTargetDictionary) {
+                    Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
+                      extras.push( [ child.id, key, index ] );
+                    });
+                  }
 
-                if (Array.isArray( child.material )) {
-                  let child_count_array = 1;
+                  if (Array.isArray( child.material )) {
+                    let child_count_array = 1;
 
-                  initial_transparency_array[ child.name ] = {};
-                  initial_opacity_array[ child.name ] = {};
-                  original_side_array[ child.name ] = {};
-                  original_vertex_color_array[ child.name ] = {};
+                    initial_transparency_array[ child.name ] = {};
+                    initial_opacity_array[ child.name ] = {};
+                    original_side_array[ child.name ] = {};
+                    original_vertex_color_array[ child.name ] = {};
 
-                  child.material.forEach( mtl => {
-                    if (node_materials[ mtl.type ]) mtl = switch_material( mtl );
+                    child.material.forEach( mtl => {
+                      if (node_materials[ mtl.type ]) mtl = switch_material( mtl );
 
-                    if (mtl.name === '') mtl.name = 'material_' + child_count_array;
+                      if (mtl.name === '') mtl.name = 'material_' + child_count_array;
 
-                    if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
+                      if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
+
+                      // Enable post processing button
+                      if (mtl.emissiveMap || (mtl.emissive && (mtl.emissive.r !== 0 ||
+                        mtl.emissive.g !== 0 || mtl.emissive.b !== 0))) {
+
+                        document.getElementById('btn_bloom').disabled = false;
+                        emissive_present = true;
+                      }
+
+                      initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
+                      initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                      original_side_array[ child.name ][ child_count_array ] = mtl.side;
+                      original_vertex_color_array[ child.name ][ child_count_array ] = mtl.vertexColors;
+
+                      mtl.flatShading = false;
+                      mtl.needsUpdate = true;
+
+                      child_count_array += 1;
+                    });
+                  } else {
+                    if (node_materials[ child.material.type ]) child.material = switch_material( child.material );
+
+                    if (child.material.name === '') child.material.name = 'material_' + child_count;
+
+                    if (child.isPoints === true) child.material.size = isMobile === true ? 0.8 : 1.25;
 
                     // Enable post processing button
-                    if (mtl.emissiveMap || (mtl.emissive && (mtl.emissive.r !== 0 ||
-                      mtl.emissive.g !== 0 || mtl.emissive.b !== 0))) {
+                    if (child.material.emissiveMap || (child.material.emissive && (child.material.emissive.r !== 0 ||
+                      child.material.emissive.g !== 0 || child.material.emissive.b !== 0))) {
 
                       document.getElementById('btn_bloom').disabled = false;
                       emissive_present = true;
                     }
 
-                    initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
-                    initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
-                    original_side_array[ child.name ][ child_count_array ] = mtl.side;
-                    original_vertex_color_array[ child.name ][ child_count_array ] = mtl.vertexColors;
+                    initial_transparency[ child.name ] = child.material.transparent;
+                    initial_opacity[ child.name ] = child.material.opacity;
+                    original_side[ child.name ] = child.material.side;
+                    original_vertex_colors[ child.name ] = child.material.vertexColors;
 
-                    mtl.flatShading = false;
-                    mtl.needsUpdate = true;
-
-                    child_count_array += 1;
-                  });
-                } else {
-                  if (node_materials[ child.material.type ]) child.material = switch_material( child.material );
-
-                  if (child.material.name === '') child.material.name = 'material_' + child_count;
-
-                  if (child.isPoints === true) child.material.size = isMobile === true ? 0.8 : 1.25;
-
-                  // Enable post processing button
-                  if (child.material.emissiveMap || (child.material.emissive && (child.material.emissive.r !== 0 ||
-                    child.material.emissive.g !== 0 || child.material.emissive.b !== 0))) {
-
-                    document.getElementById('btn_bloom').disabled = false;
-                    emissive_present = true;
+                    child.material.flatShading = false;
+                    child.material.needsUpdate = true;
                   }
-
-                  initial_transparency[ child.name ] = child.material.transparent;
-                  initial_opacity[ child.name ] = child.material.opacity;
-                  original_side[ child.name ] = child.material.side;
-                  original_vertex_colors[ child.name ] = child.material.vertexColors;
-
-                  child.material.flatShading = false;
-                  child.material.needsUpdate = true;
                 }
-              }
 
-              child_count += 1;
-            });
-
-            gltf_obj.name = 'url_model';
-
-            initial_rotation = gltf_obj.rotation;
-
-            // Add gltf model to scene
-            scene.add( gltf_obj );
-            gltf_obj.position.set( 0, 0, 0 );
-            default_camera.lookAt( gltf_obj.position );
-
-            finish_loading();
-          }, function ( xhr ) { // onProgress
-          }, function ( error1 ) { // onError
-            console.log( error1 );
-
-            console.log( 'Trying DRACO Loader...' );
-
-            draco_loader.load( selected_url_file, function( geometry ) {
-              if (!geometry.attributes.normal) geometry.computeVertexNormals();
-              geometry.normalizeNormals();
-
-              if (geometry.hasAttribute( 'color' )) {
-                vertex_colors_enabled = true;
-                original_vertex_colors[ 'child_0' ] = geometry.attributes.color.array;
-                document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-              }
-
-              let draco_texture = texture_loader.load( 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAzSURBVBhXFYrJDQAxDAIHl5tG9pWOI8/aICGunO9qP0JRNZqwltgspltKdtmfihNMoc0PFNkQjHSfyTIAAAAASUVORK5CYII=' );
-              draco_texture.colorSpace = THREE.SRGBColorSpace;
-              draco_texture.wrapS = THREE.RepeatWrapping;
-              draco_texture.wrapT = THREE.RepeatWrapping;
-              draco_texture.needsUpdate = true;
-
-              draco_material = new THREE.MeshStandardNodeMaterial({
-                side: THREE.DoubleSide,
-                map: draco_texture.clone(),
-                opacity: 1,
-                transparent: true,
-                vertexColors: vertex_colors_enabled
+                child_count += 1;
               });
 
-              gltf_obj = new THREE.Mesh( geometry, draco_material );
-              gltf_obj.name = 'child_0';
+              gltf_obj.name = 'url_model';
 
-              draco_texture.dispose();
-
-              initial_opacity[ gltf_obj.name ] = 1;
               initial_rotation = gltf_obj.rotation;
 
-              // Add DRACO model to scene
+              // Add gltf model to scene
               scene.add( gltf_obj );
               gltf_obj.position.set( 0, 0, 0 );
               default_camera.lookAt( gltf_obj.position );
 
               finish_loading();
             }, function ( xhr ) { // onProgress
-            }, function ( error2 ) { // onError
-              handle_error( error2 );
+            }, function ( error1 ) { // onError
+              console.log( 'Not a GLTF v2.0 file' );
+              console.log( 'Trying DRACO Loader...' );
+
+              draco_loader.load( selected_url_file, function( geometry ) {
+                if (!geometry.attributes.normal) geometry.computeVertexNormals();
+                geometry.normalizeNormals();
+
+                if (geometry.hasAttribute( 'color' )) {
+                  vertex_colors_enabled = true;
+                  original_vertex_colors[ 'child_0' ] = geometry.attributes.color.array;
+                  document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                }
+
+                let draco_texture = texture_loader.load( 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAzSURBVBhXFYrJDQAxDAIHl5tG9pWOI8/aICGunO9qP0JRNZqwltgspltKdtmfihNMoc0PFNkQjHSfyTIAAAAASUVORK5CYII=' );
+                draco_texture.colorSpace = THREE.SRGBColorSpace;
+                draco_texture.wrapS = THREE.RepeatWrapping;
+                draco_texture.wrapT = THREE.RepeatWrapping;
+                draco_texture.needsUpdate = true;
+
+                draco_material = new THREE.MeshStandardNodeMaterial({
+                  side: THREE.DoubleSide,
+                  map: draco_texture.clone(),
+                  opacity: 1,
+                  transparent: true,
+                  vertexColors: vertex_colors_enabled
+                });
+
+                gltf_obj = new THREE.Mesh( geometry, draco_material );
+                gltf_obj.name = 'child_0';
+
+                draco_texture.dispose();
+
+                initial_opacity[ gltf_obj.name ] = 1;
+                initial_rotation = gltf_obj.rotation;
+
+                // Add DRACO model to scene
+                scene.add( gltf_obj );
+                gltf_obj.position.set( 0, 0, 0 );
+                default_camera.lookAt( gltf_obj.position );
+
+                finish_loading();
+              }, function ( xhr ) { // onProgress
+              }, function ( error2 ) { // onError
+                handle_error( error2 );
+              });
             });
-          });
+          }
 
           mouse_wheel = true;
         }
@@ -4273,7 +4368,7 @@
 
         if (selected_url_file !== '') url_loading = true;
 
-        init();
+        init( true, local_files );
       }
 
       async function reset_all( reset = false ) {
@@ -4672,7 +4767,7 @@
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
         }
 
-        mouse_wheel = true;
+        initialize_dragndrop_listeners();
       }
 
       function disabled_changed() {
