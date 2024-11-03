@@ -36,11 +36,8 @@ The `Mobile 3D` button provides access to stripped down and simplified version o
 - All mobile testing was done on an Android mobile phone and an iPad
   - You might need to use the `URL` loading on an iPad
   - Android users should be aware of the following:
-    - Some Chrome updates could break some functionality:
-      - The update of 21 October 2024 does not seem to allow picking and loading textures along with the model:
-        - Media Picker might just show all files as greyed out for some viewers
-      - Previous Chrome version `129.0.6668.100` seems to be working properly
-    - Rely on using multiple browsers, Firefox still seems to be working properly
+    - Some browser updates could break some functionality (either Chrome or Firefox or any other):
+      - Always rely on using multiple browsers, one of them might still be working properly
 
 GitHub servers are providing correct access to all files:
   - Cloning or downloading this repository and using it offline will have a somewhat reduced functionality if run locally without some server
