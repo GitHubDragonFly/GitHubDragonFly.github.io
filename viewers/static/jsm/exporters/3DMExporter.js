@@ -2,7 +2,8 @@ import {
 	BufferAttribute,
 	DefaultLoadingManager,
 	InterleavedBufferAttribute,
-	Matrix4
+	Matrix4,
+	REVISION
 } from "three";
 
 import { deinterleaveAttribute } from "three/addons/utils/BufferGeometryUtils.min.js";
@@ -14,7 +15,7 @@ async function import_decompress() {
 	try {
 
 		const { WebGLRenderer } = await import( "three" );
-		const { decompress } = await import( "three/addons/utils/TextureUtils.min.js" );
+		const { decompress } = await import( parseFloat( REVISION ) > 169.0 ? "three/addons/utils/WebGLTextureUtils.min.js" : "three/addons/utils/TextureUtils.min.js" );
 
 		const renderer = new WebGLRenderer( { antialias: true } );
 
@@ -37,16 +38,11 @@ async function import_decompress() {
 
 			const blitTexture_clone = blitTexture.clone();
 
-			if ( blitTexture_clone.offset.x !== 0 || blitTexture_clone.offset.y !== 0 ||
-				blitTexture_clone.repeat.x !== 1 || blitTexture_clone.repeat.y !== 1 ) {
-
-				blitTexture_clone.offset.set( 0, 0 );
-				blitTexture_clone.repeat.set( 1, 1 );
-
-			}
+			blitTexture_clone.offset.set( 0, 0 );
+			blitTexture_clone.repeat.set( 1, 1 );
 
 			const material = new NodeMaterial();
-			material.fragmentNode = texture( blitTexture_clone ).uv( uv().flipY() );
+			material.fragmentNode = texture( blitTexture_clone, uv().flipY() );
 
 			const width = Math.min( blitTexture_clone.image.width, maxTextureSize );
 			const height = Math.min( blitTexture_clone.image.height, maxTextureSize );

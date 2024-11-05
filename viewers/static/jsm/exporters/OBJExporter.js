@@ -1,6 +1,7 @@
 import {
 	Color,
 	Matrix3,
+	REVISION,
 	Vector2,
 	Vector3
 } from "three";
@@ -10,7 +11,7 @@ async function import_decompress() {
 	try {
 
 		const { WebGLRenderer } = await import( "three" );
-		const { decompress } = await import( "three/addons/utils/TextureUtils.js" );
+		const { decompress } = await import( parseFloat( REVISION ) > 169.0 ? "three/addons/utils/WebGLTextureUtils.min.js" : "three/addons/utils/TextureUtils.min.js" );
 
 		const renderer = new WebGLRenderer( { antialias: true } );
 
@@ -37,7 +38,7 @@ async function import_decompress() {
 			blitTexture_clone.repeat.set( 1, 1 );
 
 			const material = new NodeMaterial();
-			material.fragmentNode = texture( blitTexture_clone ).uv( uv().flipY() );
+			material.fragmentNode = texture( blitTexture_clone, uv().flipY() );
 
 			const width = Math.min( blitTexture_clone.image.width, maxTextureSize );
 			const height = Math.min( blitTexture_clone.image.height, maxTextureSize );
