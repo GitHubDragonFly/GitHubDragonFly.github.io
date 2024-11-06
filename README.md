@@ -130,7 +130,8 @@ Number Type Converter
     - `GLTF WebGPU` standalone viewer is using the official three.js `GLTF Loader` import
     - `OBJ+MTL WebGPU` standalone viewer is using built-in custom version of `OBJ Loader` and `MTL Loader`
     - Both viewers additionally support drag-and-drop and ZIP files
-    - Export functionality is not included in these standalone viewers
+    - Export functionality is currently limited to GLTF / GLB exports in these standalone viewers:
+      - Both viewers are using the official three.js GLTF Exporter
   - Emissive bloom post processing effect (represented with the `PP` button):
     - Currently available in both standalone and desktop versions of GLTF and OBJ+MTL WebGPU viewers
     - This emissive bloom effect can only be applied to a model which has a built-in emissive component:
