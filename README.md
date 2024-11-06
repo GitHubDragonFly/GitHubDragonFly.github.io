@@ -120,7 +120,7 @@ Number Type Converter
     - Mobile viewers show it as the `Browse` button
 - Any of the viewers might have bugs and interface / library related limitations
   - Some viewers might be slow to load some models, usually if using `WASM` of some library
-- Currently experimental three.js `WebGPU` support is included in experimental `GLTF WebGPU`, `OBJ+MTL WebGPU` and `PDB WebGPU` viewers:
+- Currently experimental three.js `WebGPU` support is included in experimental `GLTF`, `OBJ+MTL` and `PDB` WebGPU viewers:
   - Use either Chrome or Safari browser with its `WebGPU experimental features` enabled to test these viewers (and your computer):
     - Not really sure if WebGPU in Firefox Nightly browser works properly yet
   - All 3 viewers are customized and also have some export options available:
