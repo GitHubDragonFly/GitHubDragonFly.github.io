@@ -13,6 +13,7 @@
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.169.0/build/three.module.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/",
+          "three-viewport-gizmo": "https://cdn.jsdelivr.net/npm/three-viewport-gizmo@1.0.1/dist/three-viewport-gizmo.min.js",
           "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/decode.min.js",
           "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/encode.min.js",
           "@monogrid/gainmap-js/libultrahdr": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/libultrahdr.min.js",
@@ -35,11 +36,10 @@
     <script>
       var THREE, manager, rhino_obj, object_is_mesh, object_is_points;
       var rhino_loader, hdrJPGLoader, texture_loader, exr_loader, rgbe_loader;
-      var renderer, scene, camera, render_requested, edges, edges_visible;
-      var mouse_down, mouse_wheel, reset_rotation, events_initialized, link;
+      var renderer, scene, camera, render_requested, edges, edges_visible, link;
+      var controls, gizmo, mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var lil_gui, gui, gui_set = false, gui_multi_layers, params, toneMappingOptions;
       var guiExposure, guiToneMapping, guiBlurriness, guiEnvIntensity, guiIntensity;
-      var controls, orb_controls, gizmo, orb_controls_gizmo;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
@@ -64,8 +64,6 @@
       import * as three_js from "three";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
       import { Rhino3dmLoader } from "../static/jsm/loaders/3DMLoader.min.js";
-      import { OrbitControls } from "../static/jsm/controls/OrbitControls.min.js";
-      import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.min.js";
 
       THREE = three_js;
 
@@ -81,9 +79,6 @@
 
       lil_gui = GUI;
       set_gui_position();
-
-      orb_controls = OrbitControls;
-      orb_controls_gizmo = OrbitControlsGizmo;
     </script>
 
     <script src="../static/assimpjs/assimpjs.min.js" defer></script>
@@ -292,16 +287,9 @@
         margin-left: 2px;
       }
 
-      .fm_gizmo {
-        width: 63px;
-        height: 63px;
-        padding: 4px;
-        margin: 2px;
-      }
-
       .fm {
         color: navy;
-        width: calc(100% - 86px);
+        width: 99%;
         border: 1px solid navy;
         -webkit-border-radius: 2px;
         border-radius: 2px;
@@ -336,7 +324,7 @@
     <!-- Using Rhino3dm library: https://github.com/mcneel/rhino3dm -->
     <!-- Using glTF Transform for DRACO / MESHOPT compression: https://gltf-transform.dev -->
     <!-- Using gainmap-js encoder & decoder: https://github.com/MONOGRID/gainmap-js -->
-    <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/ThreeOrbitControlsGizmo -->
+    <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/three-viewport-gizmo -->
     <!-- Animated GIF export is based on the following example and library: -->
     <!--   https://github.com/mrdoob/omggif-example  -->
     <!--   https://github.com/deanm/omggif  -->
@@ -350,7 +338,6 @@
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
-      <div class="fm_gizmo" id="gizmo" title="Interactive Orbit Controls Gizmo" style="float: right; background-color: black;"></div>
       <div class="fm" id="fm1">
         <label for="file_input" title="3DM (Rhino) Format" style="color: #553801; margin-left: 3px;">3D</label>
         <button title="URL of the remote 3DM model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
@@ -673,12 +660,10 @@
       function show_url() {
         if (url_displayed === true) {
           document.getElementById('url').style.display = 'none';
-          document.getElementById('fm2').style.width = isMobile === true ? '99%' : 'calc(100% - 86px)';
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
           url_displayed = false;
         } else {
           document.getElementById('url').style.display = 'block';
-          document.getElementById('fm2').style.width = '99%';
           document.getElementById('btn_url').style.backgroundColor = 'lightgreen';
           url_displayed = true;
         }
@@ -730,19 +715,6 @@
           document.getElementById('btn_full_screen').style.backgroundColor = 'transparent';
         }
 
-        if (typeof $ !== 'undefined' && isMobile === false) {
-          let fm1_bottom = ( parseInt( $('#fm1').outerHeight( true ) ) );
-
-          if (url_displayed === true) {
-            document.getElementById('url').style.width = fm1_bottom > 70 ? '99%' : 'calc(100% - 86px)';
-
-            let url_bottom = ( fm1_bottom + parseInt( $('#url').outerHeight( true ) ) );
-            document.getElementById('fm2').style.width = url_bottom > 70 ? '99%' : 'calc(100% - 86px)';
-          } else {
-            document.getElementById('fm2').style.width = fm1_bottom > 70 ? '99%' : 'calc(100% - 86px)';
-          }
-        }
-
         if (scene !== undefined) {
           mouse_wheel = true;
 
@@ -753,6 +725,8 @@
 
           camera.aspect = ww / wh;
           camera.updateProjectionMatrix();
+
+          if (gizmo) gizmo.update();
 
           set_gui_position();
 
@@ -810,6 +784,8 @@
         document.getElementById('div_loading').innerHTML = pw;
         document.getElementById('div_loading').style.display = 'block';
 
+        if (gizmo) gizmo.enabled = false;
+
         if (gui_multi_layers === true || (gui_set === true && document.getElementById('equi').checked)) {
           document.getElementById('gui_position').style.display = 'none';
         }
@@ -851,6 +827,8 @@
         document.getElementById('div_loading').innerHTML = '';
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('fixed_menu').style.display = 'block';
+
+        if (gizmo) gizmo.enabled = true;
 
         if (gui_multi_layers === true || (gui_set === true && document.getElementById('equi').checked)) {
           document.getElementById('gui_position').style.display = 'block';
@@ -1227,6 +1205,8 @@
 
         set_filename();
 
+        if (gizmo) gizmo.enabled = false;
+
         if (!link) {
           link = document.createElement( 'a' );
           link.style.display = 'none';
@@ -1366,6 +1346,8 @@
         document.getElementById('export_names').selectedIndex = 0;
 
         set_filename();
+
+        if (gizmo) gizmo.enabled = false;
 
         if (!link) {
           link = document.createElement( 'a' );
@@ -2263,11 +2245,6 @@
           if (grid_visible === true) show_grid();
 
           if (rhino_obj) await scene_cleanup();
-
-          if (gizmo) {
-            document.getElementById('gizmo').removeChild( gizmo.domElement );
-            gizmo = undefined;
-          }
 
           await reset_all( true );
         }
@@ -3463,24 +3440,13 @@
 
         console.timeEnd( 'Loading Time' );
 
-        if (isMobile === true) {
-          document.getElementById('gizmo').style.display = 'none';
-        } else {
-          if (gizmo === undefined) {
-            gizmo = new orb_controls_gizmo( controls, {
-              size: 65,
-              padding: 4,
-              bubbleSizePrimary: 7,
-              bubbleSizeSecondary: 3,
-              lineWidth: 1,
-              fontSize: '8px',
-              fontColor: 'black',
-              fontWeight: 'bold'
-            });
+        if (gizmo === undefined) {
+          const { ViewportGizmo } = await import( "three-viewport-gizmo" );
 
-            document.getElementById('gizmo').addEventListener( 'click', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
-            document.getElementById('gizmo').appendChild( gizmo.domElement );
-          }
+          gizmo = new ViewportGizmo( camera, renderer, { placement: "bottom-right", sphere: { color: 'transparent' } } );
+          gizmo.attachControls( controls );
+
+          gizmo._domElement.addEventListener( 'click', ( event ) => { if (progress.value === 0) mouse_wheel = true; }, false);
         }
 
         document.getElementById('div_loading').style.display = 'none';
@@ -3511,11 +3477,6 @@
         mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
-
-        if (gizmo) {
-          document.getElementById('gizmo').removeChild( gizmo.domElement );
-          gizmo.dispose();
-        }
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
@@ -3926,7 +3887,7 @@
               }
             } else {
               if (mouse_wheel === true) {
-                if (count > 10) {
+                if (count > 20) {
                   mouse_wheel = false;
                   count = 0;
                 } else {
@@ -3936,10 +3897,11 @@
             }
 
             controls.update();
-            if (gizmo) gizmo.update();
 
             renderer.clear();
             renderer.render( scene, camera );
+
+            if (gizmo && gizmo.enabled === true) gizmo.render();
           }
         }
       }
@@ -4077,10 +4039,9 @@
           selected_url_file = '';
           enable_disable( true );
 
-          if (gizmo) {
-            document.getElementById('gizmo').removeChild( gizmo.domElement );
-            gizmo.dispose();
-          }
+          if (gizmo) gizmo.dispose();
+
+          window.localStorage.clear();
         }
 
         disabled_changed();
@@ -4146,6 +4107,11 @@
             child.geometry.dispose();
           }
         });
+
+        if (gizmo) {
+          gizmo.dispose();
+          gizmo = undefined;
+        }
 
         if (isMobile === false) {
           renderer.info.reset();
@@ -4217,15 +4183,6 @@
           $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
         }
-
-        if (isMobile === true) {
-          $('#gizmo')[ 0 ].style.display = 'none';
-          $('#fm1')[ 0 ].style.width = '99%';
-          $('#fm2')[ 0 ].style.width = '99%';
-          $('#url')[ 0 ].style.width = '99%';
-        }
-
-        mouse_wheel = true;
       }
 
       function disabled_changed() {
