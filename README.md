@@ -294,10 +294,9 @@ Number Type Converter
 ## Applicable to most viewers
 
 - Menu with controls can be located either on top or on the bottom of the page
-- Almost all viewers include the interactive [Orbit Controls Gizmo](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) for orientation
+- Almost all viewers include the interactive `Orbit Controls Gizmo` for orientation, either [old](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo) or [new](https://github.com/Fennec-hub/three-viewport-gizmo) version
 - Most viewers, if not all, have been tested as functional in the latest Firefox / Chrome / Edge / Safari browsers
   - do note that mobile Safari browser might be finicky about certain features
-- For quick testing of any viewer, see the `URLS4MODELS.md` file for corresponding URL examples
 - Some loading instructions are also available in [HTML_CSS_JS_Flask](https://github.com/GitHubDragonFly/HTML_CSS_JS_Flask) and [HTML_CSS_JS](https://github.com/GitHubDragonFly/HTML_CSS_JS) repositories
 - Drag-and-drop is currently only supporteded in current standalone and desktop WebGPU viewers
 - ZIP file support is currently only available in OBJ+MTL viewers and current standalone and desktop WebGPU viewers
@@ -309,8 +308,9 @@ Number Type Converter
 - Import files via remote URL:
   - Multiple comma separated URLs are allowed in some viewers and can be from mixed websites
   - For single URL:
-    - most viewers support GitHub
-    - some viewers support Dropbox and URLs without extension
+    - Most viewers support GitHub
+    - Some viewers support Dropbox and URLs without extension
+    - For quick testing, see the `URLS4MODELS.md` file for corresponding URL examples
   - URLs should have no CORS restrictions
 - Import formats, where applicable, with any optional or required textures:
   - 3DS, 3DM, 3MF, AMF, DAE, FBX, IFC, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, PRWM, USDZ, WRL, XYZ
