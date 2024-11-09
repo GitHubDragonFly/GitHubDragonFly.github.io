@@ -529,21 +529,22 @@ PLY+STL Viewer
 
 # Notes about three.js Texture Viewer
 
-- Supporting the following image formats:
+- Use the `T` button to switch between loaded textures
+- Supports the following image formats:
   - PNG, APNG, JPG, JPEG, JFIF, PJPEG, PJP, BMP, DIB, GIF, PCX, TIF, TIFF
   - WEBP, TGA, SVG, DDS, KTX, KTX2, EXR, HDR, BASIS and Lottie JSON
-  - Also supported are: MP4 / WEBM / OGV video files and M4A / M4B / OGG audio files
+  - Also supported are: MP4, WEBM and OGV video files as well as M4A, M4B and OGG audio files
 - It is using [gainmap-js](https://github.com/MONOGRID/gainmap-js) encoder and decoder:
-  - Support loading a single JPEG file with integrated gainmaps
-  - Support loading EXR and HDR files which will be encoded on-the-fly into a single JPEG file with integrated gainmaps
-  - Set to handle still JPEG without gainmaps, PNG, BMP, GIF and WEBP texture loading
+  - Support loading a single `JPEG` file with integrated gainmaps
+  - Support loading `EXR` and `HDR` files:
+    - Encoded on-the-fly into a single `JPEG` file with integrated gainmaps
+  - Handle still `JPEG` without gainmaps, `PNG`, `BMP`, `GIF` and `WEBP` texture loading
 - Animated GIF file support is powered in part by [omggif](https://github.com/deanm/omggif) and displayed with [THREE.CSS2DRenderer](https://threejs.org/docs/#examples/en/renderers/CSS2DRenderer)
 - Animated PNG file support is powered in part by [UPNG.js](https://github.com/photopea/UPNG.js) and displayed with [THREE.CSS2DRenderer](https://threejs.org/docs/#examples/en/renderers/CSS2DRenderer)
 - Animated WEBP file is displayed with [THREE.CSS2DRenderer](https://threejs.org/docs/#examples/en/renderers/CSS2DRenderer)
 - All of the above animated files are "view only" so most viewer controls will not have any effect and will be disabled
-- TIF / TIFF image file support is powered by [UTIF.js](https://github.com/photopea/UTIF.js)
+- TIF or TIFF image file support is powered by [UTIF.js](https://github.com/photopea/UTIF.js)
 - PCX image file support is powered by [pcx-js](https://github.com/warpdesign/pcx-js)
-- Use the `T` button to switch between textures
 - Texture is displayed on a rotatable plane which can also be moved and zoomed in / out:
   - This is not applicable to Animated GIF - PNG - WEBP and / or video files (gizmo will disappear)
 - Video player has its own controls for playback and full-screen switching
@@ -551,7 +552,7 @@ PLY+STL Viewer
 - For certain formats and their manipulation an easy alternative to this viewer would be `https://ezgif.com`
 - Most of these files can easily be viewed with some operating system applications or by the browsers themselves (like animated GIF / PNG / WEBP or MP4 / WEBM / OGV videos):
   - In Windows, for example, right-click the file itself then choose `Open With` and select `Firefox` browser
-  - Windows users could also consider getting the [QuickLook](https://apps.microsoft.com/store/detail/quicklook/9NV4BS3L1H4S) app
+  - Windows users could possibly benefit from getting the [QuickLook](https://apps.microsoft.com/store/detail/quicklook/9NV4BS3L1H4S) app
 
 ![Texture Viewer](https://github.com/user-attachments/assets/6d1cdbc4-f89a-4f6e-b48f-8504d19a89aa)
 
