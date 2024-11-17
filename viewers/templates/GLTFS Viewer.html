@@ -31,13 +31,13 @@
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
     <!-- For encoding GLB exports with draco compression -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
       var THREE, g_loader, ktx2_loader, texture_loader, gltf_loader, draco_loader, tga_loader, dds_loader, exr_loader, rgbe_loader, hdrJPGLoader;
       var fflate, vrm, vrm_registered = false, manager, renderer, scene, scenes, default_camera, camera, cameras, cam_id, skeletonUtils;
       var parser, controls, orb_controls, gizmo, orb_controls_gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
-      var animations, animation_mixer, current_animation, extras, current_extra, clock, object_is_points;
+      var animations, animation_mixer, current_animation, extras, current_extra, clock, object_is_points, bg_flip;
       var gui, gui_set = false, guiExposure = null, params, toneMappingOptions, tex_res, tex_flip, tex_fmt;
       var gltfMaterialsVariantsExtension, gltfVideoTextureExtension, equi_enabled, depthTest_enabled;
       var gltf_obj, current_side, resource_path, edges, edges_visible, wireframe_enabled, link;
@@ -372,7 +372,8 @@
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".vrm, .gltf, .glb, .drc, .bin, .dds, .ktx2, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
         <label for="file_image_input" title="Background Image" style="color: #553801;">BGND</label>
-        <input type="file" title="Background Image" id="file_image_input" accept=".exr, .hdr, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
+        <input type="file" title="Background Image" id="file_image_input" accept=".exr, .hdr, .ktx2, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
+        <button title="Set Background Image Y-Flip" id="btn_bg_flip" onclick="set_bg_flip();" style="background-color: transparent; color: blue;" disabled>Y</button>
         <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="background-color: transparent; color: blue; min-width: 25px;" disabled>Eq</button>
         <button title="Toggle Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
         <button title="Model Opacity - double click to enable/disable" id="btn_dc_opacity" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" ondblclick="set_opacity();" onclick="show_hide_dropdown_opacity();">O
@@ -684,6 +685,22 @@
       }
 
       function return_false() { return false; }
+
+      function set_bg_flip() {
+        if (bg_flip === false) {
+          bg_flip = true;
+          document.getElementById('btn_bg_flip').style.backgroundColor = 'lightgreen';
+        } else {
+          bg_flip = false;
+          document.getElementById('btn_bg_flip').style.backgroundColor = 'transparent';
+        }
+
+        if (document.getElementById('file_image_input').value) {
+          scene.background.dispose();
+          scene.background = null;
+          set_scene_image();
+        }
+      }
 
       function set_gui_position() {
         if (menu_location_bottom === false) {
@@ -1741,14 +1758,7 @@
             hdrJPGLoader.load( url, async function( texture ) {
               let tex = await texture.toDataTexture();
 
-              if (tex.encoding === 'srgb') {
-                tex.encoding = THREE.sRGBEncoding;
-              } else if (tex.encoding === 'srgb-linear') {
-                tex.encoding = THREE.LinearEncoding;
-              }
-
               tex.mapping = THREE.EquirectangularReflectionMapping;
-              tex.format = THREE.RGBAFormat;
               tex.needsUpdate = true;
 
               scene.background = tex.clone();
@@ -1825,6 +1835,46 @@
         if (gui) set_gui_position();
       }
 
+      // internally used modified decompress function from TextureUtils.js
+
+      async function decompress( texture ) {
+
+        let texture_clone = texture.clone();
+
+        let _renderer = new THREE.WebGLRenderer( { antialias: false } );
+        renderer.outpuEncoding = texture_clone.encoding;
+
+        let _camera = new THREE.PerspectiveCamera();
+        let _scene = new THREE.Scene();
+
+        // Set the texture as scene's background
+
+        _scene.background = texture_clone;
+
+        _renderer.setSize( texture_clone.image.width, texture_clone.image.height );
+        _renderer.clear();
+        _renderer.render( _scene, _camera );
+
+        let readableTexture = new THREE.CanvasTexture( _renderer.domElement );
+
+        readableTexture.encoding = texture.encoding;
+        readableTexture.minFilter = texture.minFilter;
+        readableTexture.magFilter = texture.magFilter;
+        readableTexture.wrapS = texture.wrapS;
+        readableTexture.wrapT = texture.wrapT;
+        readableTexture.name = texture.name;
+        readableTexture.needsUpdate = true;
+
+        _scene.background.dispose();
+        texture_clone.dispose();
+        texture.dispose();
+
+        _renderer.dispose();
+        _renderer = null;
+
+        return readableTexture;
+      }
+
       async function set_scene_image( reset = false ) {
         let fii = document.getElementById('file_image_input').files[ 0 ];
 
@@ -1841,17 +1891,11 @@
 
           let fn_uc = fii.name.toUpperCase();
 
-          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.SVG') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
+          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.KTX2') || fn_uc.endsWith('.SVG') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
             hdrJPGLoader.load( URL.createObjectURL( fii ) , async function( texture ) {
               URL.revokeObjectURL( fii );
 
               let hdrJpgEquirectangularMap = await texture.toDataTexture();
-
-              if (hdrJpgEquirectangularMap.encoding === 'srgb') {
-                hdrJpgEquirectangularMap.encoding = THREE.sRGBEncoding;
-              } else if (hdrJpgEquirectangularMap.encoding === 'srgb-linear') {
-                hdrJpgEquirectangularMap.encoding = THREE.LinearEncoding;
-              }
 
               if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
                 const repeat_x = hdrJpgEquirectangularMap.image.width / 2048;
@@ -1860,12 +1904,12 @@
                 hdrJpgEquirectangularMap.repeat.set( repeat_x, repeat_y );
               }
 
+              hdrJpgEquirectangularMap.flipY = (bg_flip === true);
+
               hdrJpgEquirectangularMap.needsUpdate = true;
 
               if (equi_enabled === true) {
                 hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
-                hdrJpgEquirectangularMap.encoding = THREE.sRGBEncoding;
-                hdrJpgEquirectangularMap.format = THREE.RGBAFormat;
                 scene.background = hdrJpgEquirectangularMap.clone();
                 scene.environment = hdrJpgEquirectangularMap.clone();
               } else {
@@ -1888,14 +1932,52 @@
 
               URL.revokeObjectURL( fii );
             });
+          } else if (fn_uc.endsWith('.KTX2')) {
+            ktx2_loader.load( URL.createObjectURL( fii ), async function( texture ) {
+              URL.revokeObjectURL( fii );
+
+              // Convert to PNG so it shows on most platforms
+              // Unsupported KTX2 formats might log a warning
+
+              let canvas_tex = await decompress( texture );
+
+              texture.dispose();
+
+              texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), function( png_tex ) {
+                canvas_tex.dispose();
+
+                png_tex.flipY = (bg_flip === true);
+
+                if (equi_enabled === true) {
+                  png_tex.mapping = THREE.EquirectangularReflectionMapping;
+                  scene.background = png_tex.clone();
+                  scene.environment = png_tex.clone();
+                } else {
+                  scene.background = png_tex.clone();
+                }
+
+                mouse_wheel = true;
+
+                png_tex.dispose();
+
+                set_bgenv_message( true );
+              });
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              document.getElementById('div_message').innerText = 'Error loading image';
+              console.log( 'Error loading Background Image File!' );
+              console.log( error );
+
+              URL.revokeObjectURL( fii );
+            });
           } else if (fn_uc.endsWith('.SVG')) {
             texture_loader.load( URL.createObjectURL( fii ) , function( texture ) {
               URL.revokeObjectURL( fii );
 
+              texture.flipY = (bg_flip === false);
+
               if (equi_enabled === true) {
                 texture.mapping = THREE.EquirectangularReflectionMapping;
-                texture.encoding = THREE.sRGBEncoding;
-                texture.format = THREE.RGBAFormat;
                 scene.background = texture.clone();
                 scene.environment = texture.clone();
               } else {
@@ -2000,12 +2082,6 @@
 
               let hdrJpgEquirectangularMap = await texture.toDataTexture();
 
-              if (hdrJpgEquirectangularMap.encoding === 'srgb') {
-                hdrJpgEquirectangularMap.encoding = THREE.sRGBEncoding;
-              } else if (hdrJpgEquirectangularMap.encoding === 'srgb-linear') {
-                hdrJpgEquirectangularMap.encoding = THREE.LinearEncoding;
-              }
-
               if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
                 const repeat_x = hdrJpgEquirectangularMap.image.width / 2048;
                 const repeat_y = hdrJpgEquirectangularMap.image.height / 2048;
@@ -2013,11 +2089,12 @@
                 hdrJpgEquirectangularMap.repeat.set( repeat_x, repeat_y );
               }
 
+              hdrJpgEquirectangularMap.flipY = (bg_flip === true);
+
               hdrJpgEquirectangularMap.needsUpdate = true;
 
               if (equi_enabled === true) {
                 hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
-                hdrJpgEquirectangularMap.format = THREE.RGBAFormat;
                 scene.background = hdrJpgEquirectangularMap.clone();
                 scene.environment = hdrJpgEquirectangularMap.clone();
               } else {
@@ -2655,7 +2732,11 @@
 
         if (clock === undefined) clock = new THREE.Clock();
 
-        if (scene === undefined) scene = new THREE.Scene();
+        if (scene === undefined) {
+          scene = new THREE.Scene();
+          scene.backgroundRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
+          scene.environmentRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
+        }
 
         scene.backgroundBlurriness = 0.00001;
         scene.backgroundIntensity = 0.95;
@@ -4708,6 +4789,8 @@
         bgnd_linear_gradient = false;
         document.getElementById('btn_bgnd_linear_gradient').disabled = false;
         document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+        bg_flip = false;
+        document.getElementById('btn_bg_flip').style.backgroundColor = 'transparent';
 
         // Reset camera and vertex colors related values
         if (cameras) {
@@ -4947,6 +5030,7 @@
         document.getElementById('btn_dc_ali').disabled = disable;
         document.getElementById('btn_dc_dli').disabled = disable;
         document.getElementById('btn_equi').disabled = disable;
+        document.getElementById('btn_bg_flip').disabled = disable;
         document.getElementById('btn_quick_x').disabled = disable;
         document.getElementById('btn_wireframe').disabled = disable;
         document.getElementById('btn_dc_opacity').disabled = disable;
