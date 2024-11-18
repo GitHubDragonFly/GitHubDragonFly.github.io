@@ -173,14 +173,15 @@ Number Type Converter
 - Special notes about `Image to 3D Mesh Viewer`:
   - It shows as `IMG2MESH` under the `General` option of the main menu
   - Based on thrax version of code: `https://tartan-swanky-plutonium.glitch.me/`
-  - Original code: `https://github.com/shaoruu/three-extruded-image`
+    - Original code: `https://github.com/shaoruu/three-extruded-image`
   - Supported import image formats:
-    - BMP, DDS, DIB, GIF, ICO, JPEG, PNG, SVG, TGA, TIFF, WEBP
+    - BMP, DDS, DIB, EXR, GIF, HDR, ICO, JPEG, PNG, SVG, TGA, TIFF, WEBP
     - Local blobs and remote URL loading are supported:
       - URLs have to end with supported extension
       - GitHub URLs are supported
   - Supports exporting to the following formats:
     - Animated GIF and PNG (see general notes about these formats further below)
+    - PNG, KTX2 and WEBP images at unchanged original image size
     - 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
       - Maximum exported texture size is currently limited to 2k
 
