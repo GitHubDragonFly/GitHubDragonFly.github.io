@@ -36,9 +36,9 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
-      var THREE, texture_loader, ifc_loader, exr_loader, rgbe_loader, hdrJPGLoader;
+      var THREE, texture_loader, ifc_loader, ktx2_loader, exr_loader, rgbe_loader, hdrJPGLoader;
       var manager, fflate, renderer, scene, camera, ifc_obj, render_requested, isMobile;
-      var first_run = false, fr_count = 0, controls, gizmo, link;
+      var first_run = false, fr_count = 0, controls, gizmo, link, bg_flip;
       var grid, polar_grid, grid_visible, polar_grid_visible, edges, edges_visible;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, count = 0;
       var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
@@ -334,7 +334,8 @@
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();"accept=".ifc" />
         <label for="file_image_input" title="Background Image" style="color: #553801;">BGND</label>
-        <input title="Background Image" type="file" id="file_image_input" accept=".exr, .hdr, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
+        <input title="Background Image" type="file" id="file_image_input" accept=".exr, .hdr, .ktx2, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
+        <button title="Set Background Image Y-Flip" id="btn_bg_flip" onclick="set_bg_flip();" style="background-color: transparent; color: blue;" disabled>Y</button>
         <button title="Toggle Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
         <button title="Model Opacity - double click to enable/disable" id="btn_dc_opacity" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" ondblclick="set_opacity();" onclick="show_hide_dropdown_opacity();">O
           <div id="dc_opacity" class="dropdown-content" style="display: none;" onfocusout="if (enable_opacity === true) hide_dropdown_opacity();">
@@ -598,6 +599,34 @@
       }
 
       function return_false() { return false; }
+
+      async function set_bg_flip() {
+        if (bg_flip === false) {
+          bg_flip = true;
+          document.getElementById('btn_bg_flip').style.backgroundColor = 'lightgreen';
+        } else {
+          bg_flip = false;
+          document.getElementById('btn_bg_flip').style.backgroundColor = 'transparent';
+        }
+
+        if (document.getElementById('file_image_input').value) {
+          if (document.getElementById('equi').checked) {
+            scene.environment.dispose();
+            scene.environment = null;
+          }
+
+          scene.background.dispose();
+          scene.background = null;
+
+          await set_scene_image();
+
+          if (document.getElementById('equi').checked) {
+            scene.backgroundBlurriness = params.backBlurriness === 0 ? 0.00001 : params.backBlurriness;
+            scene.backgroundIntensity = params.backIntensity;
+            if ( params.toneMapping !== 'None' ) renderer.toneMappingExposure = params.exposure;
+          }
+        }
+      }
 
       function set_gui_position() {
         if (menu_location_bottom === false) {
@@ -1542,27 +1571,39 @@
 
       function set_envMap( set_env_map = false ) {
         if (ifc_obj) {
-          if (Array.isArray( ifc_obj.material )) {
-            ifc_obj.material.forEach( mtl => {
-              if (set_env_map === true) {
-                mtl.envMap = scene.environment;
-              } else {
-                mtl.envMap = null;
-              }
+          ifc_obj.traverse( ( child ) => {
+            if (child.isMesh && child.material) {
+              if (Array.isArray( child.material )) {
+                child.material.forEach( mtl => {
+                  if (mtl.envMap) {
+                    mtl.envMap.dispose();
+                    mtl.envMap = null;
+                  }
 
-              mtl.needsUpdate = true;
-            });
-          } else {
-            if (set_env_map === true) {
-              ifc_obj.material.envMap = scene.environment;
-            } else {
-              ifc_obj.material.envMap = null;
+                  if (set_env_map === true) {
+                    mtl.envMap = scene.environment;
+                    mtl.envMapRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
+                  }
+
+                  mtl.needsUpdate = true;
+                });
+              } else {
+                if (child.material.envMap) {
+                  child.material.envMap.dispose();
+                  child.material.envMap = null;
+                }
+
+                if (set_env_map === true) {
+                  child.material.envMap = scene.environment;
+                  child.material.envMapRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
+                }
+
+                child.material.needsUpdate = true;
+              }
             }
 
-            ifc_obj.material.needsUpdate = true;
-          }
-
-          mouse_wheel = true;
+            mouse_wheel = true;
+          });
         }
       }
 
@@ -1576,8 +1617,6 @@
         params.backIntensity = 1.0;
         params.setEnvMap = false;
         params.exposure = 1.0;
-
-        mouse_wheel = true;
 
         set_envMap( false );
 
@@ -1616,7 +1655,7 @@
 
           let fn_uc = fii.name.toUpperCase();
 
-          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.SVG') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
+          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.SVG') || fn_uc.endsWith('.KTX2') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
             hdrJPGLoader.load( URL.createObjectURL( fii ) , async function( texture ) {
               URL.revokeObjectURL( fii );
 
@@ -1628,6 +1667,8 @@
 
                 hdrJpgEquirectangularMap.repeat.set( repeat_x, repeat_y );
               }
+
+              hdrJpgEquirectangularMap.flipY = (bg_flip === true);
 
               hdrJpgEquirectangularMap.needsUpdate = true;
 
@@ -1656,9 +1697,54 @@
 
               URL.revokeObjectURL( fii );
             });
+          } else if (fn_uc.endsWith('.KTX2')) {
+            const { decompress } = await import( 'three/addons/utils/WebGLTextureUtils.min.js' );
+
+            ktx2_loader.load( URL.createObjectURL( fii ), async function( texture ) {
+              URL.revokeObjectURL( fii );
+
+              // Convert to PNG so it shows on most platforms
+              // Unsupported KTX2 formats might log a warning
+
+              texture.colorSpace = THREE.SRGBColorSpace;
+
+              let canvas_tex = await decompress( texture );
+
+              texture.dispose();
+
+              texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), function( png_tex ) {
+                canvas_tex.dispose();
+
+                png_tex.flipY = (bg_flip === false);
+
+                if (document.getElementById('equi').checked) {
+                  png_tex.mapping = THREE.EquirectangularReflectionMapping;
+                  scene.background = png_tex.clone();
+                  scene.environment = png_tex.clone();
+                  if (params.setEnvMap === true) set_envMap( true );
+                } else {
+                  scene.background = png_tex.clone();
+                }
+
+                mouse_wheel = true;
+
+                png_tex.dispose();
+
+                set_bgenv_message( true );
+              });
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              document.getElementById('div_message').innerText = 'Error loading image';
+              console.log( 'Error loading Background Image File!' );
+              console.log( error );
+
+              URL.revokeObjectURL( fii );
+            });
           } else if (fn_uc.endsWith('.SVG')) {
             texture_loader.load( URL.createObjectURL( fii ) , function( texture ) {
               URL.revokeObjectURL( fii );
+
+              texture.flipY = (bg_flip === false);
 
               if (document.getElementById('equi').checked) {
                 texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -1773,6 +1859,8 @@
 
                 hdrJpgEquirectangularMap.repeat.set( repeat_x, repeat_y );
               }
+
+              hdrJpgEquirectangularMap.flipY = (bg_flip === true);
 
               hdrJpgEquirectangularMap.needsUpdate = true;
 
@@ -2144,6 +2232,15 @@
           renderer.autoClear = false;
 
           document.body.appendChild( renderer.domElement );
+
+          if (ktx2_loader === undefined) {
+            const { KTX2Loader } = await import( 'three/addons/loaders/KTX2Loader.min.js' );
+
+            ktx2_loader = new KTX2Loader( manager );
+            ktx2_loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/basis/' );
+            ktx2_loader.detectSupport( renderer );
+            manager.addHandler( /\.ktx2$/i, ktx2_loader );
+          }
         }
 
         if (hdrJPGLoader === undefined) {
@@ -2151,7 +2248,11 @@
           hdrJPGLoader = new HDRJPGLoader( renderer );
         }
 
-        if (scene === undefined) scene = new THREE.Scene();
+        if (scene === undefined) {
+          scene = new THREE.Scene();
+          scene.backgroundRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
+          scene.environmentRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
+        }
 
         scene.backgroundBlurriness = 0;
         scene.backgroundIntensity = 1.1;
@@ -2823,6 +2924,8 @@
         bgnd_linear_gradient = false;
         document.getElementById('btn_bgnd_linear_gradient').disabled = false;
         document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+        bg_flip = false;
+        document.getElementById('btn_bg_flip').style.backgroundColor = 'transparent';
         vertex_colors_enabled = false;
         document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
         random_vertex_colors_enabled = false;
@@ -2960,6 +3063,7 @@
         document.getElementById('btn_dc_z').disabled = disable;
         document.getElementById('btn_dc_ali').disabled = disable;
         document.getElementById('btn_dc_dli').disabled = disable;
+        document.getElementById('btn_bg_flip').disabled = disable;
         document.getElementById('btn_quick_x').disabled = disable;
         document.getElementById('btn_wireframe').disabled = disable;
         document.getElementById('btn_dc_opacity').disabled = disable;
