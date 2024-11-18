@@ -183,7 +183,7 @@ Number Type Converter
     - Animated GIF and PNG (see general notes about these formats further below)
     - PNG, KTX2 and WEBP images at unchanged original image size
     - 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
-      - Maximum exported texture size is currently limited to 2k
+      - Maximum exported texture size is currently limited only for 3DM exports to 2.5k
 
 - Special notes about `AR / VR Viewer`:
   - Using slightly modified version of the three.js `DeviceOrientationControls`, last available in r133
