@@ -18,7 +18,8 @@
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.1.0",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.1.0",
           "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.21.0/meshopt_encoder.module.min.js",
-          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.21.0/meshopt_simplifier.module.min.js"
+          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.21.0/meshopt_simplifier.module.min.js",
+          "ktx2-encoder": "https://esm.sh/ktx2-encoder@0.0.0-experimental.5"
         }
       }
     </script>
@@ -36,7 +37,7 @@
       var img_obj, gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
       var grid, polar_grid, grid_visible, polar_grid_visible, slider_height = 0;
       var ambientLight, directionalLight, isMobile, filename, zip, count = 0;
-      var ww = window.innerWidth, wh = window.innerHeight;
+      var ww = window.innerWidth, wh = window.innerHeight, isKTX2, mime_type;
       var uSync, local_files, zip_file, unzipped_files, filesMap;
       var rot_x = 0, rot_y = 0, rot_z = 0, bounding_box, gif_export;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
@@ -310,7 +311,7 @@
         <label for="btn_url" title="Get remote image via URL"></label>
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="btn_file_input" title="Browse Local Files"></label>
-        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".zip, .dds, .dib, .ico, .ktx2, .tga, .tif, .tiff, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" />
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".zip, .dds, .dib, .exr, .hdr, .ico, .ktx2, .tga, .tif, .tiff, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" />
         <label for="btn_file_image_input" title="Background Image" style="display: none;">BGND</label>
         <button title="Background Image" id="btn_file_image_input" style="display: none; min-width: 54px;" onclick="document.getElementById('file_image_input').click();">Browse</button>
         <input type="file" id="file_image_input" style="display: none;" onchange="set_scene_image();" accept=".exr, .hdr, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" />
@@ -342,6 +343,15 @@
           <option title="Animated Graphics Exports" value="ani" disabled>- ANI -</option>
           <option title="GIF - Animated GIF" value="gif" onclick="export_animated_gif();">GIF</option>
           <option title="PNG - Animated PNG (APNG)" value="apng" onclick="export_animated_png();">PNG</option>
+          <option title="Image Exports" value="img" disabled>- IMG -</option>
+          <option title="PNG Image Format" value="png" onclick="export_image();">PNG</option>
+          <option title="KTX2 Image Format ETC1S" value="ktx2e" onclick="export_image( 'ktx2e' );">KTX2e</option>
+          <option title="KTX2 Image Format UASTC" value="ktx2u" onclick="export_image( 'ktx2u' );">KTX2u</option>
+          <option title="WEBP Image Format" value="webp" onclick="export_image( 'webp' );">WEBP</option>
+          <option title="PNG Image Format Y-flipped" value="png_y" onclick="export_image( 'png', true );">PNG_Y</option>
+          <option title="KTX2 Image Format ETC1S Y-flipped" value="ktx2e_y" onclick="export_image( 'ktx2e', true );">KTX2e_Y</option>
+          <option title="KTX2 Image Format UASTC Y-flipped" value="ktx2u_y" onclick="export_image( 'ktx2u', true );">KTX2u_Y</option>
+          <option title="WEBP Image Format Y-flipped" value="webp_y" onclick="export_image( 'webp', true );">WEBP_Y</option>
         </select>
       </div>
       <div class="fm" id="url" style="display: none;">
@@ -878,6 +888,33 @@
             await process_zip( '_3DM' );
           }, function( error ) { handle_export_error( error ); }, options );
         }
+      }
+
+      async function export_image( tex_fmt = 'png', tex_flip = false ) {
+        document.getElementById('export_names').selectedIndex = 0;
+
+        await start_export();
+
+        const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+
+        let gltf_exporter = new GLTFExporter( manager );
+
+        let options = {	binary: true, maxTextureSize: Infinity };
+
+        gltf_exporter.parse( img_obj.clone(), async json => {
+          try {
+            await texture_only_export( new Uint8Array( json ), tex_fmt, tex_flip );
+          } catch (error) {
+            handle_export_error( error );
+            return;
+          }
+
+          let str = '_IMG';
+          if (tex_flip === true) str += '_Y';
+          str += ' ' + tex_fmt;
+
+          await process_zip( str );
+        }, function( error ) { handle_export_error( error ); }, options);
       }
 
       async function export_animated_gif() {
@@ -1607,29 +1644,33 @@
         mouse_wheel = true;
       }
 
-      async function convert_dds_ktx2_to_png( url ) {
+      async function convert( url, hd = false ) {
         const { decompress } = await import( "three/addons/utils/WebGLTextureUtils.min.js" );
 
         let tex;
 
         await new Promise( resolve => {
           loader.load( url, function( texture ) {
+            if (hd === false) texture.colorSpace = THREE.SRGBColorSpace;
             resolve( tex = texture.clone() );
             texture.dispose();
           });
         });
 
-        // convert to PNG
-
         let canvas_tex = await decompress( tex );
+
+        tex.dispose();
+
+        if (hd === true) return canvas_tex;
+
+        // convert to PNG
 
         let new_texture;
 
         await new Promise( resolve => {
           texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), function( texture ) {
-            texture.needsUpdate = true;
-            resolve( new_texture = texture.clone() );
-            texture.dispose();
+            canvas_tex.dispose();
+            resolve( new_texture = texture.clone(), texture.dispose() );
           });
         });
 
@@ -1741,18 +1782,26 @@
       };
 
       const createExtrudedImageMesh = async ( { url, depth = 0.1, quadPerPixel = false } ) => {
-        let tex;
+        let tex, hd = false;
 
         if (loader === dds_loader || loader === ktx2_loader) {
-          tex = await convert_dds_ktx2_to_png( url );
+          tex = await convert( url );
+          tex.minFilter = tex.magFilter = THREE.LinearFilter;
           tex.flipY = true;
+        } else if (loader === exr_loader || loader === rgbe_loader) {
+          tex = await convert( url, true );
+          tex.minFilter = tex.magFilter = THREE.LinearFilter;
+          tex.flipY = false;
+          hd = true;
         } else {
           tex = await loader.loadAsync( url );
+          tex.minFilter = tex.magFilter = THREE.NearestFilter;
           tex.flipY = false;
         }
 
-        tex.minFilter = tex.magFilter = THREE.NearestFilter;
-        tex.colorSpace = 'srgb';
+        if (hd === false) {
+          tex.colorSpace = THREE.SRGBColorSpace;
+        }
 
         let g = extrudedImageGeometry( { image: tex.source.data, depth, quadPerPixel } );
 
@@ -1769,10 +1818,12 @@
       };
 
       async function set_loader( fn_uc ) {
-        let image_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.ICO', '.JPG', '.JPEG', '.JFIF',
+        let image_extensions = [ '.BMP', '.DDS', '.DIB', '.EXR', '.HDR', '.GIF', '.ICO', '.JPG', '.JPEG', '.JFIF',
           '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.TIF', '.TIFF', '.WEBP' ];
 
         if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) {
+          let ext = (fn_uc.substring( fn_uc.lastIndexOf( '.' ) + 1)).toLowerCase();
+
           if (fn_uc.endsWith( '.TIF' ) || fn_uc.endsWith( '.TIFF' )) {
             if (tiff_loader === undefined) {
               const { TIFFLoader } = await import( "three/addons/loaders/TIFFLoader.min.js" );
@@ -1788,6 +1839,8 @@
 
             loader = tga_loader;
           } else if (fn_uc.endsWith( '.KTX2' )) {
+            isKTX2 = true;
+
             if (ktx2_loader === undefined) {
               const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
               ktx2_loader = new KTX2Loader( manager );
@@ -1797,6 +1850,23 @@
             }
 
             loader = ktx2_loader;
+          } else if (fn_uc.endsWith( '.EXR' )) {
+            if (exr_loader === undefined) {
+              const { EXRLoader } = await import( "three/addons/loaders/EXRLoader.min.js" );
+              exr_loader = new EXRLoader( manager );
+              exr_loader.setDataType( THREE.FloatType );
+              manager.addHandler( /\.exr$/i, exr_loader );
+            }
+
+            loader = exr_loader;
+          } else if (fn_uc.endsWith( '.HDR' )) {
+            if (rgbe_loader === undefined) {
+              const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
+              rgbe_loader = new RGBELoader();
+              rgbe_loader.setDataType( THREE.HalfFloatType );
+            }
+
+            loader = rgbe_loader;
           } else if (fn_uc.endsWith( '.DDS' )) {
             if (dds_loader === undefined) {
               const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
@@ -1807,6 +1877,56 @@
           } else {
             loader = texture_loader;
           }
+
+          set_mime_type( ext );
+        }
+      }
+
+      function set_mime_type( ext = 'png' ) {
+        switch ( ext ) {
+          case 'jpg':
+          case 'pjp':
+          case 'jpeg':
+          case 'jfif':
+          case 'pjpeg':
+            mime_type += 'jpeg';
+            break;
+
+          case 'bmp':
+          case 'dib':
+            mime_type += 'bmp';
+            break;
+
+          case 'ico':
+            mime_type += 'x-icon';
+            break;
+
+          case 'svg':
+            mime_type += 'svg+xml';
+            break;
+
+          case 'tif':
+          case 'tiff':
+            mime_type += 'tiff';
+            break;
+
+          case 'exr':
+          case 'hdr':
+            mime_type += 'x.' + ext;
+            break;
+
+          case 'dds':
+          case 'gif':
+          case 'ktx2':
+          case 'png':
+          case 'tga':
+          case 'webp':
+            mime_type += ext;
+            if (ext === 'ktx2') isKTX2 = true;
+            break;
+
+          default:
+            break;
         }
       }
 
@@ -1817,8 +1937,8 @@
           return url;
         });
 
-        let image_extensions = [ '.bmp', '.dds', '.dib', '.gif', '.ico', '.jpg', '.jpeg', '.jfif', '.ktx2',
-          '.pjpeg', '.pjp', '.png', '.svg', '.tga', '.tif', '.tiff', '.webp' ];
+        let image_extensions = [ '.bmp', '.dds', '.dib', '.exr', '.hdr', '.gif', '.ico', '.jpg', '.jpeg', '.jfif',
+          '.ktx2', '.pjpeg', '.pjp', '.png', '.svg', '.tga', '.tif', '.tiff', '.webp' ];
 
         for ( const key of Object.keys( unzipped_files ) ) {
           let key_lc = key.toLowerCase();
@@ -1834,46 +1954,8 @@
             if (filename.indexOf( '/' )) filename = filename.substring( filename.lastIndexOf( '/' ) + 1 );
 
             let ext = key_lc.substring( key_lc.lastIndexOf( '.' ) + 1 );
-            let mime_type = 'image/';
 
-            switch ( ext ) {
-              case 'jpg':
-              case 'pjp':
-              case 'jpeg':
-              case 'jfif':
-              case 'pjpeg':
-                mime_type += 'jpeg';
-                break;
-
-              case 'bmp':
-              case 'dib':
-                mime_type += 'bmp';
-                break;
-
-              case 'ico':
-                mime_type += 'x-icon';
-                break;
-
-              case 'svg':
-                mime_type += 'svg+xml';
-                break;
-
-              case 'tif':
-              case 'tiff':
-                mime_type += 'tiff';
-                break;
-
-              case 'dds':
-              case 'gif':
-              case 'png':
-              case 'tga':
-              case 'webp':
-                mime_type += ext;
-                break;
-
-              default:
-                break;
-            }
+            await set_mime_type( ext );
 
             let blob = new Blob( [ unzipped_files[ key ].buffer ], { type: mime_type } );
             filesMap[ 'blob:null/' + key ] = URL.createObjectURL( blob );
@@ -1931,6 +2013,8 @@
 
         selected_img_file = null;
         local_files = null;
+        mime_type = 'image/';
+        isKTX2 = false;
         filesMap = {};
         zip_file = null;
         unzipped_files = null;
@@ -1967,7 +2051,7 @@
         }
 
         if (url_loading === false) {
-          let img_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.ICO', '.JPG', '.JPEG', '.JFIF',
+          let img_extensions = [ '.BMP', '.DDS', '.DIB', '.EXR', '.HDR', '.GIF', '.ICO', '.JPG', '.JPEG', '.JFIF',
             '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.TIF', '.TIFF', '.WEBP' ];
 
           // Loaded file
@@ -1997,7 +2081,11 @@
           url_loading = false;
         }
 
-        if (scene === undefined) scene = new THREE.Scene();
+        if (scene === undefined) {
+          scene = new THREE.Scene();
+          scene.backgroundRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
+          scene.environmentRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
+        }
 
         scene.backgroundIntensity = 1.0;
         scene.backgroundBlurriness = 0.0;
@@ -2333,6 +2421,111 @@
         for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
 
         return compressedArrayBuffer;
+      }
+
+      /* Export texture only as either PNG or WEBP or KTX2 */
+
+      async function texture_only_export( arrayBuffer, tex_fmt, tex_flip ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { dedup } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
+
+        const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          dedup( { textures: true } )
+        );
+
+        const textures = doc.getRoot().listTextures();
+
+        if (textures.length === 0) {
+          throw new Error( 'No textures found to export!' );
+        }
+
+        if (tex_fmt.startsWith( 'ktx' )) {
+          const { listTextureSlots } = await import( "@gltf-transform/functions" );
+          const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
+          const { encodeToKTX2 } = await import( "ktx2-encoder" );
+
+          for (const texture of textures) {
+            let size = await texture.getSize();
+
+            let uastc = (tex_fmt.endsWith( 'e' ) === false) && (tex_fmt.endsWith( 'u' ) === true);
+
+            // check if texture dimensions are multiples of 4
+            const width_is_m4 = size[ 0 ] % 4 === 0;
+            const height_is_m4 = size[ 1 ] % 4 === 0;
+
+            let width, height;
+
+            if (!width_is_m4 || !height_is_m4) {
+              // this should produce minimal scale down
+              width = width_is_m4 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+              height = height_is_m4 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
+            } else {
+              width = size[ 0 ];
+              height = size[ 1 ];
+            }
+
+            await new Promise( resolve => {
+              encodeToKTX2( texture.getImage(), { isUASTC: uastc, isYFlip: tex_flip, generateMipmap: false } )
+              .then( ktx_texture => {
+                texture.setImage( ktx_texture );
+                texture.setMimeType( 'image/ktx2' );
+                let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
+                let blob = new Blob( [ texture[ attr ].image ], { type: 'image/ktx2' } );
+                resolve( zip.file( filename + '.ktx2', blob ) );
+              });
+            });
+          }
+        } else {
+          const { compressTexture } = await import( "@gltf-transform/functions" );
+
+          for (const texture of textures) {
+            await compressTexture( texture, { targetFormat: tex_fmt } );
+            let attr = Object.getOwnPropertySymbols( texture ).find( ( s ) => s.description === "attributes" );
+            let blob = new Blob( [ texture[ attr ].image ], { type: 'image/' + tex_fmt } );
+            await transform_texture( blob, '.' + tex_fmt, tex_flip );
+          }
+        }
+
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+      }
+
+      async function transform_texture( blob, format, tex_flip ) {
+        if (tex_flip === true) {
+          let img = new Image();
+
+          await new Promise( resolve => {
+            img.onload = function() {
+              let canvas = document.createElement('canvas');
+
+              canvas.width = Math.min( img.naturalWidth, tex_res );
+              canvas.height = Math.min( img.naturalHeight, tex_res );
+
+              const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+              // Flip image vertically
+              ctx.translate( 0, canvas.height );
+              ctx.scale( 1, -1 );
+
+              ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+              canvas.toBlob( canvas_blob => {
+                resolve( zip.file( filename + format, canvas_blob ) );
+              }, 'image/' + format.substring( 1 ), 1 );
+            }
+
+            img.src = URL.createObjectURL( blob );
+            URL.revokeObjectURL( blob );
+          });
+        } else {
+          zip.file( filename + format, blob );
+        }
       }
 
       function show_polar_grid() {
