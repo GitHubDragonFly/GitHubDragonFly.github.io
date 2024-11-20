@@ -11,24 +11,25 @@
     <script type="importmap">
       {
         "imports": {
-          "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.0.2",
-          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.0.2",
-          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.0.2",
-          "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.21.0/meshopt_encoder.module.min.js",
+          "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.1.0",
+          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.1.0",
+          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.1.0",
+          "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_encoder.module.min.js",
           "ktx2-encoder": "https://esm.sh/ktx2-encoder@0.0.0-experimental.5"
         }
       }
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
     <!-- For encoding GLB export with draco compression -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
       var filename, gltf_filenames, models, current_model = 0;
-      var isMobile, tex_res, tex_fmt, neutral_lighting = false;
-      var url_displayed = false, url_loading = false;
+      var isMobile, tex_res, tex_fmt, tex_flip, neutral_lighting = false;
+      var url_displayed = false, url_loading = false, zip;
       var ww = window.innerWidth,	wh = window.innerHeight;
       var selected_file, other_files, selected_url_file = '';
       var variants, current_variant = 0, variants_available = false;
@@ -178,6 +179,8 @@
       <div class="fm" id="fm2">
         <select id="export_names" title="Export" style="min-width: 80px;" disabled>
           <option title="Export Formats" value="export" selected disabled>Export</option>
+          <option title="Export Model Textures only with selected format and generic names, defaults to PNG format if None is selected" value="maps" onclick="export_maps();">MAPS</option>
+          <option title="3D Formats" value="3dformats" disabled>- 3D -</option>
           <option title="GL Transmission Format binary with optional texture compression" value="glb" onclick="export_glb()">GLB</option>
           <option title="GL Transmission Format binary with DRACO and optional texture compression" value="glbd" onclick="export_glb( true, false )">GLB_d</option>
           <option title="GL Transmission Format binary with Meshopt and optional texture compression" value="glbm" onclick="export_glb( false, true )">GLB_m</option>
@@ -188,7 +191,7 @@
           <option title="Export as PNG Image" value="png" onclick="export_image( 'png' )">PNG</option>
           <option title="Export as WEBP Image" value="webp" onclick="export_image( 'webp' )">WEBP</option>
         </select>
-        <select title="Maximum Exported Texture Resolution" id="export_tex_res" disabled>
+        <select title="Maximum Exported Texture Resolution (GLTF/GLB) and Y-Flip (GLB)" id="export_tex_res" disabled>
           <option title="Original" value="original" onclick="tex_res = Infinity;" selected>None</option>
           <option title="128 (128x128)" value="128" onclick="tex_res = 128;">128</option>
           <option title="256 (256x256)" value="256" onclick="tex_res = 256;">256</option>
@@ -201,9 +204,24 @@
           <option title="2k (2048x2048)" value="2k" onclick="tex_res = 2048;">2k</option>
           <option title="3k (3072x3072)" value="3k" onclick="tex_res = 3072;">3k</option>
           <option title="4k (4096x4096)" value="4k" onclick="tex_res = 4096;">4k</option>
+          <option title="Original Y flipped" value="original_flipped" onclick="tex_res = Infinity; tex_flip = true;">Flip Y</option>
+          <option title="128 (128x128) Y flipped" value="128_flipped" onclick="tex_res = 128; tex_flip = true;">128 Y</option>
+          <option title="256 (256x256) Y flipped" value="256_flipped" onclick="tex_res = 256; tex_flip = true;">256 Y</option>
+          <option title="512 (512x512) Y flipped" value="512_flipped" onclick="tex_res = 512; tex_flip = true;">512 Y</option>
+          <option title="768 (768x768) Y flipped" value="768_flipped" onclick="tex_res = 768; tex_flip = true;">768 Y</option>
+          <option title="1k (1024x1024) Y flipped" value="1k_flipped" onclick="tex_res = 1024; tex_flip = true;">1k Y</option>
+          <option title="1.2k (1280x1280) Y flipped" value="1.2k_flipped" onclick="tex_res = 1280; tex_flip = true;">1.2k Y</option>
+          <option title="1.5k (1536x1536) Y flipped" value="1.5k_flipped" onclick="tex_res = 1536; tex_flip = true;">1.5k Y</option>
+          <option title="1.7k (1792x1792) Y flipped" value="1.7k_flipped" onclick="tex_res = 1792; tex_flip = true;">1.7k Y</option>
+          <option title="2k (2048x2048) Y flipped" value="2k_flipped" onclick="tex_res = 2048; tex_flip = true;">2k Y</option>
+          <option title="3k (3072x3072) Y flipped" value="3k_flipped" onclick="tex_res = 3072; tex_flip = true;">3k Y</option>
+          <option title="4k (4096x4096) Y flipped" value="4k_flipped" onclick="tex_res = 4096; tex_flip = true;">4k Y</option>
         </select>
-        <select title="Exported Texture Format" id="export_tex_fmt" disabled>
-          <option title="Original" value="original" onclick="tex_fmt = '';" selected>None</option>
+        <select title="Exported Texture Format for GLB or MAPS" id="export_tex_fmt" disabled>
+          <option title="Original, defaults to PNG for MAPS export" value="original" onclick="tex_fmt = '';" selected>None</option>
+          <option title="PNG" value="png" onclick="tex_fmt = 'png';">PNG</option>
+          <option title="AVIF" value="avif" onclick="tex_fmt = 'avif';">AVIF</option>
+          <option title="JPEG" value="jpeg" onclick="tex_fmt = 'jpeg';">JPEG</option>
           <option title="WEBP" value="webp" onclick="tex_fmt = 'webp';">WEBP</option>
           <option title="KTX2 ETC1S + UASTC" value="ktx2" onclick="tex_fmt = 'ktx2';">KTX2</option>
           <option title="KTX2 ETC1S Only" value="ktx2e" onclick="tex_fmt = 'ktx2e';">KTX2e</option>
@@ -211,7 +229,7 @@
         </select>
       </div>
       <div class="fm" title="Export Download Link" id="div_download" style="display: none;">
-        <a id="link" href="#" target="_blank" onclick="hide_download();">Download Exported Model</a>
+        <a id="link" href="#" target="_blank" onclick="hide_download();">Download Exported File</a>
         <button title="Cancel Download" onclick="cancel_download();" style="min-width: 50px; margin: 2px 0 2px 15px;">Cancel</button>
       </div>
     </div>
@@ -270,6 +288,7 @@
         document.getElementById('div_error').style.color = 'gold';
         document.getElementById('div_error').innerHTML = 'Please wait ...';
         document.getElementById('div_error').style.display = 'block';
+
         if (document.getElementById('div_download').style.display !== 'none') cancel_download();
 
         if (!filename || filename === '') {
@@ -279,19 +298,33 @@
         }
       }
 
+      function handle_export_error( error ) {
+        if (error.message === 'No textures found to export!') {
+          alert( error.message );
+        } else {
+          alert( 'Export error!' );
+          console.log( error );
+        }
+
+        finish_export();
+      }
+
       function finish_export() {
         document.getElementById('div_error').innerHTML = '';
         document.getElementById('div_error').style.display = 'none';
         document.getElementById('fixed_menu').style.display = 'block';
         document.getElementById('div_download').style.display = 'block';
 
-        set_viewer_position();
-      }
+        document.getElementById('export_tex_res').selectedIndex = 0;
+        document.getElementById('export_tex_fmt').selectedIndex = 0;
 
-      function handle_export_error( error ) {
-        alert( 'Export error!' );
-        console.log( error );
-        finish_export();
+        tex_res = Infinity;
+        tex_flip = false;
+        tex_fmt = '';
+
+        zip = new JSZip();
+
+        set_viewer_position();
       }
 
       function cancel_download() {
@@ -305,6 +338,44 @@
       function hide_download() {
         document.getElementById('div_download').style.display = 'none';
         set_viewer_position();
+      }
+
+      async function process_export_zip( ext = '' ) {
+        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 9 } } ).then( function( zipped_file ) {
+          let link = document.getElementById('link');
+          link.download = ext + '.zip';
+          link.href = URL.createObjectURL( zipped_file );
+          URL.revokeObjectURL( zipped_file );
+
+          finish_export();
+        });
+      }
+
+      async function export_maps() {
+        await start_export();
+
+        let file_name = filename;
+
+        let modelViewer = document.getElementById('mv');
+        let options = {	binary: true, maxTextureSize: tex_res };
+
+        let glTF = await modelViewer.exportScene( options );
+        let glTF_arrayBuffer = await glTF.arrayBuffer();
+        let glTF_array = new Uint8Array( glTF_arrayBuffer );
+
+        try {
+          await texture_only_export( glTF_array );
+        } catch (error) {
+          handle_export_error( error );
+          return;
+        }
+
+        file_name += '_MAPS';
+        if (tex_flip === true) file_name += '_Y';
+        if (tex_fmt !== '') file_name += ' ' + tex_fmt;
+        if (tex_res !== Infinity) file_name += ' (' + tex_res + ')';
+
+        await process_export_zip( file_name );
       }
 
       async function export_image( type = 'png' ) {
@@ -369,6 +440,7 @@
         if (draco === true) file_name += ' DRACO';
         else if (meshopt === true) file_name += ' MESHOPT';
 
+        if (tex_flip === true) file_name += '_Y';
         if (tex_fmt !== '') file_name += ' ' + tex_fmt;
         if (tex_res !== Infinity) file_name += ' (' + tex_res + ')';
 
@@ -389,6 +461,7 @@
           return;
         }
 
+        let link = document.getElementById('link');
         link.download = file.name;
         link.href = URL.createObjectURL( file );
         URL.revokeObjectURL( file );
@@ -449,7 +522,7 @@
         await doc.transform(
           dedup(),
           instance( { min: 2 } ),
-          palette( { min: 5 } ),
+          palette({ min: 5 }),
           flatten(),
           join(),
           resample(),
@@ -495,7 +568,7 @@
                       const ctx = canvas.getContext('2d');
                       ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
 
-                      const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                      const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(avif|png|jpg|jpeg|webp);base64,/, '' );
                       const a2b = atob( base64data );
                       const buff = new Uint8Array( a2b.length );
 
@@ -503,7 +576,7 @@
                         buff[ i ] = a2b.charCodeAt( i );
                       }
 
-                      await encodeToKTX2( buff, { isUASTC: uastc, generateMipmap: false } )
+                      await encodeToKTX2( buff, { isUASTC: uastc, isYFlip: tex_flip, generateMipmap: false } )
                       .then( ktx_texture => {
                         texture.setImage( ktx_texture );
                         texture.setMimeType( 'image/ktx2' );
@@ -517,7 +590,7 @@
                   file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
                 });
               } else {
-                await encodeToKTX2( texture.getImage(), { isUASTC: uastc, generateMipmap: false } )
+                await encodeToKTX2( texture.getImage(), { isUASTC: uastc, isYFlip: tex_flip, generateMipmap: false } )
                 .then( ktx_texture => {
                   texture.setImage( ktx_texture );
                   texture.setMimeType( 'image/ktx2' );
@@ -527,12 +600,25 @@
             }
           } else {
             const { compressTexture } = await import( "@gltf-transform/functions" );
-            const { EXTTextureWebP } = await import( "@gltf-transform/extensions" );
 
             for (const texture of textures) {
               await compressTexture( texture, { targetFormat: tex_fmt } );
-              doc.createExtension( EXTTextureWebP ).setRequired( true );
-              io.registerExtensions( [ EXTTextureWebP ] );
+
+              if (tex_flip === true) {
+                let blob = new Blob( [ texture.getImage() ], { type: 'image/' + tex_fmt } );
+                let img = await transform_texture( blob, '', '.' + tex_fmt );
+                texture.setImage( img );
+              }
+
+              if (tex_fmt === 'webp') {
+                const { EXTTextureWebP } = await import( "@gltf-transform/extensions" );
+                doc.createExtension( EXTTextureWebP ).setRequired( true );
+                io.registerExtensions( [ EXTTextureWebP ] );
+              } else if (tex_fmt === 'avif') {
+                const { EXTTextureAVIF } = await import( "@gltf-transform/extensions" );
+                doc.createExtension( EXTTextureAVIF ).setRequired( true );
+                io.registerExtensions( [ EXTTextureAVIF ] );
+              }
             }
           }
         }
@@ -623,7 +709,7 @@
                       const ctx = canvas.getContext('2d');
                       ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
 
-                      const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                      const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(avif|png|jpg|jpeg|webp);base64,/, '' );
                       const a2b = atob( base64data );
                       const buff = new Uint8Array( a2b.length );
 
@@ -631,7 +717,7 @@
                         buff[ i ] = a2b.charCodeAt( i );
                       }
 
-                      await encodeToKTX2( buff, { isUASTC: uastc, generateMipmap: false } )
+                      await encodeToKTX2( buff, { isUASTC: uastc, isYFlip: tex_flip, generateMipmap: false } )
                       .then( ktx_texture => {
                         texture.setImage( ktx_texture );
                         texture.setMimeType( 'image/ktx2' );
@@ -645,7 +731,7 @@
                   file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
                 });
               } else {
-                await encodeToKTX2( texture.getImage(), { isUASTC: uastc, generateMipmap: false } )
+                await encodeToKTX2( texture.getImage(), { isUASTC: uastc, isYFlip: tex_flip, generateMipmap: false } )
                 .then( ktx_texture => {
                   texture.setImage( ktx_texture );
                   texture.setMimeType( 'image/ktx2' );
@@ -655,12 +741,25 @@
             }
           } else {
             const { compressTexture } = await import( "@gltf-transform/functions" );
-            const { EXTTextureWebP } = await import( "@gltf-transform/extensions" );
 
             for (const texture of textures) {
               await compressTexture( texture, { targetFormat: tex_fmt } );
-              doc.createExtension( EXTTextureWebP ).setRequired( true );
-              io.registerExtensions( [ EXTTextureWebP ] );
+
+              if (tex_flip === true) {
+                let blob = new Blob( [ texture.getImage() ], { type: 'image/' + tex_fmt } );
+                let img = await transform_texture( blob, '', '.' + tex_fmt );
+                texture.setImage( img );
+              }
+
+              if (tex_fmt === 'webp') {
+                const { EXTTextureWebP } = await import( "@gltf-transform/extensions" );
+                doc.createExtension( EXTTextureWebP ).setRequired( true );
+                io.registerExtensions( [ EXTTextureWebP ] );
+              } else if (tex_fmt === 'avif') {
+                const { EXTTextureAVIF } = await import( "@gltf-transform/extensions" );
+                doc.createExtension( EXTTextureAVIF ).setRequired( true );
+                io.registerExtensions( [ EXTTextureAVIF ] );
+              }
             }
           }
         }
@@ -745,7 +844,7 @@
                       const ctx = canvas.getContext('2d');
                       ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
 
-                      const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+                      const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(avif|png|jpg|jpeg|webp);base64,/, '' );
                       const a2b = atob( base64data );
                       const buff = new Uint8Array( a2b.length );
 
@@ -753,7 +852,7 @@
                         buff[ i ] = a2b.charCodeAt( i );
                       }
 
-                      await encodeToKTX2( buff, { isUASTC: uastc, generateMipmap: false } )
+                      await encodeToKTX2( buff, { isUASTC: uastc, isYFlip: tex_flip, generateMipmap: false } )
                       .then( ktx_texture => {
                         texture.setImage( ktx_texture );
                         texture.setMimeType( 'image/ktx2' );
@@ -767,7 +866,7 @@
                   file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
                 });
               } else {
-                await encodeToKTX2( texture.getImage(), { isUASTC: uastc, generateMipmap: false } )
+                await encodeToKTX2( texture.getImage(), { isUASTC: uastc, isYFlip: tex_flip, generateMipmap: false } )
                 .then( ktx_texture => {
                   texture.setImage( ktx_texture );
                   texture.setMimeType( 'image/ktx2' );
@@ -777,12 +876,25 @@
             }
           } else {
             const { compressTexture } = await import( "@gltf-transform/functions" );
-            const { EXTTextureWebP } = await import( "@gltf-transform/extensions" );
 
             for (const texture of textures) {
               await compressTexture( texture, { targetFormat: tex_fmt } );
-              doc.createExtension( EXTTextureWebP ).setRequired( true );
-              io.registerExtensions( [ EXTTextureWebP ] );
+
+              if (tex_flip === true) {
+                let blob = new Blob( [ texture.getImage() ], { type: 'image/' + tex_fmt } );
+                let img = await transform_texture( blob, '', '.' + tex_fmt );
+                texture.setImage( img );
+              }
+
+              if (tex_fmt === 'webp') {
+                const { EXTTextureWebP } = await import( "@gltf-transform/extensions" );
+                doc.createExtension( EXTTextureWebP ).setRequired( true );
+                io.registerExtensions( [ EXTTextureWebP ] );
+              } else if (tex_fmt === 'avif') {
+                const { EXTTextureAVIF } = await import( "@gltf-transform/extensions" );
+                doc.createExtension( EXTTextureAVIF ).setRequired( true );
+                io.registerExtensions( [ EXTTextureAVIF ] );
+              }
             }
           }
         }
@@ -796,6 +908,161 @@
         return compressedArrayBuffer;
       }
 
+      /* Export textures only as either PNG or AVIF or WEBP or KTX2 */
+
+      async function texture_only_export( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { dedup } = await import( "@gltf-transform/functions" );
+        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
+
+        const io = new WebIO();
+
+        io.registerExtensions( KHRONOS_EXTENSIONS );
+        io.registerExtensions( [ EXTMeshGPUInstancing ] );  // read instanced meshes
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        await doc.transform(
+          dedup( { textures: true } )
+        );
+
+        const textures = doc.getRoot().listTextures();
+
+        if (textures.length === 0) {
+          throw new Error( 'No textures found to export!' );
+        }
+
+        let file_reader, i = 1;
+
+        if (tex_fmt.startsWith( 'ktx' )) {
+          const { listTextureSlots } = await import( "@gltf-transform/functions" );
+          const { KHRTextureBasisu } = await import( "@gltf-transform/extensions" );
+          const { encodeToKTX2 } = await import( "ktx2-encoder" );
+
+          const uastc_textures = [ 'normalTexture', 'occlusionTexture', 'metallicRoughnessTexture' ];
+
+          for (const texture of textures) {
+            const slots = await listTextureSlots( texture );
+            const size = await texture.getSize();
+
+            const uastc = (tex_fmt.endsWith( 'e' ) === false) && (uastc_textures.some( k => k === slots[ 0 ] ) || tex_fmt.endsWith( 'u' ) === true);
+
+            // check if texture dimensions are multiples of 4
+            const width_is_m4 = size[ 0 ] % 4 === 0;
+            const height_is_m4 = size[ 1 ] % 4 === 0;
+
+            if (!width_is_m4 || !height_is_m4) {
+              if (file_reader === undefined) file_reader = new FileReader();
+
+              await new Promise( resolve => {
+                file_reader.onload = function( e ) {
+                  const img = new Image();
+
+                  img.onload = async function() {
+                    const canvas = document.createElement('canvas');
+
+                    // this should produce minimal scale down
+                    canvas.width = width_is_m4 === true ? size[ 0 ] : Math.max( 4, ( size[ 0 ] - ( size[ 0 ] % 4 ) ) );
+                    canvas.height = height_is_m4 === true ? size[ 1 ] : Math.max( 4, ( size[ 1 ] - ( size[ 1 ] % 4 ) ) );
+
+                    const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+                    ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+                    const base64data = canvas.toDataURL( `image/${texture.getMimeType()}`, 1 ).replace( /^data:image\/(avif|png|jpg|jpeg|webp);base64,/, '' );
+                    const a2b = atob( base64data );
+                    const buff = new Uint8Array( a2b.length );
+
+                    for ( let i = 0, l = buff.length; i < l; i ++ ) {
+                      buff[ i ] = a2b.charCodeAt( i );
+                    }
+
+                    await encodeToKTX2( buff, { isUASTC: uastc, isYFlip: tex_flip, generateMipmap: false } )
+                    .then( ktx_texture => {
+                      let blob = new Blob( [ ktx_texture ], { type: 'image/ktx2' } );
+                      resolve( zip.file( 'image' + i + '.ktx2', blob ) );
+                    });
+                  }
+
+                  img.src = e.target.result;
+                }
+
+                file_reader.readAsDataURL( new Blob( [ texture.getImage() ], { type: texture.getMimeType() } ));
+              });
+            } else {
+              await encodeToKTX2( texture.getImage(), { isUASTC: uastc, isYFlip: tex_flip, generateMipmap: false } )
+              .then( ktx_texture => {
+                let blob = new Blob( [ ktx_texture ], { type: 'image/ktx2' } );
+                zip.file( 'image' + i + '.ktx2', blob );
+              });
+            }
+
+            i ++;
+          }
+        } else {
+          const { compressTexture } = await import( "@gltf-transform/functions" );
+
+          let fmt = (tex_fmt === '') ? 'png' : tex_fmt;
+
+          for (const texture of textures) {
+            await compressTexture( texture, { targetFormat: fmt } );
+            let blob = new Blob( [ texture.getImage() ], { type: 'image/' + fmt } );
+
+            if (tex_flip === true) {
+              texture.setImage( await transform_texture( blob, fmt ) );
+              await compressTexture( texture, { targetFormat: fmt } );
+              blob = new Blob( [ texture.getImage() ], { type: 'image/' + fmt } );
+            }
+
+            zip.file( 'image' + i + '.' + fmt, blob );
+
+            i ++;
+          }
+        }
+
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+      }
+
+      async function transform_texture( blob, format = 'png' ) {
+        let buff, img = new Image();
+
+        await new Promise( resolve => {
+          img.onload = function() {
+            let canvas = document.createElement('canvas');
+
+            canvas.width = Math.min( img.naturalWidth, tex_res );
+            canvas.height = Math.min( img.naturalHeight, tex_res );
+
+            let ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+            // Flip image vertically
+            if (tex_flip === true) {
+              ctx.translate( 0, canvas.height );
+              ctx.scale( 1, -1 );
+            }
+
+            ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
+
+            let base64data = canvas.toDataURL( 'image/' + format, 1 ).replace( /^data:image\/(avif|png|jpg|jpeg|webp);base64,/, '' );
+            let a2b = atob( base64data );
+            buff = new Uint8Array( a2b.length );
+
+            for ( let i = 0, l = buff.length; i < l; i ++ ) {
+              buff[ i ] = a2b.charCodeAt( i );
+            }
+
+            resolve( buff );
+          }
+
+          img.src = URL.createObjectURL( blob );
+          URL.revokeObjectURL( blob );
+        });
+
+        return buff;
+      }
+
       async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
@@ -806,12 +1073,15 @@
         animations = {};
         variants = {};
         tex_fmt = '';
+        tex_flip = false;
         tex_res = Infinity;
         filename = null;
         gltf_filenames = {};
         models = [];
 
         enable_disable( true );
+
+        if (zip === undefined) zip = new JSZip();
 
         if (url_loading === false) {
           const extensions = [ '.BIN', '.KTX2', '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF', '.SVG', '.WEBP' ];
