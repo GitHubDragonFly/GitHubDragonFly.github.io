@@ -175,15 +175,18 @@ Number Type Converter
   - Based on thrax version of code: `https://tartan-swanky-plutonium.glitch.me/`
     - Original code: `https://github.com/shaoruu/three-extruded-image`
   - Supported import image formats:
-    - BMP, DDS, DIB, EXR, GIF, HDR, ICO, JPEG, PNG, SVG, TGA, TIFF, WEBP
+    - AVIF, BMP, DDS, DIB, EXR, GIF, HDR, ICO, JPEG, KTX2, PNG, SVG, TGA, TIFF, WEBP
+      - Using [@jsquash/avif](https://github.com/jamsinclair/jSquash) encoder for AVIF compression
+      - Using experimental [ktx2-encoder](https://github.com/gz65555/ktx2-encoder) for KTX2 compression
     - Local blobs and remote URL loading are supported:
       - URLs have to end with supported extension
       - GitHub URLs are supported
   - Supports exporting to the following formats:
     - Animated GIF and PNG (see general notes about these formats further below)
-    - PNG, KTX2 and WEBP images at unchanged original image size
+    - AVIF, JPEG, PNG, KTX2 and WEBP images at unchanged original image size
     - 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
       - Maximum exported texture size is currently limited only for 3DM exports to 2.5k
+    - [glTF Transform](https://gltf-transform.dev) is used for some exports
 
 - Special notes about `AR / VR Viewer`:
   - Using slightly modified version of the three.js `DeviceOrientationControls`, last available in r133
