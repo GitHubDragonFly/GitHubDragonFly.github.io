@@ -437,7 +437,7 @@ Number Type Converter
   - `V` - variants that might be present in GLTF models (ASSIMP, GLTF, GLTFS and GM viewers)
   - `W` - button or `Wire` checkbox to show wireframe
   - `X` - morphs
-  - `Y` - Y-flip exported textures (available in mobile GLTF Viewer only)
+  - `Y` - Y-flip exported textures (mobile GLTF Viewer only) or Y-flip locally loaded background image
   - `As` - and / or `atoms` button (available in PDB viewers only)
   - `Bs` - and / or `bonds` button (available in PDB viewers only)
   - `C0` - camera index
