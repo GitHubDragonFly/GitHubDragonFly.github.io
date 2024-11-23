@@ -1829,8 +1829,10 @@
 
 				canvas = canvas || document.createElement( 'canvas' );
 
-				canvas.width = Math.min( image.width, maxTextureSize );
-				canvas.height = Math.min( image.height, maxTextureSize );
+				let scale = maxTextureSize / Math.max( image.width, image.height );
+
+				canvas.width = image.width * Math.min( 1, scale );
+				canvas.height = image.height * Math.min( 1, scale );
 
 				ctx = ctx || canvas.getContext( '2d' );
 
