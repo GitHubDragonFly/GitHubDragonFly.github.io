@@ -177,6 +177,7 @@ Number Type Converter
   - Supported import image formats:
     - AVIF, BMP, DDS, DIB, EXR, GIF, HDR, ICO, JPEG, KTX2, PNG, SVG, TGA, TIFF, WEBP
       - Using [@jsquash/avif](https://github.com/jamsinclair/jSquash) encoder for AVIF compression
+        - This encoder appears to be limited to 4k resolution
       - Using experimental [ktx2-encoder](https://github.com/gz65555/ktx2-encoder) for KTX2 compression
     - Local blobs and remote URL loading are supported:
       - URLs have to end with supported extension
