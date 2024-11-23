@@ -881,8 +881,10 @@ class Rhino3dmExporter {
 
 			const _canvas = document.createElementNS( 'http://www.w3.org/1999/xhtml', 'canvas' );
 
-			_canvas.width = Math.min( image.width, Math.min( 2560, maxTextureSize ) );
-			_canvas.height = Math.min( image.height, Math.min( 2560, maxTextureSize ) );
+			let scale = Math.min( 2560, maxTextureSize ) / Math.max( image.width, image.height );
+
+			_canvas.width = image.width * Math.min( 1, scale );
+			_canvas.height = image.height * Math.min( 1, scale );
 	
 			const ctx = _canvas.getContext( '2d' );
 
