@@ -13,11 +13,11 @@
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.webgpu.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
-          "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.0.2",
-          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.0.2",
-          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.0.2",
-          "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.21.0/meshopt_encoder.module.min.js",
-          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.21.0/meshopt_simplifier.module.min.js"
+          "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.1.0",
+          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.1.0",
+          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.1.0",
+          "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_encoder.module.min.js",
+          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_simplifier.module.min.js"
         }
       }
     </script>
@@ -29,10 +29,10 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
-      var THREE, uSync, manager, gpu, gl2, pdb_loader, pdb_obj, font_loader;
+      var THREE, uSync, manager, pdb_loader, pdb_obj, ktx2_loader, font_loader;
       var renderer, texture_loader, exr_loader, rgbe_loader, render_requested;
-      var controls, count = 0, link, isMobile, node_materials;
-      var scene, camera, params, toneMappingOptions, label_font;
+      var gpu, gl2, controls, count = 0, link, isMobile, node_materials;
+      var scene, camera, params, toneMappingOptions, label_font, bg_flip;
       var gui, gui_legend, gui_set = false, guiExposure = null;
       var mouse_down, mouse_wheel, events_initialized, bounding_box;
       var local_files, filesMap, zip_file, unzipped_files;
@@ -335,6 +335,7 @@
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".pdb, .zip" />
         <label for="file_image_input" title="Background Image" style="color: #553801;">BGND</label>
         <input type="file" title="Background Image" id="file_image_input" accept=".exr, .hdr, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
+        <button title="Set Background Image Y-Flip" id="btn_bg_flip" onclick="set_bg_flip();" style="background-color: transparent; color: blue;" disabled>Y</button>
         <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="background-color: transparent; color: blue; min-width: 25px;" disabled>Eq</button>
         <button title="Toggle Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
         <button title="Model Opacity - double click to enable/disable" id="btn_dc_opacity" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" ondblclick="set_opacity();" onclick="show_hide_dropdown_opacity();">O
@@ -595,6 +596,49 @@
       }
 
       function return_false() { return false; }
+
+      async function set_bg_flip() {
+        if (bg_flip === false) {
+          bg_flip = true;
+          document.getElementById('btn_bg_flip').style.backgroundColor = 'lightgreen';
+        } else {
+          bg_flip = false;
+          document.getElementById('btn_bg_flip').style.backgroundColor = 'transparent';
+        }
+
+        if (document.getElementById('file_image_input').value) {
+          if (equi_enabled === true) {
+            if (gpu === false) {
+              scene.environment.dispose();
+              scene.environment = null;
+            } else {
+              scene.environmentNode.dispose();
+              scene.environmentNode = null;
+            }
+          }
+
+          if (gpu === false) {
+            if (scene.background) {
+              scene.background.dispose();
+              scene.background = null;
+            }
+          } else {
+            if (scene.backgroundNode) {
+              scene.backgroundNode.dispose();
+              scene.backgroundNode = null;
+            }
+          }
+
+          await set_scene_image();
+
+          if (equi_enabled === true) {
+            scene.environmentIntensity = params.envMapIntensity;
+            scene.backgroundBlurriness = params.backBlurriness === 0 ? 0.00001 : params.backBlurriness;
+            scene.backgroundIntensity = params.backIntensity;
+            if ( params.toneMapping !== 'None' ) renderer.toneMappingExposure = params.exposure;
+          }
+        }
+      }
 
       function set_gui_position() {
         if (typeof $ !== 'undefined' && menu_location_bottom === false) {
@@ -1663,11 +1707,12 @@
 
           let fn_uc = fii.name.toUpperCase();
 
-          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
+          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.KTX2') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
             texture_loader.load( URL.createObjectURL( fii ) , function( texture ) {
               URL.revokeObjectURL( fii );
 
               texture.colorSpace = THREE.SRGBColorSpace;
+              texture.flipY = (bg_flip === false);
 
               if (equi_enabled === true) {
                 texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -1691,6 +1736,46 @@
               set_bgenv_message( true );
             }, function ( xhr ) {
             }, function ( error ) {
+              document.getElementById('div_message').innerText = 'Error loading image';
+              console.log( 'Error loading Background Image File!' );
+              console.log( error );
+
+              URL.revokeObjectURL( fii );
+            });
+          } else if (fn_uc.endsWith('.KTX2')) {
+            ktx2_loader.load( URL.createObjectURL( fii ), async function( texture ) {
+              URL.revokeObjectURL( fii );
+
+              // Convert to PNG so it shows on most platforms
+              // Unsupported KTX2 formats might log a warning
+
+              texture.colorSpace = THREE.SRGBColorSpace;
+
+              let canvas_tex = await decompress( texture );
+
+              texture.dispose();
+
+              texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), function( png_tex ) {
+                canvas_tex.dispose();
+
+                png_tex.flipY = (bg_flip === false);
+
+                if (equi_enabled === true) {
+                  png_tex.mapping = THREE.EquirectangularReflectionMapping;
+                  scene.background = png_tex.clone();
+                  scene.environment = png_tex.clone();
+                } else {
+                  scene.background = png_tex.clone();
+                }
+
+                mouse_wheel = true;
+
+                png_tex.dispose();
+
+                set_bgenv_message( true );
+              });
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
               document.getElementById('div_message').innerText = 'Error loading image';
               console.log( 'Error loading Background Image File!' );
               console.log( error );
@@ -1722,7 +1807,8 @@
             loader.load( URL.createObjectURL( fii ), function( texture ) {
               URL.revokeObjectURL( fii );
 
-              texture.colorSpace = THREE.SRGBColorSpace;
+              texture.colorSpace = THREE.LinearSRGBColorSpace;
+              texture.flipY = (bg_flip === false);
 
               if (equi_enabled === true) {
                 texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -2004,9 +2090,6 @@
 
           mouse_wheel = true;
 
-          if (polar_grid_visible === true) show_polar_grid();
-          if (grid_visible === true) show_grid();
-
           if (pdb_obj) await scene_cleanup();
 
           await reset_all( true );
@@ -2015,6 +2098,13 @@
         enable_disable( true );
 
         if (zip === undefined) zip = new JSZip();
+
+        if (ktx2_loader === undefined) {
+          const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
+          ktx2_loader = new KTX2Loader( manager );
+          ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/basis/" );
+          manager.addHandler( /\.ktx2$/i, ktx2_loader );
+        }
 
         if (params === undefined) {
           params = {
@@ -2128,9 +2218,18 @@
           renderer.autoClear = false;
 
           document.body.appendChild( renderer.domElement );
+
+          if (ktx2_loader) {
+            ktx2_loader.detectSupport( renderer );
+            await ktx2_loader.init();
+          }
         }
 
-        if (scene === undefined) scene = new THREE.Scene();
+        if (scene === undefined) {
+          scene = new THREE.Scene();
+          scene.backgroundRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
+          scene.environmentRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
+        }
 
         scene.backgroundBlurriness = 0.00001;
         scene.backgroundIntensity = 1.0;
@@ -3180,6 +3279,8 @@
         bgnd_linear_gradient = false;
         document.getElementById('btn_bgnd_linear_gradient').disabled = false;
         document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+        bg_flip = false;
+        document.getElementById('btn_bg_flip').style.backgroundColor = 'transparent';
 
         if (scene !== undefined) await reset_scene_params();
 
@@ -3229,6 +3330,11 @@
       }
 
       async function scene_cleanup() {
+        mouse_wheel = true;
+
+        if (polar_grid_visible === true) show_polar_grid();
+        if (grid_visible === true) show_grid();
+
         scene.remove( pdb_obj );
 
         renderer.clear();
@@ -3280,6 +3386,11 @@
 
         await gui_legend_reset();
 
+        if (ktx2_loader) {
+          ktx2_loader.dispose();
+          ktx2_loader === undefined;
+        }
+
         if (isMobile === false) renderer.info.reset();
       }
 
@@ -3306,6 +3417,7 @@
         document.getElementById('btn_dc_ali').disabled = disable;
         document.getElementById('btn_dc_dli').disabled = disable;
         document.getElementById('btn_equi').disabled = disable;
+        document.getElementById('btn_bg_flip').disabled = disable;
         document.getElementById('btn_quick_x').disabled = disable;
         document.getElementById('btn_dc_opacity').disabled = disable;
         document.getElementById('btn_bgnd_linear_gradient').disabled = disable;
