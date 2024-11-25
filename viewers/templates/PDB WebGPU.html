@@ -1431,6 +1431,11 @@
               scene.environment.dispose();
               scene.environment = null;
             }
+
+            if (scene.background) {
+              if (!scene.background.isColor) scene.background.dispose();
+              scene.background = null;
+            }
           } else {
             if (scene.environmentNode) {
               scene.environmentNode.dispose();
@@ -1443,11 +1448,7 @@
             }
           }
 
-          if (scene.background) {
-            if (!scene.background.isColor) scene.background.dispose();
-            scene.background = null;
-          }
-
+          scene.background = new THREE.Color( 'black' );
           scene.backgroundBlurriness = 0.00001;
           scene.environmentIntensity = 1.0;
         }
@@ -1701,7 +1702,11 @@
         if (fii) {
           if (reset === false) set_bgenv_message();
 
-          bgnd_linear_gradient = false;
+          if (bgnd_linear_gradient === true) {
+            bgnd_linear_gradient = false;
+            enabled_features[ 'bgnd_linear_gradient' ] = false;
+          }
+
           document.getElementById('back_color').value = '#000000';
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
 
@@ -1713,10 +1718,10 @@
 
               texture.colorSpace = THREE.SRGBColorSpace;
               texture.flipY = (bg_flip === false);
+              texture.needsUpdate = true;
 
               if (equi_enabled === true) {
                 texture.mapping = THREE.EquirectangularReflectionMapping;
-                texture.needsUpdate = true;
 
                 if (gpu === false) {
                   scene.background = texture.clone();
@@ -1759,10 +1764,10 @@
                 canvas_tex.dispose();
 
                 png_tex.flipY = (bg_flip === true);
+                png_tex.needsUpdate = true;
 
                 if (equi_enabled === true) {
                   png_tex.mapping = THREE.EquirectangularReflectionMapping;
-                  png_tex.needsUpdate = true;
 
                   if (gpu === false) {
                     scene.background = png_tex.clone();
@@ -1816,10 +1821,10 @@
 
               texture.colorSpace = THREE.LinearSRGBColorSpace;
               texture.flipY = (bg_flip === false);
+              texture.needsUpdate = true;
 
               if (equi_enabled === true) {
                 texture.mapping = THREE.EquirectangularReflectionMapping;
-                texture.needsUpdate = true;
 
                 if (gpu === false) {
                   scene.background = texture.clone();
@@ -1870,17 +1875,32 @@
           canvas.height = wh;
 
           let gradient = context.createLinearGradient( 0, 0, 0, wh );
-          let gradient_colors = [ [ 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.15 ],
-            [ '#151525', '#252535', '#454555', '#656575', '#787888', '#8A8A9A', '#9A9AAA', '#A5A5B5' ] ];
+          let gradient_colors = [
+            [ 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.15 ],
+            [ '#151525', '#252535', '#454555', '#656575', '#787888', '#8A8A9A', '#9A9AAA', '#A5A5B5' ]
+          ];
+
           let i = gradient_colors[ 0 ].length;
           while( i-- ) { gradient.addColorStop( gradient_colors[ 0 ][ i ], gradient_colors[ 1 ][ i ] ); }
+
           context.fillStyle = gradient;
           context.fillRect( 0, 0, ww, wh );
+
           let texture = new THREE.Texture( canvas );
           texture.mapping = THREE.EquirectangularReflectionMapping;
+          texture.colorSpace = THREE.LinearSRGBColorSpace;
           texture.needsUpdate = true;
-          scene.background = texture.clone();
-          scene.environment = texture.clone();
+
+          if (gpu === false) {
+            scene.background = texture.clone();
+            scene.environment = texture.clone();
+          } else {
+            scene.backgroundNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+            scene.environmentNode = THREE.texture( texture.clone(), THREE.equirectUV(), 0 );
+          }
+
+          scene.environmentIntensity = 0.15;
+
           texture.dispose();
 
           document.getElementById('file_image_input').value = '';
@@ -3013,11 +3033,11 @@
 
       async function simplify( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
+        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
         const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
-        const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
         const { dedup, flatten, join, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
 
-        const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
+        const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
@@ -3032,6 +3052,7 @@
 
         const compressedArrayBuffer = await io.writeBinary( doc );
 
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
         for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
         for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
 
@@ -3042,14 +3063,13 @@
 
       async function draco_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
+        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
         const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
         const { dedup, flatten, instance, join, palette, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression, EXTMeshGPUInstancing } = await import( "@gltf-transform/extensions" );
 
-        const io = new WebIO()
-        .registerExtensions( KHRONOS_EXTENSIONS )
-        .registerExtensions( [ EXTMeshGPUInstancing ] )  // read instanced meshes
-        .registerDependencies({
+        const io = new WebIO().registerExtensions( ALL_EXTENSIONS )
+
+        io.registerDependencies({
           'draco3d.encoder': DracoEncoderModule(),
         });
 
@@ -3067,15 +3087,16 @@
           sparse( { ratio: 0.2 } )
         );
 
-        doc.createExtension( KHRDracoMeshCompression )
+        doc.createExtension( ALL_EXTENSIONS[ 4 ] )
         .setRequired( true )
         .setEncoderOptions({
-          method: KHRDracoMeshCompression.EncoderMethod.EDGEBREAKER,
+          method: ALL_EXTENSIONS[ 4 ].EncoderMethod.EDGEBREAKER,
           encodeSpeed: 5,
         });
 
         const compressedArrayBuffer = io.writeBinary( doc );
 
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
         for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
         for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
 
@@ -3086,17 +3107,16 @@
 
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( "@gltf-transform/core" );
+        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
         const { MeshoptEncoder } = await import( "meshoptimizer_encoder" );
         const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
         const { dedup, flatten, instance, join, meshopt, palette, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, EXTMeshGPUInstancing, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
 
         await MeshoptEncoder.ready;
 
-        const io = new WebIO()
-        .registerExtensions( KHRONOS_EXTENSIONS )
-        .registerExtensions( [ EXTMeshGPUInstancing ] ) // read instanced meshes
-        .registerDependencies({
+        const io = new WebIO().registerExtensions( ALL_EXTENSIONS )
+
+        io.registerDependencies({
           'meshopt.encoder': MeshoptEncoder,
         });
 
@@ -3115,16 +3135,15 @@
           meshopt( { encoder: MeshoptEncoder, level: 'high' } )
         );
 
-        doc.createExtension( EXTMeshoptCompression )
+        doc.createExtension( ALL_EXTENSIONS[ 1 ] )
         .setRequired( true )
         .setEncoderOptions({
-          method: EXTMeshoptCompression.EncoderMethod.QUANTIZE,  // or EXTMeshoptCompression.EncoderMethod.FILTER
+          method: ALL_EXTENSIONS[ 1 ].EncoderMethod.QUANTIZE,  // or EncoderMethod.FILTER
         });
-
-        io.registerExtensions( [ EXTMeshoptCompression ] );
 
         const compressedArrayBuffer = await io.writeBinary( doc );
 
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
         for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
         for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
 
