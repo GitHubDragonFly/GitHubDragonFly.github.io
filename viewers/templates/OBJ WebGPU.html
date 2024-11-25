@@ -27,6 +27,7 @@
 
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
+    <script src="../static/assimpjs/assimpjs.min.js" defer></script>
 
     <!-- For encoding GLB exports with draco compression -->
     <script src="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
@@ -1639,6 +1640,11 @@
           <option title="PLY - Polygon File Format binary" value="ply" onclick="export_ply( true );">PLY_b</option>
           <option title="STL - Stereolithography Format" value="stl" onclick="export_stl();">STL</option>
           <option title="USDZ - Universal Scene Description Format" value="usdz" onclick="export_usdz();">USDZ</option>
+          <option title="ASSIMP Export Formats" value="assimp" disabled>ASSIMP</option>
+          <option title="FBX - Filmbox Format" value="fbx" onclick="export_assimp( 'fbx' );">FBX</option>
+          <option title="ASSJSON - Assimp JSON Format" value="assjson" onclick="export_assimp( 'assjson' );">JSON</option>
+          <option title="STEP Format" value="stp" onclick="export_assimp( 'stp' );">STEP</option>
+          <option title="X3D - Extensible 3D Graphics Format" value="x3d" onclick="export_assimp( 'x3d' );">X3D</option>
         </select>
         <select title="Maximum Exported Texture Resolution and Y flip" id="export_tex_res" disabled>
           <option title="Original" value="original" onclick="tex_res = Infinity; tex_flip = false;" selected>None</option>
@@ -2254,7 +2260,7 @@
 
           let gltf_exporter = new GLTFExporter( manager );
 
-          let options = {	binary: binary, maxTextureSize: tex_res };
+          let options = {	binary: binary, maxTextureSize: (binary === true ? Infinity : tex_res) };
 
           gltf_exporter.parse( Obj.clone(), async json => {
             let blob;
@@ -2267,7 +2273,7 @@
                   blob = new Blob( [ await draco_compress( new Uint8Array( json ) ) ], { type: type } );
                 } else if (meshopt === true) {
                   blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: type } );
-                } else if (tex_fmt !== '') {
+                } else if (tex_fmt !== '' || tex_res !== Infinity || tex_flip === true) {
                   blob = new Blob( [ await texture_compress( new Uint8Array( json ) ) ], { type: type } );
                 } else {
                   blob = new Blob( [ await simplify( new Uint8Array( json ) ) ], { type: type } );
@@ -2301,6 +2307,57 @@
 
               await process_export_zip( str );
             }
+          }, function( error ) { handle_export_error( error ); }, options);
+        }
+      }
+
+      async function export_assimp( format = 'fbx' ) {
+        if (Obj) {
+          await start_export();
+
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
+
+          let options = {	binary: true };
+
+          gltf_exporter.parse( Obj.clone(), async function( json ) {
+            let simplified = await texture_compress( new Uint8Array( json ) );
+
+            // Use ASSIMPJS to export files
+            assimpjs().then( async function( ajs ) {
+              let result = ajs.ConvertFile( filename, format, simplified, undefined, undefined );
+              let fileCount = result.FileCount();
+
+              // check if the conversion succeeded
+              if (result.IsSuccess() === false || fileCount === 0) {
+                handle_export_error( result.GetErrorCode() );
+                ajs = null;
+                result = null;
+                return;
+              }
+
+              // get the first result file and convert it to blob
+              let resultFile = await result.GetFile( 0 );
+              let jsonContent = resultFile.GetContent();
+              let blob = new Blob( [ jsonContent ], { type: 'application/octet-stream' } );
+
+              // Possible ASSIMP export formats, some with binary / ascii options:
+              //   assjson, assbin, assxml, collada, x, stp, obj, objnomtl, 3ds, 3mf, pbrt
+              //   gltf, gltf2, glb, glb2, stl, stlb, ply, plyb, fbx, fbxa, x3d
+              //   m3d / m3da - disabled since no longer maintained within ASSIMP
+              // For proper file extension, shorten the format before zipping it up
+              let ext_to_change = { 'fbxa': 'fbx', 'assjson': 'json', 'collada': 'dae' }; // 'plyb': 'ply' ... etc
+              if (ext_to_change[ format ]) format = ext_to_change[ format ];
+
+              zip.file( filename + '.' + format, blob );
+
+              ajs = null;
+              result = null;
+              resultFile = null;
+
+              await process_zip( '_' + format.toUpperCase() );
+            });
           }, function( error ) { handle_export_error( error ); }, options);
         }
       }
