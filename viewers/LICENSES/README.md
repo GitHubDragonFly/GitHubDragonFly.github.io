@@ -28,6 +28,8 @@ The licenses for the [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface a
 
 jQuery license can be seen [here](https://jquery.org/license/)
 
+[Rhino3dm](https://github.com/mcneel/rhino3dm) MIT license can be seen [here](https://github.com/mcneel/rhino3dm?tab=MIT-1-ov-file#readme)
+
 OrbitControlsGizmo MIT licenses can be seen here: [old](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo/blob/master/LICENSE) and [new](https://github.com/Fennec-hub/three-viewport-gizmo?tab=MIT-1-ov-file#readme)
 
 TIF/TIFF image file support is powered by the [UTIF.js](https://github.com/photopea/UTIF.js) whose license is included in the `viewers/static/js/utif` folder
