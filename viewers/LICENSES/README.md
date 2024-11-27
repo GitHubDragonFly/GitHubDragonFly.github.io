@@ -8,13 +8,29 @@ See `viewers/static/js/omggif` folder for licenses and Animated GIF export info,
 
 See `viewers/static/js/model-tag` folder for license related to mrdoob's [model-tag](https://github.com/mrdoob/model-tag) used in `GLTF Legacy` viewer
 
+Google's [Model Viewer](https://github.com/google/model-viewer) element Apache License, Version 2.0 can be seen [here](https://www.apache.org/licenses/LICENSE-2.0)
+
+[glTF Transform](https://gltf-transform.dev) MIT license can be seen [here](https://github.com/donmccurdy/glTF-Transform?tab=MIT-1-ov-file#readme)
+
+[meshoptimizer](https://github.com/zeux/meshoptimizer) MIT license can be seen [here](https://github.com/zeux/meshoptimizer?tab=MIT-1-ov-file#readme)
+
+[@jsquash/avif](https://github.com/jamsinclair/jSquash) Apache License, Version 2.0 can be seen [here](https://www.apache.org/licenses/LICENSE-2.0)
+
+[ktx2-encoder](https://github.com/gz65555/ktx2-encoder) MIT license can be seen [here](https://github.com/gz65555/ktx2-encoder?tab=MIT-1-ov-file#readme)
+
+[JSZip](https://github.com/Stuk/jszip) MIT license can be seen [here](https://github.com/Stuk/jszip?tab=License-1-ov-file#readme)
+
+[UPNG](https://github.com/photopea/UPNG.js) MIT license can be seen [here](https://github.com/photopea/UPNG.js?tab=MIT-1-ov-file#readme)
+
+[Pako](https://github.com/nodeca/pako) MIT license can be seen [here](https://github.com/nodeca/pako?tab=MIT-1-ov-file#readme)
+
 The licenses for the [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and for the [ASSIMP](https://github.com/assimp/assimp) library can be found in the `viewers/static/assimpjs` folder
 
 See `viewers/static/js/jszip/dist` folder for license related to [JSZip](https://stuk.github.io/jszip/) used for zipping up exported models
 
 jQuery license can be seen [here](https://jquery.org/license/)
 
-OrbitControlsGizmo MIT license can be seen [here](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo/blob/master/LICENSE)
+OrbitControlsGizmo MIT licenses can be seen here: [old](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo/blob/master/LICENSE) and [new](https://github.com/Fennec-hub/three-viewport-gizmo?tab=MIT-1-ov-file#readme)
 
 TIF/TIFF image file support is powered by the [UTIF.js](https://github.com/photopea/UTIF.js) whose license is included in the `viewers/static/js/utif` folder
 
