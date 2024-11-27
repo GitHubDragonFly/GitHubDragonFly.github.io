@@ -34,6 +34,8 @@ OrbitControlsGizmo MIT licenses can be seen here: [old](https://github.com/Fenne
 
 [@monogrid/gaimap-js](https://github.com/MONOGRID/gainmap-js) MIT license can be seen [here](https://github.com/MONOGRID/gainmap-js?tab=MIT-1-ov-file#readme)
 
+[PCX-js](https://github.com/warpdesign/pcx-js) MIT license can be seen [here](https://github.com/warpdesign/pcx-js?tab=MIT-1-ov-file#readme)
+
 TIF/TIFF image file support is powered by the [UTIF.js](https://github.com/photopea/UTIF.js) whose license is included in the `viewers/static/js/utif` folder
 
 PRWM exports are powered by the [PRWM](https://github.com/kchapelier/PRWM) whose licenses can be seen in their respective folders: `viewers/static/js/obj2prwm` and `viewers/static/js/three-buffergeometry-to-prwm`
