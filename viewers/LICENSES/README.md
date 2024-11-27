@@ -32,6 +32,8 @@ jQuery license can be seen [here](https://jquery.org/license/)
 
 OrbitControlsGizmo MIT licenses can be seen here: [old](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo/blob/master/LICENSE) and [new](https://github.com/Fennec-hub/three-viewport-gizmo?tab=MIT-1-ov-file#readme)
 
+[@monogrid/gaimap-js](https://github.com/MONOGRID/gainmap-js) MIT license can be seen [here](https://github.com/MONOGRID/gainmap-js?tab=MIT-1-ov-file#readme)
+
 TIF/TIFF image file support is powered by the [UTIF.js](https://github.com/photopea/UTIF.js) whose license is included in the `viewers/static/js/utif` folder
 
 PRWM exports are powered by the [PRWM](https://github.com/kchapelier/PRWM) whose licenses can be seen in their respective folders: `viewers/static/js/obj2prwm` and `viewers/static/js/three-buffergeometry-to-prwm`
