@@ -34,6 +34,9 @@ OrbitControlsGizmo MIT licenses can be seen here: [old](https://github.com/Fenne
 
 [@monogrid/gaimap-js](https://github.com/MONOGRID/gainmap-js) MIT license can be seen [here](https://github.com/MONOGRID/gainmap-js?tab=MIT-1-ov-file#readme)
 
+[three.quarks](https://github.com/Alchemist0823/three.quarks) MIT license can be seen [here](https://github.com/Alchemist0823/three.quarks?tab=MIT-1-ov-file#readme)
+[three.proton](https://github.com/drawcall/three.proton) MIT license can be seen [here](http://www.opensource.org/licenses/mit-license)
+
 [PCX-js](https://github.com/warpdesign/pcx-js) MIT license can be seen [here](https://github.com/warpdesign/pcx-js?tab=MIT-1-ov-file#readme)
 
 TIF/TIFF image file support is powered by the [UTIF.js](https://github.com/photopea/UTIF.js) whose license is included in the `viewers/static/js/utif` folder
