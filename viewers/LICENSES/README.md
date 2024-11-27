@@ -26,8 +26,6 @@ Google's [Model Viewer](https://github.com/google/model-viewer) element Apache L
 
 The licenses for the [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and for the [ASSIMP](https://github.com/assimp/assimp) library can be found in the `viewers/static/assimpjs` folder
 
-See `viewers/static/js/jszip/dist` folder for license related to [JSZip](https://stuk.github.io/jszip/) used for zipping up exported models
-
 jQuery license can be seen [here](https://jquery.org/license/)
 
 OrbitControlsGizmo MIT licenses can be seen here: [old](https://github.com/Fennec-hub/ThreeOrbitControlsGizmo/blob/master/LICENSE) and [new](https://github.com/Fennec-hub/three-viewport-gizmo?tab=MIT-1-ov-file#readme)
@@ -36,9 +34,9 @@ TIF/TIFF image file support is powered by the [UTIF.js](https://github.com/photo
 
 PRWM exports are powered by the [PRWM](https://github.com/kchapelier/PRWM) whose licenses can be seen in their respective folders: `viewers/static/js/obj2prwm` and `viewers/static/js/three-buffergeometry-to-prwm`
 
-APNG image file support is, apart from three.js, also powered by the [UPNG.js](https://github.com/photopea/UPNG.js) and the [Pako.js](https://github.com/nodeca/pako) whose licenses can be seen in their respective folders: `viewers/static/js/upng` and `viewers/static/js/pako`
-
 [OCCT](https://github.com/kovacsv/occt-import-js) licenses are in the `viewers/static/occt-import-js/dist` folder
+
+Some of the above mentioned licenses might also be found in some of the folders within this repository
 
 Notes about modifications, some of which are only added to work with these viewers:
 
