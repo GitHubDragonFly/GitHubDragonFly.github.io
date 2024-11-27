@@ -34,6 +34,8 @@ TIF/TIFF image file support is powered by the [UTIF.js](https://github.com/photo
 
 PRWM exports are powered by the [PRWM](https://github.com/kchapelier/PRWM) whose licenses can be seen in their respective folders: `viewers/static/js/obj2prwm` and `viewers/static/js/three-buffergeometry-to-prwm`
 
+[nunuStudio](https://github.com/tentone/nunuStudio) MIT license can be seen [here](https://github.com/tentone/nunuStudio?tab=MIT-1-ov-file#readme)
+
 [OCCT](https://github.com/kovacsv/occt-import-js) licenses are in the `viewers/static/occt-import-js/dist` folder
 
 Some of the above mentioned licenses might also be found in some of the folders within this repository
