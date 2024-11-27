@@ -36,6 +36,12 @@ PRWM exports are powered by the [PRWM](https://github.com/kchapelier/PRWM) whose
 
 [nunuStudio](https://github.com/tentone/nunuStudio) MIT license can be seen [here](https://github.com/tentone/nunuStudio?tab=MIT-1-ov-file#readme)
 
+[A-Frame](https://github.com/aframevr/aframe) MIT license can be seen [here](https://github.com/aframevr/aframe?tab=MIT-1-ov-file#readme)
+
+[@pmndrs/drei-vanilla](https://github.com/pmndrs/drei-vanilla#splat) MIT license can be seen [here](https://github.com/pmndrs/drei-vanilla?tab=MIT-1-ov-file#readme)
+
+[Luma WebGL](https://github.com/lumalabs/luma-web-examples) MIT license can be seen [here](https://github.com/lumalabs/luma-web-examples?tab=MIT-1-ov-file#readme)
+
 [OCCT](https://github.com/kovacsv/occt-import-js) licenses are in the `viewers/static/occt-import-js/dist` folder
 
 Some of the above mentioned licenses might also be found in some of the folders within this repository
