@@ -120,20 +120,23 @@ Number Type Converter
     - Mobile viewers show it as the `Browse` button
 - Any of the viewers might have bugs and interface / library related limitations
   - Some viewers might be slow to load some models, usually if using `WASM` of some library
-- Currently experimental three.js `WebGPU` support is included in experimental `GLTF`, `OBJ+MTL` and `PDB` WebGPU viewers:
+- Currently experimental three.js `WebGPU` support is included in the following experimental viewers:
+  - `GLTF`, `OBJ+MTL`, `PDB` and `PLY+STL` WebGPU viewers:
   - Use either Chrome or Safari browser with its `WebGPU experimental features` enabled to test these viewers (and your computer):
     - Not really sure if WebGPU in Firefox Nightly browser works properly yet
   - All 3 viewers are customized and also have some export options available:
     -  `GLTF WebGPU` viewer can also be used to optimize and compress GLTF / GLB models
   - Mobile versions of these 3 viewers are available but not properly tested yet
-  - Standalone versions of `GLTF WebGPU` and `OBJ+MTL WebGPU` viewers are available in the `viewers/webgpu/` folder:
+  - Standalone versions of `GLTF WebGPU`, `OBJ+MTL WebGPU` and `PLY+STL WebGPU` viewers are available in the `viewers/webgpu/` folder:
+    - `PLY+STL WebGPU` standalone viewer is using the official three.js `PLY Loader` and `STL Loader` imports:
+      - This is currently the only version of this kind of viewer with WebGPU
     - `GLTF WebGPU` standalone viewer is using the official three.js `GLTF Loader` import
     - `OBJ+MTL WebGPU` standalone viewer is using built-in custom version of `OBJ Loader` and `MTL Loader`
     - Both viewers additionally support drag-and-drop and ZIP files
     - Export functionality is currently limited to GLTF / GLB exports in these standalone viewers:
       - Both viewers are using the official three.js GLTF Exporter
   - Emissive bloom post processing effect (represented with the `PP` button):
-    - Currently available in both standalone and desktop versions of GLTF and OBJ+MTL WebGPU viewers
+    - Currently available in both standalone and desktop versions of `GLTF` and `OBJ+MTL` WebGPU viewers
     - This emissive bloom effect can only be applied to a model which has a built-in emissive component:
       - Maybe try the [Emissive Strength Test](https://github.com/KhronosGroup/glTF-Sample-Models/blob/main/2.0/EmissiveStrengthTest/glTF-Binary/EmissiveStrengthTest.glb) GLB example from Khronos Group
     - It should only work with an unmodified originally loaded model:
