@@ -130,6 +130,8 @@ Number Type Converter
   - Standalone versions of `GLTF WebGPU`, `OBJ+MTL WebGPU` and `PLY+STL WebGPU` viewers are available in the `viewers/webgpu/` folder:
     - `PLY+STL WebGPU` standalone viewer is using the official three.js `PLY Loader` and `STL Loader` imports:
       - This is currently the only version of this kind of viewer with WebGPU
+      - It is using a modified version of [UVUnwrapper](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/utils/UVUnwrapper.js) to create UVs for the model:
+        - This requires that at least 1 texture is loaded together with either `PLY` or `STL` model otherwise it will just be standard loading without UV creation
     - `GLTF WebGPU` standalone viewer is using the official three.js `GLTF Loader` import
     - `OBJ+MTL WebGPU` standalone viewer is using built-in custom version of `OBJ Loader` and `MTL Loader`
     - All standalone viewers additionally support drag-and-drop and ZIP files
