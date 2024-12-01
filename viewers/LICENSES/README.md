@@ -14,6 +14,9 @@ Google's [Model Viewer](https://github.com/google/model-viewer) element Apache L
 
 [meshoptimizer](https://github.com/zeux/meshoptimizer) MIT license can be seen [here](https://github.com/zeux/meshoptimizer?tab=MIT-1-ov-file#readme)
 
+[web-ifc](https://github.com/ThatOpen/engine_web-ifc) library Mozilla Public License Version 2.0 can be seen [here](https://github.com/ThatOpen/engine_web-ifc?tab=MPL-2.0-1-ov-file#readme)
+[web-ifc-three](https://github.com/ThatOpen/web-ifc-three) IFC Loader MIT license can be seen [here](https://github.com/ThatOpen/web-ifc-three?tab=MIT-1-ov-file#readme)
+
 [@jsquash/avif](https://github.com/jamsinclair/jSquash) Apache License, Version 2.0 can be seen [here](https://www.apache.org/licenses/LICENSE-2.0)
 
 [ktx2-encoder](https://github.com/gz65555/ktx2-encoder) MIT license can be seen [here](https://github.com/gz65555/ktx2-encoder?tab=MIT-1-ov-file#readme)
