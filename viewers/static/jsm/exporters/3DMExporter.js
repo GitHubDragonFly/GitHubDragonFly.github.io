@@ -15,7 +15,10 @@ async function import_decompress() {
 	try {
 
 		const { WebGLRenderer } = await import( "three" );
-		const { decompress } = await import( parseFloat( REVISION ) > 169.0 ? "three/addons/utils/WebGLTextureUtils.min.js" : "three/addons/utils/TextureUtils.min.js" );
+		const { decompress } = await import( parseFloat( REVISION ) > 169.0 ?
+			"three/addons/utils/WebGLTextureUtils.min.js" :
+			"three/addons/utils/TextureUtils.min.js"
+		);
 
 		const renderer = new WebGLRenderer( { antialias: true } );
 
@@ -25,7 +28,8 @@ async function import_decompress() {
 
 	try {
 
-		const { CanvasTexture, NodeMaterial, QuadMesh, WebGPURenderer, texture, uv } = await import( "three" );
+		const { CanvasTexture, NodeMaterial, QuadMesh, WebGPURenderer } = await import( "three" );
+		const { texture, uv } = await import( "three/tsl" );
 
 		const renderer = new WebGPURenderer( { antialias: true } );
 		await renderer.init();

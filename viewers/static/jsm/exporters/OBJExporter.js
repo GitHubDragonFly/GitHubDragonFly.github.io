@@ -11,7 +11,10 @@ async function import_decompress() {
 	try {
 
 		const { WebGLRenderer } = await import( "three" );
-		const { decompress } = await import( parseFloat( REVISION ) > 169.0 ? "three/addons/utils/WebGLTextureUtils.min.js" : "three/addons/utils/TextureUtils.min.js" );
+		const { decompress } = await import( parseFloat( REVISION ) > 169.0 ?
+			"three/addons/utils/WebGLTextureUtils.min.js" :
+			"three/addons/utils/TextureUtils.min.js"
+		);
 
 		const renderer = new WebGLRenderer( { antialias: true } );
 
@@ -21,7 +24,8 @@ async function import_decompress() {
 
 	try {
 
-		const { CanvasTexture, NodeMaterial, QuadMesh, WebGPURenderer, texture, uv } = await import( "three" );
+		const { CanvasTexture, NodeMaterial, QuadMesh, WebGPURenderer } = await import( "three" );
+		const { texture, uv } = await import( "three/tsl" );
 
 		const renderer = new WebGPURenderer( { antialias: true } );
 		await renderer.init();
@@ -293,11 +297,13 @@ class OBJExporter {
 					// transform the vertex to export format
 					if ( vertex_colors ) {
 
-						output += 'v ' + vertex.x + ' ' + vertex.y + ' ' + vertex.z + ' ' + vertex_colors.getX( i ) + ' ' + vertex_colors.getY( i ) + ' ' + vertex_colors.getZ( i ) + '\n';
+						output += 'v ' + vertex.x + ' ' + vertex.y + ' ' + vertex.z + ' ' + vertex_colors.getX( i ) + ' ' + vertex_colors.getY( i ) + ' ' + vertex_colors.getZ( i );
+						output += '\n';
 
 					} else {
 
-						output += 'v ' + vertex.x + ' ' + vertex.y + ' ' + vertex.z + '\n';
+						output += 'v ' + vertex.x + ' ' + vertex.y + ' ' + vertex.z;
+						output += '\n';
 
 					}
 
@@ -308,13 +314,16 @@ class OBJExporter {
 			// uvs
 			if ( uvs !== undefined ) {
 
-				for ( let i = 0, l = uvs.count; i < l; i ++, nbVertexUvs ++ ) {
+				for ( let i = 0; i < uvs.count; i ++ ) {
 
 					uv.x = uvs.getX( i ) || 0; // avoid NaN values
 					uv.y = uvs.getY( i ) || 0; // avoid NaN values
 
 					// transform the uv to export format
-					output += 'vt ' + uv.x + ' ' + uv.y + '\n';
+					output += 'vt ' + uv.x + ' ' + uv.y;
+					output += '\n';
+
+					nbVertexUvs ++;
 
 				}
 
@@ -325,7 +334,7 @@ class OBJExporter {
 
 				normalMatrixWorld.getNormalMatrix( mesh.matrixWorld );
 
-				for ( let i = 0, l = normals.count; i < l; i ++, nbNormals ++ ) {
+				for ( let i = 0; i < normals.count; i ++ ) {
 
 					normal.x = normals.getX( i ) * ( mesh.scale.x || 1.0 );
 					normal.y = normals.getY( i ) * ( mesh.scale.y || 1.0 );
@@ -335,7 +344,10 @@ class OBJExporter {
 					normal.applyMatrix3( normalMatrixWorld ).normalize();
 
 					// transform the normal to export format
-					output += 'vn ' + normal.x + ' ' + normal.y + ' ' + normal.z + '\n';
+					output += 'vn ' + normal.x + ' ' + normal.y + ' ' + normal.z;
+					output += '\n';
+
+					nbNormals ++;
 
 				}
 
@@ -344,13 +356,14 @@ class OBJExporter {
 			// faces
 			if ( indices !== null ) {
 
-				for ( let i = 0, l = indices.count; i < l; i += 3 ) {
+				for ( let i = 0; i < indices.count; i += 3 ) {
 
 					Object.keys( multi_materials ).forEach( ( key ) => {
 
 						if ( parseInt( key ) === i ) {
 
-							output += 'usemtl ' + multi_materials[ i ] + '\n';
+							output += 'usemtl ' + multi_materials[ i ];
+							output += '\n';
 
 						}
 
@@ -364,19 +377,21 @@ class OBJExporter {
 					}
 
 					// transform the face to export format
-					output += 'f ' + face.join( ' ' ) + '\n';
+					output += 'f ' + face.join( ' ' );
+					output += '\n';
 
 				}
 
 			} else {
 
-				for ( let i = 0, l = vertices.count; i < l; i += 3 ) {
+				for ( let i = 0; i < vertices.count; i += 3 ) {
 
 					Object.keys( multi_materials ).forEach( ( key ) => {
 
 						if ( parseInt( key ) === i ) {
 
-							output += 'usemtl ' + multi_materials[ i ] + '\n';
+							output += 'usemtl ' + multi_materials[ i ];
+							output += '\n';
 
 						}
 
@@ -390,7 +405,8 @@ class OBJExporter {
 					}
 
 					// transform the face to export format
-					output += 'f ' + face.join( ' ' ) + '\n';
+					output += 'f ' + face.join( ' ' );
+					output += '\n';
 
 				}
 
@@ -502,9 +518,10 @@ class OBJExporter {
 
 			if ( type === 'LineSegments' ) {
 
-				for ( let j = 1, k = j + 1, l = vertices.count; j < l; j += 2, k = j + 1 ) {
+				for ( let j = 1; j < vertices.count; j += 2 ) {
 
-					output += 'l ' + ( indexVertex + j ) + ' ' + ( indexVertex + k ) + '\n';
+					output += 'l ' + ( indexVertex + j ) + ' ' + ( indexVertex + ( j + 1 ) );
+					output += '\n';
 
 				}
 
@@ -514,7 +531,7 @@ class OBJExporter {
 
 				output += 'l ';
 
-				for ( let j = 1, l = vertices.count; j <= l; j ++ ) {
+				for ( let j = 1; j < vertices.count; j ++ ) {
 
 					output += indexVertex + j + ' ';
 
@@ -567,7 +584,7 @@ class OBJExporter {
 
 			if ( vertices !== undefined ) {
 
-				for ( let i = 0, l = vertices.count; i < l; i ++, nbVertex ++ ) {
+				for ( let i = 0; i < vertices.count; i ++ ) {
 
 					vertex.fromBufferAttribute( vertices, i );
 					vertex.applyMatrix4( points.matrixWorld );
@@ -581,6 +598,7 @@ class OBJExporter {
 					}
 
 					output += '\n';
+					nbVertex ++;
 
 				}
 
@@ -622,7 +640,8 @@ class OBJExporter {
 
 				materials[ points.material.name ] = points.material;
 
-				output += 'usemtl ' + points.material.name + '\n';
+				output += 'usemtl ' + points.material.name;
+				output += '\n';
 
 				points_count += 1;
 			}
@@ -666,7 +685,7 @@ class OBJExporter {
 			let count = 1;
 
 			const ext = 'png';
-			const image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJP', '.PJPEG', '.BMP', '.GIF', '.SVG', '.WEBP' ];
+			const image_extensions = [ '.AVIF', '.BMP', '.DDS', '.GIF', '.KTX2', '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJP', '.PJPEG', '.SVG', '.TGA', '.WEBP' ];
 
 			for ( const key of Object.keys( materials ) ) {
 
@@ -691,7 +710,7 @@ class OBJExporter {
 			// set MTL parameters and textures
 			async function set_mtl_params_textures( mat) {
 
-				let name = ( mat.name && mat.name !== '' ) ? ( image_extensions.some( ext => mat.name.toUpperCase().endsWith( ext ) ) ? mat.name.substring( 0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : 'material' + mat.id;
+				let name = ( mat.name && mat.name !== '' ) ? ( image_extensions.some( img_ext => mat.name.toUpperCase().endsWith( img_ext ) ) ? mat.name.substring( 0, mat.name.lastIndexOf( '.' ) ) : mat.name ) : 'material' + mat.id;
 				name = name.replaceAll( '#', '' );
 				name = name.replaceAll( ' ', '_' );
 
