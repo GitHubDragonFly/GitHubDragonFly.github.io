@@ -36,6 +36,8 @@ const _color = new Color();
 
 function ParserState() {
 
+	let i_uv1 = 0;
+
 	const state = {
 		objects: [],
 		object: {},
@@ -44,6 +46,7 @@ function ParserState() {
 		normals: [],
 		colors: [],
 		uvs: [],
+		uvs1: [],
 
 		materials: {},
 		materialLibraries: [],
@@ -77,6 +80,7 @@ function ParserState() {
 					normals: [],
 					colors: [],
 					uvs: [],
+					uvs1: [],
 					hasUVIndices: false
 				},
 				materials: [],
@@ -310,6 +314,19 @@ function ParserState() {
 			dst.push( src[ a + 0 ], src[ a + 1 ] );
 			dst.push( src[ b + 0 ], src[ b + 1 ] );
 			dst.push( src[ c + 0 ], src[ c + 1 ] );
+
+			if ( this.uvs1.length > 0 ) {
+
+				const src1 = this.uvs1;
+				const dst1 = this.object.geometry.uvs1;
+
+				dst1.push( src1[ i_uv1 ], src1[ i_uv1 + 1 ] );
+				dst1.push( src1[ i_uv1 + 2 ], src1[ i_uv1 + 3 ] );
+				dst1.push( src1[ i_uv1 + 4 ], src1[ i_uv1 + 5 ] );
+
+				i_uv1 += 6;
+
+			}
 
 		},
 
@@ -564,6 +581,12 @@ class OBJLoader extends Loader {
 							parseFloat( data[ 2 ] )
 						);
 						break;
+					case 'vt1':
+						state.uvs1.push(
+							parseFloat( data[ 1 ] ),
+							parseFloat( data[ 2 ] )
+						);
+						break;
 
 				}
 
@@ -757,6 +780,7 @@ class OBJLoader extends Loader {
 				if ( geometry.hasUVIndices === true ) {
 
 					buffergeometry.setAttribute( 'uv', new Float32BufferAttribute( geometry.uvs, 2 ) );
+					if ( geometry.uvs1.length > 0 ) buffergeometry.setAttribute( 'uv1', new Float32BufferAttribute( geometry.uvs1, 2 ) );
 
 				}
 
