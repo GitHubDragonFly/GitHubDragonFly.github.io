@@ -16,7 +16,7 @@ import {
 	Vector2
 } from "three";
 
-import * as fflate from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/libs/fflate.module.min.js";
+import * as fflate from "three/addons/libs/fflate.module.min.js";
 
 class USDAParser {
 
@@ -840,6 +840,29 @@ class USDZLoader extends Loader {
 										setTextureParams( material.map, data[ 'def Shader "Transform2d_opacity"' ] );
 
 									}
+
+								}
+
+							}
+
+						} else if ( material.opacity === 0.99999 ) {
+
+							material.transparent = true;
+							material.depthWrite = false;
+
+							// set map
+
+							if ( 'float inputs:opacity.connect' in surface ) {
+
+								const path = surface[ 'float inputs:opacity.connect' ];
+								const sampler = findTexture( root, /(\w+).output/.exec( path )[ 1 ] );
+
+								material.map = buildTexture( sampler );
+								material.map.colorSpace = NoColorSpace;
+
+								if ( 'def Shader "Transform2d_opacity"' in data ) {
+
+									setTextureParams( material.map, data[ 'def Shader "Transform2d_opacity"' ] );
 
 								}
 
