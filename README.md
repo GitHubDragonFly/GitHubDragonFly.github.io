@@ -62,7 +62,7 @@ The `Intro` button on the desktop main menu page will connect to the intro video
  - The video shows a little bit of info on the main menu interface
  - The video shows how to start using 3D viewers by browsing and loading OBJ model files from a hard drive
  - This button is not available on the mobile menu
- - It might be simpler to open models via any viewer's `URL` option, provided that you have the actual model's URL available
+ - It might be simpler to open 3D models via any viewer's `URL` option, provided that you have the actual model's URL available
  - This video was captured by using the free and open source [OBS Studio](https://github.com/obsproject/obs-studio) software
  - Videos available in my other repositories were also captured by the OBS Studio.
 
@@ -393,6 +393,7 @@ Number Type Converter
       - Viewers which include this exporter will try to export the model automatically
     - OBJ + MTL exporter and loaders try to take advantage of the THREE.MeshPhysicalMaterial to bring a GLTF alike functionality
       - Check the `OBJ_MTL_PBR.md` file for the exported MTL entries description
+      - They will also attempt export / import of any existing `uv1` set alongside `uv` for `aoMap` or `lightMap`
     - OBJ exporter might currently, along with the exported MTL file, export multiple copies of the same texture but under different names:
       - Select 1 copy of the texture and rename it if you wish, then update the corresponding MTL file entries to point to that texture
       - Delete all other copies of that same texture
