@@ -1,7 +1,6 @@
 import {
 	Color,
 	Matrix3,
-	REVISION,
 	Vector2,
 	Vector3
 } from "three";
@@ -10,10 +9,9 @@ async function import_decompress() {
 
 	try {
 
-		const { WebGLRenderer } = await import( "three" );
-		const { decompress } = await import( parseFloat( REVISION ) > 169.0 ?
-			"three/addons/utils/WebGLTextureUtils.min.js" :
-			"three/addons/utils/TextureUtils.min.js"
+		const { WebGLRenderer } = await import( 'three' );
+		const { decompress } = await import(
+			'https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/utils/TextureUtils.min.js'
 		);
 
 		const renderer = new WebGLRenderer( { antialias: true } );
@@ -24,8 +22,8 @@ async function import_decompress() {
 
 	try {
 
-		const { CanvasTexture, NodeMaterial, QuadMesh, WebGPURenderer } = await import( "three" );
-		const { texture, uv } = await import( "three/tsl" );
+		const { CanvasTexture, NodeMaterial, QuadMesh, WebGPURenderer } = await import( 'three' );
+		const { texture, uv } = await import( 'three/tsl' );
 
 		const renderer = new WebGPURenderer( { antialias: true } );
 		await renderer.init();
@@ -147,6 +145,7 @@ class OBJExporter {
 		const color = new Color();
 		const normal = new Vector3();
 		const uv = new Vector2();
+		const uv1 = new Vector2();
 		const face = [];
 
 		function parseMesh( mesh ) {
@@ -180,6 +179,7 @@ class OBJExporter {
 			const vertices = geometry.getAttribute( 'position' );
 			const normals = geometry.getAttribute( 'normal' );
 			const uvs = geometry.getAttribute( 'uv' );
+			const uvs1 = geometry.getAttribute( 'uv1' );
 			const indices = geometry.getIndex();
 
 			// name of the mesh object
@@ -324,6 +324,22 @@ class OBJExporter {
 					output += '\n';
 
 					nbVertexUvs ++;
+
+				}
+
+			}
+
+			// uvs1
+			if ( uvs1 !== undefined ) {
+
+				for ( let i = 0; i < uvs1.count; i ++ ) {
+
+					uv1.x = uvs1.getX( i ) || 0; // avoid NaN values
+					uv1.y = uvs1.getY( i ) || 0; // avoid NaN values
+
+					// transform the uv1 to export format
+					output += 'vt1 ' + uv1.x + ' ' + uv1.y;
+					output += '\n';
 
 				}
 
@@ -685,23 +701,26 @@ class OBJExporter {
 			let count = 1;
 
 			const ext = 'png';
-			const image_extensions = [ '.AVIF', '.BMP', '.DDS', '.GIF', '.KTX2', '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJP', '.PJPEG', '.SVG', '.TGA', '.WEBP' ];
+			const image_extensions = [
+				'.AVIF', '.BMP', '.DDS', '.GIF', '.KTX2', '.PNG', '.JPG',
+				'.JPEG', '.JFIF', '.PJP', '.PJPEG', '.SVG', '.TGA', '.WEBP'
+			];
 
 			for ( const key of Object.keys( materials ) ) {
 
 				if ( Array.isArray( materials[ key ] )) {
 
-					materials[ key ].forEach( async ( mtl ) => {
+					materials[ key ].forEach( mtl => {
 
 						map_Px_set = false;
-						await set_mtl_params_textures( mtl );
+						set_mtl_params_textures( mtl );
 
 					});
 
 				} else {
 
 					map_Px_set = false;
-					await set_mtl_params_textures( materials[ key ] );
+					set_mtl_params_textures( materials[ key ] );
 
 				}
 
@@ -813,7 +832,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.map.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.map.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -834,13 +853,13 @@ class OBJExporter {
 								map_uuids.push( mat.map.uuid );
 								map_names[ mat.map.uuid ] = name;
 
+								mtlOutput += 'map_Kd -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Kd -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -858,7 +877,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.specularMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.specularMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -881,13 +900,13 @@ class OBJExporter {
 								map_uuids.push( mat.specularMap.uuid );
 								map_names[ mat.specularMap.uuid ] = name;
 
+								mtlOutput += 'map_Ks -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Ks -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -905,7 +924,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.emissiveMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.emissiveMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -928,13 +947,13 @@ class OBJExporter {
 								map_uuids.push( mat.emissiveMap.uuid );
 								map_names[ mat.emissiveMap.uuid ] = name;
 
+								mtlOutput += 'map_Ke -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Ke -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -952,7 +971,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.bumpMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.bumpMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -975,12 +994,6 @@ class OBJExporter {
 								map_uuids.push( mat.bumpMap.uuid );
 								map_names[ mat.bumpMap.uuid ] = name;
 
-								textures.push( {
-									name,
-									ext,
-									data: await imageToData( map_to_process.image, ext )
-								});
-
 								if ( mat.bumpScale === 1 ) {
 
 									mtlOutput += 'map_bump -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -990,6 +1003,12 @@ class OBJExporter {
 									mtlOutput += 'map_bump -bm ' + mat.bumpScale + ' -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								}
+
+								textures.push( {
+									name,
+									ext,
+									data: imageToData( map_to_process.image, ext )
+								});
 
 							} else {
 
@@ -1015,7 +1034,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.lightMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.lightMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1038,13 +1057,13 @@ class OBJExporter {
 								map_uuids.push( mat.lightMap.uuid );
 								map_names[ mat.lightMap.uuid ] = name;
 
+								mtlOutput += 'Pbr_pl_map -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'Pbr_pl_map -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1064,7 +1083,7 @@ class OBJExporter {
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = await scope.decompress( mat.metalnessMap.clone(), maxTextureSize, scope.renderer );
+								map_to_process = scope.decompress( mat.metalnessMap.clone(), maxTextureSize, scope.renderer );
 
 							}
 
@@ -1087,12 +1106,6 @@ class OBJExporter {
 									map_uuids.push( mat.metalnessMap.uuid );
 									map_names[ mat.metalnessMap.uuid ] = name;
 
-									textures.push( {
-										name,
-										ext,
-										data: await imageToData( map_to_process.image, ext )
-									});
-
 									if ( mat.roughnessMap && mat.roughnessMap === mat.metalnessMap ) {
 
 										mtlOutput += 'map_Px -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1103,6 +1116,12 @@ class OBJExporter {
 										mtlOutput += 'map_Pm -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 									}
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( map_to_process.image, ext )
+									});
 
 								} else {
 
@@ -1133,7 +1152,7 @@ class OBJExporter {
 
 							if ( map_to_process.isCompressedTexture === true ) {
 
-								map_to_process = await scope.decompress( mat.roughnessMap.clone(), maxTextureSize, scope.renderer );
+								map_to_process = scope.decompress( mat.roughnessMap.clone(), maxTextureSize, scope.renderer );
 
 							}
 
@@ -1156,12 +1175,6 @@ class OBJExporter {
 									map_uuids.push( mat.roughnessMap.uuid );
 									map_names[ mat.roughnessMap.uuid ] = name;
 
-									textures.push( {
-										name,
-										ext,
-										data: await imageToData( map_to_process.image, ext )
-									});
-
 									if ( mat.metalnessMap && mat.metalnessMap === mat.roughnessMap ) {
 
 										mtlOutput += 'map_Px -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
@@ -1172,6 +1185,12 @@ class OBJExporter {
 										mtlOutput += 'map_Pr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 									}
+
+									textures.push( {
+										name,
+										ext,
+										data: imageToData( map_to_process.image, ext )
+									});
 
 								} else {
 
@@ -1200,7 +1219,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.displacementMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.displacementMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1223,13 +1242,13 @@ class OBJExporter {
 								map_uuids.push( mat.displacementMap.uuid );
 								map_names[ mat.displacementMap.uuid ] = name;
 
+								mtlOutput += 'disp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'disp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1247,7 +1266,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.normalMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.normalMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1270,13 +1289,13 @@ class OBJExporter {
 								map_uuids.push( mat.normalMap.uuid );
 								map_names[ mat.normalMap.uuid ] = name;
 
+								mtlOutput += 'norm -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'norm -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1294,7 +1313,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.alphaMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.alphaMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1317,13 +1336,13 @@ class OBJExporter {
 								map_uuids.push( mat.alphaMap.uuid );
 								map_names[ mat.alphaMap.uuid ] = name;
 
+								mtlOutput += 'map_d -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_d -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1341,7 +1360,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.aoMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.aoMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1364,13 +1383,13 @@ class OBJExporter {
 								map_uuids.push( mat.aoMap.uuid );
 								map_names[ mat.aoMap.uuid ] = name;
 
+								mtlOutput += 'map_Ka -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Ka -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1388,7 +1407,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.anisotropyMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.anisotropyMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1411,13 +1430,13 @@ class OBJExporter {
 								map_uuids.push( mat.anisotropyMap.uuid );
 								map_names[ mat.anisotropyMap.uuid ] = name;
 
+								mtlOutput += 'map_Pa -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Pa -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1435,7 +1454,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.clearcoatMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.clearcoatMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1458,13 +1477,13 @@ class OBJExporter {
 								map_uuids.push( mat.clearcoatMap.uuid );
 								map_names[ mat.clearcoatMap.uuid ] = name;
 
+								mtlOutput += 'map_Pcc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Pcc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1482,7 +1501,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.clearcoatNormalMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.clearcoatNormalMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1505,13 +1524,13 @@ class OBJExporter {
 								map_uuids.push( mat.clearcoatNormalMap.uuid );
 								map_names[ mat.clearcoatNormalMap.uuid ] = name;
 
+								mtlOutput += 'map_Pcn -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Pcn -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1529,7 +1548,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.clearcoatRoughnessMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.clearcoatRoughnessMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1552,13 +1571,13 @@ class OBJExporter {
 								map_uuids.push( mat.clearcoatRoughnessMap.uuid );
 								map_names[ mat.clearcoatRoughnessMap.uuid ] = name;
 
+								mtlOutput += 'map_Pcr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Pcr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1576,7 +1595,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.iridescenceMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.iridescenceMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1599,13 +1618,13 @@ class OBJExporter {
 								map_uuids.push( mat.iridescenceMap.uuid );
 								map_names[ mat.iridescenceMap.uuid ] = name;
 
+								mtlOutput += 'map_Pi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Pi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1623,7 +1642,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.iridescenceThicknessMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.iridescenceThicknessMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1646,13 +1665,13 @@ class OBJExporter {
 								map_uuids.push( mat.iridescenceThicknessMap.uuid );
 								map_names[ mat.iridescenceThicknessMap.uuid ] = name;
 
+								mtlOutput += 'map_Pit -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Pit -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1670,7 +1689,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.sheenColorMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.sheenColorMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1693,13 +1712,13 @@ class OBJExporter {
 								map_uuids.push( mat.sheenColorMap.uuid );
 								map_names[ mat.sheenColorMap.uuid ] = name;
 
+								mtlOutput += 'map_Psc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Psc -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1717,7 +1736,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.sheenRoughnessMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.sheenRoughnessMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1740,13 +1759,13 @@ class OBJExporter {
 								map_uuids.push( mat.sheenRoughnessMap.uuid );
 								map_names[ mat.sheenRoughnessMap.uuid ] = name;
 
+								mtlOutput += 'map_Psr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Psr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1764,7 +1783,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.specularIntensityMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.specularIntensityMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1787,13 +1806,13 @@ class OBJExporter {
 								map_uuids.push( mat.specularIntensityMap.uuid );
 								map_names[ mat.specularIntensityMap.uuid ] = name;
 
+								mtlOutput += 'map_Psi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Psi -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1811,7 +1830,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.specularColorMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.specularColorMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1834,13 +1853,13 @@ class OBJExporter {
 								map_uuids.push( mat.specularColorMap.uuid );
 								map_names[ mat.specularColorMap.uuid ] = name;
 
+								mtlOutput += 'map_Psp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Psp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1858,7 +1877,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.thicknessMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.thicknessMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1881,13 +1900,13 @@ class OBJExporter {
 								map_uuids.push( mat.thicknessMap.uuid );
 								map_names[ mat.thicknessMap.uuid ] = name;
 
+								mtlOutput += 'map_Pth -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Pth -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1905,7 +1924,7 @@ class OBJExporter {
 
 						if ( map_to_process.isCompressedTexture === true ) {
 
-							map_to_process = await scope.decompress( mat.transmissionMap.clone(), maxTextureSize, scope.renderer );
+							map_to_process = scope.decompress( mat.transmissionMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
@@ -1928,13 +1947,13 @@ class OBJExporter {
 								map_uuids.push( mat.transmissionMap.uuid );
 								map_names[ mat.transmissionMap.uuid ] = name;
 
+								mtlOutput += 'map_Ptr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
 								textures.push( {
 									name,
 									ext,
-									data: await imageToData( map_to_process.image, ext )
+									data: imageToData( map_to_process.image, ext )
 								});
-
-								mtlOutput += 'map_Ptr -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 							} else {
 
@@ -1996,48 +2015,56 @@ class OBJExporter {
 
 		// the following functions were adopted from ColladaExporter.js
 
-		async function imageToData( image, ext ) {
+		function imageToData( image, ext ) {
 
 			let canvas, ctx;
 
-			canvas = canvas || document.createElement( 'canvas' );
+			if ( typeof image === 'canvas' ) {
 
-			let scale = maxTextureSize / Math.max( image.width, image.height );
-
-			canvas.width = image.width * Math.min( 1, scale );
-			canvas.height = image.height * Math.min( 1, scale );
-
-			ctx = ctx || canvas.getContext( '2d' );
-
-			if ( map_flip_required === true ) {
-
-				// Flip image vertically
-
-				ctx.translate( 0, canvas.height );
-				ctx.scale( 1, - 1 );
-
-			}
-
-			// this seems to also work fine for exporting TGA images as PNG
-
-			if ( image instanceof ImageData ) {
-
-				ctx.putImageData( image, 0, 0 );
-
-			} else if ( image.data && image.data.constructor === Uint8Array ) {
-
-				let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
-
-				ctx.putImageData( imgData, 0, 0 );
+				canvas = image;
 
 			} else {
 
-				ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+				canvas = canvas || document.createElement( 'canvas' );
+
+				let scale = maxTextureSize / Math.max( image.width, image.height );
+
+				canvas.width = image.width * Math.min( 1, scale );
+				canvas.height = image.height * Math.min( 1, scale );
+
+				ctx = ctx || canvas.getContext( '2d' );
+
+				if ( map_flip_required === true ) {
+
+					// Flip image vertically
+
+					ctx.translate( 0, canvas.height );
+					ctx.scale( 1, - 1 );
+
+				}
+
+				// this seems to also work fine for exporting TGA images as PNG
+
+				if ( image instanceof ImageData ) {
+
+					ctx.putImageData( image, 0, 0 );
+
+				} else if ( image.data && image.data.constructor === Uint8Array ) {
+
+					let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
+
+					ctx.putImageData( imgData, 0, 0 );
+
+				} else {
+
+					ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+
+				}
 
 			}
 
 			// Get the base64 encoded data
-			const base64data = canvas.toDataURL( `image/${ext}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+			const base64data = canvas.toDataURL( `image/${ext}`, 1 ).replace( /^data:image\/(avif|bmp|gif|jpeg|ktx2|png);base64,/, '' );
 
 			// Convert to a uint8 array
 			return base64ToBuffer( base64data );

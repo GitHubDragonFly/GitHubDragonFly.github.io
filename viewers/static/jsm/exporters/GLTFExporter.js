@@ -2,10 +2,10 @@ import {
 	BufferAttribute,
 	ClampToEdgeWrapping,
 	Color,
+	CompressedTexture,
 	DoubleSide,
 	InterpolateDiscrete,
 	InterpolateLinear,
-	NoColorSpace,
 	LinearFilter,
 	LinearMipmapLinearFilter,
 	LinearMipmapNearestFilter,
@@ -15,16 +15,16 @@ import {
 	NearestFilter,
 	NearestMipmapLinearFilter,
 	NearestMipmapNearestFilter,
+	NoColorSpace,
 	PropertyBinding,
+	Quaternion,
 	RGBAFormat,
 	RepeatWrapping,
+	REVISION,
 	Scene,
 	Source,
 	SRGBColorSpace,
-	CompressedTexture,
-	Vector3,
-	Quaternion,
-	REVISION
+	Vector3
 } from "three";
 
 async function import_decompress() {
@@ -32,9 +32,8 @@ async function import_decompress() {
 	try {
 
 		const { WebGLRenderer } = await import( "three" );
-		const { decompress } = await import( parseFloat( REVISION ) > 169.0 ?
-			"three/addons/utils/WebGLTextureUtils.min.js" :
-			"three/addons/utils/TextureUtils.min.js"
+		const { decompress } = await import(
+			"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/utils/TextureUtils.min.js"
 		);
 
 		const renderer = new WebGLRenderer( { antialias: true } );

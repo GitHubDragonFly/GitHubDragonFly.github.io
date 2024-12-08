@@ -5,8 +5,7 @@ import {
 	DoubleSide,
 	InterleavedBufferAttribute,
 	Matrix4,
-	MeshBasicMaterial,
-	REVISION
+	MeshBasicMaterial
 } from "three";
 
 import { deinterleaveAttribute } from "three/addons/utils/BufferGeometryUtils.min.js";
@@ -16,9 +15,8 @@ async function import_decompress() {
 	try {
 
 		const { WebGLRenderer } = await import( "three" );
-		const { decompress } = await import( parseFloat( REVISION ) > 169.0 ?
-			"three/addons/utils/WebGLTextureUtils.min.js" :
-			"three/addons/utils/TextureUtils.min.js"
+		const { decompress } = await import(
+			"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/utils/TextureUtils.min.js"
 		);
 
 		const renderer = new WebGLRenderer( { antialias: true } );

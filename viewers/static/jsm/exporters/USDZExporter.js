@@ -3,8 +3,7 @@ import {
 	DoubleSide,
 	LinearSRGBColorSpace,
 	MeshStandardMaterial,
-	NoColorSpace,
-	REVISION
+	NoColorSpace
 } from "three";
 
 import {
@@ -17,9 +16,8 @@ async function import_decompress() {
 	try {
 
 		const { WebGLRenderer } = await import( "three" );
-		const { decompress } = await import( parseFloat( REVISION ) > 169.0 ?
-			"three/addons/utils/WebGLTextureUtils.min.js" :
-			"three/addons/utils/TextureUtils.min.js"
+		const { decompress } = await import(
+			"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/utils/TextureUtils.min.js"
 		);
 
 		const renderer = new WebGLRenderer( { antialias: true } );
@@ -130,7 +128,7 @@ class USDZExporter {
 			},
 			quickLookCompatible: false,
 			map_flip_required: false,
-			maxTextureSize: 1024,
+			maxTextureSize: Infinity,
 		}, options );
 
 		const files = {};
@@ -321,7 +319,7 @@ class USDZExporter {
 
 			}
 
-			const canvas = imageToCanvas( texture.image, options.map_flip_required, options.maxTextureSize );
+			const canvas = await imageToCanvas( texture.image, options.map_flip_required, options.maxTextureSize );
 			const blob = await new Promise( resolve => canvas.toBlob( resolve, 'image/png', 1 ) );
 
 			files[ `textures/Texture_${ id }.png` ] = new Uint8Array( await blob.arrayBuffer() );
@@ -368,7 +366,7 @@ class USDZExporter {
 
 }
 
-function imageToCanvas( image, flipY, maxTextureSize ) {
+async function imageToCanvas( image, flipY, maxTextureSize ) {
 
 	if ( ( typeof HTMLImageElement !== 'undefined' && image instanceof HTMLImageElement ) ||
 		( typeof HTMLCanvasElement !== 'undefined' && image instanceof HTMLCanvasElement ) ||
@@ -820,7 +818,7 @@ function buildMaterial( material, textures, quickLookCompatible = false ) {
 
 	}
 
-	if ( material.roughnessMap && material.roughness === 1 ) {
+	if ( material.roughnessMap && material.roughness > 0.0 ) {
 
 		inputs.push( `${ pad }float inputs:roughness.connect = </Materials/Material_${ material.id }/Texture_${ material.roughnessMap.id }_roughness.outputs:g>` );
 
@@ -832,7 +830,7 @@ function buildMaterial( material, textures, quickLookCompatible = false ) {
 
 	}
 
-	if ( material.metalnessMap && material.metalness === 1 ) {
+	if ( material.metalnessMap && material.metalness > 0.0 ) {
 
 		inputs.push( `${ pad }float inputs:metallic.connect = </Materials/Material_${ material.id }/Texture_${ material.metalnessMap.id }_metallic.outputs:b>` );
 
@@ -853,55 +851,59 @@ function buildMaterial( material, textures, quickLookCompatible = false ) {
 
 	} else {
 
-		if ( material.opacity !== undefined ) {
+		if ( material.transmission !== undefined && material.transmission > 0.0 ) {
 
-			if ( material.transmission !== undefined && material.transmission > 0.0 ) {
+			// workaround to let USDZ Loader set transmission
+			// this will approximate the models appearance
 
-				// workaround to let USDZ Loader set transmission
-				// this will approximate the models appearance
+			if ( material.thickness !== undefined && material.thickness > 0.0 ) {
 
-				if ( material.thickness !== undefined && material.thickness > 0.0 ) {
+				inputs.push( `${ pad }float inputs:opacity = 0.25` );
+				inputs.push( `${ pad }float inputs:opacityThreshold = 0.0059` );
 
-					inputs.push( `${ pad }float inputs:opacity = 0.25` );
-					inputs.push( `${ pad }float inputs:opacityThreshold = 0.0059` );
+			} else {
 
-				} else {
+				inputs.push( `${ pad }float inputs:opacity = 0.95` );
+				inputs.push( `${ pad }float inputs:opacityThreshold = 0.0058` );
 
-					inputs.push( `${ pad }float inputs:opacity = 0.95` );
-					inputs.push( `${ pad }float inputs:opacityThreshold = 0.0058` );
+			}
 
-				}
+			if ( material.transmissionMap ) {
 
-				if ( material.transmissionMap ) {
+				inputs.push( `${ pad }float inputs:opacity.connect = </Materials/Material_${ material.id }/Texture_${ material.transmissionMap.id }_opacity.outputs:r>` );
+				samplers.push( buildTexture( material.transmissionMap, 'opacity' ) );
 
-					inputs.push( `${ pad }float inputs:opacity.connect = </Materials/Material_${ material.id }/Texture_${ material.transmissionMap.id }_opacity.outputs:r>` );
-					samplers.push( buildTexture( material.transmissionMap, 'opacity' ) );
+			}
 
-				}
+		} else if ( material.transparent === true || material.opacity < 1.0 ) {
 
-			} else if ( material.transparent === true || material.opacity < 1.0 ) {
+			if ( material.transparent === true && material.depthWrite === false ) {
 
-				inputs.push( `${ pad }float inputs:opacity = ${ material.opacity }` );
-				inputs.push( `${ pad }float inputs:opacityThreshold = 0.0057` );
-
-				if ( material.map ) {
-					inputs.push( `${ pad }float inputs:opacity.connect = </Materials/Material_${ material.id }/Texture_${ material.map.id }_diffuse.outputs:a>` );
-					samplers.push( buildTexture( material.map, 'opacity' ) );
-				}
-
-			} else if ( material.alphaTest || material.alphaTest > 0 ) {
-
-				inputs.push( `${ pad }float inputs:opacity = ${ material.opacity }` );
-				inputs.push( `${ pad }float inputs:opacityThreshold = ${ material.alphaTest }` );
-
-				if ( material.map ) {
-					inputs.push( `${ pad }float inputs:opacity.connect = </Materials/Material_${ material.id }/Texture_${ material.map.id }_diffuse.outputs:a>` );
-					samplers.push( buildTexture( material.map, 'opacity' ) );
-				}
+				inputs.push( `${ pad }float inputs:opacity = 0.99999` );
 
 			} else {
 
 				inputs.push( `${ pad }float inputs:opacity = ${ material.opacity }` );
+				inputs.push( `${ pad }float inputs:opacityThreshold = 0.0057` );
+
+			}
+
+			if ( material.map ) {
+
+				inputs.push( `${ pad }float inputs:opacity.connect = </Materials/Material_${ material.id }/Texture_${ material.map.id }_diffuse.outputs:a>` );
+				samplers.push( buildTexture( material.map, 'opacity' ) );
+
+			}
+
+		} else if ( material.alphaTest !== undefined && material.alphaTest > 0.0 ) {
+
+			inputs.push( `${ pad }float inputs:opacity = ${ material.opacity }` );
+			inputs.push( `${ pad }float inputs:opacityThreshold = ${ material.alphaTest }` );
+
+			if ( material.map ) {
+
+				inputs.push( `${ pad }float inputs:opacity.connect = </Materials/Material_${ material.id }/Texture_${ material.map.id }_diffuse.outputs:a>` );
+				samplers.push( buildTexture( material.map, 'opacity' ) );
 
 			}
 
