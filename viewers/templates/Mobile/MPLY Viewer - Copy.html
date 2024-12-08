@@ -3,7 +3,7 @@
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="3DS (3D Studio) Viewer">
+    <meta name="description" content="PLY (Polygon) + STL (Stereolithography) Viewer">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
@@ -11,8 +11,9 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.171.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.171.0/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.139.2/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.139.2/examples/jsm/",
+          "xatlas-web": "https://esm.sh/xatlas-web@0.1.0"
         }
       }
     </script>
@@ -20,37 +21,50 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var THREE, manager, tds_loader, tga_loader, dds_loader, textures;
-      var renderer, scene, camera, tds_obj, render_requested;
-      var controls, mouse_down, mouse_wheel, events_initialized;
-      var ambientLight, directionalLight, wireframe_enabled;
-      var ww = window.innerWidth, wh = window.innerHeight, isMobile;
-      var first_run = false, fr_count = 0, count = 0, texture_maps;
-      var bounding_box, vertex_colors_enabled, flat_shading_enabled;
-      var selected_tds_file, selected_url_file = '', selected_tds_url_file;
-      var url_displayed = false, url_loading = false, resource_path, url_resource_path;
+      var THREE, manager, ply_loader, stl_loader, renderer, scene, camera, render_requested;
+      var uSync, uvUnwrapper, controls, mouse_down, mouse_wheel, events_initialized, isMobile;
+      var mesh, bounding_box, material, flat_shading_enabled, object_is_points;
+      var merge_vertices, ambientLight, directionalLight, wireframe_enabled;
+      var ww = window.innerWidth, wh = window.innerHeight, vertex_colors_enabled;
+      var url_displayed = false, url_loading = false, url_ply, count = 0;
+      var selected_ply_file, selected_stl_file, selected_url_file = '';
     </script>
 
     <script type="module">
       import * as three_js from "three";
-      import { TDSLoader } from "../../static/jsm/loaders/TDSLoader.min.js";
+      import { STLLoader } from "three/addons/loaders/STLLoader.min.js";
+      import { PLYLoader } from "three/addons/loaders/PLYLoader.min.js";
+      import { unzipSync } from "three/addons/libs/fflate.module.min.js";
+      import * as XAtlas from "xatlas-web";
+      import { UVUnwrapper } from "https://cdn.jsdelivr.net/npm/three-gpu-pathtracer@0.0.23/src/utils/UVUnwrapper.min.js";
+
+      console.log('XAtlas ', XAtlas);
 
       THREE = three_js;
+      uSync = unzipSync;
+
+      const wasmurl = 'https://cdn.jsdelivr.net/npm/xatlas-web@0.1.0/dist/xatlas-web.wasm';
+
+      uvUnwrapper = new UVUnwrapper();
+      uvUnwrapper._module = await XAtlas[ 'default' ]( { locateFile( path ) { return wasmurl; } } );
+
+      console.log('uvUnwrapper ', uvUnwrapper);
 
       manager = new THREE.LoadingManager();
-      manager.onLoad = function() { mouse_wheel = true };
+      manager.onLoad = function() { mouse_wheel = true; }
 
-      tds_loader = new TDSLoader( manager );
+      ply_loader = new PLYLoader( manager );
+      stl_loader = new STLLoader( manager );
     </script>
 
     <style>
-      body,html{
+      body, html {
         position: relative;
         display: block;
         background-color: black;
         width: 100%;
         min-height: 100vh;
-        border: 0;
+        border: none;
         padding: 0;
         margin: 0;
         overflow: hidden;
@@ -61,11 +75,11 @@
         border: 1px solid blue;
         -webkit-border-radius: 3px;
         border-radius: 3px;
+        vertical-align: middle;
         margin: 2px 2px 2px 0;
         min-width: 19px;
         height: 22px;
         padding: 1px;
-        vertical-align: middle;
       }
 
       label {
@@ -168,20 +182,19 @@
         background-color: whitesmoke;
         display: inline-block;
         position: fixed;
-        z-index: 1;
-        margin: 0px;
         padding: 1px;
         width: 100%;
+        z-index: 1;
+        margin: 0;
       }
     </style>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
-    <!-- Using jQuery: https://github.com/jquery/jquery -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>3DS Viewer (r171)</title>
+    <title>PLY+STL Viewer (r169)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -192,12 +205,12 @@
         <label for="btn_url" title="Get remote model via URL"></label>
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="btn_file_input" title="Browse Local Files"></label>
-        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".3ds, .tga, .dds, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".ply, .stl" />
         <label for="back_color" title="Background Color">B</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
-            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="30" step="0.05" value="3" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
+            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="20" step="0.05" value="3" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
             <span id="dli_val">3</span>
           </div>
         </button>
@@ -220,7 +233,7 @@
     </div>
 
     <div id="div_error" class="error_msg">E R R O R !</div>
-    <div id="div_loading" class="loading_msg">3DS Viewer</div>
+    <div id="div_loading" class="loading_msg">PLY+STL Viewer</div>
 
     <script>
       function hide_dropdown_dli() { $('#dc_dli').fadeOut(); mouse_wheel = true; }
@@ -244,7 +257,7 @@
       function switch_to_desktop() {
         let link = document.createElement( 'a' );
         link.style.display = 'none';
-        link.href = "../3DS Viewer.html";
+        link.href = "../PLY Viewer.html";
         link.click();
       }
 
@@ -271,7 +284,7 @@
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
 
         window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
-        window.addEventListener( 'pointerup', (event) => { mouse_down = false; mouse_wheel = true; }, false);
+        window.addEventListener( 'pointerup', (event) => { mouse_down = false; }, false);
         window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
         window.addEventListener( 'keydown', ( event ) => {
           if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
@@ -320,28 +333,54 @@
       }
 
       function set_initial_scale() {
-        // Set the initial scale of the object so it comes to view
-        bounding_box.setFromObject( tds_obj );
-        let center = bounding_box.getCenter( new THREE.Vector3() );
-        controls.target.set( center.x, center.y, center.z );
+        // Set the initial scale of the object so it hopefully comes to view
 
+        bounding_box.setFromObject( mesh );
         let size = bounding_box.getSize( new THREE.Vector3() );
+        let center = bounding_box.getCenter( new THREE.Vector3() );
 
-        if ( size.y > 200 ) {
-          tds_obj.scale.multiplyScalar( 100 / size.y );
-        } else if ( size.y > 1 ) {
-          tds_obj.scale.multiplyScalar( 50 / size.y );
-        } else if ( size.y > 0.02 ) {
-          tds_obj.scale.multiplyScalar( 25 / size.y );
-        } else if ( size.y > 0.01 ) {
-          tds_obj.scale.multiplyScalar( 10 / size.y );
+        // Move to the center
+
+        if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
+        if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
+        if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
+
+        // Scale according to window width / height, whichever is greater
+
+        if (ww > wh) {
+          mesh.scale.multiplyScalar( ( wh / size.y ) * 0.15 );
         } else {
-          tds_obj.scale.multiplyScalar( 1 / size.y )
+          mesh.scale.multiplyScalar( ( ww / size.x ) * 0.15 );
         }
 
-        bounding_box.setFromObject( tds_obj );
+        // Get center coordinates and move to the center again
+
+        bounding_box.setFromObject( mesh );
+        size = bounding_box.getSize( new THREE.Vector3() );
         center = bounding_box.getCenter( new THREE.Vector3() );
-        controls.target.set( center.x, center.y, center.z );
+
+        if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
+        if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
+        if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
+
+        // Scale again and re-center if the model's width / height is greater than the screen's width / height
+
+        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
+          mesh.scale.multiplyScalar( ( ww / (ww > wh ? size.x : size.y) ) );
+
+          bounding_box.setFromObject( mesh );
+          size = bounding_box.getSize( new THREE.Vector3() );
+          center = bounding_box.getCenter( new THREE.Vector3() );
+
+          if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
+          if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
+          if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
+        }
+
+        // Set the camera's z distance
+
+        camera.position.z = bounding_box.max.z + 250;
+        camera.updateProjectionMatrix();
 
         mouse_wheel = true;
       }
@@ -352,40 +391,33 @@
         if (scene) {
           mouse_wheel = true;
 
-          if (tds_obj) await scene_cleanup();
+          if (mesh) await scene_cleanup();
 
           await reset_all( true );
         }
 
         enable_disable( true );
 
-        if (tga_loader === undefined) {
-          const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
-          tga_loader = new TGALoader( manager );
-          manager.addHandler( /\.tga$/i, tga_loader );
+        if (merge_vertices === undefined) {
+          const { mergeVertices } = await import( "three/addons/utils/BufferGeometryUtils.min.js" );
+          merge_vertices = mergeVertices;
         }
 
-        if (dds_loader === undefined) {
-          const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
-          dds_loader = new DDSLoader( manager );
-          manager.addHandler( /\.dds$/i, dds_loader );
-        }
-
-        selected_tds_file = null;
-        selected_tds_url_file = null;
-        url_resource_path = '';
-        resource_path = '';
+        selected_ply_file = null;
+        selected_stl_file = null;
+        object_is_points = false;
+        url_ply = false;
         mouse_down = false;
         mouse_wheel = true;
-        textures = [];
-        wireframe_enabled = false;
-        flat_shading_enabled = false;
         vertex_colors_enabled = false;
+        flat_shading_enabled = true;
         render_requested = false;
         bounding_box = new THREE.Box3();
 
+        document.getElementById('btn_flat').disabled = false;
+        document.getElementById('btn_wireframe').disabled = false;
+
         console.time( 'Loading Time' );
-        document.body.style.backgroundImage = 'none';
         document.getElementById('div_error').style.display = 'none';
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
@@ -395,25 +427,13 @@
           var fi = document.getElementById('file_input');
 
           for (let i = 0; i < fi.files.length; i++) {
-            let fn_uc = fi.files[ i ].name.toUpperCase();
-
-            if (fn_uc.endsWith('.3DS')) selected_tds_file = fi.files[ i ];
-            else if (fi.files[ i ].type.startsWith('image/') || fn_uc.endsWith('.DDS') || fn_uc.endsWith('.TGA')) {
-              textures.push( fi.files[ i ] );}
+            if (fi.files[ i ].name.toUpperCase().endsWith('.PLY')) { selected_ply_file = fi.files[ i ]; }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.STL')) { selected_stl_file = fi.files[ i ]; }
           };
 
-          if (selected_tds_file === null) {
-            handle_error( 'No valid 3DS file selected!' );
+          if (selected_ply_file === null && selected_stl_file === null) {
+            handle_error( 'No valid PLY or STL file selected!' );
             return;
-          }
-
-          if (textures.length > 0) {
-            textures.forEach( file => {
-              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
-              URL.revokeObjectURL( file );
-            });
-
-            resource_path = resource_path.substring( 0, resource_path.length - 1 );
           }
 
           selected_url_file = '';
@@ -426,8 +446,8 @@
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
-          renderer.toneMapping = THREE.NeutralToneMapping;
-          renderer.toneMappingExposure = 1.2;
+          renderer.toneMapping = THREE.ACESFilmicToneMapping;
+          renderer.toneMappingExposure = 0.5;
           renderer.setSize( ww, wh );
           renderer.info.autoReset = false;
           renderer.shadowMap.enabled = true;
@@ -439,7 +459,7 @@
         }
 
         if (scene === undefined) scene = new THREE.Scene();
-        if (tds_obj === undefined) tds_obj = new THREE.Object3D();
+        if (mesh === undefined) mesh = new THREE.Object3D();
 
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
@@ -453,13 +473,13 @@
         if (ambientLight === undefined) {
           ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.25 );
           ambientLight.position.set( 0, 0, - 250 );
-          scene.add( ambientLight );
+          camera.add( ambientLight );
         }
 
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
           directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 3 );
-          directionalLight.position.set( 0, 0, 250 );
+          directionalLight.position.set( 0, 100, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
         }
@@ -483,8 +503,21 @@
           //controls.maxDistance = 500;
         }
 
+        if (material === undefined) {
+          material = new THREE.MeshStandardMaterial( {
+            side: THREE.DoubleSide,
+            vertexColors: false,
+            flatShading: true,
+            transparent: true,
+            metalness: 0.5,
+            roughness: 0.5,
+            opacity: 1,
+            fog: true
+          });
+        }
+
         if (scene.environment === null) {
-          let url = 'https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/textures/water.avif';
+          let url = 'https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/textures/water.jpg';
 
           new THREE.TextureLoader().load( url, async function( texture ) {
             texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -503,162 +536,151 @@
           });
         }
 
-        // Load 3DS file
-        selected_tds_file ? loadFile() : loadURLFile();
+        // Load the model
+        loadFile();
       }
 
       function loadFile() {
-        // The following will only trigger the default texture being applied to local 3ds models
-        // whose required texture files might be either missing or just not selected for loading
-        if (resource_path === '') resource_path = ',';
+        // Launch loading of the selected file, addFileInScene is the callback when it's ready
+        if (selected_ply_file !== null) {
+          ply_loader.load( URL.createObjectURL( selected_ply_file ), addFileInScene,
+          function( xhr ) { }, // onProgress
+          function ( error ) { handle_error( error ); }); // onError
+        } else if (selected_stl_file !== null) {
+          stl_loader.load( URL.createObjectURL( selected_stl_file ), addFileInScene,
+          function( xhr ) { }, // onProgress
+          function ( error ) { handle_error( error ); }); // onError
+        } else {
+          loadURLFile();
+        }
+      }
 
-        tds_loader.load( URL.createObjectURL( selected_tds_file ), resource_path, url_resource_path, function( object ) {
-          URL.revokeObjectURL( selected_tds_file );
+      function addFileInScene( object ) {
+        if (selected_ply_file) {
+          URL.revokeObjectURL( selected_ply_file );
+        } else if (selected_stl_file) {
+          URL.revokeObjectURL( selected_stl_file );
+        }
 
-          tds_obj = object.clone();
+        // object is geometry
 
-          tds_obj.traverse( function( child ) {
-            if (child.isMesh) {
-              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-              child.geometry.normalizeNormals();
+        let smooth = object.clone();
 
-              child.geometry.computeBoundingBox();
-              child.geometry.computeBoundingSphere();
+        smooth.computeBoundingBox();
+        smooth.computeBoundingSphere();
 
-              if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                vertex_colors_enabled = true;
-              }
+        if ( smooth.index !== null ) {
+          smooth.deleteAttribute('normal');
+          smooth = merge_vertices( smooth, 1e-6 );
+          smooth.computeVertexNormals();
+          smooth.normalizeNormals();
+          smooth.center();
 
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  set_texture_colorSpace( mtl );
+          if (smooth.hasAttribute( 'color' )) vertex_colors_enabled = true;
 
-                  mtl.side = THREE.DoubleSide;
-                  mtl.vertexColors = vertex_colors_enabled;
-                });
-              } else {
-                set_texture_colorSpace( child.material );
+          mesh = new THREE.Mesh( smooth, material );
 
-                child.material.side = THREE.DoubleSide;
-                child.material.vertexColors = vertex_colors_enabled;
-              }
+          document.getElementById('btn_flat').disabled = false;
+          document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_wireframe').disabled = false;
+        } else {
+          if (selected_ply_file || url_ply) {
+            flat_shading_enabled = false;
+            document.getElementById('btn_flat').disabled = true;
+            document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+            document.getElementById('btn_wireframe').disabled = true;
+
+            if (smooth.hasAttribute( 'color' )) vertex_colors_enabled = true;
+
+            let points_material = new THREE.PointsMaterial( { size: 0.6, transparent: true, blending: THREE.AdditiveBlending } );
+
+            mesh = new THREE.Points( smooth, points_material );
+            mesh.sizeAttenuation = true;
+            mesh.sortPoints = true;
+            object_is_points = true;
+          } else {
+            smooth.deleteAttribute('normal');
+            smooth = merge_vertices( smooth, 1e-6 );
+            smooth.computeVertexNormals();
+            smooth.normalizeNormals();
+            smooth.center();
+
+            if (object.hasColors) vertex_colors_enabled = true;
+
+            mesh = new THREE.Mesh( smooth, material );
+
+            let coords = new Array( mesh.geometry.attributes.position.count ).fill( 0 );
+
+            if (mesh.geometry.attributes.uv === undefined) {
+              mesh.geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( coords, 2) );
             }
-          });
 
-          tds_obj.rotation.x -= Math.PI / 2.0;
+            uvUnwrapper.generate( mesh.geometry, mesh, AddMeshStatus = { 'Success': 0 } );
 
-          // Add tds_obj to the scene
-          scene.add( tds_obj );
-          camera.lookAt( tds_obj.position );
+            console.log('mesh ', mesh);
 
-          finish_loading();
-        }, function ( xhr ) { // onProgress
-        }, function ( error ) { // onError
-          handle_error( error );
-          URL.revokeObjectURL( selected_tds_file );
+            document.getElementById('btn_flat').disabled = false;
+            document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+            document.getElementById('btn_wireframe').disabled = false;
+          }
+        }
+
+        mesh.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            if (child.isPoints === true ) child.material.size = isMobile === true ? 0.6 : 0.7;
+            child.material.vertexColors = vertex_colors_enabled;
+          }
         });
+
+        // Add mesh to the scene
+        scene.add( mesh );
+        camera.lookAt( mesh.position );
+
+        finish_loading();
 
         mouse_wheel = true;
       }
 
       function loadURLFile() {
-        if (selected_url_file != '') {
-          if (selected_url_file.indexOf( ',' ) > -1) {
-            let urls = selected_url_file.split( ',' );
-
-            for (let i = 0; i < urls.length; i++) {
-              let url = urls[ i ].trim();
-
-              if (url.startsWith('https://www.dropbox.com') === true) {
-                url = url.replace('www.dropbox.com', 'dl.dropbox.com');
-              } else if (url.startsWith('https://github.com') === true) {
-                url = ( url.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
-              }
-
-              // No extension checking for URLs so one has to point to 3DS model
-
-              if (url.endsWith('/')) {
-                tds_loader.setResourcePath( url );
-              } else {
-                selected_tds_url_file = url;
-              }
-            }
-
-            if (url_resource_path !== '') url_resource_path = url_resource_path.substring( 0, url_resource_path.length - 1 );
-          } else {
-            if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
-              selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
-            } else if (selected_url_file.startsWith('https://github.com') === true) {
-              selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
-            }
-
-            // No extension checking for URL so it has to point to 3DS model
-
-            selected_tds_url_file = selected_url_file;
+        if (selected_url_file !== '') {
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          tds_loader.load( selected_tds_url_file, resource_path, url_resource_path, function( object ) {
-            tds_obj = object.clone();
+          // No extension checking for single URL so it has to point to PLY or STL file
 
-            tds_obj.traverse( function( child ) {
-              if (child.isMesh) {
-                child.geometry.computeBoundingBox();
-                child.geometry.computeBoundingSphere();
-
-                if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                child.geometry.normalizeNormals();
-
-                if (child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
-                  vertex_colors_enabled = true;
-                }
-
-                if (Array.isArray( child.material )) {
-                  child.material.forEach( mtl => {
-                    set_texture_colorSpace( mtl );
-
-                    mtl.side = THREE.DoubleSide;
-                    mtl.vertexColors = vertex_colors_enabled;
-                  });
-                } else {
-                  set_texture_colorSpace( child.material );
-
-                  child.material.side = THREE.DoubleSide;
-                  child.material.vertexColors = vertex_colors_enabled;
-                }
-              }
-            });
-
-            tds_obj.rotation.x -= Math.PI / 2.0;
-
-            // Add tds_obj to the scene
-            scene.add( tds_obj );
-            camera.lookAt( tds_obj.position );
-
-            finish_loading();
-          }, function ( xhr ) { // onProgress
-          }, function ( error ) { handle_error( error ); }); // onError
+          stl_loader.load( selected_url_file, addFileInScene,
+          function( xhr ) { }, // onProgress
+          function ( error1 ) { // onError
+            url_ply = true;
+            ply_loader.load( selected_url_file, addFileInScene,
+            function( xhr ) { }, // onProgress
+            function ( error2 ) { handle_error( error2 ); }); // onError
+          });
         }
-
-        mouse_wheel = true;
       }
 
-      function finish_loading() {
+      async function finish_loading() {
         set_initial_scale();
         resize();
 
-        render_requested = true;
-        mouse_wheel = false;
-        first_run = true;
-        fr_count = 0;
-        render();
-      }
+        if (object_is_points === true) {
+          document.getElementById('btn_flat').disabled = true;
+          document.getElementById('btn_wireframe').disabled = true;
+        }
 
-      async function enable_controls() {
         enable_disable( false );
+
         console.timeEnd( 'Loading Time' );
         document.getElementById('div_loading').style.display = 'none';
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 100 ) );
+        render_requested = true;
+        mouse_wheel = true;
+        render();
+
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
       }
 
       function log_info() {
@@ -678,135 +700,35 @@
         document.getElementById('div_error').style.display = 'block';
       }
 
-      function set_texture_colorSpace( material ) {
-        if (material.map && (!material.map.colorSpace || material.map.colorSpace === 'NoColorSpace')) {
-          material.map.colorSpace = THREE.SRGBColorSpace;
-        }
-
-        if (material.aoMap && (!material.aoMap.colorSpace || material.aoMap.colorSpace !== 'NoColorSpace')) {
-          material.aoMap.colorSpace = THREE.NoColorSpace;
-        }
-
-        if (material.alphaMap && (!material.alphaMap.colorSpace || material.alphaMap.colorSpace !== 'NoColorSpace')) {
-          material.alphaMap.colorSpace = THREE.NoColorSpace;
-        }
-
-        if (material.bumpMap && (!material.bumpMap.colorSpace || material.bumpMap.colorSpace === 'NoColorSpace')) {
-          material.bumpMap.colorSpace = THREE.SRGBColorSpace;
-        }
-
-        if (material.lightMap && (!material.lightMap.colorSpace || material.lightMap.colorSpace !== 'NoColorSpace')) {
-          material.lightMap.colorSpace = THREE.NoColorSpace;
-        }
-
-        if (material.emissiveMap && (!material.emissiveMap.colorSpace || material.emissiveMap.colorSpace === 'NoColorSpace')) {
-          material.emissiveMap.colorSpace = THREE.SRGBColorSpace;
-        }
-
-        if (material.normalMap && (!material.normalMap.colorSpace || material.normalMap.colorSpace !== 'NoColorSpace')) {
-          material.normalMap.colorSpace = THREE.NoColorSpace;
-        }
-
-        if (material.specularMap && (!material.specularMap.colorSpace || material.specularMap.colorSpace === 'NoColorSpace')) {
-          material.specularMap.colorSpace = THREE.SRGBColorSpace;
-        }
-
-        if (material.metalnessMap && (!material.metalnessMap.colorSpace || material.metalnessMap.colorSpace !== 'NoColorSpace')) {
-          material.metalnessMap.colorSpace = THREE.NoColorSpace;
-        }
-
-        if (material.roughnessMap && (!material.roughnessMap.colorSpace || material.roughnessMap.colorSpace !== 'NoColorSpace')) {
-          material.roughnessMap.colorSpace = THREE.NoColorSpace;
-        }
-
-        if (material.anisotropyMap && (!material.anisotropyMap.colorSpace || material.anisotropyMap.colorSpace !== 'NoColorSpace')) {
-          material.anisotropyMap.colorSpace = THREE.NoColorSpace;
-        }
-
-        if (material.clearcoatMap && (!material.clearcoatMap.colorSpace || material.clearcoatMap.colorSpace === 'NoColorSpace')) {
-          material.clearcoatMap.colorSpace = THREE.SRGBColorSpace;
-        }
-
-        if (material.clearcoatNormalMap && (!material.clearcoatNormalMap.colorSpace || material.clearcoatNormalMap.colorSpace !== 'NoColorSpace')) {
-          material.clearcoatNormalMap.colorSpace = THREE.NoColorSpace;
-        }
-
-        if (material.clearcoatRoughnessMap && (!material.clearcoatRoughnessMap.colorSpace || material.clearcoatRoughnessMap.colorSpace !== 'NoColorSpace')) {
-          material.clearcoatRoughnessMap.colorSpace = THREE.NoColorSpace;
-        }
-
-        if (material.iridescenceMap && (!material.iridescenceMap.colorSpace || material.iridescenceMap.colorSpace === 'NoColorSpace')) {
-          material.iridescenceMap.colorSpace = THREE.SRGBColorSpace;
-        }
-
-        if (material.iridescenceThicknessMap && (!material.iridescenceThicknessMap.colorSpace || material.iridescenceThicknessMap.colorSpace !== 'NoColorSpace')) {
-          material.iridescenceThicknessMap.colorSpace = THREE.NoColorSpace;
-        }
-
-        if (material.sheenColorMap && (!material.sheenColorMap.colorSpace || material.sheenColorMap.colorSpace === 'NoColorSpace')) {
-          material.sheenColorMap.colorSpace = THREE.SRGBColorSpace;
-        }
-
-        if (material.sheenRoughnessMap && (!material.sheenRoughnessMap.colorSpace || material.sheenRoughnessMap.colorSpace !== 'NoColorSpace')) {
-          material.sheenRoughnessMap.colorSpace = THREE.NoColorSpace;
-        }
-
-        if (material.specularColorMap && (!material.specularColorMap.colorSpace || material.specularColorMap.colorSpace === 'NoColorSpace')) {
-          material.specularColorMap.colorSpace = THREE.SRGBColorSpace;
-        }
-
-        if (material.specularIntensityMap && (!material.specularIntensityMap.colorSpace || material.specularIntensityMap.colorSpace !== 'NoColorSpace')) {
-          material.specularIntensityMap.colorSpace = THREE.NoColorSpace;
-        }
-
-        if (material.thicknessMap && (!material.thicknessMap.colorSpace || material.thicknessMap.colorSpace !== 'NoColorSpace')) {
-          material.thicknessMap.colorSpace = THREE.NoColorSpace;
-        }
-
-        if (material.transmissionMap && (!material.transmissionMap.colorSpace || material.transmissionMap.colorSpace !== 'NoColorSpace')) {
-          material.transmissionMap.colorSpace = THREE.NoColorSpace;
-        }
-      }
-
       function quick_x_rotation( angle ) {
-        tds_obj.rotateX( Math.PI * parseFloat( angle ) );
-
-        bounding_box.setFromObject( tds_obj );
-        let center = bounding_box.getCenter( new THREE.Vector3() );
-
-        controls.target.set( center.x, center.y, center.z );
+        mesh.rotateX( Math.PI * parseFloat( angle ) );
 
         mouse_wheel = true;
       }
 
       function set_flat() {
-        if (flat_shading_enabled === true) {
-          flat_shading_enabled = false;
-          document.getElementById('btn_flat').style.backgroundColor = 'transparent';
-        } else {
-          flat_shading_enabled = true;
-          document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
-        }
+        if (mesh) {
+          if (flat_shading_enabled === true) {
+            document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+            flat_shading_enabled = false;
+          } else {
+            document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+            flat_shading_enabled = true;
+          }
 
-        tds_obj.traverse( function( child ) {
-          if (child.type === 'Mesh' || child.isMesh) {
-            if (Array.isArray( child.material )) {
-              child.material.forEach( mtl => {
-                mtl.flatShading = flat_shading_enabled;
-                mtl.needsUpdate = true;
-              });
-            } else {
+          mesh.traverse( ( child ) => {
+            if (child.isMesh) {
               child.material.flatShading = flat_shading_enabled;
               child.material.needsUpdate = true;
             }
-          }
 
-          mouse_wheel = true;
-        });
+            mouse_wheel = true;
+          });
+        }
       }
 
       function show_wireframe() {
-        if (tds_obj) {
+        if (mesh) {
           if (wireframe_enabled === true) {
             wireframe_enabled = false;
             document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
@@ -815,49 +737,26 @@
             document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
           }
 
-          tds_obj.traverse( function( child ) {
-            if (child.type === 'Mesh' || child.isMesh) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.wireframe = wireframe_enabled;
-                });
-              } else {
-                child.material.wireframe = wireframe_enabled;
-              }
-            }
+          material.wireframe = wireframe_enabled;
 
-            mouse_wheel = true;
-          });
+          mouse_wheel = true;
         }
       }
 
       async function render() {
-        if (tds_obj) {
-          if (first_run === true || mouse_down === true || mouse_wheel === true) {
+        if (mesh) {
+          if (mouse_down === true || mouse_wheel === true) {
             controls.update();
 
             renderer.clear();
             renderer.render( scene, camera );
 
-            // If it might be slow to render initially
-            if (first_run === true) {
-              fr_count ++;
-              if (fr_count > 15) {
-                mouse_wheel = true;
-                first_run = false;
-                fr_count = 0;
+            if (mouse_wheel === true) {
+              if (count > 10) {
+                mouse_wheel = false;
                 count = 0;
-
-                enable_controls();
-              }
-            } else {
-              if (mouse_wheel === true) {
-                if (count > 15) {
-                  mouse_wheel = false;
-                  count = 0;
-                } else {
-                  count ++;
-                }
+              } else {
+                count ++;
               }
             }
           }
@@ -892,7 +791,7 @@
               scene.environment = null;
             }
 
-            if (tds_obj) await scene_cleanup();
+            if (mesh) await scene_cleanup();
 
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
@@ -902,10 +801,10 @@
             renderer.dispose();
           }
 
-          mouse_wheel = true;
-
           document.getElementById('file_input').value = '';
           document.getElementById('div_error').style.display = 'none';
+          document.getElementById('btn_flat').disabled = true;
+          document.getElementById('btn_wireframe').disabled = true;
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
           enable_disable( true );
@@ -915,44 +814,24 @@
       }
 
       async function scene_cleanup() {
-        scene.remove( tds_obj );
+        scene.remove( mesh );
 
         renderer.clear();
 
-        if (flat_shading_enabled === true) await set_flat();
-        if (wireframe_enabled === true) await show_wireframe();
+        if (wireframe_enabled === true) show_wireframe();
 
-        tds_obj.traverse( ( child ) => {
-          if (child.isMesh) {
-            if (child.material) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  for (const prop in mtl) {
-                    texture_maps.forEach( tex_map => {
-                      if (prop === tex_map) {
-                        if (mtl[ prop ]) mtl[ prop ].dispose();
-                      }
-                    });
-                  };
-
-                  mtl.dispose();
-                });
-              } else {
-                for (const prop in child.material) {
-                  texture_maps.forEach( tex_map => {
-                    if (prop === tex_map) {
-                      if (child.material[ prop ]) child.material[ prop ].dispose();
-                    }
-                  });
-                };
-
-                child.material.dispose();
-              }
-            }
-
-            child.geometry.dispose();
+        mesh.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            if (child.material && child.material.map) child.material.map.dispose();
+            if (child.material) child.material.dispose();
+            if (child.geometry) child.geometry.dispose();
           }
         });
+
+        mesh = undefined;
+
+        material.dispose();
+        material = undefined;
 
         if (isMobile === false) {
           renderer.info.reset();
@@ -964,9 +843,7 @@
         document.getElementById('directional_light_intensity').disabled = disable;
         document.getElementById('btn_dc_dli').disabled = disable;
         document.getElementById('back_color').disabled = disable;
-        document.getElementById('btn_flat').disabled = disable;
         document.getElementById('btn_quick_x').disabled = disable;
-        document.getElementById('btn_wireframe').disabled = disable;
         disabled_changed();
 
         mouse_wheel = true;
@@ -979,11 +856,7 @@
           (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
 
-        texture_maps = [ 'map', 'aoMap', 'alphaMap', 'bumpMap', 'displacementMap', 'envMap', 'lightMap', 'emissiveMap', 'normalMap',
-          'metalnessMap', 'roughnessMap', 'anisotropyMap', 'clearcoatMap', 'clearcoatNormalMap', 'clearcoatRoughnessMap',
-          'iridescenceMap', 'iridescenceThicknessMap', 'sheenColorMap', 'sheenRoughnessMap', 'specularMap',
-          'specularColorMap', 'specularIntensityMap', 'thicknessMap', 'transmissionMap'
-        ];
+        mouse_wheel = true;
       }
 
       function disabled_changed() {
