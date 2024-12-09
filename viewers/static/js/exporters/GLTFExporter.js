@@ -873,11 +873,19 @@
 
 			const reference = metalnessMap || roughnessMap;
 
-			const texture = reference.clone();
+			let texture = reference.clone();
 
-			texture.source = new THREE.Source( canvas );
-			texture.colorSpace = THREE.NoColorSpace;
-			texture.channel = ( metalnessMap || roughnessMap ).channel;
+			if ( THREE.Source ) {
+
+				texture.source = new THREE.Source( canvas );
+				texture.colorSpace = THREE.NoColorSpace;
+				texture.channel = ( metalnessMap || roughnessMap ).channel;
+
+			} else {
+
+				texture = new THREE.Texture( canvas );
+
+			}
 
 			if ( metalnessMap && roughnessMap && metalnessMap.channel !== roughnessMap.channel ) {
 
