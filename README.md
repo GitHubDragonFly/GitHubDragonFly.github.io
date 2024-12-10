@@ -144,13 +144,7 @@ Number Type Converter
     - Currently available in both standalone and desktop versions of `GLTF` and `OBJ+MTL` WebGPU viewers
     - This emissive bloom effect can only be applied to a model which has a built-in emissive component:
       - Maybe try the [Emissive Strength Test](https://github.com/KhronosGroup/glTF-Sample-Models/blob/main/2.0/EmissiveStrengthTest/glTF-Binary/EmissiveStrengthTest.glb) GLB example from Khronos Group
-    - It should only work with an unmodified originally loaded model:
-      - Manipulating any of the following will disable the bloom effect until their initial values are restored:
-        - `equirectangular background` and `gradient color background`
-        - `edges`, `wireframe` and `opacity`
-      - Manipulating any of the following will require a full model reset in order to use the bloom effect:
-        - `material side`, `flatShading` and `xtra smooth`
-    - This is currently set as a somewhat mild effect so try lowering the lights intensity to see it better
+    - This is currently set as a somewhat mild effect so try lowering the lights intensity to see it better by darkening the non-emissive parts
 - Memory handling should be good, relatively speaking:
   - With every next model loaded the previous model geometries / materials are being disposed of
   - Viewers are webpages so it might be easier to just refresh the whole page before loading the next model
