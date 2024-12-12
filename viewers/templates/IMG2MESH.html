@@ -11,8 +11,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.171.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.171.0/examples/jsm/",
           "three-viewport-gizmo": "https://cdn.jsdelivr.net/npm/three-viewport-gizmo@1.0.1/dist/three-viewport-gizmo.min.js",
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.1.0",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.1.0",
@@ -29,7 +29,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
     <!-- For encoding GLB with draco compression -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.171.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
       var THREE, renderer, render_requested, scene, camera, loader, texture_loader;
@@ -309,7 +309,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>IMG2MESH Viewer (r170)</title>
+    <title>IMG2MESH Viewer (r171)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -321,7 +321,7 @@
         <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".zip, .dds, .dib, .exr, .hdr, .ico, .ktx2, .tga, .tif, .tiff, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" />
         <label for="btn_file_image_input" title="Background Image" style="display: none;">BGND</label>
         <button title="Background Image" id="btn_file_image_input" style="display: none; min-width: 54px;" onclick="document.getElementById('file_image_input').click();">Browse</button>
-        <input type="file" id="file_image_input" style="display: none;" onchange="set_scene_image();" accept=".exr, .hdr, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" />
+        <input type="file" id="file_image_input" style="display: none;" onchange="set_scene_image();" accept=".exr, .hdr, .ktx2, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" />
         <label for="back_color" title="Background Color" id="lbl_back_color">B<input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled /></label>
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
@@ -1334,12 +1334,93 @@
         mouse_wheel = true;
       }
 
+      // internally used modified decompress function from WebGLTextureUtils.js
+
+      async function decompress( texture, maxTextureSize = Infinity, renderer = null ) {
+        let _renderer = renderer;
+        let fullscreenQuad;
+
+        let fullscreenQuadGeometry = new THREE.PlaneGeometry( 2, 2, 1, 1 );
+        let fullscreenQuadMaterial = new THREE.ShaderMaterial( {
+          uniforms: { blitTexture: new THREE.Uniform( texture.clone() ) },
+          vertexShader: `
+          varying vec2 vUv;
+          void main(){
+          vUv = uv;
+          gl_Position = vec4(position.xy * 1.0,0.,.999999);
+          }`,
+          fragmentShader: `
+          uniform sampler2D blitTexture; 
+          varying vec2 vUv;
+
+          void main(){ 
+          gl_FragColor = vec4(vUv.xy, 0, 1);
+				
+          #ifdef IS_SRGB
+          gl_FragColor = sRGBTransferOETF( texture2D( blitTexture, vUv) );
+          #else
+          gl_FragColor = texture2D( blitTexture, vUv);
+          #endif
+          }`
+        } );
+
+        fullscreenQuadMaterial.uniforms.blitTexture.value = texture.clone();
+        fullscreenQuadMaterial.defines.IS_SRGB = texture.colorSpace == THREE.SRGBColorSpace;
+        fullscreenQuadMaterial.needsUpdate = true;
+
+        if ( ! fullscreenQuad ) {
+          fullscreenQuad = new THREE.Mesh( fullscreenQuadGeometry, fullscreenQuadMaterial );
+          fullscreenQuad.frustrumCulled = false;
+        }
+
+        const _camera = new THREE.PerspectiveCamera();
+        const _scene = new THREE.Scene();
+        _scene.add( fullscreenQuad );
+
+        if ( _renderer === null ) {
+          _renderer = new THREE.WebGLRenderer( { antialias: false } );
+        }
+
+        const scale = maxTextureSize / Math.max( texture.image.width, texture.image.height );
+
+        const width = texture.image.width * Math.min( 1, scale );
+        const height = texture.image.height * Math.min( 1, scale );
+
+        _renderer.setSize( width, height );
+        _renderer.clear();
+        _renderer.render( _scene, _camera );
+
+        const canvas = document.createElement( 'canvas' );
+        const context = canvas.getContext( '2d' );
+
+        canvas.width = width;
+        canvas.height = height;
+
+        context.drawImage( _renderer.domElement, 0, 0, width, height );
+
+        const readableTexture = new THREE.CanvasTexture( canvas );
+
+        readableTexture.minFilter = texture.minFilter;
+        readableTexture.magFilter = texture.magFilter;
+        readableTexture.wrapS = texture.wrapS;
+        readableTexture.wrapT = texture.wrapT;
+        readableTexture.name = texture.name;
+
+        if ( _renderer ) {
+          _renderer.forceContextLoss();
+          _renderer.dispose();
+          _renderer = null;
+        }
+
+        return readableTexture;
+      }
+
       function set_bgenv_message( end = false ) {
         if (end === true) {
           document.getElementById('div_message').innerHTML = '';
           document.getElementById('div_message').style.display = 'none';
         } else {
-          document.getElementById('div_message').innerHTML = 'Background and environment changing ... ' + pw;
+          document.getElementById('div_message').innerHTML = 'Background changing ... ' + pw;
           document.getElementById('div_message').style.display = '';
         }
 
@@ -1360,9 +1441,13 @@
 
           let fn_uc = fii.name.toUpperCase();
 
-          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
-            texture_loader.load( URL.createObjectURL( fii ) , function( texture ) {
+          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.KTX2') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
+            texture_loader.load( URL.createObjectURL( fii ) , async function( texture ) {
               URL.revokeObjectURL( fii );
+
+              if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
+                texture = await resize_texture( texture.image );
+              }
 
               texture.colorSpace = THREE.SRGBColorSpace;
               texture.needsUpdate = true;
@@ -1388,7 +1473,59 @@
 
               URL.revokeObjectURL( fii );
             });
-          } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
+          } else if (fn_uc.endsWith('.KTX2')) {
+            if (ktx2_loader === undefined) {
+              const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
+              ktx2_loader = new KTX2Loader( manager );
+              ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.171.0/examples/jsm/libs/basis/" );
+              ktx2_loader.detectSupport( renderer );
+              await ktx2_loader.init();
+            }
+
+            ktx2_loader.load( URL.createObjectURL( fii ), async function( texture ) {
+              URL.revokeObjectURL( fii );
+
+              // Convert to PNG so it shows on most platforms
+              // Unsupported KTX2 formats might log a warning
+
+              let canvas_tex = await decompress( texture );
+
+              texture.dispose();
+
+              texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), async function( png_tex ) {
+                canvas_tex.dispose();
+
+                if (isMobile === true && (png_tex.image.width > 2048 || png_tex.image.height > 2048)) {
+                  png_tex = await resize_texture( png_tex.image );
+                }
+
+                png_tex.colorSpace = THREE.SRGBColorSpace;
+                png_tex.flipY = false;
+                png_tex.needsUpdate = true;
+
+                if (equi_enabled === true) {
+                  png_tex.mapping = THREE.EquirectangularReflectionMapping;
+                  scene.background = png_tex.clone();
+                  scene.environment = png_tex.clone();
+                } else {
+                  scene.background = png_tex.clone();
+                }
+
+                mouse_wheel = true;
+
+                png_tex.dispose();
+
+                set_bgenv_message( true );
+              });
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              document.getElementById('div_message').innerText = 'Error loading image';
+              console.log( 'Error loading Background Image File!' );
+              console.log( error );
+
+              URL.revokeObjectURL( fii );
+            });
+        } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
             let hd_loader;
 
             if (fn_uc.endsWith('.EXR')) {
@@ -1407,10 +1544,13 @@
               hd_loader = rgbe_loader;
             }
 
-            hd_loader.load( URL.createObjectURL( fii ), function( texture ) {
+            hd_loader.load( URL.createObjectURL( fii ), async function( texture ) {
               URL.revokeObjectURL( fii );
 
-              texture.colorSpace = THREE.LinearSRGBColorSpace;
+              if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
+                texture = await decompress( texture, 2048 );
+              }
+
               texture.needsUpdate = true;
 
               if (equi_enabled === true) {
@@ -1459,10 +1599,14 @@
           canvas.height = wh;
 
           let gradient = context.createLinearGradient( 0, 0, 0, wh );
-          let gradient_colors = [ [ 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.15 ],
-            [ '#151525', '#252535', '#454555', '#656575', '#787888', '#8A8A9A', '#9A9AAA', '#A5A5B5' ] ];
+          let gradient_colors = [
+            [ 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.15 ],
+            [ '#151525', '#252535', '#454555', '#656575', '#787888', '#8A8A9A', '#9A9AAA', '#A5A5B5' ]
+          ];
+
           let i = gradient_colors[ 0 ].length;
           while( i-- ) { gradient.addColorStop( gradient_colors[ 0 ][ i ], gradient_colors[ 1 ][ i ] ); }
+
           context.fillStyle = gradient;
           context.fillRect( 0, 0, ww, wh );
 
@@ -1655,8 +1799,6 @@
       }
 
       async function convert( url, hd = false ) {
-        const { decompress } = await import( "three/addons/utils/WebGLTextureUtils.min.js" );
-
         let tex;
 
         await new Promise( resolve => {
@@ -1671,20 +1813,7 @@
 
         tex.dispose();
 
-        if (hd === true) return canvas_tex;
-
-        // convert to PNG
-
-        let new_texture;
-
-        await new Promise( resolve => {
-          texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), function( texture ) {
-            canvas_tex.dispose();
-            resolve( new_texture = texture.clone(), texture.dispose() );
-          });
-        });
-
-        return new_texture;
+        return canvas_tex;
       }
 
       const extrudedImageGeometry = ({
@@ -1859,7 +1988,7 @@
             if (ktx2_loader === undefined) {
               const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
               ktx2_loader = new KTX2Loader( manager );
-              ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/basis/" );
+              ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.171.0/examples/jsm/libs/basis/" );
               ktx2_loader.detectSupport( renderer );
               await ktx2_loader.init();
             }
@@ -2623,6 +2752,40 @@
         });
 
         return [ buff, image_data, size ];
+      }
+
+      async function resize_texture( image ) {
+        let texture;
+
+        await new Promise( resolve => {
+          let canvas = document.createElement('canvas');
+
+          let scale = 2048 / Math.max( image.width, image.height );
+
+          canvas.width = image.width * Math.min( 1, scale );
+          canvas.height = image.height * Math.min( 1, scale );
+
+          let ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+          if ( image instanceof ImageData ) {
+            ctx.putImageData( image, 0, 0 );
+          } else if ( image.data && image.data.constructor === Uint16Array ) {
+            let u8 = new Uint8Array( image.data );
+            let imgData = new ImageData( new Uint8ClampedArray( u8 ), image.width, image.height );
+            ctx.putImageData( imgData, 0, 0 );
+          } else if ( image.data && image.data.constructor === Uint8Array ) {
+            let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
+            ctx.putImageData( imgData, 0, 0 );
+          } else {
+            ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+          }
+
+          let data_url = canvas.toDataURL( 'image/png', 1 );
+
+          resolve( texture = new THREE.Texture( data_url ) );
+        });
+
+        return texture;
       }
 
       function show_polar_grid() {
