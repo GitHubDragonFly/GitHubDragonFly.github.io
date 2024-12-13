@@ -82,6 +82,7 @@
       set_gui_position();
     </script>
 
+    <script src="../static/assimpjs/assimpjs.min.js" defer></script>
     <script src="../static/js/upng/UPNG.min.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
 
@@ -328,6 +329,8 @@
     <!--  - Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0 -->
     <!-- When applicable, using experimental ktx2-encoder for KTX2 compression: https://github.com/gz65555/ktx2-encoder -->
     <!-- When applicable, using JSZip for exports: https://github.com/Stuk/jszip -->
+    <!-- When applicable, using ASSIMPJS for exports - https://github.com/kovacsv/assimpjs -->
+    <!--  - Using ASSIMP - https://github.com/assimp/assimp -->
     <!-- When applicable, using gainmap-js encoder & decoder: https://github.com/MONOGRID/gainmap-js -->
     <!-- When applicable, using Animated GIF export based on the following example and library: -->
     <!--   https://github.com/mrdoob/omggif-example  -->
@@ -389,6 +392,9 @@
           <option title="PLY - Polygon File Format binary" value="ply" onclick="export_ply( true );">PLY_b</option>
           <option title="STL - Stereolithography Format" value="stl" onclick="export_stl();">STL</option>
           <option title="USDZ - Universal Scene Description Format" value="usdz" onclick="export_usdz();">USDZ</option>
+          <option title="ASSIMP Export Formats" value="assimp" disabled>ASSIMP</option>
+          <option title="FBX - Filmbox Format" value="fbx" onclick="export_assimp( 'fbx' );">FBX</option>
+          <option title="ASSJSON - Assimp JSON Format" value="assjson" onclick="export_assimp( 'assjson' );">JSON</option>
           <option title="Animated Graphics Exports" value="ani" disabled>- ANI -</option>
           <option title="GIF - Animated GIF" value="gif" onclick="export_animated_gif();">GIF</option>
           <option title="PNG - Animated PNG (APNG)" value="apng" onclick="export_animated_png();">PNG</option>
@@ -1166,6 +1172,63 @@
         }
       }
 
+      async function export_assimp( format = 'fbx' ) {
+        if (fbx_obj) {
+          await start_export();
+
+          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+
+          let gltf_exporter = new GLTFExporter( manager );
+
+          let options;
+
+          if (animations.length > 0) {
+            options = {	binary: true, animations: animations };
+          } else {
+            options = {	binary: true };
+          }
+
+          gltf_exporter.parse( fbx_obj, async function( json ) {
+            let simplified = await texture_compress( new Uint8Array( json ) );
+
+            // Use ASSIMPJS to export files
+            assimpjs().then( async function( ajs ) {
+              let result = ajs.ConvertFile( filename, format, simplified, undefined, undefined );
+              let fileCount = result.FileCount();
+
+              // check if the conversion succeeded
+              if (result.IsSuccess() === false || fileCount === 0) {
+                handle_export_error( result.GetErrorCode() );
+                ajs = null;
+                result = null;
+                return;
+              }
+
+              // get the first result file and convert it to blob
+              let resultFile = await result.GetFile( 0 );
+              let jsonContent = resultFile.GetContent();
+              let blob = new Blob( [ jsonContent ], { type: 'application/octet-stream' } );
+
+              // Possible ASSIMP export formats, some with binary / ascii options:
+              //   assjson, assbin, assxml, collada, x, stp, obj, objnomtl, 3ds, 3mf, pbrt
+              //   gltf, gltf2, glb, glb2, stl, stlb, ply, plyb, fbx, fbxa, x3d
+              //   m3d / m3da - disabled since no longer maintained within ASSIMP
+              // For proper file extension, shorten the format before zipping it up
+              let ext_to_change = { 'fbxa': 'fbx', 'assjson': 'json', 'collada': 'dae' }; // 'plyb': 'ply' ... etc
+              if (ext_to_change[ format ]) format = ext_to_change[ format ];
+
+              zip.file( filename + '.' + format, blob );
+
+              ajs = null;
+              result = null;
+              resultFile = null;
+
+              await process_zip( '_' + format.toUpperCase() );
+            });
+          }, function( error ) { handle_export_error( error ); }, options);
+        }
+      }
+
       async function export_json() {
         if (fbx_obj) {
           await start_export();
@@ -1791,6 +1854,87 @@
         mouse_wheel = true;
       }
 
+      // internally used modified decompress function from WebGLTextureUtils.js
+
+      async function decompress( texture, maxTextureSize = Infinity, renderer = null ) {
+        let _renderer = renderer;
+        let fullscreenQuad;
+
+        let fullscreenQuadGeometry = new THREE.PlaneGeometry( 2, 2, 1, 1 );
+        let fullscreenQuadMaterial = new THREE.ShaderMaterial( {
+          uniforms: { blitTexture: new THREE.Uniform( texture.clone() ) },
+          vertexShader: `
+          varying vec2 vUv;
+          void main(){
+          vUv = uv;
+          gl_Position = vec4(position.xy * 1.0,0.,.999999);
+          }`,
+          fragmentShader: `
+          uniform sampler2D blitTexture; 
+          varying vec2 vUv;
+
+          void main(){ 
+          gl_FragColor = vec4(vUv.xy, 0, 1);
+				
+          #ifdef IS_SRGB
+          gl_FragColor = sRGBTransferOETF( texture2D( blitTexture, vUv) );
+          #else
+          gl_FragColor = texture2D( blitTexture, vUv);
+          #endif
+          }`
+        } );
+
+        fullscreenQuadMaterial.uniforms.blitTexture.value = texture.clone();
+        fullscreenQuadMaterial.defines.IS_SRGB = texture.colorSpace == THREE.SRGBColorSpace;
+        fullscreenQuadMaterial.needsUpdate = true;
+
+        if ( ! fullscreenQuad ) {
+          fullscreenQuad = new THREE.Mesh( fullscreenQuadGeometry, fullscreenQuadMaterial );
+          fullscreenQuad.frustrumCulled = false;
+        }
+
+        const _camera = new THREE.PerspectiveCamera();
+        const _scene = new THREE.Scene();
+        _scene.add( fullscreenQuad );
+
+        const scale = maxTextureSize / Math.max( texture.image.width, texture.image.height );
+
+        const width = texture.image.width * Math.min( 1, scale );
+        const height = texture.image.height * Math.min( 1, scale );
+
+        if ( _renderer === null ) {
+          _renderer = new THREE.WebGLRenderer( { antialias: false } );
+        }
+
+        _renderer.setSize( width, height );
+        _renderer.clear();
+        _renderer.render( _scene, _camera );
+
+        const canvas = document.createElement( 'canvas' );
+        const context = canvas.getContext( '2d' );
+
+        canvas.width = width;
+        canvas.height = height;
+
+        context.drawImage( _renderer.domElement, 0, 0, width, height );
+
+        const readableTexture = new THREE.CanvasTexture( canvas );
+
+        readableTexture.minFilter = texture.minFilter;
+        readableTexture.magFilter = texture.magFilter;
+        readableTexture.wrapS = texture.wrapS;
+        readableTexture.wrapT = texture.wrapT;
+        readableTexture.name = texture.name;
+
+        if ( _renderer ) {
+          _renderer.forceContextLoss();
+          _renderer.dispose();
+          _renderer = null;
+        }
+
+        return readableTexture;
+      }
+
       function set_bgenv_message( end = false ) {
         if (end === true) {
           document.getElementById('div_message').innerHTML = '';
@@ -1827,15 +1971,12 @@
 
               let hdrJpgEquirectangularMap = await texture.toDataTexture();
 
-              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
-                const repeat_x = hdrJpgEquirectangularMap.image.width / 2048;
-                const repeat_y = hdrJpgEquirectangularMap.image.height / 2048;
-
-                hdrJpgEquirectangularMap.repeat.set( repeat_x, repeat_y );
-              }
-
               hdrJpgEquirectangularMap.colorSpace = THREE.LinearSRGBColorSpace;
               hdrJpgEquirectangularMap.flipY = (bg_flip === true);
+
+              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
+                hdrJpgEquirectangularMap = await decompress( hdrJpgEquirectangularMap, 2048 );
+              }
 
               hdrJpgEquirectangularMap.needsUpdate = true;
 
@@ -1865,30 +2006,24 @@
               URL.revokeObjectURL( fii );
             });
           } else if (fn_uc.endsWith('.KTX2')) {
-            const { decompress } = await import( 'three/addons/utils/WebGLTextureUtils.min.js' );
-
             ktx2_loader.load( URL.createObjectURL( fii ), async function( texture ) {
               URL.revokeObjectURL( fii );
 
               // Convert to PNG so it shows on most platforms
               // Unsupported KTX2 formats might log a warning
 
-              texture.colorSpace = THREE.SRGBColorSpace;
-
               let canvas_tex = await decompress( texture );
 
               texture.dispose();
 
-              texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), function( png_tex ) {
+              texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), async function( png_tex ) {
                 canvas_tex.dispose();
 
                 if (isMobile === true && (png_tex.image.width > 2048 || png_tex.image.height > 2048)) {
-                  const repeat_x = png_tex.image.width / 2048;
-                  const repeat_y = png_tex.image.height / 2048;
-
-                  png_tex.repeat.set( repeat_x, repeat_y );
+                  png_tex = await resize_texture( png_tex.image );
                 }
 
+                png_tex.colorSpace = THREE.SRGBColorSpace;
                 png_tex.flipY = (bg_flip === true);
                 png_tex.needsUpdate = true;
 
@@ -1916,14 +2051,11 @@
               URL.revokeObjectURL( fii );
             });
           } else if (fn_uc.endsWith('.SVG')) {
-            texture_loader.load( URL.createObjectURL( fii ) , function( texture ) {
+            texture_loader.load( URL.createObjectURL( fii ) , async function( texture ) {
               URL.revokeObjectURL( fii );
 
               if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
-                const repeat_x = texture.image.width / 2048;
-                const repeat_y = texture.image.height / 2048;
-
-                texture.repeat.set( repeat_x, repeat_y );
+                texture = await resize_texture( texture.image );
               }
 
               texture.colorSpace = THREE.SRGBColorSpace;
@@ -2037,14 +2169,11 @@
 
               let hdrJpgEquirectangularMap = await texture.toDataTexture();
 
-              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
-                const repeat_x = hdrJpgEquirectangularMap.image.width / 2048;
-                const repeat_y = hdrJpgEquirectangularMap.image.height / 2048;
-
-                hdrJpgEquirectangularMap.repeat.set( repeat_x, repeat_y );
-              }
-
               hdrJpgEquirectangularMap.flipY = (bg_flip === true);
+
+              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
+                hdrJpgEquirectangularMap = await decompress( hdrJpgEquirectangularMap, 2048 );
+              }
 
               hdrJpgEquirectangularMap.needsUpdate = true;
 
@@ -3370,6 +3499,40 @@
         });
 
         return [ buff, image_data, size ];
+      }
+
+      async function resize_texture( image ) {
+        let texture;
+
+        await new Promise( resolve => {
+          let canvas = document.createElement('canvas');
+
+          let scale = 2048 / Math.max( image.width, image.height );
+
+          canvas.width = image.width * Math.min( 1, scale );
+          canvas.height = image.height * Math.min( 1, scale );
+
+          let ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+          if ( image instanceof ImageData ) {
+            ctx.putImageData( image, 0, 0 );
+          } else if ( image.data && image.data.constructor === Uint16Array ) {
+            let u8 = new Uint8Array( image.data );
+            let imgData = new ImageData( new Uint8ClampedArray( u8 ), image.width, image.height );
+            ctx.putImageData( imgData, 0, 0 );
+          } else if ( image.data && image.data.constructor === Uint8Array ) {
+            let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
+            ctx.putImageData( imgData, 0, 0 );
+          } else {
+            ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+          }
+
+          let data_url = canvas.toDataURL( 'image/png', 1 );
+
+          resolve( texture = new THREE.Texture( data_url ) );
+        });
+
+        return texture;
       }
 
       function show_polar_grid() {
