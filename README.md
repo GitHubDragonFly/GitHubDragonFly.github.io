@@ -61,8 +61,8 @@ For those who either deal with or are just learning about Programmable Logic Con
 The `Intro` button on the desktop main menu page will connect to the intro video below:
  - The video shows a little bit of info on the main menu interface
  - The video shows how to start using 3D viewers by browsing and loading OBJ model files from a hard drive
+   - It might be simpler to open 3D models via any viewer's `URL` option, provided that you have the actual model's URL available
  - This button is not available on the mobile menu
- - It might be simpler to open 3D models via any viewer's `URL` option, provided that you have the actual model's URL available
  - This video was captured by using the free and open source [OBS Studio](https://github.com/obsproject/obs-studio) software
  - Videos available in my other repositories were also captured by the OBS Studio.
 
@@ -83,16 +83,18 @@ Main Menu Page (mobile)
 # Notes about Number Type Converter
 
 - Appears to be fully functional for conversion between:
+  - octal
   - binary
   - hexadecimal
-  - octal
-  - signed and unsigned 8, 16, 32, 64 and 128 bit integers
   - 32 and 64 bit floating-point numbers
+  - signed and unsigned 8, 16, 32, 64 and 128 bit integers
 - This is an online version of the Windows App found [here](https://github.com/GitHubDragonFly/Number_Type_Converter) so check its description
 - An open mind and some knowledge of number systems, hopefully binary, will help understand the displayed values
 - Not all numbers might be easily visible on mobile devices so use only when needed
 - Possibly of good use to those who deal with Programmable Logic Controllers (PLC) and students
-- Note about float parser: if it encounters an invalid character, as per standard number rules, then it will stop and complete parsing of the string as a valid number which was present up to that point (ex. if you would enter `-75-88.5` under Float32 then it will be parsed as `-75`)
+- Note about float parser: if it encounters an invalid character, as per standard number rules, then it will stop and complete parsing of the string:
+  - It will use a valid number which was present up to that point
+    - For example, if you would enter `-75-88.5` under `Float32` then it will be parsed as `-75`)
 - Integer representation of the floating-point values might be inaccurate due to precision and / or rounding
 
 Number Type Converter
