@@ -2351,6 +2351,7 @@
           if (mesh) await scene_cleanup();
 
           material.dispose();
+          material = undefined;
 
           await reset_all( true );
         }
@@ -2467,8 +2468,6 @@
             handle_error( 'No valid PLY or STL file selected!' );
             return;
           }
-
-          if (textures.length > 0) document.getElementById('btn_textures').disabled = false;
 
           selected_url_file = '';
         } else {
@@ -2759,10 +2758,6 @@
 
         mesh.traverse( ( child ) => {
           if (child.isMesh || child.isPoints) {
-            let length = child.geometry.attributes.position.array.length;
-            random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
-            original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
-
             child.material.vertexColors = vertex_colors_enabled;
           }
         });
@@ -2798,6 +2793,8 @@
       }
 
       async function finish_loading() {
+        if (textures.length > 0) document.getElementById('btn_textures').disabled = false;
+
         enable_disable( false );
 
         if (object_is_points === true) {
@@ -2863,188 +2860,6 @@
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
-      }
-
-      /* Simplify */
-
-      async function simplify( arrayBuffer ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
-        const { KHRONOS_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { dedup, flatten, join, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
-
-        const io = new WebIO().registerExtensions( KHRONOS_EXTENSIONS );
-
-        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
-
-        if (object_is_points === true) {
-          await doc.transform(
-            dedup(),
-            flatten(),
-            join(),
-            prune(),
-            sparse( { ratio: 0.2 } )
-          );
-        } else {
-          await doc.transform(
-            dedup(),
-            flatten(),
-            join(),
-            weld(),
-            simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
-            prune(),
-            sparse( { ratio: 0.2 } )
-          );
-        }
-
-        const compressedArrayBuffer = await io.writeBinary( doc );
-
-        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
-        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
-
-        return compressedArrayBuffer;
-      }
-
-      /* Encode with draco compression - geometry */
-
-      async function draco_compress( arrayBuffer ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
-        const { dedup, flatten, join, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, KHRDracoMeshCompression } = await import( "@gltf-transform/extensions" );
-
-        const io = new WebIO()
-        .registerExtensions( KHRONOS_EXTENSIONS )
-        .registerDependencies({
-          'draco3d.encoder': DracoEncoderModule(),
-        });
-
-        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
-
-        if (object_is_points === true) {
-          await doc.transform(
-            dedup(),
-            flatten(),
-            join(),
-            prune(),
-            sparse( { ratio: 0.2 } )
-          );
-        } else {
-          await doc.transform(
-            dedup(),
-            flatten(),
-            join(),
-            weld(),
-            simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
-            prune(),
-            sparse( { ratio: 0.2 } )
-          );
-        }
-
-        doc.createExtension( KHRDracoMeshCompression )
-        .setRequired( true )
-        .setEncoderOptions({
-          method: KHRDracoMeshCompression.EncoderMethod.EDGEBREAKER,
-          encodeSpeed: 5,
-        });
-
-        const compressedArrayBuffer = await io.writeBinary( doc );
-
-        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
-        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
-
-        return compressedArrayBuffer;
-      }
-
-      /* Encode with meshopt compression - geometry, morphs, animations */
-
-      async function meshopt_compress( arrayBuffer ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { MeshoptEncoder } = await import( "meshoptimizer_encoder" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
-        const { dedup, flatten, join, meshopt, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
-        const { KHRONOS_EXTENSIONS, EXTMeshoptCompression } = await import( "@gltf-transform/extensions" );
-
-        await MeshoptEncoder.ready;
-
-        const io = new WebIO()
-        .registerExtensions( KHRONOS_EXTENSIONS )
-        .registerDependencies({
-          'meshopt.encoder': MeshoptEncoder,
-        });
-
-        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
-
-        if (object_is_points === true) {
-          await doc.transform(
-            dedup(),
-            flatten(),
-            join(),
-            prune(),
-            sparse( { ratio: 0.2 } ),
-            meshopt( { encoder: MeshoptEncoder, level: 'high' } )
-          );
-        } else {
-          await doc.transform(
-            dedup(),
-            flatten(),
-            join(),
-            weld(),
-            simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
-            prune(),
-            sparse( { ratio: 0.2 } ),
-            meshopt( { encoder: MeshoptEncoder, level: 'high' } )
-          );
-        }
-
-        doc.createExtension( EXTMeshoptCompression )
-        .setRequired( true )
-        .setEncoderOptions({
-          method: EXTMeshoptCompression.EncoderMethod.QUANTIZE,  // or EXTMeshoptCompression.EncoderMethod.FILTER
-        });
-
-        io.registerExtensions( [ EXTMeshoptCompression ] );
-
-        const compressedArrayBuffer = await io.writeBinary( doc );
-
-        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
-        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
-
-        return compressedArrayBuffer;
-      }
-
-      async function resize_texture( image ) {
-        let texture;
-
-        await new Promise( resolve => {
-          let canvas = document.createElement('canvas');
-
-          let scale = 2048 / Math.max( image.width, image.height );
-
-          canvas.width = image.width * Math.min( 1, scale );
-          canvas.height = image.height * Math.min( 1, scale );
-
-          let ctx = canvas.getContext( '2d', { willReadFrequently: true } );
-
-          if ( image instanceof ImageData ) {
-            ctx.putImageData( image, 0, 0 );
-          } else if ( image.data && image.data.constructor === Uint16Array ) {
-            let u8 = new Uint8Array( image.data );
-            let imgData = new ImageData( new Uint8ClampedArray( u8 ), image.width, image.height );
-            ctx.putImageData( imgData, 0, 0 );
-          } else if ( image.data && image.data.constructor === Uint8Array ) {
-            let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
-            ctx.putImageData( imgData, 0, 0 );
-          } else {
-            ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
-          }
-
-          let data_url = canvas.toDataURL( 'image/png', 1 );
-
-          resolve( texture = new THREE.Texture( data_url ) );
-        });
-
-        return texture;
       }
 
       function show_points_model() {
@@ -3132,6 +2947,186 @@
         sampled_points.sortPoints = true;
 
         return sampled_points;
+      }
+
+      /* Simplify */
+
+      async function simplify( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
+        const { dedup, flatten, join, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
+
+        const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        if (object_is_points === true) {
+          await doc.transform(
+            dedup(),
+            flatten(),
+            join(),
+            prune(),
+            sparse( { ratio: 0.2 } )
+          );
+        } else {
+          await doc.transform(
+            dedup(),
+            flatten(),
+            join(),
+            weld(),
+            simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
+            prune(),
+            sparse( { ratio: 0.2 } )
+          );
+        }
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
+      }
+
+      /* Encode with draco compression - geometry */
+
+      async function draco_compress( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
+        const { dedup, flatten, join, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
+
+        const io = new WebIO().registerExtensions( ALL_EXTENSIONS )
+
+        io.registerDependencies({
+          'draco3d.encoder': DracoEncoderModule(),
+        });
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        if (object_is_points === true) {
+          await doc.transform(
+            dedup(),
+            flatten(),
+            join(),
+            prune(),
+            sparse( { ratio: 0.2 } )
+          );
+        } else {
+          await doc.transform(
+            dedup(),
+            flatten(),
+            join(),
+            weld(),
+            simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
+            prune(),
+            sparse( { ratio: 0.2 } )
+          );
+        }
+
+        doc.createExtension( ALL_EXTENSIONS[ 4 ] )
+        .setRequired( true )
+        .setEncoderOptions({
+          method: ALL_EXTENSIONS[ 4 ].EncoderMethod.EDGEBREAKER,
+          encodeSpeed: 5,
+        });
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
+      }
+
+      /* Encode with meshopt compression - geometry, morphs, animations */
+
+      async function meshopt_compress( arrayBuffer ) {
+        const { WebIO } = await import( "@gltf-transform/core" );
+        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
+        const { MeshoptEncoder } = await import( "meshoptimizer_encoder" );
+        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
+        const { dedup, flatten, join, meshopt, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
+
+        await MeshoptEncoder.ready;
+
+        const io = new WebIO().registerExtensions( ALL_EXTENSIONS )
+
+        io.registerDependencies({
+          'meshopt.encoder': MeshoptEncoder,
+        });
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        if (object_is_points === true) {
+          await doc.transform(
+            dedup(),
+            flatten(),
+            join(),
+            prune(),
+            sparse( { ratio: 0.2 } ),
+            meshopt( { encoder: MeshoptEncoder, level: 'high' } )
+          );
+        } else {
+          await doc.transform(
+            dedup(),
+            flatten(),
+            join(),
+            weld(),
+            simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
+            prune(),
+            sparse( { ratio: 0.2 } ),
+            meshopt( { encoder: MeshoptEncoder, level: 'high' } )
+          );
+        }
+
+        doc.createExtension( ALL_EXTENSIONS[ 1 ] )
+        .setRequired( true )
+        .setEncoderOptions({
+          method: ALL_EXTENSIONS[ 1 ].EncoderMethod.QUANTIZE,  // or EncoderMethod.FILTER
+        });
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
+      }
+
+      async function resize_texture( image ) {
+        let texture;
+
+        await new Promise( resolve => {
+          let canvas = document.createElement('canvas');
+
+          let scale = 2048 / Math.max( image.width, image.height );
+
+          canvas.width = image.width * Math.min( 1, scale );
+          canvas.height = image.height * Math.min( 1, scale );
+
+          let ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+          if ( image instanceof ImageData ) {
+            ctx.putImageData( image, 0, 0 );
+          } else if ( image.data && image.data.constructor === Uint16Array ) {
+            let u8 = new Uint8Array( image.data );
+            let imgData = new ImageData( new Uint8ClampedArray( u8 ), image.width, image.height );
+            ctx.putImageData( imgData, 0, 0 );
+          } else if ( image.data && image.data.constructor === Uint8Array ) {
+            let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
+            ctx.putImageData( imgData, 0, 0 );
+          } else {
+            ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+          }
+
+          let data_url = canvas.toDataURL( 'image/png', 1 );
+
+          resolve( texture = new THREE.Texture( data_url ) );
+        });
+
+        return texture;
       }
 
       function show_polar_grid() {
@@ -3501,9 +3496,11 @@
 
           mesh.traverse( ( child ) => {
             if (child.isMesh || child.isPoints) {
-              let length = child.geometry.attributes.position.array.length;
-              random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
-              original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+              if (random_vertex_color_array[ child.name ] === undefined) {
+                let length = child.geometry.attributes.position.array.length;
+                random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
+                original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+              }
 
               child.material.vertexColors = vertex_colors_enabled;
               child.material.needsUpdate = true;
@@ -3603,19 +3600,9 @@
       async function reset_only() {
         mouse_wheel = true;
 
-        if (polar_grid_visible === true) show_polar_grid();
-        if (grid_visible === true) show_grid();
+        if (selected_url_file !== '') url_loading = true;
 
-        await scene_cleanup();
-
-        await reset_all( true );
-
-        console.time( 'Loading Time' );
-
-        document.getElementById('div_loading').innerHTML = 'Reload';
-        document.getElementById('div_loading').style.display = 'block';
-
-        loadFile();
+        init();
       }
 
       async function reset_all( reset = false ) {
