@@ -11,8 +11,9 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.171.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.171.0/examples/jsm/",
+          "three-viewport-gizmo": "https://cdn.jsdelivr.net/npm/three-viewport-gizmo@2.0.2/dist/three-viewport-gizmo.min.js",
           "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/decode.min.js",
           "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/encode.min.js",
           "@monogrid/gainmap-js/libultrahdr": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/libultrahdr.min.js",
@@ -20,7 +21,8 @@
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.1.0",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.1.0",
           "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_encoder.module.min.js",
-          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_simplifier.module.min.js"
+          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_simplifier.module.min.js",
+          "xatlas-web": "https://esm.sh/xatlas-web@0.1.0"
         }
       }
     </script>
@@ -29,37 +31,37 @@
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
     <!-- For encoding GLB exports with draco compression -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.171.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
       var THREE, manager, ply_loader, stl_loader, texture_loader, tga_loader, dds_loader;
-      var merge_vertices, gif_loader, gif_writer, exr_loader, rgbe_loader, hdrJPGLoader;
-      var fflate, renderer, scene, camera, mesh, triangles_count, edges, edges_visible, render_requested;
-      var controls, orb_controls, gizmo, orb_controls_gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
+      var gif_loader, gif_writer, ktx2_loader, exr_loader, rgbe_loader, hdrJPGLoader;
+      var fflate, renderer, scene, camera, mesh, edges, edges_visible, render_requested;
+      var merge_vertices, controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var gui, gui_set = false, guiExposure = null, params, toneMappingOptions, outline_material;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, link, isMobile;
       var original_model, points_model, object_is_points, sampler, equi_enabled;
-      var ambientLight, hemisphereLight, directionalLight;
-      var ww = window.innerWidth, wh = window.innerHeight;
-      var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
-      var mesh_present, bounding_box, filename, gif_export, zip;
-      var flat_shading_enabled, enable_opacity, bgnd_linear_gradient, point_size;
-      var material, textures, current_texture, animated_gif_texture, url_tga_loaded, count = 0;
-      var url_displayed = false, url_loading = false, menu_location_bottom = false, url_ply, slider_height = 0;
-      var selected_ply_file, selected_stl_file, selected_url_file = '', selected_url_ply_file, selected_url_stl_file;
-      var vertex_colors_enabled, original_vertex_color_array, random_vertex_colors_enabled, random_vertex_color_array;
+      var ambientLight, directionalLight, triangles_count, count = 0;
+      var ww = window.innerWidth, wh = window.innerHeight, uvUnwrapper;
+      var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation, bg_flip;
+      var mesh_present, bounding_box, filename, gif_export, wireframe_enabled;
+      var flat_shading_enabled, enable_opacity, bgnd_linear_gradient, zip;
+      var material, textures, current_texture, animated_gif_texture, point_size;
+      var url_displayed = false, url_loading = false, menu_location_bottom = false;
+      var selected_ply_file, selected_stl_file, selected_url_file = '';
+      var vertex_colors_enabled, original_vertex_color_array, slider_height = 0;
+      var random_vertex_colors_enabled, random_vertex_color_array, url_ply;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
     </script>
 
     <script type="module">
       import * as three_js from "three";
+      import * as XAtlas from "xatlas-web";
       import * as fflate_js from "three/addons/libs/fflate.module.min.js";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { OrbitControls } from "../static/jsm/controls/OrbitControls.min.js";
-      import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.min.js";
-      import { GifLoader } from "../static/jsm/loaders/three-gif-loader/gif-loader.js";
       import { GifWriter } from "../static/jsm/libs/omggif/omggif.min.js";
+      import { GifLoader } from "../static/jsm/loaders/three-gif-loader/gif-loader.js";
 
       THREE = three_js;
       fflate = fflate_js;
@@ -75,8 +77,95 @@
       gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
       set_gui_position();
 
-      orb_controls = OrbitControls;
-      orb_controls_gizmo = OrbitControlsGizmo;
+      // Modified version of UVUnwrapper: https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/utils/UVUnwrapper.js
+      // Using xatlas-web: https://github.com/mozillareality/xatlas-web
+
+      const AddMeshStatus = {
+        Success: 0,
+        Error: 1,
+        IndexOutOfRange: 2,
+        InvalidIndexCount: 3
+      };
+
+      class UVUnwrapper {
+        constructor() {
+          this._module = null;
+        }
+
+        async load() {
+          const wasmurl = new URL( 'https://cdn.jsdelivr.net/npm/xatlas-web@0.1.0/dist/xatlas-web.wasm', import.meta.url );
+
+          this._module = XAtlas[ 'default' ]( {
+            locateFile( path ) {
+              if ( path.endsWith( '.wasm' ) ) {
+                return wasmurl.toString();
+              }
+
+              return path;
+            }
+          } );
+
+          return this._module.ready;
+        }
+
+        unwrapGeometry( geometry ) {
+          const xatlas = this._module;
+          const originalVertexCount = geometry.attributes.position.count;
+          const originalIndexCount = geometry.index.count;
+
+          xatlas.createAtlas();
+
+          const meshInfo = xatlas.createMesh( originalVertexCount, originalIndexCount, true, true );
+          xatlas.HEAPU16.set( geometry.index.array, meshInfo.indexOffset / Uint16Array.BYTES_PER_ELEMENT );
+          xatlas.HEAPF32.set( geometry.attributes.position.array, meshInfo.positionOffset / Float32Array.BYTES_PER_ELEMENT );
+          xatlas.HEAPF32.set( geometry.attributes.normal.array, meshInfo.normalOffset / Float32Array.BYTES_PER_ELEMENT );
+
+          const statusCode = xatlas.addMesh();
+
+          if ( statusCode !== AddMeshStatus.Success ) {
+            throw new Error( `UVUnwrapper: Error adding mesh. Status code ${ statusCode }` );
+          }
+
+          xatlas.generateAtlas();
+
+          const meshData = xatlas.getMeshData( meshInfo.meshId );
+          const oldPositionArray = geometry.attributes.position.array;
+          const oldNormalArray = geometry.attributes.normal.array;
+
+          const newPositionArray = new Float32Array( meshData.newVertexCount * 3 );
+          const newNormalArray = new Float32Array( meshData.newVertexCount * 3 );
+          const newUvArray = new Float32Array( xatlas.HEAPF32.buffer, meshData.uvOffset, meshData.newVertexCount * 2 );
+          const newIndexArray = new Uint32Array( xatlas.HEAPU32.buffer, meshData.indexOffset, meshData.newIndexCount );
+          const originalIndexArray = new Uint32Array(
+            xatlas.HEAPU32.buffer,
+            meshData.originalIndexOffset,
+            meshData.newVertexCount
+          );
+
+          for ( let i = 0; i < meshData.newVertexCount; i ++ ) {
+            const originalIndex = originalIndexArray[ i ];
+            newPositionArray[ i * 3 ] = oldPositionArray[ originalIndex * 3 ];
+            newPositionArray[ i * 3 + 1 ] = oldPositionArray[ originalIndex * 3 + 1 ];
+            newPositionArray[ i * 3 + 2 ] = oldPositionArray[ originalIndex * 3 + 2 ];
+            newNormalArray[ i * 3 ] = oldNormalArray[ originalIndex * 3 ];
+            newNormalArray[ i * 3 + 1 ] = oldNormalArray[ originalIndex * 3 + 1 ];
+            newNormalArray[ i * 3 + 2 ] = oldNormalArray[ originalIndex * 3 + 2 ];
+          }
+
+          geometry.deleteAttribute( 'position' );
+          geometry.deleteAttribute( 'normal' );
+
+          geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( newPositionArray, 3 ) );
+          geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( newNormalArray, 3 ) );
+          geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( newUvArray, 2 ) );
+          geometry.setIndex( new THREE.Uint32BufferAttribute( newIndexArray, 1 ) );
+
+          xatlas.destroyAtlas();
+        }
+      }
+
+      uvUnwrapper = new UVUnwrapper();
+      await uvUnwrapper.load();
     </script>
 
     <script src="../static/assimpjs/assimpjs.min.js" defer></script>
@@ -141,10 +230,6 @@
       input[type=radio] {
         vertical-align: middle;
         margin: 0 2px 0 2px;
-      }
-
-      input[type=checkbox] {
-        margin: 0 2px 0 3px;
       }
 
       input[type=range] {
@@ -285,16 +370,9 @@
         margin-left: 2px;
       }
 
-      .fm_gizmo {
-        width: 63px;
-        height: 63px;
-        padding: 4px;
-        margin: 2px;
-      }
-
       .fm {
         color: navy;
-        width: calc(100% - 86px);
+        width: 99%;
         border: 1px solid navy;
         -webkit-border-radius: 2px;
         border-radius: 2px;
@@ -326,35 +404,35 @@
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
-    <!-- Using glTF Transform for MESHOPT compression: https://gltf-transform.dev -->
-    <!-- Using gainmap-js encoder & decoder: https://github.com/MONOGRID/gainmap-js -->
-    <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/ThreeOrbitControlsGizmo -->
-    <!-- PLY Examples from: https://github.com/mrdoob/three.js -->
-    <!-- More PLY examples: https://people.math.sc.edu/Burkardt/data/data.html -->
-    <!-- PRWM export powered by: https://github.com/kchapelier/PRWM -->
-    <!-- Animated GIF export is based on the following example and library: -->
+    <!-- Using jQuery: https://github.com/jquery/jquery -->
+    <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/three-viewport-gizmo -->
+    <!-- When applicable, using glTF Transform for MESHOPT compression: https://gltf-transform.dev -->
+    <!--  - When applicable, using meshoptimizer: https://github.com/zeux/meshoptimizer -->
+    <!-- When applicable, using gainmap-js encoder & decoder: https://github.com/MONOGRID/gainmap-js -->
+    <!-- When applicable, using PRWM export powered by: https://github.com/kchapelier/PRWM -->
+    <!-- When applicable, using Animated GIF export based on the following example and library: -->
     <!--   https://github.com/mrdoob/omggif-example  -->
     <!--   https://github.com/deanm/omggif  -->
-    <!-- Modified Animated GIF loader -->
+    <!-- When applicable, using modified Animated GIF loader -->
     <!--   from: https://github.com/movableink/three-gif-loader -->
     <!--   using: https://github.com/deanm/omggif -->
-    <!-- Animated PNG file export support powered by: -->
+    <!-- When applicable, using Animated PNG file export powered by: -->
     <!--   https://github.com/photopea/UPNG.js -->
     <!--   https://github.com/nodeca/pako -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>PLY+STL Viewer (r170)</title>
+    <title>PLY+STL Viewer (r171)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
-      <div class="fm_gizmo" id="gizmo" title="Interactive Orbit Controls Gizmo" style="float: right; background-color: black;"></div>
       <div class="fm" id="fm1">
         <label for="file_input" title="3D Model Formats: PLY and STL" style="color: #553801; margin-left: 3px;">3D</label>
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".ply, .stl, .dds, .tga, .webp, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml" multiple />
+        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".ply, .stl, .dds, .dib, .ktx2, .tga, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" multiple />
         <label for="file_image_input" title="Background Image" style="color: #553801;">BGND</label>
-        <input type="file" title="Background Image" id="file_image_input" accept=".exr, .hdr, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
+        <input type="file" title="Background Image" id="file_image_input" accept=".exr, .hdr, .ktx2, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
+        <button title="Set Y-Flip for manually loaded Background Image" id="btn_bg_flip" onclick="set_bg_flip();" style="background-color: transparent; color: blue;" disabled>Y</button>
         <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="background-color: transparent; color: blue; min-width: 25px;" disabled>Eq</button>
         <button title="Toggle Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
         <button title="Model Opacity - double click to enable/disable" id="btn_dc_opacity" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" ondblclick="set_opacity();" onclick="show_hide_dropdown_opacity();">O
@@ -376,7 +454,6 @@
           <option title="Scale 50x" value="50x" onclick="set_model_scale( '50x' );">50x</option>
           <option title="Scale 100x" value="100x" onclick="set_model_scale( '100x' );">100x</option>
         </select>
-        <label title="Toggle Wireframe">Wire<input type="checkbox" id="wireframe" onchange="show_wireframe();" disabled /></label>
         <select title="Export" id="export_names" style="min-width: 90px;" disabled>
           <option title="Export Formats" value="export" selected disabled>Export</option>
           <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
@@ -449,7 +526,6 @@
         </button>
         <label for="ambient_light_color" title="Ambient Light Color">AL<input type="color" title="Ambient Light Color" id="ambient_light_color" onchange="set_ambient_light_color();" disabled /></label>
         <label for="directional_light_color" title="Directional Light Color">DL<input type="color" title="Directional Light Color" id="directional_light_color" onchange="set_directional_light_color();" disabled /></label>
-        <label for="hemisphere_light_color" title="Hemisphere Light Color">HL<input type="color" title="Hemisphere Light Color" id="hemisphere_light_color" onchange="set_hemisphere_light_color();" disabled /></label>
         <label for="back_color" title="Background Color">B<input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled /></label>
         <label for="object_color" title="Object Color">C<input type="color" title="Object Color" id="object_color" onchange="set_object_color();" disabled /></label>
         <label for="edge_color" title="Edge Color">EC<input type="color" title="Edge Color" id="edge_color" onchange="set_edge_color();" disabled /></label>
@@ -459,6 +535,7 @@
         <button title="Switch Texture" id="btn_textures" onclick="set_texture();" style="min-width: 27px;" disabled>T</button>
         <button title="Toggle Vertex Colors" id="btn_vertex_colors" onclick="set_vertex_colors();" style="min-width: 27px;" disabled>VC</button>
         <button title="Toggle Random Vertex Colors" id="btn_random_vertex_colors" onclick="set_random_vertex_colors();" style="min-width: 15px;" disabled>!</button>
+        <button title="Toggle Wireframe" id="btn_wireframe" onclick="show_wireframe();" style="min-width: 22px;" disabled >W</button>
         <button title="Toggle Grid - 200 x 200" id="btn_grid" onclick="show_grid();" disabled>#</button>
         <button title="Toggle Polar Grid - radius 100" id="btn_polar_grid" onclick="show_polar_grid();" style="min-width: 24px;" disabled><p class="polar"></p></button>
         <button title="Toggle Points Model" id="btn_points_model" onclick="show_points_model();" style="min-width: 27px;" disabled>PM</button>
@@ -628,6 +705,34 @@
 
       function return_false() { return false; }
 
+      async function set_bg_flip() {
+        if (bg_flip === false) {
+          bg_flip = true;
+          document.getElementById('btn_bg_flip').style.backgroundColor = 'lightgreen';
+        } else {
+          bg_flip = false;
+          document.getElementById('btn_bg_flip').style.backgroundColor = 'transparent';
+        }
+
+        if (document.getElementById('file_image_input').value) {
+          if (equi_enabled === true) {
+            scene.environment.dispose();
+            scene.environment = null;
+          }
+
+          scene.background.dispose();
+          scene.background = null;
+
+          await set_scene_image();
+
+          if (equi_enabled === true) {
+            scene.backgroundIntensity = params.backIntensity;
+            scene.backgroundBlurriness = params.backBlurriness;
+            if ( params.toneMapping !== 'None' ) renderer.toneMappingExposure = params.exposure;
+          }
+        }
+      }
+
       function set_gui_position() {
         if (menu_location_bottom === false) {
           let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
@@ -642,19 +747,15 @@
       function show_url() {
         if (url_displayed === true) {
           document.getElementById('url').style.display = 'none';
-          document.getElementById('fm2').style.width = isMobile === true ? '99%' : 'calc(100% - 86px)';
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
           url_displayed = false;
         } else {
           document.getElementById('url').style.display = 'block';
-          document.getElementById('fm2').style.width = '99%';
           document.getElementById('btn_url').style.backgroundColor = 'lightgreen';
           url_displayed = true;
         }
 
         resize();
-
-        if (gui) set_gui_position();
 
         mouse_wheel = true;
       }
@@ -670,7 +771,7 @@
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
 
         window.addEventListener( 'pointerdown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
-        window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; if (progress.value === 0) mouse_wheel = true; }, false);
         window.addEventListener( 'wheel', ( event ) => { if (progress.value === 0) mouse_wheel = true; }, false);
         window.addEventListener( 'keydown', ( event ) => {
           if (progress.value === 0) {
@@ -699,19 +800,6 @@
           document.getElementById('btn_full_screen').style.backgroundColor = 'transparent';
         }
 
-        if (typeof $ !== 'undefined' && isMobile === false) {
-          let fm1_bottom = ( parseInt( $('#fm1').outerHeight( true ) ) );
-
-          if (url_displayed === true) {
-            document.getElementById('url').style.width = fm1_bottom > 70 ? '99%' : 'calc(100% - 86px)';
-
-            let url_bottom = ( fm1_bottom + parseInt( $('#url').outerHeight( true ) ) );
-            document.getElementById('fm2').style.width = url_bottom > 70 ? '99%' : 'calc(100% - 86px)';
-          } else {
-            document.getElementById('fm2').style.width = fm1_bottom > 70 ? '99%' : 'calc(100% - 86px)';
-          }
-        }
-
         if (scene !== undefined) {
           mouse_wheel = true;
 
@@ -723,7 +811,9 @@
           camera.aspect = ww / wh;
           camera.updateProjectionMatrix();
 
-          if (gui) set_gui_position();
+          if (gizmo) gizmo.update();
+
+          set_gui_position();
 
           mouse_wheel = true;
         }
@@ -758,7 +848,13 @@
           document.getElementById('btn_menu_location').style.backgroundColor = '#FFFF00';
         }
 
-        if (gui) set_gui_position();
+        if (gizmo) {
+          gizmo._domElement.style.top = menu_location_bottom === true ? 0 : '';
+          gizmo._domElement.style.bottom = menu_location_bottom === true ? '' : 0;
+          gizmo.update();
+        }
+
+        set_gui_position();
 
         mouse_wheel = true;
       }
@@ -778,6 +874,8 @@
         document.getElementById('fixed_menu').style.display = 'none';
         document.getElementById('div_loading').innerHTML = pw;
         document.getElementById('div_loading').style.display = 'block';
+
+        if (gizmo) gizmo.enabled = false;
 
         if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'none';
 
@@ -807,19 +905,7 @@
           link.download = filename + ext + '.zip';
           link.click();
 
-          document.getElementById('div_loading').innerHTML = '';
-          document.getElementById('div_loading').style.display = 'none';
-          document.getElementById('fixed_menu').style.display = 'block';
-
-          if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'block';
-
-          render_requested = true;
-          mouse_wheel = true;
-          render();
-
-          zip = new JSZip();
-          document.body.removeChild( link );
-          link = undefined;
+          finish_export();
         });
       }
 
@@ -827,9 +913,15 @@
         alert( 'Export error!' );
         console.log( error );
 
+        finish_export();
+      }
+
+      function finish_export() {
         document.getElementById('div_loading').innerHTML = '';
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('fixed_menu').style.display = 'block';
+
+        if (gizmo) gizmo.enabled = true;
 
         if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'block';
 
@@ -837,6 +929,7 @@
         mouse_wheel = true;
         render();
 
+        zip = new JSZip();
         document.body.removeChild( link );
         link = undefined;
       }
@@ -1190,6 +1283,8 @@
 
         set_filename();
 
+        if (gizmo) gizmo.enabled = false;
+
         if (!link) {
           link = document.createElement( 'a' );
           link.style.display = 'none';
@@ -1265,15 +1360,11 @@
             await process_zip( '_GIF' );
 
             progress.value = 0;
-            document.getElementById('fixed_menu').style.display = 'block';
-            document.getElementById('gif_progress').style.display = 'none';
+            gif_export = false;
+            document.getElementById('animation_progress').style.display = 'none';
             document.getElementById('div_gif_rectangle').style.display = 'none';
 
-            if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'block';
-
-            gif_export = false;
-
-            if (render_requested === true) render();
+            render();
 
             return;
           }
@@ -1329,6 +1420,8 @@
         document.getElementById('export_names').selectedIndex = 0;
 
         set_filename();
+
+        if (gizmo) gizmo.enabled = false;
 
         if (!link) {
           link = document.createElement( 'a' );
@@ -1418,13 +1511,10 @@
             await process_zip( '_APNG' );
 
             progress.value = 0;
-            document.getElementById('fixed_menu').style.display = 'block';
-            document.getElementById('gif_progress').style.display = 'none';
+            document.getElementById('animation_progress').style.display = 'none';
             document.getElementById('div_gif_rectangle').style.display = 'none';
 
-            if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'block';
-
-            if (render_requested === true) render();
+            render();
 
             return;
           }
@@ -1446,6 +1536,8 @@
             scene.background.dispose();
             scene.background = null;
           }
+
+          scene.backgroundBlurriness = 0.0;
         }
       }
 
@@ -1666,6 +1758,87 @@
         mouse_wheel = true;
       }
 
+      // internally used modified decompress function from WebGLTextureUtils.js
+
+      async function decompress( texture, maxTextureSize = Infinity, renderer = null ) {
+        let _renderer = renderer;
+        let fullscreenQuad;
+
+        let fullscreenQuadGeometry = new THREE.PlaneGeometry( 2, 2, 1, 1 );
+        let fullscreenQuadMaterial = new THREE.ShaderMaterial( {
+          uniforms: { blitTexture: new THREE.Uniform( texture.clone() ) },
+          vertexShader: `
+          varying vec2 vUv;
+          void main(){
+          vUv = uv;
+          gl_Position = vec4(position.xy * 1.0,0.,.999999);
+          }`,
+          fragmentShader: `
+          uniform sampler2D blitTexture; 
+          varying vec2 vUv;
+
+          void main(){ 
+          gl_FragColor = vec4(vUv.xy, 0, 1);
+				
+          #ifdef IS_SRGB
+          gl_FragColor = sRGBTransferOETF( texture2D( blitTexture, vUv) );
+          #else
+          gl_FragColor = texture2D( blitTexture, vUv);
+          #endif
+          }`
+        } );
+
+        fullscreenQuadMaterial.uniforms.blitTexture.value = texture.clone();
+        fullscreenQuadMaterial.defines.IS_SRGB = texture.colorSpace == THREE.SRGBColorSpace;
+        fullscreenQuadMaterial.needsUpdate = true;
+
+        if ( ! fullscreenQuad ) {
+          fullscreenQuad = new THREE.Mesh( fullscreenQuadGeometry, fullscreenQuadMaterial );
+          fullscreenQuad.frustrumCulled = false;
+        }
+
+        const _camera = new THREE.PerspectiveCamera();
+        const _scene = new THREE.Scene();
+        _scene.add( fullscreenQuad );
+
+        const scale = maxTextureSize / Math.max( texture.image.width, texture.image.height );
+
+        const width = texture.image.width * Math.min( 1, scale );
+        const height = texture.image.height * Math.min( 1, scale );
+
+        if ( _renderer === null ) {
+          _renderer = new THREE.WebGLRenderer( { antialias: false } );
+        }
+
+        _renderer.setSize( width, height );
+        _renderer.clear();
+        _renderer.render( _scene, _camera );
+
+        const canvas = document.createElement( 'canvas' );
+        const context = canvas.getContext( '2d' );
+
+        canvas.width = width;
+        canvas.height = height;
+
+        context.drawImage( _renderer.domElement, 0, 0, width, height );
+
+        const readableTexture = new THREE.CanvasTexture( canvas );
+
+        readableTexture.minFilter = texture.minFilter;
+        readableTexture.magFilter = texture.magFilter;
+        readableTexture.wrapS = texture.wrapS;
+        readableTexture.wrapT = texture.wrapT;
+        readableTexture.name = texture.name;
+
+        if ( _renderer ) {
+          _renderer.forceContextLoss();
+          _renderer.dispose();
+          _renderer = null;
+        }
+
+        return readableTexture;
+      }
+
       function set_bgenv_message( end = false ) {
         if (end === true) {
           document.getElementById('div_message').innerHTML = '';
@@ -1694,17 +1867,17 @@
 
           let fn_uc = fii.name.toUpperCase();
 
-          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.SVG') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
+          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.SVG') || fn_uc.endsWith('.KTX2') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
             hdrJPGLoader.load( URL.createObjectURL( fii ) , async function( texture ) {
               URL.revokeObjectURL( fii );
 
               let hdrJpgEquirectangularMap = await texture.toDataTexture();
 
-              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
-                const repeat_x = hdrJpgEquirectangularMap.image.width / 2048;
-                const repeat_y = hdrJpgEquirectangularMap.image.height / 2048;
+              hdrJpgEquirectangularMap.colorSpace = THREE.LinearSRGBColorSpace;
+              hdrJpgEquirectangularMap.flipY = (bg_flip === true);
 
-                hdrJpgEquirectangularMap.repeat.set( repeat_x, repeat_y );
+              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
+                hdrJpgEquirectangularMap = await decompress( hdrJpgEquirectangularMap, 2048 );
               }
 
               hdrJpgEquirectangularMap.needsUpdate = true;
@@ -1733,9 +1906,58 @@
 
               URL.revokeObjectURL( fii );
             });
-          } else if (fn_uc.endsWith('.SVG')) {
-            texture_loader.load( URL.createObjectURL( fii ) , function( texture ) {
+          } else if (fn_uc.endsWith('.KTX2')) {
+            ktx2_loader.load( URL.createObjectURL( fii ), async function( texture ) {
               URL.revokeObjectURL( fii );
+
+              // Convert to PNG so it shows on most platforms
+              // Unsupported KTX2 formats might log a warning
+
+              let canvas_tex = await decompress( texture );
+
+              texture.dispose();
+
+              texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), async function( png_tex ) {
+                canvas_tex.dispose();
+
+                if (isMobile === true && (png_tex.image.width > 2048 || png_tex.image.height > 2048)) {
+                  png_tex = await resize_texture( png_tex.image );
+                }
+
+                png_tex.colorSpace = THREE.SRGBColorSpace;
+                png_tex.flipY = (bg_flip === true);
+                png_tex.needsUpdate = true;
+
+                if (equi_enabled === true) {
+                  png_tex.mapping = THREE.EquirectangularReflectionMapping;
+                  scene.background = png_tex.clone();
+                  scene.environment = png_tex.clone();
+                } else {
+                  scene.background = png_tex.clone();
+                }
+
+                mouse_wheel = true;
+
+                png_tex.dispose();
+
+                set_bgenv_message( true );
+              });
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              URL.revokeObjectURL( fii );
+              handle_error( error );
+            });
+          } else if (fn_uc.endsWith('.SVG')) {
+            texture_loader.load( URL.createObjectURL( fii ) , async function( texture ) {
+              URL.revokeObjectURL( fii );
+
+              if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
+                texture = await resize_texture( texture.image );
+              }
+
+              texture.colorSpace = THREE.SRGBColorSpace;
+              texture.flipY = (bg_flip === false);
+              texture.needsUpdate = true;
 
               if (equi_enabled === true) {
                 texture.mapping = THREE.EquirectangularReflectionMapping;
@@ -1843,11 +2065,10 @@
 
               let hdrJpgEquirectangularMap = await texture.toDataTexture();
 
-              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
-                const repeat_x = hdrJpgEquirectangularMap.image.width / 2048;
-                const repeat_y = hdrJpgEquirectangularMap.image.height / 2048;
+              hdrJpgEquirectangularMap.flipY = (bg_flip === true);
 
-                hdrJpgEquirectangularMap.repeat.set( repeat_x, repeat_y );
+              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
+                hdrJpgEquirectangularMap = await decompress( hdrJpgEquirectangularMap, 2048 );
               }
 
               hdrJpgEquirectangularMap.needsUpdate = true;
@@ -1907,10 +2128,14 @@
           canvas.height = wh;
 
           let gradient = context.createLinearGradient( 0, 0, 0, wh );
-          let gradient_colors = [ [ 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.15 ],
-            [ '#151525', '#252535', '#454555', '#656575', '#787888', '#8A8A9A', '#9A9AAA', '#A5A5B5' ] ];
+          let gradient_colors = [
+            [ 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.15 ],
+            [ '#151525', '#252535', '#454555', '#656575', '#787888', '#8A8A9A', '#9A9AAA', '#A5A5B5' ]
+          ];
+
           let i = gradient_colors[ 0 ].length;
           while( i-- ) { gradient.addColorStop( gradient_colors[ 0 ][ i ], gradient_colors[ 1 ][ i ] ); }
+
           context.fillStyle = gradient;
           context.fillRect( 0, 0, ww, wh );
 
@@ -1941,24 +2166,6 @@
           parseInt( al_colors.substring( 3, 5 ), 16 ) / 255.0,
           parseInt( al_colors.substring( 5 ), 16 ) / 255.0
         );
-
-        mouse_wheel = true;
-      }
-
-      function set_hemisphere_light_color() {
-        let hl_colors = document.getElementById('hemisphere_light_color').value; // hex format '#rrggbb'
-
-        hemisphereLight.color.setRGB(
-          parseInt( hl_colors.substring( 1, 3 ), 16 ) / 10.0,
-          parseInt( hl_colors.substring( 3, 5 ), 16 ) / 10.0,
-          parseInt( hl_colors.substring( 5 ), 16 ) / 10.0
-        );
-
-        if (hl_colors === '#000000') {
-          hemisphereLight.groundColor.setRGB( 0, 0, 0 );
-        } else {
-          hemisphereLight.groundColor.setRGB( 9.2, 9.2, 9.2 );
-        }
 
         mouse_wheel = true;
       }
@@ -2141,17 +2348,9 @@
 
           mouse_wheel = true;
 
-          if (polar_grid_visible === true) show_polar_grid();
-          if (grid_visible === true) show_grid();
-
           if (mesh) await scene_cleanup();
 
           material.dispose();
-
-          if (gizmo) {
-            document.getElementById('gizmo').removeChild( gizmo.domElement );
-            gizmo = undefined;
-          }
 
           await reset_all( true );
         }
@@ -2214,8 +2413,6 @@
 
         selected_ply_file = null;
         selected_stl_file = null;
-        selected_url_ply_file = null;
-        selected_url_stl_file = null;
         object_is_points = false;
         mesh_present = true;
         url_ply = false;
@@ -2225,6 +2422,7 @@
         edges = null;
         edges_visible = false;
         enable_opacity = false;
+        wireframe_enabled = false;
         flat_shading_enabled = true;
         bgnd_linear_gradient = false;
         vertex_colors_enabled = false;
@@ -2234,7 +2432,6 @@
         grid_visible = false;
         polar_grid_visible = false;
         render_requested = false;
-        url_tga_loaded = false;
         textures = [];
         current_texture = -1;
         animated_gif_texture = false;
@@ -2252,13 +2449,18 @@
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
         if (url_loading === false) {
+          let img_extensions = [ '.AVIF', '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF',
+            '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
+
           // Loaded file
           var fi = document.getElementById('file_input');
 
           for (let i = 0; i < fi.files.length; i++) {
-            if (fi.files[ i ].name.toUpperCase().endsWith('.PLY')) { selected_ply_file = fi.files[ i ]; }
-            else if (fi.files[ i ].name.toUpperCase().endsWith('.STL')) { selected_stl_file = fi.files[ i ]; }
-            else if (fi.files[ i ].type.startsWith('image/')) textures.push( fi.files[ i ] );
+            let fn_uc = fi.files[ i ].name.toUpperCase();
+
+            if (fn_uc.endsWith('.PLY')) { selected_ply_file = fi.files[ i ]; }
+            else if (fn_uc.endsWith('.STL')) { selected_stl_file = fi.files[ i ]; }
+            else if (img_extensions.some( ext => fn_uc.endsWith( ext ) )) textures.push( fi.files[ i ] );
           };
 
           if (selected_ply_file === null && selected_stl_file === null) {
@@ -2289,6 +2491,15 @@
           renderer.autoClear = false;
 
           document.body.appendChild( renderer.domElement );
+
+          if (ktx2_loader === undefined) {
+            const { KTX2Loader } = await import( 'three/addons/loaders/KTX2Loader.min.js' );
+
+            ktx2_loader = new KTX2Loader( manager );
+            ktx2_loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.171.0/examples/jsm/libs/basis/' );
+            ktx2_loader.detectSupport( renderer );
+            manager.addHandler( /\.ktx2$/i, ktx2_loader );
+          }
         }
 
         if (hdrJPGLoader === undefined) {
@@ -2328,13 +2539,6 @@
           scene.add( ambientLight );
         }
 
-        // Add HemisphereLight to the scene
-        if (hemisphereLight === undefined) {
-          hemisphereLight = new THREE.HemisphereLight( 0x000000, 0x000000, 0.15 );
-          hemisphereLight.position.set( 0, 250, 0 );
-          scene.add( hemisphereLight );
-        }
-
         // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
           directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 3.5 );
@@ -2344,12 +2548,14 @@
         }
 
         if (controls === undefined) {
-          controls = new orb_controls( camera, renderer.domElement );
-          controls.enableZoomToCursor = true;
-          controls.zoomSpeed = 0.8;
-          controls.rotateSpeed = 0.8;
-          controls.keyPanSpeed = 0.8; 
-          controls.panSpeed = 0.8;
+          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+
+          controls = new OrbitControls( camera, renderer.domElement );
+          controls.zoomToCursor = true;
+          controls.zoomSpeed = 0.6;
+          controls.rotateSpeed = 0.6;
+          controls.keyPanSpeed = 0.6; 
+          controls.panSpeed = 0.6;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.05;
           //controls.enableKeys = false;
@@ -2406,14 +2612,9 @@
 
         // object is geometry
 
-        triangles_count = object.attributes.position.count / 3.0;
-
-        point_size = isMobile === true ? 0.1 : 0.2;
+        point_size = isMobile === true ? 0.15 : 0.35;
 
         let smooth = object.clone();
-
-        smooth.computeBoundingBox();
-        smooth.computeBoundingSphere();
 
         if ( smooth.index !== null ) {
           smooth.deleteAttribute('normal');
@@ -2422,42 +2623,57 @@
           smooth.normalizeNormals();
           smooth.center();
 
+          smooth.computeBoundingBox();
+          smooth.computeBoundingSphere();
+
           if (smooth.hasAttribute( 'color' )) {
             vertex_colors_enabled = true;
             document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-            document.getElementById('btn_random_vertex_colors').disabled = false;
-            random_vertex_changed();
           }
 
           original_model = new THREE.Mesh( smooth, material );
           original_model.name = 'original_model';
+
+          // If textures are loaded then try to unwrap the model and create uvs
+          if (textures.length > 0 && original_model.geometry.attributes.uv === undefined) {
+            if (vertex_colors_enabled === true) {
+              alert( 'Vertex colors will be removed. Load model without textures to preserve vertex colors.' )
+              vertex_colors_enabled = false;
+              original_model.geometry.deleteAttribute( 'color' );
+              document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
+            }
+
+            document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
+            await new Promise( resolve => setTimeout( resolve, 100 ) );
+
+            await uvUnwrapper.unwrapGeometry( original_model.geometry );
+          }
+
           edges = new THREE.LineSegments( new THREE.EdgesGeometry( original_model.geometry, 30 ), outline_material );
 
           mesh.add( original_model );
 
-          // Do not create the points model for rather large meshes
+          // Create points model
 
-          if (triangles_count < 300000) {
-            let sampled_points = await sample_mesh_surface( original_model.clone() );
+          let sampled_points = await sample_mesh_surface( original_model.clone() );
+          if (original_model.geometry.attributes.uv) sampled_points.geometry.setAttribute( 'uv', original_model.geometry.attributes.uv );
 
-            // Create points model
+          let points_material = new THREE.PointsMaterial( { size: point_size, blending: THREE.AdditiveBlending } );
 
-            let non_indexed_geometry = smooth.clone().toNonIndexed();
-            let points_material = new THREE.PointsMaterial( { size: point_size, blending: THREE.AdditiveBlending } );
+          points_model = new THREE.Points( smooth, points_material );
+          if (original_model.geometry.attributes.uv) points_model.geometry.setAttribute( 'uv', original_model.geometry.attributes.uv );
+          points_model.name = 'points_model';
+          points_model.sizeAttenuation = true;
+          points_model.sortPoints = true;
 
-            points_model = new THREE.Points( non_indexed_geometry, points_material );
-            points_model.name = 'points_model';
-            points_model.sizeAttenuation = true;
-            points_model.sortPoints = true;
+          // Add sampled points
 
-            // Add sampled points
-            points_model.add( sampled_points );
+          points_model.add( sampled_points );
 
-            mesh.add( points_model );
-            mesh.children[ 1 ].visible = false;
+          mesh.add( points_model );
+          mesh.children[ 1 ].visible = false;
 
-            document.getElementById('btn_points_model').disabled = false;
-          }
+          document.getElementById('btn_points_model').disabled = false;
         } else {
           if (selected_ply_file !== null || url_ply === true) {
             mesh_present = false;
@@ -2468,8 +2684,6 @@
             if (smooth.hasAttribute( 'color' )) {
               vertex_colors_enabled = true;
               document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-              document.getElementById('btn_random_vertex_colors').disabled = false;
-              random_vertex_changed();
             }
 
             original_model = new THREE.Points( smooth, points_material );
@@ -2478,54 +2692,70 @@
             original_model.sortPoints = true;
 
             mesh.add( original_model );
-          } else {
+           } else {
             smooth.deleteAttribute('normal');
             smooth = merge_vertices( smooth, 1e-6 );
             smooth.computeVertexNormals();
             smooth.normalizeNormals();
             smooth.center();
 
+            smooth.computeBoundingBox();
+            smooth.computeBoundingSphere();
+
             if (object.hasColors) {
               vertex_colors_enabled = true;
               document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-              document.getElementById('btn_random_vertex_colors').disabled = false;
-              random_vertex_changed();
             }
 
             original_model = new THREE.Mesh( smooth, material );
             original_model.name = 'original_model';
+
+            // If textures are loaded then try to unwrap the model and create uvs
+            if (textures.length > 0 && original_model.geometry.attributes.uv === undefined) {
+              if (vertex_colors_enabled === true) {
+                alert( 'Vertex colors will be removed. Load model without textures to preserve vertex colors.' )
+                vertex_colors_enabled = false;
+                original_model.geometry.deleteAttribute( 'color' );
+                document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
+              }
+
+              document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
+              await new Promise( resolve => setTimeout( resolve, 100 ) );
+
+              await uvUnwrapper.unwrapGeometry( original_model.geometry );
+            }
+
             edges = new THREE.LineSegments( new THREE.EdgesGeometry( original_model.geometry, 30 ), outline_material );
 
             mesh.add( original_model );
 
-            // Do not create the points model for rather large meshes
+            // Create points model
 
-            if (triangles_count < 300000) {
-              // Create points model
-              let sampled_points = await sample_mesh_surface( original_model.clone() );
+            let sampled_points = await sample_mesh_surface( original_model.clone() );
+            if (original_model.geometry.attributes.uv) sampled_points.geometry.setAttribute( 'uv', original_model.geometry.attributes.uv );
 
-              let non_indexed_geometry = smooth.clone().toNonIndexed();
-              let points_material = new THREE.PointsMaterial( { size: point_size, blending: THREE.AdditiveBlending } );
+            let points_material = new THREE.PointsMaterial( { size: point_size, blending: THREE.AdditiveBlending } );
 
-              points_model = new THREE.Points( non_indexed_geometry, points_material );
-              points_model.name = 'points_model';
-              points_model.sizeAttenuation = true;
-              points_model.sortPoints = true;
+            points_model = new THREE.Points( smooth, points_material );
+            if (original_model.geometry.attributes.uv) points_model.geometry.setAttribute( 'uv', original_model.geometry.attributes.uv );
+            points_model.name = 'points_model';
+            points_model.sizeAttenuation = true;
+            points_model.sortPoints = true;
 
-              // Add sampled points
-              points_model.add( sampled_points );
+            // Add sampled points
 
-              mesh.add( points_model );
-              mesh.children[ 1 ].visible = false;
+            points_model.add( sampled_points );
 
-              document.getElementById('btn_points_model').disabled = false;
-            }
+            mesh.add( points_model );
+            mesh.children[ 1 ].visible = false;
+
+            document.getElementById('btn_points_model').disabled = false;
           }
         }
 
-        initial_rotation.x = mesh.rotation.x;
-        initial_rotation.y = mesh.rotation.y;
-        initial_rotation.z = mesh.rotation.z;
+        initial_rotation.x = original_model.rotation.x;
+        initial_rotation.y = original_model.rotation.y;
+        initial_rotation.z = original_model.rotation.z;
 
         mesh.traverse( ( child ) => {
           if (child.isMesh || child.isPoints) {
@@ -2554,7 +2784,7 @@
             selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          // No extension checking for URL so it has to point to PLY / STL file
+          // No extension checking for URL so it has to point to PLY or STL file
 
           stl_loader.load( selected_url_file, addFileInScene,
           function( xhr ) { }, // onProgress
@@ -2573,37 +2803,29 @@
         if (object_is_points === true) {
           document.getElementById('btn_points_model').disabled = true;
           document.getElementById('btn_points_model').style.backgroundColor = '#d1cefc';
-          document.getElementById('wireframe').disabled = true;
+          document.getElementById('btn_wireframe').disabled = true;
           document.getElementById('btn_flat').disabled = true;
           document.getElementById('btn_edges').disabled = true;
           document.getElementById('edge_color').disabled = true;
           document.getElementById('btn_material').disabled = true;
           points_model_enabled();
+          disabled_changed();
         }
 
         set_initial_scale();
         resize();
 
-        disabled_changed();
+        if (gizmo === undefined) {
+          const { ViewportGizmo } = await import( "three-viewport-gizmo" );
 
-        if (isMobile === true) {
-          document.getElementById('gizmo').style.display = 'none';
-        } else {
-          if (gizmo === undefined) {
-            gizmo = new orb_controls_gizmo( controls, {
-              size: 65,
-              padding: 4,
-              bubbleSizePrimary: 7,
-              bubbleSizeSecondary: 3,
-              lineWidth: 1,
-              fontSize: '8px',
-              fontColor: 'black',
-              fontWeight: 'bold'
-            });
+          gizmo = new ViewportGizmo( camera, renderer, {
+            placement: menu_location_bottom === true ? 'top-right' : 'bottom-right',
+            sphere: { color: 'transparent' }
+          } );
 
-            document.getElementById('gizmo').addEventListener( 'click', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
-            document.getElementById('gizmo').appendChild( gizmo.domElement );
-          }
+          gizmo.attachControls( controls );
+
+          gizmo._domElement.addEventListener( 'click', ( event ) => { if (progress.value === 0) mouse_wheel = true; }, false);
         }
 
         console.timeEnd( 'Loading Time' );
@@ -2638,11 +2860,6 @@
         mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
-
-        if (gizmo) {
-          document.getElementById('gizmo').removeChild( gizmo.domElement );
-          gizmo.dispose();
-        }
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
@@ -2796,11 +3013,45 @@
         return compressedArrayBuffer;
       }
 
+      async function resize_texture( image ) {
+        let texture;
+
+        await new Promise( resolve => {
+          let canvas = document.createElement('canvas');
+
+          let scale = 2048 / Math.max( image.width, image.height );
+
+          canvas.width = image.width * Math.min( 1, scale );
+          canvas.height = image.height * Math.min( 1, scale );
+
+          let ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+          if ( image instanceof ImageData ) {
+            ctx.putImageData( image, 0, 0 );
+          } else if ( image.data && image.data.constructor === Uint16Array ) {
+            let u8 = new Uint8Array( image.data );
+            let imgData = new ImageData( new Uint8ClampedArray( u8 ), image.width, image.height );
+            ctx.putImageData( imgData, 0, 0 );
+          } else if ( image.data && image.data.constructor === Uint8Array ) {
+            let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
+            ctx.putImageData( imgData, 0, 0 );
+          } else {
+            ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+          }
+
+          let data_url = canvas.toDataURL( 'image/png', 1 );
+
+          resolve( texture = new THREE.Texture( data_url ) );
+        });
+
+        return texture;
+      }
+
       function show_points_model() {
         if (mesh) {
           if (object_is_points === false) {
             document.getElementById('btn_points_model').style.backgroundColor = 'lightgreen';
-            document.getElementById('wireframe').disabled = true;
+            document.getElementById('btn_wireframe').disabled = true;
             document.getElementById('btn_flat').disabled = true;
             document.getElementById('btn_material').disabled = true;
 
@@ -2810,7 +3061,7 @@
             object_is_points = true;
           } else {
             document.getElementById('btn_points_model').style.backgroundColor = '#d1cefc';
-            document.getElementById('wireframe').disabled = false;
+            document.getElementById('btn_wireframe').disabled = false;
             document.getElementById('btn_flat').disabled = false;
             document.getElementById('btn_material').disabled = false;
 
@@ -2832,12 +3083,10 @@
         // Mesh surface sampling to increase number of displayed points
         // Ref: https://tympanus.net/codrops/2021/08/31/surface-sampling-in-three-js/
 
-        if (model.geometry.index !== null) model.geometry = model.geometry.toNonIndexed();
-
         // Create a surface sampler from the loaded model
         sampler = new MeshSurfaceSampler( model )
-          .setWeightAttribute( 'color' )
-          .build();
+        .setWeightAttribute( 'color' )
+        .build();
 
         // The geometry of the sampled points
         const sampler_geometry = new THREE.BufferGeometry();
@@ -2855,9 +3104,9 @@
         const vertices = [];
         const colors = [];
 
-        // Sample 50000 points randomly from the surface
-        // Lower this number for any exported file size considerations
-        for ( let i = 0; i < 50000; i ++ ) {
+        // Sample points randomly from the surface
+        // Use the model position count so it's compatible with UVs
+        for ( let i = 0; i < model.geometry.attributes.position.count; i ++ ) {
           sampler.sample( sampled_position, undefined, sampled_color );
 
           // Push the point coordinates
@@ -2973,13 +3222,22 @@
 
       function show_wireframe() {
         if (mesh) {
-          mesh.traverse( ( child ) => {
-            if (child.isMesh) {
-              child.material.wireframe = document.getElementById('wireframe').checked;
+          if (wireframe_enabled === true) {
+            document.getElementById('btn_wireframe').style.backgroundColor = '#d1cefc';
+            wireframe_enabled = false;
+          } else {
+            document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
+            wireframe_enabled = true;
+          }
+
+          mesh.traverse( function( child ) {
+      	    if (child.isMesh) {
+              child.material.wireframe = wireframe_enabled;
+              child.material.needsUpdate = true;
             }
 
             mouse_wheel = true;
-          });
+      	  });
         }
       }
 
@@ -3018,6 +3276,7 @@
                   side: THREE.DoubleSide,
                   metalness: 0.5,
                   roughness: 0.6,
+                  wireframe: wireframe_enabled,
                   transparent: enable_opacity,
                   flatShading: flat_shading_enabled,
                   vertexColors: vertex_colors_enabled
@@ -3036,6 +3295,7 @@
                 let mtrl = new THREE.MeshLambertMaterial( {
                   side: THREE.DoubleSide,
                   transparent: enable_opacity,
+                  wireframe: wireframe_enabled,
                   flatShading: flat_shading_enabled,
                   vertexColors: vertex_colors_enabled
                 });
@@ -3056,6 +3316,7 @@
                 child.material.transparent = enable_opacity;
                 child.material.vertexColors = vertex_colors_enabled;
                 child.material.flatShading = flat_shading_enabled;
+                child.material.wireframe = wireframe_enabled,
                 child.material.needsUpdate = true;
               }
             }
@@ -3063,7 +3324,6 @@
 
           set_object_color();
           set_model_opacity();
-          show_wireframe();
 
           mouse_wheel = true;
         }
@@ -3081,6 +3341,8 @@
             document.getElementById('btn_textures').innerHTML = 'T' + current_texture;
           }
 
+          let tex;
+
           mesh.traverse( async ( child ) => {
             if (child.isMesh || child.isPoints) {
               if (current_texture === -1) {
@@ -3088,67 +3350,133 @@
                 if (child.material.map) child.material.map.dispose();
                 child.material.map = null;
                 child.material.needsUpdate = true;
+                animated_gif_texture = false;
               } else {
-                if (selected_url_ply_file || selected_url_stl_file) {
-                  if (textures[ current_texture ].num_frames && textures[ current_texture ].num_frames > 1) animated_gif_texture = true;
-
-                  textures[ current_texture ].wrapS = THREE.RepeatWrapping;
-                  textures[ current_texture ].wrapT = THREE.RepeatWrapping;
-
-                  // Apply texture
-                  child.material.map = textures[ current_texture ];
-
-                  if (url_tga_loaded) {
-                    child.material.map.generateMipmaps = true;
-                    child.material.map.flipY = true;
-                  }
-
-                  child.material.needsUpdate = true;
-                } else {
-                  if (textures[ current_texture ].name.toUpperCase().endsWith('.DDS')) {
+                if (textures[ current_texture ].name.toUpperCase().endsWith('.DDS')) {
+                  if (tex === undefined) {
                     dds_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
                       URL.revokeObjectURL( textures[ current_texture ] );
 
+                      tex = texture.clone();
+
+                      texture.dispose();
+
                       // Apply texture
-                      child.material.map = texture;
+                      child.material.map = tex;
+                      child.material.map.colorSpace = THREE.SRGBColorSpace;
                       child.material.needsUpdate = true;
+
+                      mouse_wheel = true;
                     });
-                  } else if (textures[ current_texture ].name.toUpperCase().endsWith('.TGA')) {
+                  } else {
+                    // Apply texture
+                    child.material.map = tex;
+                    child.material.map.colorSpace = THREE.SRGBColorSpace;
+                    child.material.needsUpdate = true;
+
+                    mouse_wheel = true;
+                  }
+                } else if (textures[ current_texture ].name.toUpperCase().endsWith('.KTX2')) {
+                  if (tex === undefined) {
+                    ktx2_loader.load( URL.createObjectURL( textures[ current_texture ] ), async function( texture ) {
+                      URL.revokeObjectURL( textures[ current_texture ] );
+
+                      tex = texture.clone();
+
+                      texture.dispose();
+
+                      // Apply texture
+                      child.material.map = tex;
+                      child.material.map.colorSpace = THREE.SRGBColorSpace;
+                      child.material.needsUpdate = true;
+
+                      mouse_wheel = true;
+                    });
+                  } else {
+                    // Apply texture
+                    child.material.map = tex;
+                    child.material.map.colorSpace = THREE.SRGBColorSpace;
+                    child.material.needsUpdate = true;
+
+                    mouse_wheel = true;
+                  }
+                } else if (textures[ current_texture ].name.toUpperCase().endsWith('.TGA')) {
+                  if (tex === undefined) {
                     tga_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
                       URL.revokeObjectURL( textures[ current_texture ] );
 
+                      tex = texture.clone();
+
+                      texture.dispose();
+
                       // Apply texture
-                      child.material.map = texture;
+                      child.material.map = tex;
                       child.material.map.generateMipmaps = true;
                       child.material.map.flipY = true;
+                      child.material.map.colorSpace = THREE.SRGBColorSpace;
                       child.material.needsUpdate = true;
+
+                      mouse_wheel = true;
                     });
-                  } else if (textures[ current_texture ].name.toUpperCase().endsWith('.GIF')) {
-                    let tex = gif_loader.load( URL.createObjectURL( textures[ current_texture ] ) );
-                    URL.revokeObjectURL( textures[ current_texture ] );
-
-                    await new Promise(resolve => setTimeout( resolve, 1000 )); // adjust timing if necessary
-
-                    if (tex.num_frames > 1) animated_gif_texture = true;
-
+                  } else {
                     // Apply texture
                     child.material.map = tex;
+                    child.material.map.generateMipmaps = true;
+                    child.material.map.flipY = true;
+                    child.material.map.colorSpace = THREE.SRGBColorSpace;
                     child.material.needsUpdate = true;
 
-                    tex.dispose();
-                  } else {
+                    mouse_wheel = true;
+                  }
+                } else if (textures[ current_texture ].name.toUpperCase().endsWith('.GIF')) {
+                  if (tex === undefined) {
+                    tex = gif_loader.load( URL.createObjectURL( textures[ current_texture ] ) );
+                    URL.revokeObjectURL( textures[ current_texture ] );
+
+                    await new Promise( resolve => setTimeout( resolve, 1000 ) ); // adjust timing if necessary
+
+                    tex.wrapS = THREE.RepeatWrapping;
+                    tex.wrapT = THREE.RepeatWrapping;
+
+                    if (tex.num_frames > 1) animated_gif_texture = true;
+                  }
+
+                  // Apply texture
+                  child.material.map = tex;
+                  child.material.map.colorSpace = THREE.SRGBColorSpace;
+                  child.material.needsUpdate = true;
+
+                  mouse_wheel = true;
+                } else {
+                  if (tex === undefined) {
                     texture_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
                       URL.revokeObjectURL( textures[ current_texture ] );
 
+                      tex = texture.clone();
+
+                      texture.dispose();
+
                       // Apply texture
-                      child.material.map = texture;
+                      child.material.map = tex;
+                      child.material.map.colorSpace = THREE.SRGBColorSpace;
                       child.material.needsUpdate = true;
+
+                      mouse_wheel = true;
                     });
+                  } else {
+                    // Apply texture
+                    child.material.map = tex;
+                    child.material.map.colorSpace = THREE.SRGBColorSpace;
+                    child.material.needsUpdate = true;
+
+                    mouse_wheel = true;
                   }
                 }
               }
             }
           });
+
+          if (tex) tex.dispose();
 
           mouse_wheel = true;
         }
@@ -3224,7 +3552,9 @@
           if (render_requested === true) requestAnimationFrame( render );
         }
 
-        if (mouse_down || mouse_wheel || reset_rotation || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
+        if (mouse_down || mouse_wheel || animated_gif_texture || reset_rotation ||
+          progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
+
           if (mesh) {
             // Reset mesh rotational values
             if (reset_rotation === true) {
@@ -3252,19 +3582,20 @@
             }
 
             if (mouse_wheel === true) {
-              if (count > 3) {
+              if (count > 20) {
                 mouse_wheel = false;
                 count = 0;
               } else {
-                count += 1;
+                count ++;
               }
             }
 
             controls.update();
-            if (gizmo) gizmo.update();
 
             renderer.clear();
             renderer.render( scene, camera );
+
+            if (gizmo && gizmo.enabled === true) gizmo.render();
           }
         }
       }
@@ -3312,7 +3643,6 @@
         document.getElementById('object_color').value = '#000000';
         document.getElementById('edge_color').value = '#FF0000';
         document.getElementById('ambient_light_color').value = '#FFFFFF';
-        document.getElementById('hemisphere_light_color').value = '#000000';
         document.getElementById('directional_light_color').value = '#FFFFFF';
         document.getElementById('directional_light_intensity').value = 3.5;
         document.getElementById('ambient_light_intensity').value = 0;
@@ -3321,9 +3651,6 @@
         document.getElementById('rotate').checked = true;
         document.getElementById('dlight').checked = false;
         radio_changed();
-
-        // Reset the wireframe checkbox
-        document.getElementById('wireframe').checked = false;
 
         // Reset the opacity values
         enable_opacity = false;
@@ -3334,6 +3661,8 @@
         // Reset other related values
         equi_enabled = false;
         document.getElementById('btn_equi').style.backgroundColor = 'transparent';
+        wireframe_enabled = false;
+        document.getElementById('btn_wireframe').style.backgroundColor = '#d1cefc';
         edges_visible = false;
         document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
         current_texture = -1;
@@ -3345,6 +3674,8 @@
         bgnd_linear_gradient = false;
         document.getElementById('btn_bgnd_linear_gradient').disabled = false;
         document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+        bg_flip = false;
+        document.getElementById('btn_bg_flip').style.backgroundColor = 'transparent';
         if (mesh_present === true) {
           flat_shading_enabled = true;
           document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
@@ -3359,6 +3690,9 @@
         document.getElementById('btn_random_vertex_colors').disabled = true;
         document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
         random_vertex_changed();
+
+        document.getElementById('model_scale').selectedIndex = 0;
+        document.getElementById('export_names').selectedIndex = 0;
 
         if (scene !== undefined) await reset_scene_params();
 
@@ -3383,11 +3717,9 @@
           material.flatShading = true;
           material.opacity = 1;
           set_scene_image( reset );
-          show_wireframe();
           set_back_color();
           set_object_color();
           set_ambient_light_color();
-          set_hemisphere_light_color();
           set_directional_light_color();
           set_directional_light_intensity();
           set_ambient_light_intensity();
@@ -3395,6 +3727,11 @@
           // Page (re)loading
           if (scene !== undefined) {
             if (mesh) await scene_cleanup();
+
+            if (gizmo) {
+              gizmo.dispose();
+              gizmo = undefined;
+            }
 
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
@@ -3416,10 +3753,7 @@
           selected_url_file = '';
           enable_disable( true );
 
-          if (gizmo) {
-            document.getElementById('gizmo').removeChild( gizmo.domElement );
-            gizmo.dispose();
-          }
+          window.localStorage.clear();
         }
 
         disabled_changed();
@@ -3428,9 +3762,16 @@
       }
 
       async function scene_cleanup() {
+        mouse_wheel = true;
+
+        if (polar_grid_visible === true) show_polar_grid();
+        if (grid_visible === true) show_grid();
+
         scene.remove( mesh );
 
         renderer.clear();
+
+        if (wireframe_enabled === true) await show_wireframe();
 
         if (edges !== null) {
           if (edges_visible === true) await show_edges();
@@ -3468,10 +3809,8 @@
         document.getElementById('rotation_x').disabled = disable;
         document.getElementById('rotation_y').disabled = disable;
         document.getElementById('rotation_z').disabled = disable;
-        document.getElementById('wireframe').disabled = disable;
         document.getElementById('model_scale').disabled = disable;
         document.getElementById('ambient_light_color').disabled = disable;
-        document.getElementById('hemisphere_light_color').disabled = disable;
         document.getElementById('directional_light_color').disabled = disable;
         document.getElementById('directional_light_intensity').disabled = disable;
         document.getElementById('ambient_light_intensity').disabled = disable;
@@ -3485,7 +3824,9 @@
         document.getElementById('btn_dc_ali').disabled = disable;
         document.getElementById('btn_dc_dli').disabled = disable;
         document.getElementById('btn_equi').disabled = disable;
+        document.getElementById('btn_bg_flip').disabled = disable;
         document.getElementById('btn_quick_x').disabled = disable;
+        document.getElementById('btn_wireframe').disabled = disable;
         document.getElementById('btn_dc_opacity').disabled = disable;
         document.getElementById('btn_material').disabled = disable;
         document.getElementById('btn_bgnd_linear_gradient').disabled = disable;
@@ -3513,15 +3854,6 @@
           $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
         }
-
-        if (isMobile === true) {
-          $('#gizmo')[ 0 ].style.display = 'none';
-          $('#fm1')[ 0 ].style.width = '99%';
-          $('#fm2')[ 0 ].style.width = '99%';
-          $('#url')[ 0 ].style.width = '99%';
-        }
-
-        mouse_wheel = true;
       }
 
       function disabled_changed() {
