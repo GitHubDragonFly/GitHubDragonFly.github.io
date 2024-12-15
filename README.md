@@ -503,12 +503,18 @@ Number Type Converter
     - To support loading a single JPEG file with integrated gainmaps
     - To support loading EXR and HDR files, which will be encoded on-the-fly into a single JPEG file with integrated gainmaps
       - You could find some texture examples in the official three.js [equirectangular](https://github.com/mrdoob/three.js/tree/dev/examples/textures/equirectangular) folder
-- PLY+STL, PRWM and VTK viewers can also:
-  - Show a points version of the loaded model and export it as such (if the model is not rather large):
+- PLY+STL, PRWM and VTK desktop viewers can also:
+  - Show a points version of the loaded model and export it as such:
     - Tip: export this points model into PLY format and then drop the PLY file into [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) to get SPLAT file
   - Export edges, when enabled, in OBJ and GLTF exports of both solid and points model (a popup alert will notify about this)
+  - PLY+STL viewer is also using a modified version of [UVUnwrapper](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/utils/UVUnwrapper.js) to create UVs for the model:
+    - This experimental feature requires the following:
+      - Either `PLY` or `STL` model that does not have built-in UVs
+      - At least 1 texture is loaded together with the model otherwise it will just be standard loading without UV creation
+      - Models with vertex colors will have the colors removed since they don't seem to work properly with UV creation
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
-    - currently available only in `FBX` `OBJ` `PLY+STL` `PRWM` viewers and should be tried on simple models
+    - currently available only in `FBX` `OBJ` `PLY+STL` `PRWM` desktop viewers and should be tried on simple models
+    - `PLY+STL` viewer seems to be the best choice currently, others might need some updating
 
       ![Cube with Animated GIF texture](https://github.com/user-attachments/assets/bb87f931-f50b-4c2c-8016-495fe9df2e13)
 
