@@ -40,8 +40,8 @@
       var merge_vertices, controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var gui, gui_set = false, guiExposure = null, params, toneMappingOptions, outline_material;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, link, isMobile;
-      var original_model, points_model, object_is_points, sampler, equi_enabled;
-      var ambientLight, directionalLight, triangles_count, count = 0;
+      var original_model, points_model, sampled_points, object_is_points, sampler;
+      var ambientLight, directionalLight, triangles_count, count = 0, equi_enabled;
       var ww = window.innerWidth, wh = window.innerHeight, uvUnwrapper;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation, bg_flip;
       var mesh_present, bounding_box, filename, gif_export, wireframe_enabled;
@@ -164,8 +164,7 @@
         }
       }
 
-      uvUnwrapper = new UVUnwrapper();
-      await uvUnwrapper.load();
+      uvUnwrapper = UVUnwrapper;
     </script>
 
     <script src="../static/assimpjs/assimpjs.min.js" defer></script>
@@ -2350,8 +2349,11 @@
 
           if (mesh) await scene_cleanup();
 
-          material.dispose();
-          material = undefined;
+          if (material) {
+            if (material.map) material.map.dispose();
+            material.dispose();
+            material = undefined;
+          }
 
           await reset_all( true );
         }
@@ -2645,7 +2647,10 @@
             document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
             await new Promise( resolve => setTimeout( resolve, 100 ) );
 
-            await uvUnwrapper.unwrapGeometry( original_model.geometry );
+            let uvu = new uvUnwrapper();
+            await uvu.load();
+            await uvu.unwrapGeometry( original_model.geometry );
+            uvu._module._free();
           }
 
           edges = new THREE.LineSegments( new THREE.EdgesGeometry( original_model.geometry, 30 ), outline_material );
@@ -2654,7 +2659,7 @@
 
           // Create points model
 
-          let sampled_points = await sample_mesh_surface( original_model.clone() );
+          sampled_points = await sample_mesh_surface( original_model.clone() );
           if (original_model.geometry.attributes.uv) sampled_points.geometry.setAttribute( 'uv', original_model.geometry.attributes.uv );
 
           let points_material = new THREE.PointsMaterial( { size: point_size, blending: THREE.AdditiveBlending } );
@@ -2721,7 +2726,10 @@
               document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
               await new Promise( resolve => setTimeout( resolve, 100 ) );
 
-              await uvUnwrapper.unwrapGeometry( original_model.geometry );
+              let uvu = new uvUnwrapper();
+              await uvu.load();
+              await uvu.unwrapGeometry( original_model.geometry );
+              uvu._module._free();
             }
 
             edges = new THREE.LineSegments( new THREE.EdgesGeometry( original_model.geometry, 30 ), outline_material );
@@ -2730,7 +2738,7 @@
 
             // Create points model
 
-            let sampled_points = await sample_mesh_surface( original_model.clone() );
+            sampled_points = await sample_mesh_surface( original_model.clone() );
             if (original_model.geometry.attributes.uv) sampled_points.geometry.setAttribute( 'uv', original_model.geometry.attributes.uv );
 
             let points_material = new THREE.PointsMaterial( { size: point_size, blending: THREE.AdditiveBlending } );
@@ -2767,6 +2775,8 @@
         // Add mesh to the scene
         scene.add( mesh );
         camera.lookAt( mesh.position );
+
+        object.dispose();
 
         finish_loading();
       }
@@ -2910,8 +2920,8 @@
         const sampler_material = new THREE.PointsMaterial( { size: point_size, blending: THREE.AdditiveBlending } );
 
         // Create a Points object
-        const sampled_points = new THREE.Points( sampler_geometry, sampler_material );
-        sampled_points.name = 'sampled_points';
+        const samples = new THREE.Points( sampler_geometry, sampler_material );
+        samples.name = 'sampled_points';
 
         // Create variables for sampling
         const sampled_position = new THREE.Vector3();
@@ -2943,10 +2953,10 @@
         sampler_geometry.computeVertexNormals();
         sampler_geometry.normalizeNormals();
 
-        sampled_points.sizeAttenuation = true;
-        sampled_points.sortPoints = true;
+        samples.sizeAttenuation = true;
+        samples.sortPoints = true;
 
-        return sampled_points;
+        return samples;
       }
 
       /* Simplify */
@@ -3597,7 +3607,7 @@
         }
       }
 
-      async function reset_only() {
+      function reset_only() {
         mouse_wheel = true;
 
         if (selected_url_file !== '') url_loading = true;
@@ -3697,14 +3707,6 @@
           controls.reset();
           if (mesh) mesh.position.set( 0, 0, 0 );
           directionalLight.position.set( 0, 250, 250 );
-          if (material) {
-            if (material.map) { material.map.dispose(); material.map = null; }
-            if (material.envMap) { material.envMap.dispose(); material.envMap = null; }
-            material.color.setRGB( 1, 1, 1 );
-            material.vertexColors = false;
-            material.flatShading = false;
-            material.opacity = 1;
-          }
           set_scene_image( reset );
           set_back_color();
           set_object_color();
@@ -3760,6 +3762,7 @@
 
         renderer.clear();
 
+        if (mesh.children[ 1 ] && mesh.children[ 1 ].visible === true) await show_points_model();
         if (flat_shading_enabled === true) await set_flat();
         if (wireframe_enabled === true) await show_wireframe();
         if (textures.length > 0 && current_texture !== - 1) {
@@ -3778,6 +3781,8 @@
           });
         }
 
+        if (textures.length > 0) textures.length = 0;
+
         mesh.traverse( ( child ) => {
           if (child.isMesh || child.isPoints) {
             if (child.material && child.material.map) child.material.map.dispose();
@@ -3790,15 +3795,36 @@
           mesh.remove( mesh.children[ 0 ] );
         }
 
+        mesh = undefined;
+
+        points_model.traverse( ( child ) => {
+          if (child.isPoints) {
+            if (child.material && child.material.map) child.material.map.dispose();
+            if (child.material) child.material.dispose();
+            if (child.geometry) child.geometry.dispose();
+          }
+        });
+
         while (points_model.children.length > 0) {
           points_model.remove( points_model.children[ 0 ] );
         }
 
+        if (original_model.material.map) original_model.material.map.dispose();
         original_model.material.dispose();
         original_model.geometry.dispose();
+        original_model = undefined;
 
+        if (points_model.material.map) points_model.material.map.dispose();
         points_model.material.dispose();
         points_model.geometry.dispose();
+        points_model = undefined;
+
+        if (sampled_points) {
+          if (sampled_points.material.map) sampled_points.material.map.dispose();
+          sampled_points.material.dispose();
+          sampled_points.geometry.dispose();
+          sampled_points = undefined;
+        }
 
         if (isMobile === false) {
           renderer.info.reset();
