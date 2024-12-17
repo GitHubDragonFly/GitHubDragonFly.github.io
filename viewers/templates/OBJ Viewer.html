@@ -23,7 +23,8 @@
           "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_encoder.module.min.js",
           "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_simplifier.module.min.js",
           "ktx2-encoder": "https://esm.sh/ktx2-encoder@0.1.1",
-          "@jsquash/avif": "https://esm.sh/@jsquash/avif@1.3.0"
+          "@jsquash/avif": "https://esm.sh/@jsquash/avif@1.3.0",
+          "xatlas-web": "https://esm.sh/xatlas-web@0.1.0"
         }
       }
     </script>
@@ -42,7 +43,7 @@
       var grid, polar_grid, grid_visible, polar_grid_visible, bg_flip;
       var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
-      var tex_res, tex_flip, tex_fmt, texture_maps;
+      var tex_res, tex_flip, tex_fmt, texture_maps, uvUnwrapper;
       var ambientLight, hemisphereLight, directionalLight;
       var ww = window.innerWidth, wh = window.innerHeight;
       var first_run = false, fr_count = 0, link, isMobile;
@@ -51,14 +52,14 @@
       var initial_opacity, initial_opacity_array, enable_opacity;
       var initial_transparency, initial_transparency_array;
       var original_normals, original_indices, original_positions;
-      var original_uvs, original_attr_colors, xtra_smooth_enabled;
+      var original_uvs, original_uv1s, original_attr_colors, xtra_smooth_enabled;
       var original_color, original_color_array, wireframe_enabled;
       var original_side, original_side_array, count = 0;
       var flat_shading_enabled, bgnd_linear_gradient, physical_mtl;
       var url_tga_loaded, current_texture, animated_gif_texture, map_strings;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
       var lines_visible, lines_present, filename, outline_material, slider_height = 0;
-      var vertex_colors_enabled, original_vertex_colors, original_vertex_color_array;
+      var vertex_colors_enabled, vertex_colors_present, original_vertex_colors, original_vertex_color_array;
       var random_vertex_colors_enabled, random_vertex_color_array, current_colors;
       var selected_mtl_file, selected_mtl_url_file, selected_obj_url_file, zip_file, textures;
       var selected_url_file = '', selected_obj_file, local_files, local_files_indexes, materials;
@@ -68,12 +69,13 @@
 
     <script type="module">
       import * as three_js from "three";
+      import * as XAtlas from "xatlas-web";
       import * as fflate_js from "three/addons/libs/fflate.module.min.js";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
       import { OBJLoader } from "../static/jsm/loaders/OBJLoader.min.js";
       import { MTLLoader } from "../static/jsm/loaders/MTLLoader.min.js";
-      import { GifLoader } from "../static/jsm/loaders/three-gif-loader/gif-loader.js";
       import { GifWriter } from "../static/jsm/libs/omggif/omggif.min.js";
+      import { GifLoader } from "../static/jsm/loaders/three-gif-loader/gif-loader.js";
 
       THREE = three_js;
       fflate = fflate_js;
@@ -94,6 +96,95 @@
 
       gif_writer = GifWriter;
       gif_loader = new GifLoader( manager );
+
+      // Modified version of UVUnwrapper: https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/utils/UVUnwrapper.js
+      // Using xatlas-web: https://github.com/mozillareality/xatlas-web
+
+      const AddMeshStatus = {
+        Success: 0,
+        Error: 1,
+        IndexOutOfRange: 2,
+        InvalidIndexCount: 3
+      };
+
+      class UVUnwrapper {
+        constructor() {
+          this._module = null;
+        }
+
+        async load() {
+          const wasmurl = new URL( 'https://cdn.jsdelivr.net/npm/xatlas-web@0.1.0/dist/xatlas-web.wasm', import.meta.url );
+
+          this._module = XAtlas[ 'default' ]( {
+            locateFile( path ) {
+              if ( path.endsWith( '.wasm' ) ) {
+                return wasmurl.toString();
+              }
+
+              return path;
+            }
+          } );
+
+          return this._module.ready;
+        }
+
+        unwrapGeometry( geometry ) {
+          const xatlas = this._module;
+          const originalVertexCount = geometry.attributes.position.count;
+          const originalIndexCount = geometry.index.count;
+
+          xatlas.createAtlas();
+
+          const meshInfo = xatlas.createMesh( originalVertexCount, originalIndexCount, true, true );
+          xatlas.HEAPU16.set( geometry.index.array, meshInfo.indexOffset / Uint16Array.BYTES_PER_ELEMENT );
+          xatlas.HEAPF32.set( geometry.attributes.position.array, meshInfo.positionOffset / Float32Array.BYTES_PER_ELEMENT );
+          xatlas.HEAPF32.set( geometry.attributes.normal.array, meshInfo.normalOffset / Float32Array.BYTES_PER_ELEMENT );
+
+          const statusCode = xatlas.addMesh();
+
+          if ( statusCode !== AddMeshStatus.Success ) {
+            throw new Error( `UVUnwrapper: Error adding mesh. Status code ${ statusCode }` );
+          }
+
+          xatlas.generateAtlas();
+
+          const meshData = xatlas.getMeshData( meshInfo.meshId );
+          const oldPositionArray = geometry.attributes.position.array;
+          const oldNormalArray = geometry.attributes.normal.array;
+
+          const newPositionArray = new Float32Array( meshData.newVertexCount * 3 );
+          const newNormalArray = new Float32Array( meshData.newVertexCount * 3 );
+          const newUvArray = new Float32Array( xatlas.HEAPF32.buffer, meshData.uvOffset, meshData.newVertexCount * 2 );
+          const newIndexArray = new Uint32Array( xatlas.HEAPU32.buffer, meshData.indexOffset, meshData.newIndexCount );
+          const originalIndexArray = new Uint32Array(
+            xatlas.HEAPU32.buffer,
+            meshData.originalIndexOffset,
+            meshData.newVertexCount
+          );
+
+          for ( let i = 0; i < meshData.newVertexCount; i ++ ) {
+            const originalIndex = originalIndexArray[ i ];
+            newPositionArray[ i * 3 ] = oldPositionArray[ originalIndex * 3 ];
+            newPositionArray[ i * 3 + 1 ] = oldPositionArray[ originalIndex * 3 + 1 ];
+            newPositionArray[ i * 3 + 2 ] = oldPositionArray[ originalIndex * 3 + 2 ];
+            newNormalArray[ i * 3 ] = oldNormalArray[ originalIndex * 3 ];
+            newNormalArray[ i * 3 + 1 ] = oldNormalArray[ originalIndex * 3 + 1 ];
+            newNormalArray[ i * 3 + 2 ] = oldNormalArray[ originalIndex * 3 + 2 ];
+          }
+
+          geometry.deleteAttribute( 'position' );
+          geometry.deleteAttribute( 'normal' );
+
+          geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( newPositionArray, 3 ) );
+          geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( newNormalArray, 3 ) );
+          geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( newUvArray, 2 ) );
+          geometry.setIndex( new THREE.Uint32BufferAttribute( newIndexArray, 1 ) );
+
+          xatlas.destroyAtlas();
+        }
+      }
+
+      uvUnwrapper = UVUnwrapper;
     </script>
 
     <script src="../static/assimpjs/assimpjs.min.js" defer></script>
@@ -1660,6 +1751,8 @@
           }
 
           scene.environmentIntensity = 1.0;
+          scene.backgroundBlurriness = 0.0;
+          scene.backgroundIntensity = 1.1;
         }
       }
 
@@ -1923,15 +2016,12 @@
 
               let hdrJpgEquirectangularMap = await texture.toDataTexture();
 
-              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
-                const repeat_x = hdrJpgEquirectangularMap.image.width / 2048;
-                const repeat_y = hdrJpgEquirectangularMap.image.height / 2048;
-
-                hdrJpgEquirectangularMap.repeat.set( repeat_x, repeat_y );
-              }
-
-              hdrJpgEquirectangularMap.colorSpace = THREE.SRGBColorSpace;
+              hdrJpgEquirectangularMap.colorSpace = THREE.LinearSRGBColorSpace;
               hdrJpgEquirectangularMap.flipY = (bg_flip === true);
+
+              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
+                hdrJpgEquirectangularMap = await decompress( hdrJpgEquirectangularMap, 2048 );
+              }
 
               hdrJpgEquirectangularMap.needsUpdate = true;
 
@@ -1966,15 +2056,18 @@
               // Convert to PNG so it shows on most platforms
               // Unsupported KTX2 formats might log a warning
 
-              texture.colorSpace = THREE.SRGBColorSpace;
-
               let canvas_tex = await decompress( texture );
 
               texture.dispose();
 
-              texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), function( png_tex ) {
+              texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), async function( png_tex ) {
                 canvas_tex.dispose();
 
+                if (isMobile === true && (png_tex.image.width > 2048 || png_tex.image.height > 2048)) {
+                  png_tex = await resize_texture( png_tex.image );
+                }
+
+                png_tex.colorSpace = THREE.SRGBColorSpace;
                 png_tex.flipY = (bg_flip === true);
                 png_tex.needsUpdate = true;
 
@@ -2001,8 +2094,12 @@
               URL.revokeObjectURL( fii );
             });
           } else if (fn_uc.endsWith('.SVG')) {
-            texture_loader.load( URL.createObjectURL( fii ) , function( texture ) {
+            texture_loader.load( URL.createObjectURL( fii ) , async function( texture ) {
               URL.revokeObjectURL( fii );
+
+              if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
+                texture = await resize_texture( texture.image );
+              }
 
               texture.colorSpace = THREE.SRGBColorSpace;
               texture.flipY = (bg_flip === false);
@@ -2114,14 +2211,11 @@
 
               let hdrJpgEquirectangularMap = await texture.toDataTexture();
 
-              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
-                const repeat_x = hdrJpgEquirectangularMap.image.width / 2048;
-                const repeat_y = hdrJpgEquirectangularMap.image.height / 2048;
-
-                hdrJpgEquirectangularMap.repeat.set( repeat_x, repeat_y );
-              }
-
               hdrJpgEquirectangularMap.flipY = (bg_flip === true);
+
+              if (isMobile === true && (hdrJpgEquirectangularMap.image.width > 2048 || hdrJpgEquirectangularMap.image.height > 2048)) {
+                hdrJpgEquirectangularMap = await decompress( hdrJpgEquirectangularMap, 2048 );
+              }
 
               hdrJpgEquirectangularMap.needsUpdate = true;
 
@@ -2179,10 +2273,14 @@
           canvas.height = wh;
 
           let gradient = context.createLinearGradient( 0, 0, 0, wh );
-          let gradient_colors = [ [ 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.15 ],
-            [ '#151525', '#252535', '#454555', '#656575', '#787888', '#8A8A9A', '#9A9AAA', '#A5A5B5' ] ];
+          let gradient_colors = [
+            [ 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.15 ],
+            [ '#151525', '#252535', '#454555', '#656575', '#787888', '#8A8A9A', '#9A9AAA', '#A5A5B5' ]
+          ];
+
           let i = gradient_colors[ 0 ].length;
           while( i-- ) { gradient.addColorStop( gradient_colors[ 0 ][ i ], gradient_colors[ 1 ][ i ] ); }
+
           context.fillStyle = gradient;
           context.fillRect( 0, 0, ww, wh );
 
@@ -2403,51 +2501,83 @@
         mouse_wheel = true;
       }
 
-      // internally used modified decompress function from TextureUtils.js
+      // internally used modified decompress function from WebGLTextureUtils.js
 
-      async function decompress( texture ) {
+      async function decompress( texture, maxTextureSize = Infinity, renderer = null ) {
+        let _renderer = renderer;
+        let fullscreenQuad;
 
-        let texture_clone = texture.clone();
+        let fullscreenQuadGeometry = new THREE.PlaneGeometry( 2, 2, 1, 1 );
+        let fullscreenQuadMaterial = new THREE.ShaderMaterial( {
+          uniforms: { blitTexture: new THREE.Uniform( texture.clone() ) },
+          vertexShader: `
+          varying vec2 vUv;
+          void main(){
+          vUv = uv;
+          gl_Position = vec4(position.xy * 1.0,0.,.999999);
+          }`,
+          fragmentShader: `
+          uniform sampler2D blitTexture; 
+          varying vec2 vUv;
 
-        if (!texture_clone.colorSpace || texture_clone.colorSpace === THREE.NoColorSpace) {
-          texture_clone.colorSpace = THREE.SRGBColorSpace;
+          void main(){ 
+          gl_FragColor = vec4(vUv.xy, 0, 1);
+				
+          #ifdef IS_SRGB
+          gl_FragColor = sRGBTransferOETF( texture2D( blitTexture, vUv) );
+          #else
+          gl_FragColor = texture2D( blitTexture, vUv);
+          #endif
+          }`
+        } );
+
+        fullscreenQuadMaterial.uniforms.blitTexture.value = texture.clone();
+        fullscreenQuadMaterial.defines.IS_SRGB = texture.colorSpace == THREE.SRGBColorSpace;
+        fullscreenQuadMaterial.needsUpdate = true;
+
+        if ( ! fullscreenQuad ) {
+          fullscreenQuad = new THREE.Mesh( fullscreenQuadGeometry, fullscreenQuadMaterial );
+          fullscreenQuad.frustrumCulled = false;
         }
 
-        let _renderer = new THREE.WebGLRenderer( { antialias: false } );
-        renderer.outpuColorSpace = texture_clone.colorSpace;
+        const _camera = new THREE.PerspectiveCamera();
+        const _scene = new THREE.Scene();
+        _scene.add( fullscreenQuad );
 
-        let _camera = new THREE.PerspectiveCamera();
-        let _scene = new THREE.Scene();
+        const scale = maxTextureSize / Math.max( texture.image.width, texture.image.height );
 
-        // Set the texture as scene's background
+        const width = texture.image.width * Math.min( 1, scale );
+        const height = texture.image.height * Math.min( 1, scale );
 
-        _scene.background = texture_clone;
+        if ( _renderer === null ) {
+          _renderer = new THREE.WebGLRenderer( { antialias: false } );
+        }
 
-        _renderer.setSize( texture_clone.image.width, texture_clone.image.height );
+        _renderer.setSize( width, height );
         _renderer.clear();
         _renderer.render( _scene, _camera );
 
-        let readableTexture = new THREE.CanvasTexture( _renderer.domElement );
+        const canvas = document.createElement( 'canvas' );
+        const context = canvas.getContext( '2d' );
 
-        if (!texture.colorSpace || texture.colorSpace === THREE.NoColorSpace) {
-          readableTexture.colorSpace = THREE.SRGBColorSpace;
-        } else {
-          readableTexture.colorSpace = texture.colorSpace;
-        }
+        canvas.width = width;
+        canvas.height = height;
+
+        context.drawImage( _renderer.domElement, 0, 0, width, height );
+
+        const readableTexture = new THREE.CanvasTexture( canvas );
 
         readableTexture.minFilter = texture.minFilter;
         readableTexture.magFilter = texture.magFilter;
         readableTexture.wrapS = texture.wrapS;
         readableTexture.wrapT = texture.wrapT;
         readableTexture.name = texture.name;
-        readableTexture.needsUpdate = true;
 
-        _scene.background.dispose();
-        texture_clone.dispose();
-        texture.dispose();
-
-        _renderer.dispose();
-        _renderer = null;
+        if ( _renderer ) {
+          _renderer.forceContextLoss();
+          _renderer.dispose();
+          _renderer = null;
+        }
 
         return readableTexture;
       }
@@ -2655,6 +2785,7 @@
         lines_present = false;
         lines_visible = false;
         original_uvs = {};
+        original_uv1s = {};
         original_normals = {};
         original_indices = {};
         original_positions = {};
@@ -2673,6 +2804,7 @@
         flat_shading_enabled = false;
         bgnd_linear_gradient = false;
         vertex_colors_enabled = false;
+        vertex_colors_present = false;
         original_vertex_color_array = {};
         original_vertex_colors = {};
         random_vertex_colors_enabled = false;
@@ -2857,26 +2989,71 @@
         }
       }
 
-      function process_obj() {
+      async function process_obj() {
+        let no_mtl = (selected_mtl_file === null && selected_mtl_url_file === null);
+        let uvu, mesh_present = false, uv_present = false, vertex_colors_removed = false;
+
+        Obj.traverse( function( child ) {
+          if (child.isMesh) {
+            mesh_present = true;
+            if (child.geometry.hasAttribute( 'uv' )) uv_present = true;
+          }
+        });
+
+        if (no_mtl && Object.entries( textures ).length > 0 && mesh_present === true && uv_present === false) {
+          document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
+          await new Promise( resolve => setTimeout( resolve, 100 ) );
+
+          uvu = new uvUnwrapper();
+          await uvu.load();
+        }
+
         let child_count = 1;
 
         Obj.traverse( function( child ) {
           if (child.isMesh || child.isPoints || child.isLine) {
             if (child.geometry.isBufferGeometry) {
-              if (! child.geometry.getAttribute( 'normal' )) child.geometry.computeVertexNormals();
+              if (! child.geometry.hasAttribute( 'normal' )) child.geometry.computeVertexNormals();
               child.geometry.normalizeNormals();
-
-              child.geometry.computeBoundingBox();
-              child.geometry.computeBoundingSphere();
             }
 
             if (child.name === '') child.name = 'child_' + child_count;
 
             if (child.geometry.hasAttribute( 'color' )) {
               vertex_colors_enabled = true;
+              vertex_colors_present = true;
               document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
               document.getElementById('btn_random_vertex_colors').disabled = false;
             }
+
+            // If textures are loaded then try to unwrap the model and create uvs
+            if (uvu && child.isMesh && child.geometry.attributes.uv === undefined) {
+              if (!child.geometry.index) {
+                if (child.geometry.hasAttribute( 'normal' )) child.geometry.deleteAttribute( 'normal' );
+                child.geometry = merge_vertices( child.geometry.clone(), 1e-6 );
+                child.geometry.computeVertexNormals();
+                child.geometry.normalizeNormals();
+                //child.geometry.center();
+              }
+
+              if (vertex_colors_enabled === true) {
+                if (vertex_colors_removed === false) {
+                  alert( 'Vertex colors will be removed. Load model without textures to preserve vertex colors.' );
+                }
+
+                child.geometry.deleteAttribute( 'color' );
+                vertex_colors_removed = true;
+                vertex_colors_enabled = false;
+                vertex_colors_present = false;
+                document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
+              }
+
+              uvu.unwrapGeometry( child.geometry );
+              uvu._module._free();
+            }
+
+            child.geometry.computeBoundingBox();
+            child.geometry.computeBoundingSphere();
           }
 
           if (child.isLine) {
@@ -2893,6 +3070,7 @@
             if (child.isMesh) {
               original_indices[ child.name ] = child.geometry.getIndex();
               original_uvs[ child.name ] = child.geometry.getAttribute( 'uv' );
+              original_uv1s[ child.name ] = child.geometry.getAttribute( 'uv1' );
               original_attr_colors[ child.name ] = child.geometry.getAttribute( 'color' );
               original_normals[ child.name ] = child.geometry.getAttribute( 'normal' );
               original_positions[ child.name ] = child.geometry.getAttribute( 'position' );
@@ -3820,6 +3998,40 @@
         return [ buff, image_data, size ];
       }
 
+      async function resize_texture( image ) {
+        let texture;
+
+        await new Promise( resolve => {
+          let canvas = document.createElement('canvas');
+
+          let scale = 2048 / Math.max( image.width, image.height );
+
+          canvas.width = image.width * Math.min( 1, scale );
+          canvas.height = image.height * Math.min( 1, scale );
+
+          let ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+
+          if ( image instanceof ImageData ) {
+            ctx.putImageData( image, 0, 0 );
+          } else if ( image.data && image.data.constructor === Uint16Array ) {
+            let u8 = new Uint8Array( image.data );
+            let imgData = new ImageData( new Uint8ClampedArray( u8 ), image.width, image.height );
+            ctx.putImageData( imgData, 0, 0 );
+          } else if ( image.data && image.data.constructor === Uint8Array ) {
+            let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
+            ctx.putImageData( imgData, 0, 0 );
+          } else {
+            ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+          }
+
+          let data_url = canvas.toDataURL( 'image/png', 1 );
+
+          resolve( texture = new THREE.Texture( data_url ) );
+        });
+
+        return texture;
+      }
+
       async function finish_loading() {
         enable_disable( false );
 
@@ -4169,6 +4381,10 @@
           document.getElementById('btn_textures').innerHTML = 'T' + current_texture;
         }
 
+        let tex;
+
+        animated_gif_texture = false;
+
         Obj.traverse( async function( child ) {
           if (child.isMesh || child.isPoints || child.isLine) {
             // Dispose of and recreate material for better overall disposal
@@ -4187,9 +4403,15 @@
                   } else if (mtl.isMeshStandardMaterial) {
                     new_mtl = new THREE.MeshStandardMaterial();
                     THREE.MeshStandardMaterial.prototype.copy.call( new_mtl, mtl );
-                  } else {
+                  } else if (mtl.isMeshPhongMaterial) {
                     new_mtl = new THREE.MeshPhongMaterial();
                     THREE.MeshPhongMaterial.prototype.copy.call( new_mtl, mtl );
+                  } else if (mtl.isLineBasicMaterial) {
+                    new_mtl = new THREE.LineBasicMaterial();
+                    THREE.LineBasicMaterial.prototype.copy.call( new_mtl, mtl );
+                  } else if (mtl.isPointsMaterial) {
+                    new_mtl = new THREE.PointsMaterial();
+                    THREE.PointsMaterial.prototype.copy.call( new_mtl, mtl );
                   }
 
                   mtl.dispose();
@@ -4208,9 +4430,15 @@
                 } else if (child.material.isMeshStandardMaterial) {
                   new_mtl = new THREE.MeshStandardMaterial();
                   THREE.MeshStandardMaterial.prototype.copy.call( new_mtl, child.material );
-                } else {
+                } else if (child.material.isMeshPhongMaterial) {
                   new_mtl = new THREE.MeshPhongMaterial();
                   THREE.MeshPhongMaterial.prototype.copy.call( new_mtl, child.material );
+                } else if (child.material.isLineBasicMaterial) {
+                  new_mtl = new THREE.LineBasicMaterial();
+                  THREE.LineBasicMaterial.prototype.copy.call( new_mtl, child.material );
+                } else if (child.material.isPointsMaterial) {
+                  new_mtl = new THREE.PointsMaterial();
+                  THREE.PointsMaterial.prototype.copy.call( new_mtl, child.material );
                 }
 
                 child.material.dispose();
@@ -4225,14 +4453,17 @@
                   animated_gif_texture = true;
                 }
 
-                textures[ current_texture ].colorSpace = THREE.SRGBColorSpace;
-                textures[ current_texture ].wrapS = THREE.RepeatWrapping;
-                textures[ current_texture ].wrapT = THREE.RepeatWrapping;
+                if (tex === undefined) {
+                  tex = textures[ current_texture ];
+                  tex.wrapS = THREE.RepeatWrapping;
+                  tex.wrapT = THREE.RepeatWrapping;
+                }
 
                 // Apply texture
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
-                    mtl.map = textures[ current_texture ];
+                    mtl.map = tex;
+                    mtl.map.colorSpace = THREE.SRGBColorSpace;
 
                     if (url_tga_loaded) {
                       mtl.map.generateMipmaps = true;
@@ -4242,7 +4473,7 @@
                     mtl.needsUpdate = true;
                   });
                 } else {
-                  child.material.map = textures[ current_texture ];
+                  child.material.map = tex;
 
                   if (url_tga_loaded) {
                     child.material.map.generateMipmaps = true;
@@ -4254,71 +4485,75 @@
               } else {
                 let curr_tex = Object.entries( textures )[ current_texture ][ 0 ];
 
-                if (typeof curr_tex === 'string' && curr_tex.endsWith('.TGA')) {
+                if (typeof curr_tex === 'string' && curr_tex.toUpperCase().endsWith('.GIF')) {
+                  if (tex === undefined) {
+                    tex = await gif_loader.load( textures[ curr_tex ] );
 
-                  tga_loader.load( textures[ curr_tex ], function( texture ) {
-                    texture.generateMipmaps = true;
-                    texture.colorSpace = THREE.SRGBColorSpace;
-                    texture.wrapS = THREE.RepeatWrapping;
-                    texture.wrapT = THREE.RepeatWrapping;
+                    await new Promise(resolve => setTimeout( resolve, 500 )); // adjust timing if necessary
 
-                    // Apply texture
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        mtl.map = texture;
-                        mtl.map.flipY = true;
-                        mtl.needsUpdate = true;
-                      });
-                    } else {
-                      child.material.map = texture;
-                      child.material.map.flipY = true;
-                      child.material.needsUpdate = true;
-                    }
-                  });
-                } else if (typeof curr_tex === 'string' && curr_tex.endsWith('.GIF')) {
+                    tex.wrapS = THREE.RepeatWrapping;
+                    tex.wrapT = THREE.RepeatWrapping;
 
-                  let tex = gif_loader.load( zip_file === null ? URL.createObjectURL( curr_tex ) : textures[ curr_tex ] );
-                  tex.colorSpace = THREE.SRGBColorSpace;
-                  tex.wrapS = THREE.RepeatWrapping;
-                  tex.wrapT = THREE.RepeatWrapping;
-
-                  await new Promise(resolve => setTimeout( resolve, 1000 )); // adjust timing if necessary
-
-                  if (tex.num_frames > 1) animated_gif_texture = true;
+                    if (tex.num_frames > 1) animated_gif_texture = true;
+                  }
 
                   // Apply texture
                   if (Array.isArray( child.material )) {
                     child.material.forEach( mtl => {
                       mtl.map = tex;
+                      mtl.map.colorSpace = THREE.SRGBColorSpace;
                       mtl.needsUpdate = true;
                     });
                   } else {
                     child.material.map = tex;
+                    child.material.map.colorSpace = THREE.SRGBColorSpace;
                     child.material.needsUpdate = true;
                   }
 
-                  tex.dispose();
+                  mouse_wheel = true;
                 } else {
-                  texture_loader.load( textures[ curr_tex ], function( texture ) {
-                    texture.colorSpace = THREE.SRGBColorSpace;
-                    texture.wrapS = THREE.RepeatWrapping;
-                    texture.wrapT = THREE.RepeatWrapping;
+                  if (tex === undefined) {
+                    texture_loader.load( textures[ curr_tex ], function( texture ) {
+                      texture.wrapS = THREE.RepeatWrapping;
+                      texture.wrapT = THREE.RepeatWrapping;
 
+                      tex = texture.clone();
+
+                      texture.dispose();
+
+                      // Apply texture
+                      if (Array.isArray( child.material )) {
+                        child.material.forEach( mtl => {
+                          mtl.map = tex;
+                          mtl.map.colorSpace = THREE.SRGBColorSpace;
+                          mtl.needsUpdate = true;
+                        });
+                      } else {
+                        child.material.map = tex;
+                        child.material.map.colorSpace = THREE.SRGBColorSpace;
+                        child.material.needsUpdate = true;
+                      }
+                    });
+                  } else {
                     // Apply texture
                     if (Array.isArray( child.material )) {
                       child.material.forEach( mtl => {
-                        mtl.map = texture;
+                        mtl.map = tex;
+                        mtl.map.colorSpace = THREE.SRGBColorSpace;
                         mtl.needsUpdate = true;
                       });
                     } else {
-                      child.material.map = texture;
+                      child.material.map = tex;
+                      child.material.map.colorSpace = THREE.SRGBColorSpace;
                       child.material.needsUpdate = true;
                     }
-                  });
+                  }
                 }
               }
             }
           }
+
+          if (tex) tex.dispose();
 
           mouse_wheel = true;
         });
@@ -4346,6 +4581,7 @@
               child.geometry.setIndex( original_indices[ child.name ] );
 
               if (original_uvs[ child.name ] !== undefined) child.geometry.setAttribute( 'uv', original_uvs[ child.name ] );
+              if (original_uv1s[ child.name ] !== undefined) child.geometry.setAttribute( 'uv1', original_uv1s[ child.name ] );
               if (original_normals[ child.name ] !== undefined) child.geometry.setAttribute( 'normal', original_normals[ child.name ] );
               if (original_positions[ child.name ] !== undefined) child.geometry.setAttribute( 'position', original_positions[ child.name ] );
               if (original_attr_colors[ child.name ] !== undefined) child.geometry.setAttribute( 'color', original_attr_colors[ child.name ] );
@@ -4399,12 +4635,25 @@
               let child_count_array = 1;
 
               child.material.forEach( mtl => {
-                mtl.vertexColors = vertex_colors_enabled ? original_vertex_color_array[ child.name ][ child_count_array ] : false;
-                child_count_array += 1;
+                mtl.vertexColors = vertex_colors_enabled ?
+                  (vertex_colors_present ?
+                    original_vertex_color_array[ child.name ][ child_count ] :
+                    true
+                  ) :
+                  false;
+
                 mtl.needsUpdate = true;
+
+                child_count_array += 1;
               });
             } else {
-              child.material.vertexColors = vertex_colors_enabled ? original_vertex_colors[ child.name ] : false;
+              child.material.vertexColors = vertex_colors_enabled ?
+                (vertex_colors_present ?
+                  original_vertex_colors[ child.name ] :
+                  true
+                ) :
+                false;
+
               child.material.needsUpdate = true;
             }
     		  }
@@ -4427,7 +4676,7 @@
         Obj.traverse( function( child ) {
     	    if (child.isMesh || child.isPoints || child.isLine) {
             if (random_vertex_colors_enabled === true) {
-              current_colors[ child.name ] = child.geometry.getAttribute( 'color' );
+              if (current_colors[ child.name ] === undefined) current_colors[ child.name ] = child.geometry.getAttribute( 'color' );
               child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3 ) );
             } else {
               if (current_colors[ child.name ]) {
@@ -4435,29 +4684,6 @@
               } else {
                 child.geometry.deleteAttribute('color');
               }
-            }
-
-            if (Array.isArray( child.material )) {
-              let child_count_array = 1;
-
-              child.material.forEach( mtl => {
-                if (random_vertex_colors_enabled === true) {
-                  mtl.vertexColors = true;
-                } else {
-                  mtl.vertexColors = current_colors[ child.name ] ? original_vertex_color_array[ child.name ][ child_count_array ] : false;
-                }
-
-                child_count_array += 1;
-                mtl.needsUpdate = true;
-              });
-            } else {
-              if (random_vertex_colors_enabled === true) {
-                child.material.vertexColors = true;
-              } else {
-                child.material.vertexColors = current_colors[ child.name ] ? original_vertex_colors[ child.name ] : false;
-              }
-
-              child.material.needsUpdate = true;
             }
     		  }
 
@@ -4471,8 +4697,8 @@
         }
 
         if (Obj) {
-          if (first_run === true || mouse_down === true || mouse_wheel === true || reset_rotation === true ||
-            progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
+          if (first_run === true || mouse_down === true || mouse_wheel === true || animated_gif_texture === true ||
+            reset_rotation === true || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
 
             // Reset Obj rotational values
             if (reset_rotation === true) {
