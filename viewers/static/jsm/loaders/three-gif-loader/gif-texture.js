@@ -17,7 +17,7 @@ class GifTexture extends CanvasTexture {
     this.image = document.createElement( 'canvas' );
     this.image.width = reader.width;
     this.image.height = reader.height;
-    this.context = this.image.getContext( '2d' );
+    this.context = this.image.getContext( '2d', { willReadFrequently: true } );
 
     this.frameNumber = 0;
     this.previousFrameInfo = null;
