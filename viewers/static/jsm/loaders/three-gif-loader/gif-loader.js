@@ -32,11 +32,17 @@ class GifLoader {
 
       texture.setReader( reader );
 
-      if ( onLoad ) onLoad( reader );
+      if ( onLoad ) {
+
+        onLoad( texture );
+
+      } else {
+
+        return texture;
+
+      }
 
     }, onProgress, onError);
-
-    return texture;
 
   }
 
@@ -47,4 +53,5 @@ class GifLoader {
 
   }
 }
+
 export { GifLoader };
