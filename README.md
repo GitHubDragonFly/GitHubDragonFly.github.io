@@ -507,13 +507,15 @@ Number Type Converter
   - Show a points version of the loaded model and export it as such:
     - Tip: export this points model into PLY format and then drop the PLY file into [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) to get SPLAT file
   - Export edges, when enabled, in OBJ and GLTF exports of both solid and points model (a popup alert will notify about this)
-- OBJ+MTL, PLY+STL, PRWM and VTK viewers are using a modified version of [UVUnwrapper](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/utils/UVUnwrapper.js) to create UVs for the model:
+- GLTF, OBJ+MTL, PLY+STL, PRWM and VTK viewers are using a modified version of [UVUnwrapper](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/utils/UVUnwrapper.js) to create UVs for the model:
     - This experimental feature requires the following:
-      - A model that does not have built-in UVs
-      - At least 1 optional texture is loaded together with the model, otherwise it will just be standard loading without UV creation
+      - A textureless model that does not have built-in UVs
+      - At least 1 optional texture is loaded together with the model:
+        - GLTF Viewer will only use the first encountered texture
+        - Other viewers have the `T` button to switch between multiple textures
       - Models with vertex colors will have the colors removed since they don't seem to work properly with UV creation
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
-    - Currently available only in OBJ+STL, PLY+STL, PRWM and VTK desktop viewers and should be tried on simple models
+    - Currently available only in GLTF, OBJ+STL, PLY+STL, PRWM and VTK desktop viewers and should be tried on simple models
     - An example of the cube with Animated GIF texture is below
 
       ![Cube with Animated GIF texture](https://github.com/user-attachments/assets/bb87f931-f50b-4c2c-8016-495fe9df2e13)
