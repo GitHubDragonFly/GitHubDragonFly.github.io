@@ -24,7 +24,8 @@
           "meshoptimizer_decoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_decoder.module.min.js",
           "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_simplifier.module.min.js",
           "ktx2-encoder": "https://esm.sh/ktx2-encoder@0.1.1",
-          "@jsquash/avif": "https://esm.sh/@jsquash/avif@1.3.0"
+          "@jsquash/avif": "https://esm.sh/@jsquash/avif@1.3.0",
+          "xatlas-web": "https://esm.sh/xatlas-web@0.1.0"
         }
       }
     </script>
@@ -36,15 +37,19 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.171.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
-      var g_loader, gltf_loader, ktx2_loader, texture_loader, draco_loader, tga_loader, dds_loader, exr_loader, rgbe_loader, hdrJPGLoader;
-      var THREE, vrm, vrm_registered = false, current_vrm, manager, renderer, scene, scenes, default_camera, camera, cameras, cam_id;
-      var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible, object_is_points, bg_flip;
-      var animations, animation_mixer, current_animation, extras, current_extra, clock, fflate, count = 0;
-      var gltf_obj, parser, gltf_VideoTextureExtension, current_side, resource_path, edges, edges_visible;
-      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions, tex_res, tex_flip, tex_fmt;
-      var variants, variant_materials, current_variant, variants_available, draco_material, link;
+      var g_loader, gltf_loader, gltf_obj, ktx2_loader, texture_loader, draco_loader;
+      var merge_vertices, tga_loader, dds_loader, exr_loader, rgbe_loader, hdrJPGLoader;
+      var THREE, vrm, vrm_registered = false, current_vrm, manager, renderer;
+      var scene, scenes, default_camera, camera, cameras, cam_id, bg_flip;
+      var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
+      var animations, animation_mixer, current_animation, extras, current_extra;
+      var gif_loader, gif_writer, resource_path, object_is_points, clock, fflate;
+      var parser, gltf_VideoTextureExtension, current_side, edges, edges_visible;
+      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
+      var tex_res, tex_flip, tex_fmt, draco_material, uvUnwrapper, count = 0;
+      var variants, variant_materials, current_variant, variants_available, link;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, wireframe_enabled;
-      var ambientLight, hemisphereLight, directionalLight, isMobile, skeletonUtils;
+      var ambientLight, directionalLight, isMobile, skeletonUtils;
       var ww = window.innerWidth, wh = window.innerHeight, equi_enabled;
       var animation_running, extra_running, gif_export, texture_maps;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
@@ -56,7 +61,7 @@
       var lines_present, lines_visible, bounding_box, zip, outline_material;
       var random_vertex_colors_enabled, random_vertex_color_array;
       var vertex_colors_enabled, vertex_colors_present, current_colors;
-      var original_vertex_colors, original_vertex_color_array;
+      var original_vertex_colors, original_vertex_color_array, animated_gif_texture;
       var local_files, local_files_indexes, local_bin_files, slider_height = 0;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
       var selected_gltf_file, selected_draco_file, selected_url_file = '';
@@ -66,6 +71,7 @@
 
     <script type="module">
       import * as three_js from "three";
+      import * as XAtlas from "xatlas-web";
       import * as fflate_js from "three/addons/libs/fflate.module.min.js";
       import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.min.js';
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
@@ -73,6 +79,8 @@
       import { DRACOLoader } from "three/addons/loaders/DRACOLoader.min.js";
       import { GLTFLoader } from "../static/jsm/loaders/GLTFLoader.min.js";
       import GLTFVideoTextureExtension from "../static/jsm/extensions/loaders/EXT_texture_video/EXT_texture_video.min.js";
+      import { GifWriter } from "../static/jsm/libs/omggif/omggif.min.js";
+      import { GifLoader } from "../static/jsm/loaders/three-gif-loader/gif-loader.js";
 
       THREE = three_js;
       fflate = fflate_js;
@@ -99,8 +107,100 @@
 
       texture_loader = new THREE.TextureLoader( manager );
 
+      gif_writer = GifWriter;
+      gif_loader = new GifLoader( manager );
+
       gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
       set_gui_position();
+
+      // Modified version of UVUnwrapper: https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/utils/UVUnwrapper.js
+      // Using xatlas-web: https://github.com/mozillareality/xatlas-web
+
+      const AddMeshStatus = {
+        Success: 0,
+        Error: 1,
+        IndexOutOfRange: 2,
+        InvalidIndexCount: 3
+      };
+
+      class UVUnwrapper {
+        constructor() {
+          this._module = null;
+        }
+
+        async load() {
+          const wasmurl = new URL( 'https://cdn.jsdelivr.net/npm/xatlas-web@0.1.0/dist/xatlas-web.wasm', import.meta.url );
+
+          this._module = XAtlas[ 'default' ]( {
+            locateFile( path ) {
+              if ( path.endsWith( '.wasm' ) ) {
+                return wasmurl.toString();
+              }
+
+              return path;
+            }
+          } );
+
+          return this._module.ready;
+        }
+
+        unwrapGeometry( geometry ) {
+          const xatlas = this._module;
+          const originalVertexCount = geometry.attributes.position.count;
+          const originalIndexCount = geometry.index.count;
+
+          xatlas.createAtlas();
+
+          const meshInfo = xatlas.createMesh( originalVertexCount, originalIndexCount, true, true );
+          xatlas.HEAPU16.set( geometry.index.array, meshInfo.indexOffset / Uint16Array.BYTES_PER_ELEMENT );
+          xatlas.HEAPF32.set( geometry.attributes.position.array, meshInfo.positionOffset / Float32Array.BYTES_PER_ELEMENT );
+          xatlas.HEAPF32.set( geometry.attributes.normal.array, meshInfo.normalOffset / Float32Array.BYTES_PER_ELEMENT );
+
+          const statusCode = xatlas.addMesh();
+
+          if ( statusCode !== AddMeshStatus.Success ) {
+            throw new Error( `UVUnwrapper: Error adding mesh. Status code ${ statusCode }` );
+          }
+
+          xatlas.generateAtlas();
+
+          const meshData = xatlas.getMeshData( meshInfo.meshId );
+          const oldPositionArray = geometry.attributes.position.array;
+          const oldNormalArray = geometry.attributes.normal.array;
+
+          const newPositionArray = new Float32Array( meshData.newVertexCount * 3 );
+          const newNormalArray = new Float32Array( meshData.newVertexCount * 3 );
+          const newUvArray = new Float32Array( xatlas.HEAPF32.buffer, meshData.uvOffset, meshData.newVertexCount * 2 );
+          const newIndexArray = new Uint32Array( xatlas.HEAPU32.buffer, meshData.indexOffset, meshData.newIndexCount );
+          const originalIndexArray = new Uint32Array(
+            xatlas.HEAPU32.buffer,
+            meshData.originalIndexOffset,
+            meshData.newVertexCount
+          );
+
+          for ( let i = 0; i < meshData.newVertexCount; i ++ ) {
+            const originalIndex = originalIndexArray[ i ];
+            newPositionArray[ i * 3 ] = oldPositionArray[ originalIndex * 3 ];
+            newPositionArray[ i * 3 + 1 ] = oldPositionArray[ originalIndex * 3 + 1 ];
+            newPositionArray[ i * 3 + 2 ] = oldPositionArray[ originalIndex * 3 + 2 ];
+            newNormalArray[ i * 3 ] = oldNormalArray[ originalIndex * 3 ];
+            newNormalArray[ i * 3 + 1 ] = oldNormalArray[ originalIndex * 3 + 1 ];
+            newNormalArray[ i * 3 + 2 ] = oldNormalArray[ originalIndex * 3 + 2 ];
+          }
+
+          geometry.deleteAttribute( 'position' );
+          geometry.deleteAttribute( 'normal' );
+
+          geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( newPositionArray, 3 ) );
+          geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( newNormalArray, 3 ) );
+          geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( newUvArray, 2 ) );
+          geometry.setIndex( new THREE.Uint32BufferAttribute( newIndexArray, 1 ) );
+
+          xatlas.destroyAtlas();
+        }
+      }
+
+      uvUnwrapper = UVUnwrapper;
     </script>
 
     <script src="../static/js/upng/UPNG.min.js" defer></script>
@@ -500,8 +600,7 @@
         </button>
         <label for="ambient_light_color" title="Ambient Light Color">AL<input type="color" title="Ambient Light Color" id="ambient_light_color" onchange="set_ambient_light_color();" disabled /></label>
         <label for="directional_light_color" title="Directional Light Color">DL<input type="color" title="Directional Light Color" id="directional_light_color" onchange="set_directional_light_color();" disabled /></label>
-        <label for="hemisphere_light_color" title="Hemisphere Light Color">HL<input type="color" title="Hemisphere Light Color" id="hemisphere_light_color" onchange="set_hemisphere_light_color();" disabled /></label>
-        <label for="back_color" title="Background Color">B<input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled /></label>
+        <label for="back_color" title="Background Color">BG<input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled /></label>
         <label for="edge_color" title="Edge Color">EC<input type="color" title="Edge Color" id="edge_color" onchange="set_edge_color();" disabled /></label>
         <button title="Toggle Edges" id="btn_edges" onclick="show_edges();" disabled>E</button>
         <button title="Toggle Flat Shading" id="btn_flat" onclick="set_flat();" disabled>F</button>
@@ -1391,7 +1490,7 @@
       function gif_encode( gif_frames ) {
         let buffer = new Uint8ClampedArray( 187500000 ); // 500 * 500 * 150 * 5
         let pixels = new Uint8ClampedArray( 250000 ); // 500 * 500
-        let writer = new GifWriter( buffer, 500, 500, { loop: 0 } );
+        let writer = new gif_writer( buffer, 500, 500, { loop: 0 } );
 
         // Skip the first frame since it might be all zeros due to rendering
         // Any subsequent frame that might be all zeros will throw an error
@@ -2215,24 +2314,6 @@
         mouse_wheel = true;
       }
 
-      function set_hemisphere_light_color() {
-        let hl_colors = document.getElementById('hemisphere_light_color').value; // hex format '#rrggbb'
-
-        hemisphereLight.color.setRGB(
-          parseInt( hl_colors.substring( 1, 3 ), 16 ) / 10.0,
-          parseInt( hl_colors.substring( 3, 5 ), 16 ) / 10.0,
-          parseInt( hl_colors.substring( 5 ), 16 ) / 10.0
-        );
-
-        if (hl_colors === '#000000') {
-          hemisphereLight.groundColor.setRGB( 0, 0, 0 );
-        } else {
-          hemisphereLight.groundColor.setRGB( 9.2, 9.2, 9.2 );
-        }
-
-        mouse_wheel = true;
-      }
-
       function set_directional_light_color() {
         let dl_colors = document.getElementById('directional_light_color').value; // hex format '#rrggbb'
 
@@ -2646,6 +2727,7 @@
         polar_grid_visible = false;
         materials = [];
         materials_available = false;
+        animated_gif_texture = false;
         gif_export = false;
         render_requested = false;
         initial_rotation = new THREE.Vector3();
@@ -2795,13 +2877,6 @@
           camera.add( ambientLight );
         }
 
-        // Add HemisphereLight to the scene
-        if (hemisphereLight === undefined) {
-          hemisphereLight = new THREE.HemisphereLight( 0x000000, 0x000000, 0.05 );
-          hemisphereLight.position.set( 0, 250, 0 );
-          scene.add( hemisphereLight );
-        }
-
         // Add DirectionalLight to the default_camera (add it to the scene instead if not using Orbit Controls)
         if (directionalLight === undefined) {
           directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 5.0 );
@@ -2883,6 +2958,7 @@
           }
 
           let child_count = 1;
+          let loader;
 
           gltf_obj.traverse( async function( child ) {
             if (child.isLineSegments) {
@@ -2982,18 +3058,35 @@
                 child.material.needsUpdate = true;
               }
 
-              if (!gltf.parser.json.images) {
+              if (!parser.json.images && local_files_indexes.length > 0) {
+                // If textures are loaded then try to unwrap the model and create uvs
+                if (child.isMesh && child.geometry.attributes.uv === undefined) {
+                  if (!child.geometry.index) {
+                    child.geometry = merge_vertices( child.geometry.clone(), 1e-6 );
+                  }
+
+                  document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
+                  await new Promise( resolve => setTimeout( resolve, 100 ) );
+
+                  let uvu = new uvUnwrapper();
+                  await uvu.load();
+                  await uvu.unwrapGeometry( child.geometry );
+                  uvu._module._free();
+                }
+
                 // Use as a texture the first loaded image if any
 
-                if (local_files_indexes.length > 0) {
-                  let loader;
-
+                if (!loader) {
                   let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
                   let ext = uc_name.substring( uc_name.lastIndexOf( '.' ) + 1 );
 
                   switch ( ext ) {
                     case 'DDS':
                       loader = dds_loader;
+                      break;
+
+                    case 'GIF':
+                      loader = gif_loader;
                       break;
 
                     case 'TGA':
@@ -3008,21 +3101,26 @@
                       loader = texture_loader;
                       break;
                   }
-
-                  loader.load( URL.createObjectURL( local_files[ local_files_indexes[ 0 ] ] ), function( texture ) {
-                    URL.revokeObjectURL( local_files[ local_files_indexes[ 0 ] ] );
-
-                    texture.colorSpace = THREE.SRGBColorSpace;
-                    texture.wrapS = THREE.RepeatWrapping;
-                    texture.wrapT = THREE.RepeatWrapping;
-
-                    // Apply texture
-                    child.material.map = texture;
-                    child.material.needsUpdate = true;
-
-                    texture.dispose();
-                  });
                 }
+
+                loader.load( URL.createObjectURL( local_files[ local_files_indexes[ 0 ] ] ), function( texture ) {
+                  URL.revokeObjectURL( local_files[ local_files_indexes[ 0 ] ] );
+
+                  texture.wrapS = THREE.RepeatWrapping;
+                  texture.wrapT = THREE.RepeatWrapping;
+                  texture.colorSpace = THREE.SRGBColorSpace;
+                  texture.needsUpdate = true;
+
+                  if (texture.num_frames && texture.num_frames > 1) animated_gif_texture = true;
+
+                  // Apply texture
+                  child.material.map = texture;
+                  child.material.needsUpdate = true;
+
+                  texture.dispose();
+
+                  mouse_wheel = true;
+                });
               }
             }
 
@@ -3047,7 +3145,7 @@
       }
 
       function loadDRACO() {
-        draco_loader.load( URL.createObjectURL( local_files[ selected_draco_file ] ), function( geometry ) {
+        draco_loader.load( URL.createObjectURL( local_files[ selected_draco_file ] ), async function( geometry ) {
           URL.revokeObjectURL( local_files[ selected_draco_file ] );
 
           if (!geometry.attributes.normal) geometry.computeVertexNormals();
@@ -3065,6 +3163,21 @@
           // Use as a texture either the first loaded image or default
 
           if (local_files_indexes.length > 0) {
+            // If textures are loaded then try to unwrap the model and create uvs
+            if (geometry.attributes.uv === undefined) {
+              if (!geometry.index) {
+                geometry = merge_vertices( geometry.clone(), 1e-6 );
+              }
+
+              document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
+              await new Promise( resolve => setTimeout( resolve, 100 ) );
+
+              let uvu = new uvUnwrapper();
+              await uvu.load();
+              await uvu.unwrapGeometry( geometry );
+              uvu._module._free();
+            }
+
             let loader;
 
             let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
@@ -3073,6 +3186,10 @@
             switch ( ext ) {
               case 'DDS':
                 loader = dds_loader;
+                break;
+
+              case 'GIF':
+                loader = gif_loader;
                 break;
 
               case 'TGA':
@@ -3095,13 +3212,13 @@
               texture.wrapS = THREE.RepeatWrapping;
               texture.wrapT = THREE.RepeatWrapping;
 
+              if (texture.num_frames && texture.num_frames > 1) animated_gif_texture = true;
+
               // Apply texture
               draco_material = new THREE.MeshPhongMaterial({
                 side: THREE.DoubleSide,
                 map: texture,
                 opacity: 1,
-                receiveShadow: true,
-                castShadow: true,
                 transparent: true,
                 vertexColors: geometry.hasAttribute( 'color' )
               });
@@ -3130,8 +3247,6 @@
               side: THREE.DoubleSide,
               map: draco_texture,
               opacity: 1,
-              receiveShadow: true,
-              castShadow: true,
               transparent: true,
               vertexColors: geometry.hasAttribute( 'color' )
             });
@@ -3362,8 +3477,6 @@
                 side: THREE.DoubleSide,
                 map: draco_texture,
                 opacity: 1,
-                receiveShadow: true,
-                castShadow: true,
                 transparent: true,
                 vertexColors: vertex_colors_enabled
               });
@@ -4489,8 +4602,9 @@
           if (render_requested === true) requestAnimationFrame( render );
         }
 
-        if (first_run === true || animation_running === true || mouse_down === true || mouse_wheel === true
-           || reset_rotation === true || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
+        if (first_run === true || mouse_down === true || mouse_wheel === true ||
+            animated_gif_texture === true || animation_running === true ||
+            reset_rotation === true || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
 
           if (gltf_obj) {
             // Reset object rotational values
@@ -4598,7 +4712,6 @@
         document.getElementById('back_color').disabled = false;
         document.getElementById('edge_color').value = '#FF0000';
         document.getElementById('ambient_light_color').value = '#FFFFFF';
-        document.getElementById('hemisphere_light_color').value = '#000000';
         document.getElementById('directional_light_color').value = '#FFFFFF';
         document.getElementById('directional_light_intensity').value = 5;
         document.getElementById('ambient_light_intensity').value = 0.5;
@@ -4680,7 +4793,6 @@
           set_scene_image( reset );
           set_back_color();
           set_ambient_light_color();
-          set_hemisphere_light_color();
           set_directional_light_color();
           set_directional_light_intensity();
           set_ambient_light_intensity();
@@ -4880,7 +4992,6 @@
         document.getElementById('rotation_z').disabled = disable;
         document.getElementById('model_scale').disabled = disable;
         document.getElementById('ambient_light_color').disabled = disable;
-        document.getElementById('hemisphere_light_color').disabled = disable;
         document.getElementById('directional_light_color').disabled = disable;
         document.getElementById('directional_light_intensity').disabled = disable;
         document.getElementById('ambient_light_intensity').disabled = disable;
