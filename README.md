@@ -427,7 +427,7 @@ Number Type Converter
   - `E` - edges
     - `EC` - edge color
   - `F` - flatShading
-  - `f` - allows for Y-Flip of DDS textures when present in the model (ASSIMP Viewer)
+  - `f` - allows for Y-Flip of DDS textures when present in the model (available in ASSIMP Viewer only)
   - `G` - linear gradient background
     - will reset the background color
     - will clear the `Eq` input if present
@@ -463,6 +463,7 @@ Number Type Converter
   - `XS` - xtra smooth (available in OBJ Viewer only)
   - `RST` - reset
   - `#` - grid
+  - `&` - change LDRAW parts library location (available in LDRAW Viewer only)
 - Light controls, where applicable:
   - `AL` - ambient light color
     - `ALi` - ambient light intensity
