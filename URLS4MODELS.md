@@ -26,6 +26,7 @@ Else, most of the passive links below are of the actual models so copy any of th
   - `https://raw.githubusercontent.com/KodyJKing/three.js/master/examples/models/prwm/smooth-suzanne.le.prwm`
 - access to some LDRAW example files:
   - `https://github.com/gkjohnson/ldraw-parts-library/tree/master/models`
+  - `https://github.com/yomboprime/TNTViewer/tree/main/examples/models/ldraw`
 - access to some MMD (Miku Miku Dance) example files, with the first 3 being variations of the same model:
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_v2.vmd`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_v2.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_camera.vmd`
