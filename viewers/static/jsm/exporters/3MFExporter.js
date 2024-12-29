@@ -223,7 +223,7 @@ class ThreeMFExporter {
 
 			if ( object.isMesh ) {
 
-                buildString += '  <item objectid="' + object.id + '" />\n';
+				buildString += '  <item objectid="' + object.id + '" />\n';
 
 			}
 
