@@ -129,33 +129,32 @@ class ThreeMFExporter {
 
 		// Start the 3MF file content
 		let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n';
-		xmlString += '<model unit="millimeter" xml:lang="en-US" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n';
+		xmlString += '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">\n';
 		xmlString += await this.createResourcesSection( scene );
 		xmlString += await this.createBuildSection( scene );
 		xmlString += '</model>\n';
 
 		// Generate the Relationships file
-		let relsString = await this.createRelsFile();
-		let relsStringTextures = await this.createTexturesRelsFile( scene );
+		const relsString = await this.createRelsFile();
+		const relsStringTextures = await this.createTexturesRelsFile( scene );
 
 		// Combine the XML and Relationships content into a single 3MF package
-		const files = relsStringTextures !== null ?
-		{
-			'[Content_Types].xml': strToU8( this.createContentTypesFile() ),
-			'_rels/.rels': strToU8( relsString ),
-			'3D/3dmodel.model': strToU8( xmlString ),
-			'3D/_rels/3dmodel.model.rels': strToU8( relsStringTextures )
-		} :
-		{
-			'[Content_Types].xml': strToU8( this.createContentTypesFile() ),
-			'_rels/.rels': strToU8( relsString ),
-			'3D/3dmodel.model': strToU8( xmlString )
+		const files = {
+			'[Content_Types].xml': await strToU8( this.createContentTypesFile() ),
+			'_rels/.rels': await strToU8( relsString ),
+			'3D/3dmodel.model': await strToU8( xmlString ),
 		};
 
-		// Add textures to the zip files
-		await this.addTexturesToZip( scene, files, options );
+		if ( relsStringTextures !== null ) {
 
-		return zipSync( files, { level: 0 } );
+			files[ '3D/_rels/3dmodel.model.rels' ] = await strToU8( relsStringTextures );
+
+			// Add textures to the zip files
+			await this.addTexturesToZip( scene, files, options );
+
+		}
+
+		return zipSync( files, { level: 8 } );
 
 	}
 
@@ -185,11 +184,11 @@ class ThreeMFExporter {
 					let name = material.map.name ? material.map.name : 'texture_' + material.map.uuid;
 					if ( name.indexOf( '.' ) === -1 ) name += '.png';
 
-					resourcesString += '  <m:texture2d id="' + material.map.id + '" path="3D/Textures/' + name + '" contenttype="image/png" />\n';
+					resourcesString += '  <m:texture2d id="' + material.map.id + '" path="/3D/Textures/' + name + '" contenttype="image/png" />\n';
 
 					if ( geometry.hasAttribute( 'uv' ) ) {
 
-						resourcesString += this.generateUVs( geometry, material.map.id + 1, material.map.id );
+						resourcesString += this.generateUVs( geometry, material.map.id + 1000000, material.map.id );
 
 					}
 
@@ -201,7 +200,7 @@ class ThreeMFExporter {
 				resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
 				resourcesString += '   <mesh>\n';
 				resourcesString += this.generateVertices( geometry );
-				resourcesString += this.generateTriangles( geometry );
+				resourcesString += this.generateTriangles( geometry, material.map ? material.map.id + 1000000 : null );
 				resourcesString += '   </mesh>\n';
 
 				resourcesString += '  </object>\n';
@@ -222,9 +221,9 @@ class ThreeMFExporter {
 
 		scene.traverse( ( object ) => {
 
-			if (object.isMesh) {
+			if ( object.isMesh ) {
 
-				buildString += '  <item objectid="' + object.id + '" />\n';
+                buildString += '  <item objectid="' + object.id + '" />\n';
 
 			}
 
@@ -320,14 +319,22 @@ class ThreeMFExporter {
 
 	}
 
-	generateTriangles( geometry ) {
+	generateTriangles( geometry, pid ) {
 
 		const indices = geometry.index.array;
 		let trianglesString = '    <triangles>\n';
 
 		for ( let i = 0; i < indices.length; i += 3 ) {
 
-			trianglesString += '     <triangle v1="' + indices[ i ] + '" v2="' + indices[ i + 1 ] + '" v3="' + indices[ i + 2 ] + '" />\n';
+			if ( pid ) {
+
+				trianglesString += '     <triangle v1="' + indices[ i ] + '" v2="' + indices[ i + 1 ] + '" v3="' + indices[ i + 2 ] + '" pid="' + pid + '" />\n';
+
+			} else {
+
+				trianglesString += '     <triangle v1="' + indices[ i ] + '" v2="' + indices[ i + 1 ] + '" v3="' + indices[ i + 2 ] + '" />\n';
+
+			}
 
 		}
 
@@ -349,8 +356,9 @@ class ThreeMFExporter {
 				if ( name.indexOf( '.' ) === -1 ) name += '.png';
 
 				const canvas = this.imageToCanvas( texture.image, options.map_flip_required, options.maxTextureSize );
+				const data_url = canvas.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
 
-				files[ '3D/Textures/' + name ] = strToU8( atob( canvas.toDataURL( 'image/png' ).split( ',' )[ 1 ] ) );
+				files[ '3D/Textures/' + name ] = strToU8( data_url );
 
 			}
 
@@ -373,14 +381,14 @@ class ThreeMFExporter {
 
 			} else {
 
-				canvas = canvas || document.createElement( 'canvas' );
+				canvas = document.createElement( 'canvas' );
 
 				let scale = maxTextureSize / Math.max( image.width, image.height );
 
 				canvas.width = image.width * Math.min( 1, scale );
 				canvas.height = image.height * Math.min( 1, scale );
 
-				ctx = ctx || canvas.getContext( '2d' );
+				ctx = canvas.getContext( '2d', { willReadFrequently: true } );
 
 				if ( flipY === true ) {
 
@@ -390,8 +398,6 @@ class ThreeMFExporter {
 					ctx.scale( 1, - 1 );
 
 				}
-
-				// this seems to also work fine for exporting TGA images as PNG
 
 				if ( image instanceof ImageData ) {
 
