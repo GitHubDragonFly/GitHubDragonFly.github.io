@@ -361,6 +361,11 @@ class ThreeMFExporter {
 
 			if ( pid ) {
 
+				// This might have a weird functionality for mapping textures
+				// 3MF and three.js UV sets do not seem to have equivalency since
+				// 3MF currently also requires triangle properties p1 and p2 and p3
+				// be created and there is no established process for doing so
+
 				trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" pid="' + pid + '" p1="' + i + '" p2="' + ( i + 1 ) + '" p3="' + ( i + 2 ) + '" />\n';
 
 			} else {
@@ -378,6 +383,11 @@ class ThreeMFExporter {
 	}
 
 	generateUVs( geometry, id, texid ) {
+
+		// This might have a weird functionality for mapping textures
+		// 3MF and three.js UV sets do not seem to have equivalency since
+		// 3MF currently also requires triangle properties p1 and p2 and p3
+		// be created and there is no established process for doing so
 
 		const uvs = geometry.attributes.uv.array;
 
