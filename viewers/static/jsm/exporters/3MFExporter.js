@@ -1,5 +1,9 @@
 import {
-	DefaultLoadingManager
+	DefaultLoadingManager,
+	ClampToEdgeWrapping,
+	LinearFilter,
+	MirroredRepeatWrapping,
+	NearestFilter
 } from "three";
 
 import {
@@ -202,7 +206,16 @@ class ThreeMFExporter {
 					let name = material.map.name ? material.map.name : 'texture_' + material.map.uuid;
 					if ( name.indexOf( '.' ) === -1 ) name += '.png';
 
-					resourcesString += '  <m:texture2d id="' + material.map.id + '" path="/3D/Textures/' + name + '" contenttype="image/png" />\n';
+					let styleu = material.map.wrapS === MirroredRepeatWrapping ? 'mirror' :
+						( material.map.wrapS === ClampToEdgeWrapping ? 'clamp' :'wrap' );
+
+					let stylev = material.map.wrapT === MirroredRepeatWrapping ? 'mirror' :
+						( material.map.wrapT === ClampToEdgeWrapping ? 'clamp' : 'wrap' );
+
+					let filter = ( material.map.magFilter === NearestFilter && material.map.minFilter === NearestFilter ) ? 'nearest' :
+						( ( material.map.magFilter === LinearFilter && material.map.minFilter === LinearFilter ) ? 'linear' : 'auto' );
+
+					resourcesString += '  <m:texture2d id="' + material.map.id + '" path="/3D/Textures/' + name + '" contenttype="image/png" tilestyleu="' + styleu + '" tilestylev="' + stylev + '" filter="' + filter + '" />\n';
 
 					if ( geometry.hasAttribute( 'uv' ) ) {
 
@@ -215,12 +228,12 @@ class ThreeMFExporter {
 				resourcesString += '  <basematerials id="' + material.id + '">\n';
 				resourcesString += '   <base name="' + material.type + '" displaycolor="#' + material.color.getHexString().toUpperCase() + 'FF" />\n';
 				resourcesString += '  </basematerials>\n';
+
 				resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
 				resourcesString += '   <mesh>\n';
 				resourcesString += this.generateVertices( geometry );
 				resourcesString += this.generateTriangles( geometry, material.map ? object.id : null );
 				resourcesString += '   </mesh>\n';
-
 				resourcesString += '  </object>\n';
 
 			}
