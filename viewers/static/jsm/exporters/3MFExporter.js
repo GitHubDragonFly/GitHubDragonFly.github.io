@@ -1,8 +1,5 @@
 import {
-	DefaultLoadingManager,
-	Matrix4,
-	Quaternion,
-	Vector3
+	DefaultLoadingManager
 } from "three";
 
 import {
@@ -96,6 +93,23 @@ async function import_decompress() {
 
 }
 
+/**
+ * Created with assistance from Microsoft Copilot
+ *
+ * 3D Manufacturing Format (3MF) specification: https://3mf.io/specification/
+ *
+ * The following features from the core specification should be working fine:
+ *
+ * - 3D Models
+ * - Object Resources (Meshes)
+ * - Material Resources (Base Materials)
+ *
+ * The following features are somewhat implemented and not fully functional:
+ *
+ * - Texture 2D
+ * - Texture 2D Groups
+ */
+
 class ThreeMFExporter {
 
 	constructor( manager ) {
@@ -158,7 +172,7 @@ class ThreeMFExporter {
 
 		files[ '3D/3dmodel.model' ] = await strToU8( xmlString );
 
-		return zipSync( files, { level: 0 } );
+		return zipSync( files, { level: 8 } );
 
 	}
 
@@ -227,20 +241,7 @@ class ThreeMFExporter {
 
 			if ( object.isMesh ) {
 
-				const matrix = new Matrix4();
-				matrix.copy( object.matrixWorld );
-
-				const pos = new Vector3();
-				const quat = new Quaternion();
-				const scale = new Vector3();
-
-				matrix.decompose( pos, quat, scale );
-
-				buildString += '  <item objectid="' + object.id + '" transform="';
-				buildString += pos.x + ' ' + pos.y + ' ' + pos.z + ' 0 ';
-				buildString += quat.x + ' ' + quat.y + ' ' + quat.z + ' ' + quat.w + ' ';
-				buildString += scale.x + ' ' + scale.y + ' ' + scale.z + ' 0';
-				buildString += '" />\n';
+				buildString += '  <item objectid="' + object.id + '" />\n';
 
 			}
 
