@@ -1,5 +1,8 @@
 import {
-	DefaultLoadingManager
+	DefaultLoadingManager,
+	Matrix4,
+	Quaternion,
+	Vector3
 } from "three";
 
 import {
@@ -129,21 +132,20 @@ class ThreeMFExporter {
 
 		// Start the 3MF file content
 		let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n';
-		xmlString += '<model unit="millimeter" xml:lang="en-US" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02">\n';
+		xmlString += '<model unit="millimeter" xml:lang="en-US" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n';
 		xmlString += await this.createResourcesSection( scene );
 		xmlString += await this.createBuildSection( scene );
 		xmlString += '</model>\n';
+
+		const files = {};
 
 		// Generate the Relationships file
 		const relsString = await this.createRelsFile();
 		const relsStringTextures = await this.createTexturesRelsFile( scene );
 
 		// Combine the XML and Relationships content into a single 3MF package
-		const files = {
-			'[Content_Types].xml': await strToU8( this.createContentTypesFile() ),
-			'_rels/.rels': await strToU8( relsString ),
-			'3D/3dmodel.model': await strToU8( xmlString ),
-		};
+		files[ '[Content_Types].xml' ] = await strToU8( this.createContentTypesFile() );
+		files[ '_rels/.rels' ] = await strToU8( relsString );
 
 		if ( relsStringTextures !== null ) {
 
@@ -154,7 +156,9 @@ class ThreeMFExporter {
 
 		}
 
-		return zipSync( files, { level: 8 } );
+		files[ '3D/3dmodel.model' ] = await strToU8( xmlString );
+
+		return zipSync( files, { level: 0 } );
 
 	}
 
@@ -188,7 +192,7 @@ class ThreeMFExporter {
 
 					if ( geometry.hasAttribute( 'uv' ) ) {
 
-						resourcesString += this.generateUVs( geometry, material.map.id + 1000000, material.map.id );
+						resourcesString += this.generateUVs( geometry, object.id, material.map.id );
 
 					}
 
@@ -200,7 +204,7 @@ class ThreeMFExporter {
 				resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
 				resourcesString += '   <mesh>\n';
 				resourcesString += this.generateVertices( geometry );
-				resourcesString += this.generateTriangles( geometry, material.map ? material.map.id + 1000000 : null );
+				resourcesString += this.generateTriangles( geometry, material.map ? object.id : null );
 				resourcesString += '   </mesh>\n';
 
 				resourcesString += '  </object>\n';
@@ -223,7 +227,20 @@ class ThreeMFExporter {
 
 			if ( object.isMesh ) {
 
-				buildString += '  <item objectid="' + object.id + '" />\n';
+				const matrix = new Matrix4();
+				matrix.copy( object.matrixWorld );
+
+				const pos = new Vector3();
+				const quat = new Quaternion();
+				const scale = new Vector3();
+
+				matrix.decompose( pos, quat, scale );
+
+				buildString += '  <item objectid="' + object.id + '" transform="';
+				buildString += pos.x + ' ' + pos.y + ' ' + pos.z + ' 0 ';
+				buildString += quat.x + ' ' + quat.y + ' ' + quat.z + ' ' + quat.w + ' ';
+				buildString += scale.x + ' ' + scale.y + ' ' + scale.z + ' 0';
+				buildString += '" />\n';
 
 			}
 
@@ -252,6 +269,8 @@ class ThreeMFExporter {
 		let relsStringTextures = '<?xml version="1.0" encoding="UTF-8"?>\n';
 		relsStringTextures += '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n';
 
+		const image_names = {};
+
 		scene.traverse( ( object ) => {
 
 			if ( object.isMesh && object.material.map ) {
@@ -260,7 +279,13 @@ class ThreeMFExporter {
 				let name = object.material.map.name ? object.material.map.name : 'texture_' + object.material.map.uuid;
 				if ( name.indexOf( '.' ) === -1 ) name += '.png';
 
-				relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + object.material.map.id + '" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture" />\n';
+				if ( ! image_names[ name ] ) {
+
+					image_names[ name ] = name;
+
+					relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + object.material.map.id + '" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture" />\n';
+
+				}
 
 			}
 
@@ -288,11 +313,16 @@ class ThreeMFExporter {
 	generateVertices( geometry ) {
 
 		const vertices = geometry.attributes.position.array;
+
 		let verticesString = '    <vertices>\n';
 
 		for ( let i = 0; i < vertices.length; i += 3 ) {
 
-			verticesString += '     <vertex x="' + vertices[ i ] + '" y="' + vertices[ i + 1 ] + '" z="' + vertices[ i + 2 ] + '" />\n';
+			let v1 = vertices[ i ];
+			let v2 = vertices[ i + 1 ];
+			let v3 = vertices[ i + 2 ];
+
+			verticesString += '     <vertex x="' + v1 + '" y="' + v2 + '" z="' + v3 + '" />\n';
 
 		}
 
@@ -302,37 +332,25 @@ class ThreeMFExporter {
 
 	}
 
-	generateUVs( geometry, id, texid ) {
-
-		const uvs = geometry.attributes.uv.array;
-		let uvsString = '  <m:texture2dgroup id="' + id + '" texid="' + texid + '">\n';
-
-		for ( let i = 0; i < uvs.length; i += 2 ) {
-
-			uvsString += '   <m:tex2coord u="' + uvs[ i ] + '" v="' + uvs[ i + 1 ] + '" />\n';
-
-		}
-
-		uvsString += '  </m:texture2dgroup>\n';
-
-		return uvsString;
-
-	}
-
 	generateTriangles( geometry, pid ) {
 
 		const indices = geometry.index.array;
+
 		let trianglesString = '    <triangles>\n';
 
 		for ( let i = 0; i < indices.length; i += 3 ) {
 
+			let v1 = indices[ i ];
+			let v2 = indices[ i + 1 ];
+			let v3 = indices[ i + 2 ];
+
 			if ( pid ) {
 
-				trianglesString += '     <triangle v1="' + indices[ i ] + '" v2="' + indices[ i + 1 ] + '" v3="' + indices[ i + 2 ] + '" pid="' + pid + '" />\n';
+				trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" pid="' + pid + '" p1="' + i + '" p2="' + ( i + 1 ) + '" p3="' + ( i + 2 ) + '" />\n';
 
 			} else {
 
-				trianglesString += '     <triangle v1="' + indices[ i ] + '" v2="' + indices[ i + 1 ] + '" v3="' + indices[ i + 2 ] + '" />\n';
+				trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" />\n';
 
 			}
 
@@ -344,7 +362,31 @@ class ThreeMFExporter {
 
 	}
 
+	generateUVs( geometry, id, texid ) {
+
+		const uvs = geometry.attributes.uv.array;
+
+		let uvsString = '  <m:texture2dgroup id="' + id + '" texid="' + texid + '">\n';
+
+		for ( let i = 0; i < uvs.length; i += 2 ) {
+
+			const uvu = uvs[ i ] || 0;
+			const uvv = uvs[ i +  1 ] || 0;
+
+			uvsString += '   <m:tex2coord u="' + uvu + '" v="' + uvv + '" />\n';
+
+		}
+
+		uvsString += '  </m:texture2dgroup>\n';
+
+		return uvsString;
+
+	}
+
 	async addTexturesToZip( scene, files, options ) {
+
+		const image_names = {};
+		const textures = [];
 
 		scene.traverse( ( object ) => {
 
@@ -355,14 +397,41 @@ class ThreeMFExporter {
 				let name = texture.name ? texture.name : 'texture_' + texture.uuid;
 				if ( name.indexOf( '.' ) === -1 ) name += '.png';
 
-				const canvas = this.imageToCanvas( texture.image, options.map_flip_required, options.maxTextureSize );
-				const data_url = canvas.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
+				if ( ! image_names[ name ] ) {
 
-				files[ '3D/Textures/' + name ] = strToU8( data_url );
+					image_names[ name ] = name;
+
+					const canvas = this.imageToCanvas( texture.image, options.map_flip_required, options.maxTextureSize );
+
+					const width = canvas.width;
+					const height = canvas.height;
+
+					const base64 = canvas.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
+
+					const binaryString = atob( base64 );
+					const len = binaryString.length;
+					const bytes = new Uint8Array( len );
+
+					for ( let i = 0; i < len; i++ ) { bytes[ i ] = binaryString.charCodeAt( i ); }
+
+					const blob = new Blob( [ bytes ], { type: 'image/png' } );
+
+					textures.push( new Promise( async resolve => {
+
+						const buff = await blob.arrayBuffer();
+						const u8 = new Uint8Array( buff );
+
+						resolve( files[ '3D/Textures/' + name ] = u8 );
+
+					}));
+
+				}
 
 			}
 
 		});
+
+		await Promise.all( textures );
 
 	}
 
