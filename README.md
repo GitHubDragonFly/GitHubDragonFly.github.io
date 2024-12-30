@@ -421,6 +421,8 @@ Number Type Converter
   - GLTFS Viewer seems to do OK job in exporting still models with `pbrSpecularGlossiness` but would suggest that you use [gltf.report](https://gltf.report/) instead
   - Experiment with all exporters available by exporting the original model as well as its exported versions:
     - Considering how many export options are available in any viewer, a certain combination might just work properly
+  - There is also a partially functional experimental 3MF exporter, here only as a reference for those who might venture in trying to create this kind of exporter:
+    - There appears to be a roadblock present for converting three.js based UV set to 3MF format, check this [issue](https://github.com/3MFConsortium/spec_core/issues/78) if necessary
 - Buttons, where applicable:
   - `A` - animations
   - `D` - open desktop version of the viewer (available in mobile viewers only)
