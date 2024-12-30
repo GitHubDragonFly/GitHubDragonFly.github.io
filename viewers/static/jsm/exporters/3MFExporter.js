@@ -194,6 +194,7 @@ class ThreeMFExporter {
 				let material = object.material;
 
 				if ( ! geometry.index ) geometry = mergeVertices( geometry, 1e-6 );
+				if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
 
 				if ( material.map ) {
 
@@ -416,9 +417,6 @@ class ThreeMFExporter {
 					image_names[ name ] = name;
 
 					const canvas = this.imageToCanvas( texture.image, options.map_flip_required, options.maxTextureSize );
-
-					const width = canvas.width;
-					const height = canvas.height;
 
 					const base64 = canvas.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
 
