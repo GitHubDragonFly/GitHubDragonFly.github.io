@@ -379,9 +379,7 @@ class ThreeMFExporter {
 
 	generateUVs( geometry, id, texid ) {
 
-		const indices = geometry.index.array;
 		const uvs = geometry.attributes.uv.array;
-		const uv_control = {};
 
 		let uvsString = '  <m:texture2dgroup id="' + id + '" texid="' + texid + '">\n';
 
