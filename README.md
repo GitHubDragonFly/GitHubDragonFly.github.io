@@ -344,7 +344,7 @@ Number Type Converter
     - BIM exports are available in the Quick Viewer as well as some other viewers with custom BIM Exporter
     - 3MF exporter was created with assistance from Microsoft Copilot:
       - This is a custom exporter not officially available in the three.js library
-      - It supports basic features including the mesh material.map texture exporting
+      - It supports basic features including the mesh `material.map` texture exporting
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm), with the following notes:
       - This is a custom exporter not officially available in the three.js library
       - It requires a modified version of the 3DM Loader, which is included in this repository
@@ -418,7 +418,7 @@ Number Type Converter
     - If applicable, will support exporting morph animations but will not export other animations
   - Some viewers also offer setting the following exported textures features:
     - Resolution: 128, 256, 512, 768, 1k, 1.2k, 1.5k, 1.7k, 2k, 3k, 4k
-    - Y-flip, which is intended for `3DM`, `DAE`, `OBJ` and `USDZ` exports
+    - Y-flip, which should be used if exported textures look wrong
   - ASSIMP, GLTF and GLTFS viewers can also export model maps (textures) only, defaulting to PNG if no other format is selected
   - PDB Viewer will export all visible objects, any combination of `atoms` and `bonds` and `labels`
   - GLTFS Viewer seems to do OK job in exporting still models with `pbrSpecularGlossiness` but would suggest that you use [gltf.report](https://gltf.report/) instead
