@@ -1,6 +1,7 @@
 import {
 	DefaultLoadingManager,
 	ClampToEdgeWrapping,
+	Color,
 	LinearFilter,
 	MirroredRepeatWrapping,
 	NearestFilter
@@ -98,20 +99,23 @@ async function import_decompress() {
 }
 
 /**
+ *
  * Created with assistance from Microsoft Copilot
  *
  * 3D Manufacturing Format (3MF) specification: https://3mf.io/specification/
  *
- * The following features from the core specification should be working fine:
+ * The following features from the core specification appear to be working fine:
  *
  * - 3D Models
  * - Object Resources (Meshes)
  * - Material Resources (Base Materials)
  *
- * The following material.map texture features also appear to be working fine:
+ * The following features also appear to be working fine:
  *
  * - Texture 2D
  * - Texture 2D Groups
+ * - Color Groups (Vertex Colors)
+ *
  */
 
 class ThreeMFExporter {
@@ -176,7 +180,7 @@ class ThreeMFExporter {
 
 		files[ '3D/3dmodel.model' ] = await strToU8( xmlString );
 
-		return zipSync( files, { level: 8 } );
+		return zipSync( files, { level: 0 } );
 
 	}
 
@@ -195,6 +199,10 @@ class ThreeMFExporter {
 
 				if ( ! geometry.index ) geometry = mergeVertices( geometry, 1e-6 );
 				if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
+
+				resourcesString += '  <basematerials id="' + material.id + '">\n';
+				resourcesString += '   <base name="' + material.type + '" displaycolor="#' + material.color.getHexString().toUpperCase() + 'FF" />\n';
+				resourcesString += '  </basematerials>\n';
 
 				if ( material.map ) {
 
@@ -226,15 +234,20 @@ class ThreeMFExporter {
 
 				}
 
-				resourcesString += '  <basematerials id="' + material.id + '">\n';
-				resourcesString += '   <base name="' + material.type + '" displaycolor="#' + material.color.getHexString().toUpperCase() + 'FF" />\n';
-				resourcesString += '  </basematerials>\n';
+				if ( geometry.attributes.color ) {
+
+					resourcesString += '  <m:colorgroup id="' + geometry.id + '">\n';
+					resourcesString += this.generateColors( geometry );
+					resourcesString += '  </m:colorgroup>\n';
+
+				}
 
 				resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
 				resourcesString += '   <mesh>\n';
 				resourcesString += this.generateVertices( geometry );
-				resourcesString += this.generateTriangles( geometry, material.map ? object.id : null );
+				resourcesString += this.generateTriangles( geometry, material.map ? object.id : null, geometry.attributes.color ? geometry.id : null );
 				resourcesString += '   </mesh>\n';
+
 				resourcesString += '  </object>\n';
 
 			}
@@ -325,6 +338,24 @@ class ThreeMFExporter {
 
 	}
 
+	generateColors( geometry ) {
+
+		const colors = geometry.getAttribute( 'color' );
+
+		let colorsString = '';
+
+		for ( let i = 0; i < colors.count; i ++ ) {
+
+			let str = ( new Color().fromBufferAttribute( colors, i ) ).getHexString().toUpperCase() + 'FF';
+
+			colorsString += '   <m:color color="#' + str + '" />\n';
+
+		}
+
+		return colorsString;
+
+	}
+
 	generateVertices( geometry ) {
 
 		const vertices = geometry.attributes.position.array;
@@ -347,7 +378,7 @@ class ThreeMFExporter {
 
 	}
 
-	generateTriangles( geometry, pid ) {
+	generateTriangles( geometry, pid_texture = null, pid_color = null ) {
 
 		const indices = geometry.index.array;
 
@@ -359,9 +390,13 @@ class ThreeMFExporter {
 			let v2 = indices[ i + 1 ];
 			let v3 = indices[ i + 2 ];
 
-			if ( pid ) {
+			if ( pid_texture ) {
 
-				trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" pid="' + pid + '" p1="' + v1 + '" p2="' + v2 + '" p3="' + v3 + '" />\n';
+				trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" pid="' + pid_texture + '" p1="' + v1 + '" p2="' + v2 + '" p3="' + v3 + '" />\n';
+
+			} else if ( pid_color ) {
+
+				trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" pid="' + pid_color + '" p1="' + v1 + '" />\n';
 
 			} else {
 
