@@ -180,7 +180,7 @@ class ThreeMFExporter {
 
 		files[ '3D/3dmodel.model' ] = await strToU8( xmlString );
 
-		return zipSync( files, { level: 0 } );
+		return zipSync( files, { level: 8 } );
 
 	}
 
