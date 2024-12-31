@@ -108,7 +108,7 @@ async function import_decompress() {
  * - Object Resources (Meshes)
  * - Material Resources (Base Materials)
  *
- * The following features are somewhat implemented and not fully functional:
+ * The following material.map texture features also appear to be working fine:
  *
  * - Texture 2D
  * - Texture 2D Groups
@@ -361,12 +361,7 @@ class ThreeMFExporter {
 
 			if ( pid ) {
 
-				// This might have a weird functionality for mapping textures
-				// 3MF and three.js UV sets do not seem to have equivalency since
-				// 3MF currently also requires triangle properties p1 and p2 and p3
-				// be created and there is no established process for doing so
-
-				trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" pid="' + pid + '" p1="' + i + '" p2="' + ( i + 1 ) + '" p3="' + ( i + 2 ) + '" />\n';
+				trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" pid="' + pid + '" p1="' + v1 + '" p2="' + v2 + '" p3="' + v3 + '" />\n';
 
 			} else {
 
@@ -384,19 +379,16 @@ class ThreeMFExporter {
 
 	generateUVs( geometry, id, texid ) {
 
-		// This might have a weird functionality for mapping textures
-		// 3MF and three.js UV sets do not seem to have equivalency since
-		// 3MF currently also requires triangle properties p1 and p2 and p3
-		// be created and there is no established process for doing so
-
+		const indices = geometry.index.array;
 		const uvs = geometry.attributes.uv.array;
+		const uv_control = {};
 
 		let uvsString = '  <m:texture2dgroup id="' + id + '" texid="' + texid + '">\n';
 
 		for ( let i = 0; i < uvs.length; i += 2 ) {
 
-			const uvu = uvs[ i ] || 0;
-			const uvv = uvs[ i +  1 ] || 0;
+			const uvu = uvs[ i ];
+			const uvv = uvs[ i +  1 ];
 
 			uvsString += '   <m:tex2coord u="' + uvu + '" v="' + uvv + '" />\n';
 
