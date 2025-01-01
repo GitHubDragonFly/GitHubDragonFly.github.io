@@ -207,6 +207,8 @@ class ThreeMFExporter {
 
 				if ( material.map ) {
 
+					// If there is no name then use texture uuid as a part of new name
+
 					let name = material.map.name ? material.map.name : 'texture_' + material.map.uuid;
 					if ( name.indexOf( '.' ) === -1 ) name += '.png';
 
@@ -457,6 +459,11 @@ class ThreeMFExporter {
 
 			if ( object.isMesh && object.material.map ) {
 
+				// Preserve original texture uuid in case if
+				// it was used as a part of the texture name
+
+				const uuid = object.material.map.uuid;
+
 				let texture;
 
 				if ( object.material.map.isCompressedTexture === true ) {
@@ -469,7 +476,7 @@ class ThreeMFExporter {
 
 				}
 
-				let name = texture.name ? texture.name : 'texture_' + texture.uuid;
+				let name = texture.name ? texture.name : 'texture_' + uuid;
 				if ( name.indexOf( '.' ) === -1 ) name += '.png';
 
 				if ( ! image_names[ name ] ) {
