@@ -5,8 +5,11 @@ import {
 	DefaultLoadingManager,
 	InterleavedBufferAttribute,
 	LinearFilter,
+	Matrix4,
 	MirroredRepeatWrapping,
-	NearestFilter
+	NearestFilter,
+	Quaternion,
+	Vector3
 } from "three";
 
 import {
@@ -141,12 +144,10 @@ class ThreeMFExporter {
 
 		scene.updateMatrixWorld( true, true );
 
-		const scope = this;
-
 		const { decompress, renderer } = await import_decompress();
 
-		scope.decompress = decompress;
-		scope.renderer = renderer;
+		this.decompress = decompress;
+		this.renderer = renderer;
 
 		options = Object.assign( {
 			upAxis: 'Y_UP',
@@ -188,8 +189,6 @@ class ThreeMFExporter {
 
 	async createResourcesSection( scene ) {
 
-		const scope = this;
-
 		let resourcesString = ' <resources>\n';
 
 		scene.traverse( ( object ) => {
@@ -207,12 +206,6 @@ class ThreeMFExporter {
 				resourcesString += '  </basematerials>\n';
 
 				if ( material.map ) {
-
-					if ( material.map.isCompressedTexture === true ) {
-
-						material.map = scope.decompress( material.map, Infinity, scope.renderer );
-
-					}
 
 					let name = material.map.name ? material.map.name : 'texture_' + material.map.uuid;
 					if ( name.indexOf( '.' ) === -1 ) name += '.png';
@@ -270,18 +263,18 @@ class ThreeMFExporter {
 
 			if ( object.isMesh ) {
 
-				const matrix = new THREE.Matrix4();
+				const matrix = new Matrix4();
 				matrix.copy( object.matrixWorld );
 
 				// Decompose the matrix into position, quaternion, and scale
-				const pos = new THREE.Vector3();
-				const quat = new THREE.Quaternion();
-				const scale = new THREE.Vector3();
+				const pos = new Vector3();
+				const quat = new Quaternion();
+				const scale = new Vector3();
 
 				matrix.decompose( pos, quat, scale );
 
 				// Create the transformation string
-				const transform = new THREE.Matrix4().compose( pos, quat, scale );
+				const transform = new Matrix4().compose( pos, quat, scale );
 				const e = transform.elements;
 
 				let str = '';
@@ -464,7 +457,17 @@ class ThreeMFExporter {
 
 			if ( object.isMesh && object.material.map ) {
 
-				let texture = object.material.map;
+				let texture;
+
+				if ( object.material.map.isCompressedTexture === true ) {
+
+					texture = this.decompress( object.material.map.clone(), Infinity, this.renderer );
+
+				} else {
+
+					texture = object.material.map.clone();
+
+				}
 
 				let name = texture.name ? texture.name : 'texture_' + texture.uuid;
 				if ( name.indexOf( '.' ) === -1 ) name += '.png';
