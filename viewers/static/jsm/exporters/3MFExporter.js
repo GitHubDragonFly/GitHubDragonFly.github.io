@@ -247,14 +247,9 @@ class ThreeMFExporter {
 						let hex_opacity = ( parseInt( material.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
 						hex_uc += hex_opacity;
 
-						resourcesString += '   <base name="' + material.type + '" displaycolor="#' + hex_uc + '" />\n';
-
-					} else {
-
-						resourcesString += '   <base name="' + material.type + '" displaycolor="#' + hex_uc + '" />\n';
-
 					}
 
+					resourcesString += '   <base name="' + material.type + '" displaycolor="#' + hex_uc + '" />\n';
 					resourcesString += '  </basematerials>\n';
 
 				}
