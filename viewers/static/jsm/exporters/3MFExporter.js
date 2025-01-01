@@ -1,7 +1,9 @@
 import {
-	DefaultLoadingManager,
+	BufferAttribute,
 	ClampToEdgeWrapping,
 	Color,
+	DefaultLoadingManager,
+	InterleavedBufferAttribute,
 	LinearFilter,
 	MirroredRepeatWrapping,
 	NearestFilter
@@ -12,7 +14,7 @@ import {
 	zipSync,
 } from "three/addons/libs/fflate.module.min.js";
 
-import { mergeVertices } from "three/addons/utils/BufferGeometryUtils.min.js";
+import { deinterleaveAttribute, mergeVertices } from "three/addons/utils/BufferGeometryUtils.min.js";
 
 async function import_decompress() {
 
@@ -194,8 +196,8 @@ class ThreeMFExporter {
 
 			if ( object.isMesh ) {
 
-				let geometry = object.geometry;
-				let material = object.material;
+				let geometry = this.interleaved_buffer_attribute_check( object.geometry.clone() );
+				let material = object.material.clone();
 
 				if ( ! geometry.index ) geometry = mergeVertices( geometry, 1e-6 );
 				if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
@@ -268,7 +270,27 @@ class ThreeMFExporter {
 
 			if ( object.isMesh ) {
 
-				buildString += '  <item objectid="' + object.id + '" />\n';
+				const matrix = new THREE.Matrix4();
+				matrix.copy( object.matrixWorld );
+
+				// Decompose the matrix into position, quaternion, and scale
+				const pos = new THREE.Vector3();
+				const quat = new THREE.Quaternion();
+				const scale = new THREE.Vector3();
+
+				matrix.decompose( pos, quat, scale );
+
+				// Create the transformation string
+				const transform = new THREE.Matrix4().compose( pos, quat, scale );
+				const e = transform.elements;
+
+				let str = '';
+
+				str += e[ 0 ] + ' ' + e[ 1 ] + ' ' + e[ 2 ] + ' ' + e[ 4 ] + ' ';
+				str += e[ 5 ] + ' ' + e[ 6 ] + ' ' + e[ 8 ] + ' ' + e[ 9 ] + ' ';
+				str += e[ 10 ] + ' ' + e[ 12 ] + ' ' + e[ 13 ] + ' ' + e[ 14 ];
+ 
+				buildString += '  <item objectid="' + object.id + '" transform="' + str + '" />\n';
 
 			}
 
@@ -540,6 +562,80 @@ class ThreeMFExporter {
 			throw new Error( 'THREE.3MFExporter: No valid image data found. Unable to process texture.' );
 
 		}
+
+	}
+
+	deinterleave( geometry, attribute = 'color' ) {
+
+		const attr = geometry.attributes[ attribute ];
+		const itemSize = attr.itemSize;
+		const offset = attr.offset;
+
+		const data = attr.data;
+
+		if ( data === undefined ) return [];
+
+		let iBA = new InterleavedBufferAttribute( data, itemSize, offset );
+
+		let attr_items = deinterleaveAttribute( iBA );
+
+		let temp_array = Array( attr_items.array.length );
+
+		for ( let i = 0, l = attr_items.array.length; i < l; i ++ ) {
+
+			temp_array[ i ] = isNaN( attr_items.array[ i ] ) ? 0 : attr_items.array[ i ]; // avoid NaN values
+
+		}
+
+		return new BufferAttribute( new Float32Array( temp_array ), itemSize );
+
+	}
+
+	interleaved_buffer_attribute_check( geo ) {
+
+		const attribute_array = [ 'position', 'normal', 'color', 'tangent', 'uv', 'uv1', 'uv2', 'uv3' ];
+
+		for (const attribute of attribute_array) {
+
+			if ( geo.attributes[ attribute ] && geo.attributes[ attribute ].isInterleavedBufferAttribute ) {
+
+				if ( geo.attributes[ attribute ].data ) {
+
+					if ( geo.attributes[ attribute ].data.array ) {
+
+						let geometry_attribute_array = this.deinterleave( geo, attribute );
+
+						geo.deleteAttribute( attribute );
+						geo.setAttribute( attribute, geometry_attribute_array );
+
+					}
+
+				}
+
+			} else {
+
+				if ( geo.attributes[ attribute ] && geo.attributes[ attribute ].array ) {
+
+					const itemSize = geo.attributes[ attribute ].itemSize;
+					const arr = geo.attributes[ attribute ].array;
+					const temp_array = Array( arr.length );
+
+					for ( let i = 0, l = arr.length; i < l; i ++ ) {
+
+						temp_array[ i ] = isNaN( arr[ i ] ) ? 0 : arr[ i ]; // avoid NaN values
+
+					}
+
+					geo.deleteAttribute( attribute );
+					geo.setAttribute( attribute, new BufferAttribute( new Float32Array( temp_array ), itemSize ) );
+
+				}
+
+			}
+
+		}
+
+		return geo;
 
 	}
 
