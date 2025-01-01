@@ -204,10 +204,6 @@ class ThreeMFExporter {
 				if ( ! geometry.index ) geometry = mergeVertices( geometry, 1e-6 );
 				if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
 
-				resourcesString += '  <basematerials id="' + material.id + '">\n';
-				resourcesString += '   <base name="' + material.type + '" displaycolor="#' + material.color.getHexString().toUpperCase() + 'FF" />\n';
-				resourcesString += '  </basematerials>\n';
-
 				if ( material.map ) {
 
 					// If there is no name then use texture uuid as a part of new name
@@ -239,6 +235,27 @@ class ThreeMFExporter {
 					resourcesString += '  <m:colorgroup id="' + geometry.id + '">\n';
 					resourcesString += this.generateColors( geometry );
 					resourcesString += '  </m:colorgroup>\n';
+
+				} else {
+
+					resourcesString += '  <basematerials id="' + material.id + '">\n';
+
+					let hex_uc = material.color.getHexString().toUpperCase();
+
+					if ( material.opacity < 1 ) {
+
+						let hex_opacity = ( parseInt( material.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
+						hex_uc += hex_opacity;
+
+						resourcesString += '   <base name="' + material.type + '" displaycolor="#' + hex_uc + '" />\n';
+
+					} else {
+
+						resourcesString += '   <base name="' + material.type + '" displaycolor="#' + hex_uc + '" />\n';
+
+					}
+
+					resourcesString += '  </basematerials>\n';
 
 				}
 
@@ -322,6 +339,8 @@ class ThreeMFExporter {
 		scene.traverse( ( object ) => {
 
 			if ( object.isMesh && object.material.map ) {
+
+				// If there is no name then use texture uuid as a part of new name
 
 				map_found = true;
 				let name = object.material.map.name ? object.material.map.name : 'texture_' + object.material.map.uuid;
