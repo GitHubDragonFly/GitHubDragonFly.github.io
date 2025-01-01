@@ -156,8 +156,11 @@ class ThreeMFExporter {
 		}, options );
 
 		// Start the 3MF file content
+		let core_url = 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02';
+		let material_url = 'http://schemas.microsoft.com/3dmanufacturing/material/2015/02';
+
 		let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n';
-		xmlString += '<model unit="millimeter" xml:lang="en-US" xmlns:m="http://schemas.microsoft.com/3dmanufacturing/material/2015/02" xmlns="http://schemas.microsoft.com/3dmanufacturing/core/2015/02">\n';
+		xmlString += '<model unit="millimeter" xml:lang="en-US" xmlns:m="' + material_url + '" xmlns="' + core_url + '">\n';
 		xmlString += await this.createResourcesSection( scene );
 		xmlString += await this.createBuildSection( scene );
 		xmlString += '</model>\n';
@@ -328,7 +331,9 @@ class ThreeMFExporter {
 
 					image_names[ name ] = name;
 
-					relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + object.material.map.id + '" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture" />\n';
+					let texture_url = 'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture';
+
+					relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + object.material.map.id + '" Type="' + texture_url + '" />\n';
 
 				}
 
