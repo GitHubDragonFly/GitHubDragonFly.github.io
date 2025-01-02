@@ -506,52 +506,117 @@ class ThreeMFExporter {
 
 		scene.traverse( ( object ) => {
 
-			if ( object.isMesh && object.material.map ) {
+			if ( object.isMesh ) {
 
-				// Preserve original texture uuid in case if
-				// it was used as a part of the texture name
+				if ( Array.isArray( object.material ) ) {
 
-				const uuid = object.material.map.uuid;
+					for ( const mtl of object.material ) {
 
-				let texture;
+						if ( mtl.map ) {
 
-				if ( object.material.map.isCompressedTexture === true ) {
+							// Preserve original texture uuid in case if
+							// it was used as a part of the texture name
 
-					texture = this.decompress( object.material.map.clone(), Infinity, this.renderer );
+							const uuid = mtl.map.uuid;
+
+							let texture;
+
+							if ( mtl.map.isCompressedTexture === true ) {
+
+								texture = this.decompress( mtl.map.clone(), Infinity, this.renderer );
+
+							} else {
+
+								texture = mtl.map.clone();
+
+							}
+
+							let name = texture.name ? texture.name : 'texture_' + uuid;
+							if ( name.indexOf( '.' ) === -1 ) name += '.png';
+
+							if ( ! image_names[ name ] ) {
+
+								image_names[ name ] = name;
+
+								const canvas = this.imageToCanvas( texture.image, options.map_flip_required, options.maxTextureSize );
+
+								const base64 = canvas.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
+
+								const binaryString = atob( base64 );
+								const len = binaryString.length;
+								const bytes = new Uint8Array( len );
+
+								for ( let i = 0; i < len; i++ ) { bytes[ i ] = binaryString.charCodeAt( i ); }
+
+								const blob = new Blob( [ bytes ], { type: 'image/png' } );
+
+								textures.push( new Promise( async resolve => {
+
+									const buff = await blob.arrayBuffer();
+									const u8 = new Uint8Array( buff );
+
+									resolve( files[ '3D/Textures/' + name ] = u8 );
+
+								}));
+
+							}
+
+						}
+
+					}
 
 				} else {
 
-					texture = object.material.map.clone();
+					if ( object.material.map ) {
 
-				}
+						// Preserve original texture uuid in case if
+						// it was used as a part of the texture name
 
-				let name = texture.name ? texture.name : 'texture_' + uuid;
-				if ( name.indexOf( '.' ) === -1 ) name += '.png';
+						const uuid = object.material.map.uuid;
 
-				if ( ! image_names[ name ] ) {
+						let texture;
 
-					image_names[ name ] = name;
+						if ( object.material.map.isCompressedTexture === true ) {
 
-					const canvas = this.imageToCanvas( texture.image, options.map_flip_required, options.maxTextureSize );
+							texture = this.decompress( object.material.map.clone(), Infinity, this.renderer );
 
-					const base64 = canvas.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
+						} else {
 
-					const binaryString = atob( base64 );
-					const len = binaryString.length;
-					const bytes = new Uint8Array( len );
+							texture = object.material.map.clone();
 
-					for ( let i = 0; i < len; i++ ) { bytes[ i ] = binaryString.charCodeAt( i ); }
+						}
 
-					const blob = new Blob( [ bytes ], { type: 'image/png' } );
+						let name = texture.name ? texture.name : 'texture_' + uuid;
+						if ( name.indexOf( '.' ) === -1 ) name += '.png';
 
-					textures.push( new Promise( async resolve => {
+						if ( ! image_names[ name ] ) {
 
-						const buff = await blob.arrayBuffer();
-						const u8 = new Uint8Array( buff );
+							image_names[ name ] = name;
 
-						resolve( files[ '3D/Textures/' + name ] = u8 );
+							const canvas = this.imageToCanvas( texture.image, options.map_flip_required, options.maxTextureSize );
 
-					}));
+							const base64 = canvas.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
+
+							const binaryString = atob( base64 );
+							const len = binaryString.length;
+							const bytes = new Uint8Array( len );
+
+							for ( let i = 0; i < len; i++ ) { bytes[ i ] = binaryString.charCodeAt( i ); }
+
+							const blob = new Blob( [ bytes ], { type: 'image/png' } );
+
+							textures.push( new Promise( async resolve => {
+
+								const buff = await blob.arrayBuffer();
+								const u8 = new Uint8Array( buff );
+
+								resolve( files[ '3D/Textures/' + name ] = u8 );
+
+							}));
+
+						}
+
+					}
 
 				}
 
