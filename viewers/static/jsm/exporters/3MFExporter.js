@@ -200,7 +200,7 @@ class ThreeMFExporter {
 			if ( object.isMesh ) {
 
 				let geometry = this.interleaved_buffer_attribute_check( object.geometry.clone() );
-				let material = object.material.clone();
+				let material = Array.isArray( object.material ) ? object.material : object.material.clone();
 
 				if ( ! geometry.index ) geometry = mergeVertices( geometry, 1e-6 );
 				if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
