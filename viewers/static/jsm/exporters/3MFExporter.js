@@ -158,9 +158,10 @@ class ThreeMFExporter {
 		// Start the 3MF file content
 		let core_url = 'http://schemas.microsoft.com/3dmanufacturing/core/2015/02';
 		let material_url = 'http://schemas.microsoft.com/3dmanufacturing/material/2015/02';
+		let msft_url = 'http://www.microsoft.com/3dmanufacturing/microsoftextension/2017/01';
 
 		let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n';
-		xmlString += '<model unit="millimeter" xml:lang="en-US" xmlns:m="' + material_url + '" xmlns="' + core_url + '">\n';
+		xmlString += '<model unit="millimeter" xml:lang="en-US" xmlns="' + core_url + '" xmlns:m="' + material_url + '" xmlns:msft="' + msft_url + '">\n';
 		xmlString += await this.createResourcesSection( scene );
 		xmlString += await this.createBuildSection( scene );
 		xmlString += '</model>\n';
@@ -204,7 +205,9 @@ class ThreeMFExporter {
 				if ( ! geometry.index ) geometry = mergeVertices( geometry, 1e-6 );
 				if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
 
-				if ( material.map ) {
+				if ( material.map ) { // Check if texture is present
+
+					resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
 
 					// If there is no name then use texture uuid as a part of new name
 
@@ -228,33 +231,60 @@ class ThreeMFExporter {
 
 					}
 
-				}
+				} else if ( geometry.attributes.color ) { // Check if vertex colors are present
 
-				if ( geometry.attributes.color ) {
+					resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
 
 					resourcesString += '  <m:colorgroup id="' + geometry.id + '">\n';
 					resourcesString += this.generateColors( geometry );
 					resourcesString += '  </m:colorgroup>\n';
 
-				} else {
+				} else { // Material only
 
-					resourcesString += '  <basematerials id="' + material.id + '">\n';
+					resourcesString += '  <object id="' + object.id + '" pid="' + material.id + '" pindex="0" name="' + object.name + '" type="model">\n';
 
-					let hex_uc = material.color.getHexString().toUpperCase();
+					if ( Array.isArray( material ) ) {
 
-					if ( material.opacity < 1 ) {
+						material.forEach( ( mtl, index ) => {
 
-						let hex_opacity = ( parseInt( material.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
-						hex_uc += hex_opacity;
+							resourcesString += '  <m:basematerials id="' + material.id + '">\n';
+
+							let hex_uc = '#' + mtl.color.getHexString().toUpperCase();
+
+							if ( mtl.opacity < 1 ) {
+
+								let hex_opacity = ( parseInt( mtl.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
+								hex_uc += hex_opacity;
+
+							}
+
+							resourcesString += '   <m:base name="' + ( mtl.name || mtl.type ) + '" displaycolor="' + hex_uc + '" index="' + index + '" />\n';
+
+							resourcesString += '  </m:basematerials>\n';
+
+						});
+
+					} else {
+
+						resourcesString += '  <m:basematerials id="' + material.id + '">\n';
+
+						let hex_uc = '#' + material.color.getHexString().toUpperCase();
+
+						if ( material.opacity < 1 ) {
+
+							let hex_opacity = ( parseInt( material.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
+							hex_uc += hex_opacity;
+
+						}
+
+						resourcesString += '   <m:base name="' + ( material.name || material.type ) + '" displaycolor="' + hex_uc + '" />\n';
+
+						resourcesString += '  </m:basematerials>\n';
 
 					}
 
-					resourcesString += '   <base name="' + material.type + '" displaycolor="#' + hex_uc + '" />\n';
-					resourcesString += '  </basematerials>\n';
-
 				}
 
-				resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
 				resourcesString += '   <mesh>\n';
 				resourcesString += this.generateVertices( geometry );
 				resourcesString += this.generateTriangles( geometry, material.map ? object.id : null, geometry.attributes.color ? geometry.id : null );
