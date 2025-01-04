@@ -457,37 +457,6 @@ class ThreeMFExporter {
 
 				} else {
 
-					let hex_uc = '#' + material.color.getHexString().toUpperCase();
-
-					if ( material.opacity < 1 ) {
-
-						let hex_opacity = ( parseInt( material.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
-						hex_uc += hex_opacity;
-
-					}
-
-					if ( material.metalness !== undefined ) {
-
-						let m_id = 1000000000 + material.id;
-						let metalness = material.metalness;
-						let roughness = material.roughness;
-
-						resourcesString += '  <m:pbmetallicdisplayproperties id="' + m_id + '">\n';
-						resourcesString += '   <m:pbmetallic name="Metallic" metallicness="' + metalness + '" roughness="' + roughness + '" />\n';
-						resourcesString += '  </m:pbmetallicdisplayproperties>\n';
-
-						resourcesString += '  <m:basematerials id="' + material.id + '">\n';
-						resourcesString += '   <m:base name="Metallic" displaycolor="' + hex_uc + '" displaypropertiesid="' + m_id + '" />\n';
-						resourcesString += '  </m:basematerials>\n';
-
-					} else {
-
-						resourcesString += '  <m:basematerials id="' + material.id + '">\n';
-						resourcesString += '   <m:base name="' + ( material.name || material.type ) + '" displaycolor="' + hex_uc + '" />\n';
-						resourcesString += '  </m:basematerials>\n';
-
-					}
-
 					if ( material.map ) { // Check if texture is present
 
 						map_id = object.id;
@@ -517,6 +486,37 @@ class ThreeMFExporter {
 						}
 
 					} else { // Material only
+
+						let hex_uc = '#' + material.color.getHexString().toUpperCase();
+
+						if ( material.opacity < 1 ) {
+
+							let hex_opacity = ( parseInt( material.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
+							hex_uc += hex_opacity;
+
+						}
+
+						if ( material.metalness !== undefined ) {
+
+							let m_id = 1000000000 + material.id;
+							let metalness = material.metalness;
+							let roughness = material.roughness;
+
+							resourcesString += '  <m:pbmetallicdisplayproperties id="' + m_id + '">\n';
+							resourcesString += '   <m:pbmetallic name="Metallic" metallicness="' + metalness + '" roughness="' + roughness + '" />\n';
+							resourcesString += '  </m:pbmetallicdisplayproperties>\n';
+
+							resourcesString += '  <m:basematerials id="' + material.id + '">\n';
+							resourcesString += '   <m:base name="Metallic" displaycolor="' + hex_uc + '" displaypropertiesid="' + m_id + '" />\n';
+							resourcesString += '  </m:basematerials>\n';
+
+						} else {
+
+							resourcesString += '  <m:basematerials id="' + material.id + '">\n';
+							resourcesString += '   <m:base name="' + ( material.name || material.type ) + '" displaycolor="' + hex_uc + '" />\n';
+							resourcesString += '  </m:basematerials>\n';
+
+						}
 
 						resourcesString += '  <object id="' + object.id + '" pid="' + material.id + '" pindex="0" name="' + object.name + '" type="model">\n';
 
