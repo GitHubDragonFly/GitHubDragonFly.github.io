@@ -344,7 +344,10 @@ Number Type Converter
     - BIM exports are available in the Quick Viewer as well as some other viewers with custom BIM Exporter
     - 3MF exporter was created with assistance from Microsoft Copilot:
       - This is a custom exporter not officially available in the three.js library
-      - It supports basic features including vertex colors and the mesh `material.map` texture exporting
+      - It supports basic features: vertex colors, material arrays and the mesh `material.map` texture exporting
+      - It also supports adding a 512 x 512 thumbnail to `.3mf` file:
+        - The model should be centered on the screen and sized to approximately 512 x 512 pixels
+        - Most of the desktop viewers include this exporter as well as support for exporting thumbnail
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm), with the following notes:
       - This is a custom exporter not officially available in the three.js library
       - It requires a modified version of the 3DM Loader, which is included in this repository
