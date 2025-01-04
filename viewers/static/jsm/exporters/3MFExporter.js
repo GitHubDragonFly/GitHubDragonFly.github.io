@@ -120,6 +120,9 @@ async function import_decompress() {
  * - Texture 2D
  * - Texture 2D Groups
  * - Color Groups (Vertex Colors)
+ * - Metallic Display Properties (PBR)
+ * - Material Arrays
+ * - Adding thumbnail
  *
  */
 
