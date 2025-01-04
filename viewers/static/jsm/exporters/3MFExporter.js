@@ -153,6 +153,7 @@ class ThreeMFExporter {
 			upAxis: 'Y_UP',
 			map_flip_required: false,
 			maxTextureSize: Infinity,
+			thumbnail: null
 		}, options );
 
 		// Start the 3MF file content
@@ -160,8 +161,14 @@ class ThreeMFExporter {
 		let material_url = 'http://schemas.microsoft.com/3dmanufacturing/material/2015/02';
 		let msft_url = 'http://www.microsoft.com/3dmanufacturing/microsoftextension/2017/01';
 
+		let date = new Date();
+        let date_str = date.toString().split( ' ' )[ 0 ] + " " + date.toLocaleDateString();
+
 		let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n';
 		xmlString += '<model unit="millimeter" xml:lang="en-US" xmlns="' + core_url + '" xmlns:m="' + material_url + '" xmlns:msft="' + msft_url + '">\n';
+		xmlString += ' <metadata name="Description">Custom 3MF Exporter</metadata>\n';
+		xmlString += ' <metadata name="Designer">GitHubDragonFly</metadata>\n';
+		xmlString += ' <metadata name="CreationDate">' + date_str + '</metadata>\n';
 		xmlString += await this.createResourcesSection( scene );
 		xmlString += await this.createBuildSection( scene );
 		xmlString += '</model>\n';
@@ -169,11 +176,13 @@ class ThreeMFExporter {
 		const files = {};
 
 		// Generate the Relationships file
-		const relsString = await this.createRelsFile();
+		const relsString = await this.createRelsFile( options );
 		const relsStringTextures = await this.createTexturesRelsFile( scene );
 
 		// Combine the XML and Relationships content into a single 3MF package
-		files[ '[Content_Types].xml' ] = await strToU8( this.createContentTypesFile() );
+		if ( options.thumbnail ) files[ 'Metadata/thumbnail.png' ] = options.thumbnail;
+
+		files[ '[Content_Types].xml' ] = await strToU8( this.createContentTypesFile( options ) );
 		files[ '_rels/.rels' ] = await strToU8( relsString );
 
 		if ( relsStringTextures !== null ) {
@@ -191,106 +200,333 @@ class ThreeMFExporter {
 
 	}
 
+	async createRelsFile( options ) {
+
+		let relsString = '<?xml version="1.0" encoding="UTF-8"?>\n';
+		relsString += '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n';
+		relsString += ' <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel" />\n';
+		if ( options.thumbnail !== null ) relsString += ' <Relationship Target="/Metadata/thumbnail.png" Id="rel1" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/thumbnail" />\n';
+		relsString += '</Relationships>\n';
+
+		return relsString;
+
+	}
+
+	async createTexturesRelsFile( scene ) {
+
+		let map_found = false;
+		let relsStringTextures = '<?xml version="1.0" encoding="UTF-8"?>\n';
+		relsStringTextures += '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n';
+
+		const image_names = {};
+
+		scene.traverse( ( object ) => {
+
+			if ( object.isMesh === true ) {
+
+				if ( Array.isArray( object.material ) ) {
+
+					object.material.forEach( mtl => {
+
+						if ( mtl.map ) {
+
+							// If there is no name then use texture uuid as a part of new name
+
+							map_found = true;
+							let name = mtl.map.name ? mtl.map.name : 'texture_' + mtl.map.uuid;
+							if ( name.indexOf( '.' ) === -1 ) name += '.png';
+
+							if ( ! image_names[ name ] ) {
+
+								image_names[ name ] = name;
+
+								let texture_url = 'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture';
+
+								relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + mtl.map.id + '" Type="' + texture_url + '" />\n';
+
+							}
+
+						}
+
+					});
+
+				} else {
+
+					if ( object.material.map ) {
+
+						// If there is no name then use texture uuid as a part of new name
+
+						map_found = true;
+						let name = object.material.map.name ? object.material.map.name : 'texture_' + object.material.map.uuid;
+						if ( name.indexOf( '.' ) === -1 ) name += '.png';
+
+						if ( ! image_names[ name ] ) {
+
+							image_names[ name ] = name;
+
+							let texture_url = 'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture';
+
+							relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + object.material.map.id + '" Type="' + texture_url + '" />\n';
+
+						}
+
+					}
+
+				}
+
+			}
+
+		});
+
+		relsStringTextures += '</Relationships>\n';
+
+		return map_found === true ? relsStringTextures : null;
+
+	}
+
+	createContentTypesFile( options ) {
+
+		let contentTypesString = '<?xml version="1.0" encoding="UTF-8"?>\n';
+		contentTypesString += '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n';
+		contentTypesString += ' <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml" />\n';
+		contentTypesString += ' <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />\n';
+		contentTypesString += ' <Default Extension="png" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodeltexture" />\n';
+		if ( options.thumbnail !== null ) contentTypesString += ' <Override PartName="/Metadata/thumbnail.png" ContentType="image/png" />\n';
+		contentTypesString += '</Types>\n';
+
+		return contentTypesString;
+
+	}
+
 	async createResourcesSection( scene ) {
 
 		let resourcesString = ' <resources>\n';
 
 		scene.traverse( ( object ) => {
 
-			if ( object.isMesh ) {
+			if ( object.isMesh === true ) {
 
 				let geometry = this.interleaved_buffer_attribute_check( object.geometry.clone() );
 				let material = Array.isArray( object.material ) ? object.material : object.material.clone();
 
+				if ( geometry.groups.length > 0 ) {
+
+					// Sort groups by material index
+
+					geometry.groups = geometry.groups.sort( ( a, b ) => {
+
+						if ( a.materialIndex !== b.materialIndex ) return a.materialIndex - b.materialIndex;
+
+						return a.start - b.start;
+
+					} );
+
+				}
+
 				if ( ! geometry.index ) geometry = mergeVertices( geometry, 1e-6 );
 				if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
+				geometry.normalizeNormals();
 
-				if ( material.map ) { // Check if texture is present
+				let map_id = null;
+				let color_id = null;
 
-					resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
+				if ( geometry.attributes.color ) { // Check if vertex colors are present
 
-					// If there is no name then use texture uuid as a part of new name
-
-					let name = material.map.name ? material.map.name : 'texture_' + material.map.uuid;
-					if ( name.indexOf( '.' ) === -1 ) name += '.png';
-
-					let styleu = material.map.wrapS === MirroredRepeatWrapping ? 'mirror' :
-						( material.map.wrapS === ClampToEdgeWrapping ? 'clamp' :'wrap' );
-
-					let stylev = material.map.wrapT === MirroredRepeatWrapping ? 'mirror' :
-						( material.map.wrapT === ClampToEdgeWrapping ? 'clamp' : 'wrap' );
-
-					let filter = ( material.map.magFilter === NearestFilter && material.map.minFilter === NearestFilter ) ? 'nearest' :
-						( ( material.map.magFilter === LinearFilter && material.map.minFilter === LinearFilter ) ? 'linear' : 'auto' );
-
-					resourcesString += '  <m:texture2d id="' + material.map.id + '" path="/3D/Textures/' + name + '" contenttype="image/png" tilestyleu="' + styleu + '" tilestylev="' + stylev + '" filter="' + filter + '" />\n';
-
-					if ( geometry.hasAttribute( 'uv' ) ) {
-
-						resourcesString += this.generateUVs( geometry, object.id, material.map.id );
-
-					}
-
-				} else if ( geometry.attributes.color ) { // Check if vertex colors are present
+					color_id = geometry.id;
 
 					resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
 
-					resourcesString += '  <m:colorgroup id="' + geometry.id + '">\n';
+					resourcesString += '  <m:colorgroup id="' + color_id + '">\n';
 					resourcesString += this.generateColors( geometry );
 					resourcesString += '  </m:colorgroup>\n';
 
-				} else { // Material only
+					resourcesString += '   <mesh>\n';
+					resourcesString += this.generateVertices( geometry );
+					resourcesString += this.generateTriangles( geometry, map_id, color_id );
+					resourcesString += '   </mesh>\n';
 
-					resourcesString += '  <object id="' + object.id + '" pid="' + material.id + '" pindex="0" name="' + object.name + '" type="model">\n';
+					resourcesString += '  </object>\n';
 
-					if ( Array.isArray( material ) ) {
+				}
 
-						material.forEach( ( mtl, index ) => {
+				if ( Array.isArray( material ) && geometry.groups.length === material.length ) {
 
-							resourcesString += '  <m:basematerials id="' + material.id + '">\n';
+					// Create new object for each group / material pair
+					// Add it as a component to the main object
 
-							let hex_uc = '#' + mtl.color.getHexString().toUpperCase();
+					let componentsString = '';
 
-							if ( mtl.opacity < 1 ) {
+					material.forEach( ( mtl, index ) => {
 
-								let hex_opacity = ( parseInt( mtl.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
-								hex_uc += hex_opacity;
+						// For id uniqueness let's hope there is not 1000000000+ objects in the model
 
-							}
+						let object_id = object.id + 1000000000 + mtl.id;
+						let object_name = ( object.name || object.id ) + '_group_' + index;
 
-							resourcesString += '   <m:base name="' + ( mtl.name || mtl.type ) + '" displaycolor="' + hex_uc + '" index="' + index + '" />\n';
+						let hex_uc = '#' + mtl.color.getHexString().toUpperCase();
 
-							resourcesString += '  </m:basematerials>\n';
+						if ( mtl.opacity < 1 ) {
 
-						});
-
-					} else {
-
-						resourcesString += '  <m:basematerials id="' + material.id + '">\n';
-
-						let hex_uc = '#' + material.color.getHexString().toUpperCase();
-
-						if ( material.opacity < 1 ) {
-
-							let hex_opacity = ( parseInt( material.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
+							let hex_opacity = ( parseInt( mtl.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
 							hex_uc += hex_opacity;
 
 						}
 
-						resourcesString += '   <m:base name="' + ( material.name || material.type ) + '" displaycolor="' + hex_uc + '" />\n';
+						if ( mtl.metalness !== undefined ) {
 
+							let m_id = 1000000000 + mtl.id;
+							let metalness = mtl.metalness;
+							let roughness = mtl.roughness;
+
+							resourcesString += '  <m:pbmetallicdisplayproperties id="' + m_id + '">\n';
+							resourcesString += '   <m:pbmetallic name="Metallic" metallicness="' + metalness + '" roughness="' + roughness + '" />\n';
+							resourcesString += '  </m:pbmetallicdisplayproperties>\n';
+
+							resourcesString += '  <m:basematerials id="' + mtl.id + '">\n';
+							resourcesString += '   <m:base name="Metallic" displaycolor="' + hex_uc + '" displaypropertiesid="' + m_id + '" index="' + index + '" />\n';
+							resourcesString += '  </m:basematerials>\n';
+
+						} else {
+
+							resourcesString += '  <m:basematerials id="' + mtl.id + '">\n';
+							resourcesString += '   <m:base name="' + ( mtl.name || mtl.type ) + '" displaycolor="' + hex_uc + '" index="' + index + '" />\n';
+							resourcesString += '  </m:basematerials>\n';
+
+						}
+
+						if ( mtl.map ) { // Check if texture is present
+
+							resourcesString += '  <object id="' + object_id + '" name="' + object_name + '" type="model">\n';
+
+							map_id = object_id;
+
+							// If there is no name then use texture uuid as a part of new name
+
+							let name = mtl.map.name ? mtl.map.name : 'texture_' + mtl.map.uuid;
+							if ( name.indexOf( '.' ) === -1 ) name += '.png';
+
+							let styleu = mtl.map.wrapS === MirroredRepeatWrapping ? 'mirror' :
+								( mtl.map.wrapS === ClampToEdgeWrapping ? 'clamp' :'wrap' );
+
+							let stylev = mtl.map.wrapT === MirroredRepeatWrapping ? 'mirror' :
+								( mtl.map.wrapT === ClampToEdgeWrapping ? 'clamp' : 'wrap' );
+
+							let filter = ( mtl.map.magFilter === NearestFilter && mtl.map.minFilter === NearestFilter ) ? 'nearest' :
+								( ( mtl.map.magFilter === LinearFilter && mtl.map.minFilter === LinearFilter ) ? 'linear' : 'auto' );
+
+							resourcesString += '  <m:texture2d id="' + mtl.map.id + '" path="/3D/Textures/' + name + '" contenttype="image/png" tilestyleu="' + styleu + '" tilestylev="' + stylev + '" filter="' + filter + '" />\n';
+
+							if ( geometry.hasAttribute( 'uv' ) ) {
+
+								resourcesString += this.generateUVs( geometry, object_id, mtl.map.id, index );
+
+							}
+
+							resourcesString += '   <mesh>\n';
+							resourcesString += this.generateVertices( geometry, index );
+							resourcesString += this.generateTriangles( geometry, map_id, color_id, index );
+							resourcesString += '   </mesh>\n';
+
+							resourcesString += '  </object>\n';
+
+						} else {
+
+							resourcesString += '  <object id="' + object_id + '" pid="' + mtl.id + '" pindex="0" name="' + object_name + '" type="model">\n';
+
+							resourcesString += '   <mesh>\n';
+							resourcesString += this.generateVertices( geometry, index );
+							resourcesString += this.generateTriangles( geometry, map_id, color_id, index );
+							resourcesString += '   </mesh>\n';
+
+							resourcesString += '  </object>\n';
+
+						}
+
+						componentsString += '    <component objectid="' + object_id + '" />\n';
+
+					});
+
+					resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
+					resourcesString += '   <components>\n';
+					resourcesString += componentsString;
+					resourcesString += '   </components>\n';
+					resourcesString += '  </object>\n';
+
+				} else {
+
+					let hex_uc = '#' + material.color.getHexString().toUpperCase();
+
+					if ( material.opacity < 1 ) {
+
+						let hex_opacity = ( parseInt( material.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
+						hex_uc += hex_opacity;
+
+					}
+
+					if ( material.metalness !== undefined ) {
+
+						let m_id = 1000000000 + material.id;
+						let metalness = material.metalness;
+						let roughness = material.roughness;
+
+						resourcesString += '  <m:pbmetallicdisplayproperties id="' + m_id + '">\n';
+						resourcesString += '   <m:pbmetallic name="Metallic" metallicness="' + metalness + '" roughness="' + roughness + '" />\n';
+						resourcesString += '  </m:pbmetallicdisplayproperties>\n';
+
+						resourcesString += '  <m:basematerials id="' + material.id + '">\n';
+						resourcesString += '   <m:base name="Metallic" displaycolor="' + hex_uc + '" displaypropertiesid="' + m_id + '" />\n';
+						resourcesString += '  </m:basematerials>\n';
+
+					} else {
+
+						resourcesString += '  <m:basematerials id="' + material.id + '">\n';
+						resourcesString += '   <m:base name="' + ( material.name || material.type ) + '" displaycolor="' + hex_uc + '" />\n';
 						resourcesString += '  </m:basematerials>\n';
 
 					}
 
+					if ( material.map ) { // Check if texture is present
+
+						map_id = object.id;
+
+						resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
+
+						// If there is no name then use texture uuid as a part of new name
+
+						let name = material.map.name ? material.map.name : 'texture_' + material.map.uuid;
+						if ( name.indexOf( '.' ) === -1 ) name += '.png';
+
+						let styleu = material.map.wrapS === MirroredRepeatWrapping ? 'mirror' :
+						( material.map.wrapS === ClampToEdgeWrapping ? 'clamp' :'wrap' );
+
+						let stylev = material.map.wrapT === MirroredRepeatWrapping ? 'mirror' :
+						( material.map.wrapT === ClampToEdgeWrapping ? 'clamp' : 'wrap' );
+
+						let filter = ( material.map.magFilter === NearestFilter && material.map.minFilter === NearestFilter ) ? 'nearest' :
+						( ( material.map.magFilter === LinearFilter && material.map.minFilter === LinearFilter ) ? 'linear' : 'auto' );
+
+						resourcesString += '  <m:texture2d id="' + material.map.id + '" path="/3D/Textures/' + name + '" contenttype="image/png" tilestyleu="' + styleu + '" tilestylev="' + stylev + '" filter="' + filter + '" />\n';
+
+						if ( geometry.hasAttribute( 'uv' ) ) {
+
+							resourcesString += this.generateUVs( geometry, object.id, material.map.id );
+
+						}
+
+					} else { // Material only
+
+						resourcesString += '  <object id="' + object.id + '" pid="' + material.id + '" pindex="0" name="' + object.name + '" type="model">\n';
+
+					}
+
+					resourcesString += '   <mesh>\n';
+					resourcesString += this.generateVertices( geometry );
+					resourcesString += this.generateTriangles( geometry, map_id, color_id );
+					resourcesString += '   </mesh>\n';
+
+					resourcesString += '  </object>\n';
+
 				}
-
-				resourcesString += '   <mesh>\n';
-				resourcesString += this.generateVertices( geometry );
-				resourcesString += this.generateTriangles( geometry, material.map ? object.id : null, geometry.attributes.color ? geometry.id : null );
-				resourcesString += '   </mesh>\n';
-
-				resourcesString += '  </object>\n';
 
 			}
 
@@ -308,7 +544,7 @@ class ThreeMFExporter {
 
 		scene.traverse( ( object ) => {
 
-			if ( object.isMesh ) {
+			if ( object.isMesh === true ) {
 
 				const matrix = new Matrix4();
 				matrix.copy( object.matrixWorld );
@@ -342,68 +578,6 @@ class ThreeMFExporter {
 
 	}
 
-	async createRelsFile() {
-
-		let relsString = '<?xml version="1.0" encoding="UTF-8"?>\n';
-		relsString += '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n';
-		relsString += ' <Relationship Target="/3D/3dmodel.model" Id="rel0" Type="http://schemas.microsoft.com/3dmanufacturing/2013/01/3dmodel" />\n';
-		relsString += '</Relationships>\n';
-
-		return relsString;
-
-	}
-
-	async createTexturesRelsFile( scene ) {
-
-		let map_found = false;
-		let relsStringTextures = '<?xml version="1.0" encoding="UTF-8"?>\n';
-		relsStringTextures += '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n';
-
-		const image_names = {};
-
-		scene.traverse( ( object ) => {
-
-			if ( object.isMesh && object.material.map ) {
-
-				// If there is no name then use texture uuid as a part of new name
-
-				map_found = true;
-				let name = object.material.map.name ? object.material.map.name : 'texture_' + object.material.map.uuid;
-				if ( name.indexOf( '.' ) === -1 ) name += '.png';
-
-				if ( ! image_names[ name ] ) {
-
-					image_names[ name ] = name;
-
-					let texture_url = 'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture';
-
-					relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + object.material.map.id + '" Type="' + texture_url + '" />\n';
-
-				}
-
-			}
-
-		});
-
-		relsStringTextures += '</Relationships>\n';
-
-		return map_found === true ? relsStringTextures : null;
-
-	}
-
-	createContentTypesFile() {
-
-		let contentTypesString = '<?xml version="1.0" encoding="UTF-8"?>\n';
-		contentTypesString += '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n';
-		contentTypesString += ' <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml" />\n';
-		contentTypesString += ' <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />\n';
-		contentTypesString += ' <Default Extension="png" ContentType="image/png" />\n';
-		contentTypesString += '</Types>\n';
-
-		return contentTypesString;
-
-	}
-
 	generateColors( geometry ) {
 
 		const colors = geometry.getAttribute( 'color' );
@@ -422,19 +596,39 @@ class ThreeMFExporter {
 
 	}
 
-	generateVertices( geometry ) {
+	generateVertices( geometry, index = null ) {
 
+		const indices = geometry.index.array;
 		const vertices = geometry.attributes.position.array;
 
 		let verticesString = '    <vertices>\n';
 
-		for ( let i = 0; i < vertices.length; i += 3 ) {
+		let start = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start : 0;
+		let end = ( index && geometry.groups[ index ] ) ? ( geometry.groups[ index ].start + geometry.groups[ index ].count ) : vertices.length;
 
-			let v1 = vertices[ i ];
-			let v2 = vertices[ i + 1 ];
-			let v3 = vertices[ i + 2 ];
+		if ( index && geometry.groups[ index ] ) {
 
-			verticesString += '     <vertex x="' + v1 + '" y="' + v2 + '" z="' + v3 + '" />\n';
+			for ( let i = start; i < end; i ++ ) {
+
+				let v1 = vertices[ indices[ i ] * 3 ];
+				let v2 = vertices[ indices[ i ] * 3 + 1 ];
+				let v3 = vertices[ indices[ i ] * 3 + 2 ];
+
+				verticesString += '     <vertex x="' + v1 + '" y="' + v2 + '" z="' + v3 + '" />\n';
+
+			}
+
+		} else {
+
+			for ( let i = start; i < end; i += 3 ) {
+
+				let v1 = vertices[ i ];
+				let v2 = vertices[ i + 1 ];
+				let v3 = vertices[ i + 2 ];
+
+				verticesString += '     <vertex x="' + v1 + '" y="' + v2 + '" z="' + v3 + '" />\n';
+
+			}
 
 		}
 
@@ -444,25 +638,28 @@ class ThreeMFExporter {
 
 	}
 
-	generateTriangles( geometry, pid_texture = null, pid_color = null ) {
+	generateTriangles( geometry, map_pid = null, color_pid = null, index = null ) {
 
 		const indices = geometry.index.array;
 
 		let trianglesString = '    <triangles>\n';
 
-		for ( let i = 0; i < indices.length; i += 3 ) {
+		let start = 0;
+		let end = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].count : indices.length;
 
-			let v1 = indices[ i ];
-			let v2 = indices[ i + 1 ];
-			let v3 = indices[ i + 2 ];
+		for ( let i = start; i < end; i += 3 ) {
 
-			if ( pid_texture ) {
+			let v1 = ( index && geometry.groups[ index ] ) ? i : indices[ i ];
+			let v2 = ( index && geometry.groups[ index ] ) ? i + 1 : indices[ i + 1 ];
+			let v3 = ( index && geometry.groups[ index ] ) ? i + 2 : indices[ i + 2 ];
 
-				trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" pid="' + pid_texture + '" p1="' + v1 + '" p2="' + v2 + '" p3="' + v3 + '" />\n';
+			if ( map_pid ) {
 
-			} else if ( pid_color ) {
+				trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" pid="' + map_pid + '" p1="' + v1 + '" p2="' + v2 + '" p3="' + v3 + '" />\n';
 
-				trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" pid="' + pid_color + '" p1="' + v1 + '" />\n';
+			} else if ( color_pid ) {
+
+				trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" pid="' + color_pid + '" p1="' + v1 + '" />\n';
 
 			} else {
 
@@ -478,18 +675,37 @@ class ThreeMFExporter {
 
 	}
 
-	generateUVs( geometry, id, texid ) {
+	generateUVs( geometry, id, texid, index = null ) {
 
+		const indices = geometry.index.array;
 		const uvs = geometry.attributes.uv.array;
 
 		let uvsString = '  <m:texture2dgroup id="' + id + '" texid="' + texid + '">\n';
 
-		for ( let i = 0; i < uvs.length; i += 2 ) {
+		let start = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start : 0;
+		let end = ( index && geometry.groups[ index ] ) ? ( geometry.groups[ index ].start + geometry.groups[ index ].count ) : uvs.length;
 
-			const uvu = uvs[ i ];
-			const uvv = uvs[ i +  1 ];
+		if ( index && geometry.groups[ index ] ) {
 
-			uvsString += '   <m:tex2coord u="' + uvu + '" v="' + uvv + '" />\n';
+			for ( let i = start; i < end; i ++ ) {
+
+				const uvu = uvs[ indices[ i ] * 2 ];
+				const uvv = uvs[ indices[ i ] * 2 + 1 ];
+
+				uvsString += '   <m:tex2coord u="' + uvu + '" v="' + uvv + '" />\n';
+
+			}
+
+		} else {
+
+			for ( let i = start; i < end; i += 2 ) {
+
+				const uvu = uvs[ i ];
+				const uvv = uvs[ i + 1 ];
+
+				uvsString += '   <m:tex2coord u="' + uvu + '" v="' + uvv + '" />\n';
+
+			}
 
 		}
 
@@ -506,7 +722,7 @@ class ThreeMFExporter {
 
 		scene.traverse( ( object ) => {
 
-			if ( object.isMesh ) {
+			if ( object.isMesh === true ) {
 
 				if ( Array.isArray( object.material ) ) {
 
