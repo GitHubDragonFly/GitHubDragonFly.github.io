@@ -162,7 +162,7 @@ class ThreeMFExporter {
 		let msft_url = 'http://www.microsoft.com/3dmanufacturing/microsoftextension/2017/01';
 
 		let date = new Date();
-        let date_str = date.toString().split( ' ' )[ 0 ] + " " + date.toLocaleDateString();
+		let date_str = date.toString().split( ' ' )[ 0 ] + " " + date.toLocaleDateString();
 
 		let xmlString = '<?xml version="1.0" encoding="UTF-8"?>\n';
 		xmlString += '<model unit="millimeter" xml:lang="en-US" xmlns="' + core_url + '" xmlns:m="' + material_url + '" xmlns:msft="' + msft_url + '">\n';
