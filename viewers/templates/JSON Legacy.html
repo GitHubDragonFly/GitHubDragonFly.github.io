@@ -362,6 +362,7 @@
           <option title="Export Model Textures, preserve aspect and use selected format and generic names - defaults to PNG format if None is selected" value="maps" onclick="export_maps();">MAPS</option>
           <option title="3D Formats" value="3dformats" disabled>- 3D -</option>
           <option title="3DM - Rhino3D Format" value="3dm" onclick="export_3dm();">3DM</option>
+          <option title="3MF - 3D Manufacturing Format" value="3mf" onclick="export_3mf();">3MF</option>
           <option title="DAE - Collada Format regular export" value="dae" onclick="export_dae();">DAE</option>
           <option title="GLB - GL Transmission Format binary regular export with optional texture compression" value="glb" onclick="export_gltf( true );">GLB</option>
           <option title="GLB - GL Transmission Format binary regular export with DRACO and optional texture compression" value="glbdraco" onclick="export_gltf( true, true );">GLB_d</option>
@@ -1201,7 +1202,9 @@
 
           let options = { vertexColorsCorrection: 0, maxTextureSize: tex_res, map_flip_required: tex_flip };
 
-          rhino_exporter.parse( mesh.clone(), async function( arrayBuffer ) {
+          let mesh_clone = await create_meshes();
+
+          rhino_exporter.parse( mesh_clone, async function( arrayBuffer ) {
             let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
 
             zip.file( filename + '.3dm', blob );
@@ -1213,6 +1216,74 @@
             await process_zip( str );
           }, function( error ) { handle_export_error( error ); }, options );
         }
+      }
+
+      async function export_3mf() {
+        if (mesh) {
+          if (object_is_points === true) {
+            document.getElementById('export_names').selectedIndex = 0;
+            alert( '3MF Exporter: points are not supported!' );
+            return;
+          }
+
+          await start_export();
+
+          const { ThreeMFExporter } = await import( "../static/jsm/exporters/3MFExporter.min.js" );
+
+          let tmf_exporter = new ThreeMFExporter( manager );
+
+          let thumbnail = await export_thumbnail();
+
+          let options = { upAxis: 'Y_UP', maxTextureSize: tex_res, map_flip_required: tex_flip, thumbnail: thumbnail };
+
+          let mesh_clone = await create_meshes();
+
+          tmf_exporter.parse( mesh_clone, async function( arrayBuffer ) {
+            let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
+
+            zip.file( filename + '.3mf', blob );
+
+            let str = '_3MF';
+            if (tex_flip === true) str += '_Y';
+            if (tex_res !== Infinity) str += ' (' + tex_res + ')';
+            await process_zip( str );
+          }, function( error ) { handle_export_error( error ); }, options );
+        }
+      }
+
+      async function export_thumbnail() {
+        // Create 512 x 512 thumbnail image
+        // Currently intended for 3MF exports
+        // The model should be centered on the screen and sized to approximately 512 x 512 pixels
+
+        let frame_x = Math.ceil( ( renderer.domElement.width - 512 ) / 2.0 );
+        let frame_y = Math.ceil( ( renderer.domElement.height - 512 ) / 2.0 );
+
+        let canvas = document.createElement( 'canvas' );
+        canvas.width = 512;
+        canvas.height = 512;
+
+        let context = canvas.getContext( '2d', { willReadFrequently: true } );
+        context.clearRect( 0, 0, 512, 512 );
+
+        render();
+
+        context.drawImage( renderer.domElement, frame_x, frame_y, 512, 512, 0, 0, 512, 512 );
+
+        const base64 = canvas.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
+
+        const binaryString = atob( base64 );
+        const len = binaryString.length;
+        const bytes = new Uint8Array( len );
+
+        for ( let i = 0; i < len; i++ ) { bytes[ i ] = binaryString.charCodeAt( i ); }
+
+        const blob = new Blob( [ bytes ], { name: 'thumbnail.png', type: 'image/png' } );
+
+        const buff = await blob.arrayBuffer();
+        const u8 = new Uint8Array( buff );
+
+        return u8;
       }
 
       async function export_maps() {
@@ -3348,6 +3419,109 @@
         merged_geometries.userData.materials = meshes.map( m => m.material );
 
         return merged_geometries;
+      }
+
+      // Logic from three.js SceneUtils.js function createMeshesFromInstancedMesh( instancedMesh )
+      // It will also re-create and group regular meshes. The exported file might be large.
+
+      async function create_meshes() {
+        const { mergeVertices } = await import( "../static/jsm/utils/BufferGeometryUtils.js" );
+
+        let meshes = new THREE.Group();
+
+        let m_meshes = mesh.clone();
+        m_meshes.updateMatrixWorld( true, true );
+
+        m_meshes.traverse( function( child ) {
+          if (child.isInstancedMesh) {
+            const material = new THREE.MeshStandardMaterial({
+              name: '__DEFAULT',
+              side: THREE.DoubleSide,
+              envMapIntensity: 1.0,
+              metalness: 0.1,
+              roughness: 0.6,
+              opacity: 1
+            });
+
+            if (!child.geometry.index) {
+              child.geometry = mergeVertices( child.geometry );
+              child.geometry.computeVertexNormals();
+            }
+
+            for ( let i = 0; i < child.count; i += 1 ) {
+              let child_clone;
+
+              if (child.material) {
+                child_clone = new THREE.Mesh( child.geometry, child.material );
+              } else {
+                child_clone = new THREE.Mesh( child.geometry, material );
+
+                if (child.instanceColor) {
+                  let colors = [];
+
+                  for ( let k = 0; k < child_clone.geometry.attributes.position.array.length; k += 3 ) {
+                    colors.push( child.instanceColor.array[ 0 ], child.instanceColor.array[ 1 ], child.instanceColor.array[ 2 ] );
+                  }
+
+                  child_clone.geometry.setAttribute('color', new THREE.Float32BufferAttribute( colors, 3 ));
+                }
+              }
+
+              if (child.name && child.name !== '') child_clone.name = child.name;
+
+              child.getMatrixAt( i, child_clone.matrix );
+              child_clone.matrix.decompose( child_clone.position, child_clone.quaternion, child_clone.scale );
+
+              meshes.add( child_clone );
+              meshes.updateMatrixWorld( true, true );
+            }
+          } else if (child.isMesh) {
+            const material = new THREE.MeshStandardMaterial({
+              name: '__DEFAULT',
+              side: THREE.DoubleSide,
+              envMapIntensity: 1.0,
+              opacity: 1,
+              metalness: 0.1,
+              roughness: 0.6
+            });
+
+            if (!child.geometry.index) {
+              child.geometry = merge_vertices( child.geometry, 1e-6 );
+              child.geometry.computeVertexNormals();
+            }
+
+            let child_clone = new THREE.Mesh( child.geometry, child.material || material );
+
+            if (child.name && child.name !== '') child_clone.name = child.name;
+
+            child_clone.applyMatrix4( child.matrixWorld );
+
+            meshes.add( child_clone );
+            meshes.updateMatrixWorld( true, true );
+          } else if (child.isPoints) {
+            const material = new THREE.PointsMaterial();
+            let child_clone = new THREE.Points( child.geometry, child.material || material );
+
+            if (child.name && child.name !== '') child_clone.name = child.name;
+
+            child_clone.applyMatrix4( child.matrixWorld );
+
+            meshes.add( child_clone );
+            meshes.updateMatrixWorld( true, true );
+          } else if (child.isLineSegments) {
+            const material = new THREE.LineBasicMaterial();
+            let child_clone = new THREE.LineSegments( child.geometry, child.material || material );
+
+            if (child.name && child.name !== '') child_clone.name = child.name;
+
+            child_clone.applyMatrix4( child.matrixWorld );
+
+            meshes.add( child_clone );
+            meshes.updateMatrixWorld( true, true );
+          }
+        });
+
+        return meshes;
       }
 
       /*
