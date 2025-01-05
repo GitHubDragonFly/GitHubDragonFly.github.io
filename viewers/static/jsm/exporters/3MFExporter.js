@@ -310,7 +310,7 @@ class ThreeMFExporter {
 			if ( object.isMesh === true ) {
 
 				let geometry = this.interleaved_buffer_attribute_check( object.geometry.clone() );
-				let material = Array.isArray( object.material ) ? object.material : object.material.clone();
+				let material = object.material;
 
 				if ( geometry.groups.length > 0 ) {
 
