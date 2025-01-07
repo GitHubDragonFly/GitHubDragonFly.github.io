@@ -8,9 +8,10 @@ Else, most of the passive links below are of the actual models so copy any of th
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/RobotExpressive/RobotExpressive.glb`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/collada/abb_irb52_7_120.dae`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/usdz/saeukkang.usdz`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vrml/extrusion3.wrl`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vrml/house.wrl`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gcode/benchy.gcode`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/fbx/Samba Dancing.fbx`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pdb/diamond.pdb`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pdb/aspirin.pdb`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ply/binary/Lucy100k.ply`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/stl/binary/colored.stl`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3dm/Rhino_Logo.3dm`
@@ -28,9 +29,9 @@ Else, most of the passive links below are of the actual models so copy any of th
   - `https://github.com/gkjohnson/ldraw-parts-library/tree/master/models`
   - `https://github.com/yomboprime/TNTViewer/tree/main/examples/models/ldraw`
 - access to some MMD (Miku Miku Dance) example files, with the first 3 being variations of the same model:
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_v2.vmd`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_v2.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_camera.vmd`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_v2.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/vmds/wavefile_camera.vmd, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/mmd/audios/wavefile_short.mp3`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/mmd/vmds/wavefile_v2.vmd`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.comGitHubDragonFly/three.js/dev/examples/models/mmd/vmds/wavefile_v2.vmd, https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/mmd/vmds/wavefile_camera.vmd`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/mmd/miku/miku_v2.pmd, https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/mmd/vmds/wavefile_v2.vmd, https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/mmd/vmds/wavefile_camera.vmd, https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/mmd/audios/wavefile_short.mp3`
   - `https://raw.githubusercontent.com/oecax2208/PyMikuMikuDance/master/example/vdproject_peach_v1/小桃初代女仆v1.pmx`
   - `https://raw.githubusercontent.com/takahirox/mmd-viewer-js/master/model/default/meiko_sakine.pmd`
   - `https://raw.githubusercontent.com/takahirox/mmd-viewer-js/master/model/default/miku_m.pmd`
