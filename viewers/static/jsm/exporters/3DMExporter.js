@@ -2,7 +2,9 @@ import {
 	BufferAttribute,
 	DefaultLoadingManager,
 	InterleavedBufferAttribute,
-	Matrix4
+	Matrix4,
+	Quaternion,
+	Vector3
 } from "three";
 
 import { deinterleaveAttribute } from "three/addons/utils/BufferGeometryUtils.min.js";
@@ -145,7 +147,13 @@ class Rhino3dmExporter {
 
 	}
 
-	async parse( scene, onDone, onError, options = {} ) {
+	parse( scene, onDone, onError, options = {} ) {
+
+		this.parseAsync( scene, onDone, onError, options );
+
+	}
+
+	async parseAsync( scene, onDone, onError, options = {} ) {
 
 		const scope = this;
 
@@ -172,7 +180,7 @@ class Rhino3dmExporter {
 		const map_flip_required = options.map_flip_required;
 		const maxTextureSize = options.maxTextureSize;
 
-		let rhino_object, rhino_material, rhino_attributes, geometry_clone, mesh_matrix4;
+		let rhino_object, rhino_material, rhino_attributes, geometry_clone;
 
 		const processed_images = {};
 
@@ -488,29 +496,26 @@ class Rhino3dmExporter {
 
 			scene.traverse( function ( object ) {
 
-				function cumulative_matrix_check( parent, mesh_in_mesh = false ) {
-
-					if ( parent && ( parent.type === 'Group' || parent.type === 'Object3D' || mesh_in_mesh === true ) ) {
-
-						mesh_matrix4 = mesh_matrix4.premultiply( parent.matrix );
-
-						cumulative_matrix_check( parent.parent, ( parent.isMesh && parent.parent && parent.parent.isMesh ) );
-
-					}	
-
-				}
-
 				if ( object.isMesh || object.isPoints || object.isLine || object.isLineSegments ) {
 
 					rhino_attributes = new Module.ObjectAttributes();
 
 					geometry_clone = scope.interleaved_buffer_attribute_check( object.geometry.clone() );
 
-					mesh_matrix4 = new Matrix4().copy( object.matrix );
+					const matrix = new Matrix4();
+					matrix.copy( object.matrixWorld );
 
-					cumulative_matrix_check( object.parent, ( object.isMesh && object.parent && object.parent.isMesh ) );
+					// Decompose the matrix into position, quaternion, and scale
+					const pos = new Vector3();
+					const quat = new Quaternion();
+					const scale = new Vector3();
 
-					geometry_clone = geometry_clone.applyMatrix4( mesh_matrix4 );
+					matrix.decompose( pos, quat, scale );
+
+					// Create the transformation string
+					const transform = new Matrix4().compose( pos, quat, scale );
+
+					geometry_clone.applyMatrix4( transform );
 
 					// Geometry groups don't seem to get processed so pass them as a user string
 
