@@ -104,7 +104,7 @@
 
 					geometry.matrix.decompose( geometry.position, geometry.quaternion, geometry.scale );
 
-					if ( ! geometry.index ) geometry = mergeVertices( geometry, 1e-6 );
+					if ( ! geometry.index ) geometry = this.mergeVertices( geometry, 1e-6 );
 					if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
 					geometry.normalizeNormals();
 
