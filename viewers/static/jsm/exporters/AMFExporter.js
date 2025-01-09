@@ -21,7 +21,7 @@ import { deinterleaveAttribute, mergeVertices } from "three/addons/utils/BufferG
  * Custom Additive Manufacturing Format (AMF) Exporter
  *
  *
- * Materials and material colors supported
+ * Meshes, materials and material colors supported
  * Exported as fflate zipped file
  * 
  */
