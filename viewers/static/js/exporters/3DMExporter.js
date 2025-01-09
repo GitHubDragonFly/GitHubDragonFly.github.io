@@ -404,14 +404,11 @@
 
 				scene.traverse( function ( object ) {
 
-					if ( object.isMesh || object.isPoints || object.isLine || object.isLineSegments ) {
+					if ( object.isMesh || object.isPoints || ( ( object.isLine || object.isLineSegments ) && ! object.isConditionalLine ) ) {
 
 						rhino_attributes = new Module.ObjectAttributes();
 
 						geometry_clone = scope.interleaved_buffer_attribute_check( object.geometry.clone() );
-
-						if ( geometry_clone.matrixAutoUpdate ) geometry_clone.updateMatrix();
-						if ( geometry_clone.matrix === undefined ) geometry_clone.matrix = new THREE.Matrix4();
 
 						const matrix = new THREE.Matrix4();
 						matrix.copy( object.matrixWorld );
@@ -426,13 +423,7 @@
 						// Create the transformation string
 						const transform = new THREE.Matrix4().compose( pos, quat, scale );
 
-						geometry_clone.matrix.premultiply( transform );
-
-						if ( geometry_clone.position === undefined ) geometry_clone.position = new THREE.Vector3();
-						if ( geometry_clone.quaternion === undefined ) geometry_clone.quaternion = new THREE.Quaternion();
-						if ( geometry_clone.scale === undefined ) geometry_clone.scale = new THREE.Vector3();
-
-						geometry_clone.matrix.decompose( geometry_clone.position, geometry_clone.quaternion, geometry_clone.scale );
+						geometry_clone.applyMatrix( transform );
 
 						// Geometry groups don't seem to get processed so pass them as a user string
 
@@ -441,7 +432,7 @@
 
 					}
 
-					if ( object.isMesh || object.isLine || object.isLineSegments ) {
+					if ( object.isMesh || ( ( object.isLine || object.isLineSegments ) && ! object.isConditionalLine ) ) {
 
 						if ( object.isMesh ) {
 
