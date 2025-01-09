@@ -54,13 +54,19 @@
 
 			if ( typeof rhino3dm === 'undefined' ) {
 
-				throw Error( 'THREE.3DMLoader: External library rhino3dm.js required.' );
+				throw Error( 'THREE.3DMExporter: External library rhino3dm.js required.' );
 
 			}
 
 		}
 
-		async parse( scene, onDone, onError, options = {} ) {
+		parse( scene, onDone, onError, options = {} ) {
+
+			this.parseAsync( scene, onDone, onError, options );
+
+		}
+
+		async parseAsync( scene, onDone, onError, options = {} ) {
 
 			const scope = this;
 
@@ -82,7 +88,7 @@
 			const map_flip_required = options.map_flip_required;
 			const maxTextureSize = options.maxTextureSize;
 
-			let rhino_object, rhino_material, rhino_attributes, geometry_clone, mesh_matrix4;
+			let rhino_object, rhino_material, rhino_attributes, geometry_clone;
 
 			const processed_images = {};
 
@@ -398,32 +404,29 @@
 
 				scene.traverse( function ( object ) {
 
-					function cumulative_matrix_check( parent, mesh_in_mesh = false ) {
-
-						if ( parent && ( parent.type === 'Group' || parent.type === 'Object3D' || mesh_in_mesh === true ) ) {
-
-							mesh_matrix4 = mesh_matrix4.premultiply( parent.matrix );
-
-							cumulative_matrix_check( parent.parent, ( parent.isMesh && parent.parent && parent.parent.isMesh ) );
-
-						}	
-
-					}
-
 					if ( object.isMesh || object.isPoints || object.isLine || object.isLineSegments ) {
 
 						rhino_attributes = new Module.ObjectAttributes();
 
 						geometry_clone = scope.interleaved_buffer_attribute_check( object.geometry.clone() );
 
-						mesh_matrix4 = new THREE.Matrix4().copy( object.matrix );
-
-						cumulative_matrix_check( object.parent, ( object.isMesh && object.parent && object.parent.isMesh ) );
-
 						if ( geometry_clone.matrixAutoUpdate ) geometry_clone.updateMatrix();
 						if ( geometry_clone.matrix === undefined ) geometry_clone.matrix = new THREE.Matrix4();
 
-						geometry_clone.matrix.premultiply( mesh_matrix4 );
+						const matrix = new THREE.Matrix4();
+						matrix.copy( object.matrixWorld );
+
+						// Decompose the matrix into position, quaternion, and scale
+						const pos = new THREE.Vector3();
+						const quat = new THREE.Quaternion();
+						const scale = new THREE.Vector3();
+
+						matrix.decompose( pos, quat, scale );
+
+						// Create the transformation string
+						const transform = new THREE.Matrix4().compose( pos, quat, scale );
+
+						geometry_clone.matrix.premultiply( transform );
 
 						if ( geometry_clone.position === undefined ) geometry_clone.position = new THREE.Vector3();
 						if ( geometry_clone.quaternion === undefined ) geometry_clone.quaternion = new THREE.Quaternion();

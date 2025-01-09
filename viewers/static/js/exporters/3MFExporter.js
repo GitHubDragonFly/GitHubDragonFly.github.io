@@ -31,7 +31,7 @@
 
 			if ( typeof fflate === 'undefined' ) {
 
-				throw Error( 'THREE.3DMExporter: External library fflate required.' );
+				throw Error( 'THREE.3MFExporter: External library fflate required.' );
 
 			}
 
