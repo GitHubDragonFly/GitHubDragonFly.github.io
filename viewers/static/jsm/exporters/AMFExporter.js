@@ -2,6 +2,9 @@ import {
 	BufferAttribute,
 	DefaultLoadingManager,
 	InterleavedBufferAttribute,
+	Matrix4,
+	Quaternion,
+	Vector3
 } from "three";
 
 import {
@@ -84,6 +87,21 @@ class AMFExporter {
 
 				let geometry = this.interleaved_buffer_attribute_check( object.geometry.clone() );
 				let material = object.material;
+
+				const matrix = new Matrix4();
+				matrix.copy( object.matrixWorld );
+
+				// Decompose the matrix into position, quaternion, and scale
+				const pos = new Vector3();
+				const quat = new Quaternion();
+				const scale = new Vector3();
+
+				matrix.decompose( pos, quat, scale );
+
+				// Create the transformation string
+				const transform = new Matrix4().compose( pos, quat, scale );
+
+				geometry.applyMatrix4( transform );
 
 				if ( ! geometry.index ) geometry = mergeVertices( geometry, 1e-6 );
 				if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
