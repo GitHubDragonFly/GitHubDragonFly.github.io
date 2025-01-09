@@ -98,12 +98,6 @@
 
 					geometry.matrix.premultiply( transform );
 
-					if ( geometry.position === undefined ) geometry.position = new THREE.Vector3();
-					if ( geometry.quaternion === undefined ) geometry.quaternion = new THREE.Quaternion();
-					if ( geometry.scale === undefined ) geometry.scale = new THREE.Vector3();
-
-					geometry.matrix.decompose( geometry.position, geometry.quaternion, geometry.scale );
-
 					if ( ! geometry.index ) geometry = this.mergeVertices( geometry, 1e-6 );
 					if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
 					geometry.normalizeNormals();
