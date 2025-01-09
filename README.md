@@ -339,7 +339,7 @@ Number Type Converter
         - Custom three.js compatible BIM Loader is also available
       - Alternative [three-iges-loader](https://github.com/Konsept-Design/three-iges-loader) when the main loader errors out
 - Export formats, where applicable:
-  - 3DM, 3MF, BIM, DAE, APNG, FBX, STEP, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, OFF, PLY, STL, PRWM, USDZ
+  - 3DM, 3MF, AMF, BIM, DAE, APNG, FBX, STEP, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, OFF, PLY, STL, PRWM, USDZ
     - OFF exports are only available in the Quick Viewer, as stated further above
     - BIM exports are available in the Quick Viewer as well as some other viewers with custom BIM Exporter
     - 3MF exporter was created with assistance from Microsoft Copilot:
@@ -348,6 +348,9 @@ Number Type Converter
       - It also supports adding a 512 x 512 thumbnail to `.3mf` file:
         - The model should be centered on the screen and sized to approximately 512 x 512 pixels
         - Most of the desktop viewers include this exporter as well as support for exporting thumbnail
+    - AMF exporter was created with assistance from Microsoft Copilot:
+      - This is a custom exporter not officially available in the three.js library
+      - It supports basic features: meshes, material arrays and material colors
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm), with the following notes:
       - This is a custom exporter not officially available in the three.js library
       - It requires a modified version of the 3DM Loader, which is included in this repository
