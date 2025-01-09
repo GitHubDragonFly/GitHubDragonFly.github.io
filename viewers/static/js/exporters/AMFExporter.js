@@ -93,7 +93,7 @@
 					// Create the transformation string
 					const transform = new THREE.Matrix4().compose( pos, quat, scale );
 
-					geometry.applyMatrix4( transform );
+					geometry.matrix.premultiply( transform );
 
 					if ( ! geometry.index ) geometry = mergeVertices( geometry, 1e-6 );
 					if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
