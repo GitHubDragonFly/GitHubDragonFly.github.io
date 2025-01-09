@@ -80,6 +80,9 @@
 					let geometry = this.interleaved_buffer_attribute_check( object.geometry.clone() );
 					let material = object.material;
 
+					if ( geometry.matrixAutoUpdate ) geometry.updateMatrix();
+					if ( geometry.matrix === undefined ) geometry.matrix = new THREE.Matrix4();
+
 					const matrix = new THREE.Matrix4();
 					matrix.copy( object.matrixWorld );
 
@@ -94,6 +97,12 @@
 					const transform = new THREE.Matrix4().compose( pos, quat, scale );
 
 					geometry.matrix.premultiply( transform );
+
+					if ( geometry.position === undefined ) geometry.position = new THREE.Vector3();
+					if ( geometry.quaternion === undefined ) geometry.quaternion = new THREE.Quaternion();
+					if ( geometry.scale === undefined ) geometry.scale = new THREE.Vector3();
+
+					geometry.matrix.decompose( geometry.position, geometry.quaternion, geometry.scale );
 
 					if ( ! geometry.index ) geometry = mergeVertices( geometry, 1e-6 );
 					if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
