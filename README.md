@@ -348,9 +348,11 @@ Number Type Converter
       - It also supports adding a 512 x 512 thumbnail to `.3mf` file:
         - The model should be centered on the screen and sized to approximately 512 x 512 pixels
         - Most of the desktop viewers include this exporter as well as support for exporting thumbnail
+      - Should be pretty much at par with three.js 3MF Loader
     - AMF exporter was created with assistance from Microsoft Copilot:
       - This is a custom exporter not officially available in the three.js library
       - It supports basic features: meshes, material arrays and material colors
+      - Should be pretty much at par with three.js AMF Loader
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm), with the following notes:
       - This is a custom exporter not officially available in the three.js library
       - It requires a modified version of the 3DM Loader, which is included in this repository
