@@ -352,6 +352,7 @@ Number Type Converter
     - AMF exporter was created with assistance from Microsoft Copilot:
       - This is a custom exporter not officially available in the three.js library
       - It supports basic features: meshes, material arrays and material colors
+      - Exporting from 3MF to AMF format might be the best out of all available choices
       - Should be pretty much at par with three.js AMF Loader
     - 3DM exports are powered by [rhino3dm](https://github.com/mcneel/rhino3dm), with the following notes:
       - This is a custom exporter not officially available in the three.js library
