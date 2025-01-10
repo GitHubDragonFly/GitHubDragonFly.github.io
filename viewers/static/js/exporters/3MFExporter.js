@@ -258,7 +258,7 @@
 
 							// For id uniqueness let's hope there is not 1000000000+ objects in the model
 
-							let object_id = object.id + 1000000000 + mtl.id;
+							let object_id = object.id + 1000000000 + mtl.id + index;
 							let object_name = ( object.name || object.id ) + '_group_' + index;
 
 							let hex_uc = '#' + mtl.color.getHexString().toUpperCase();
@@ -505,10 +505,11 @@
 
 			let verticesString = '    <vertices>\n';
 
-			let start = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start : 0;
-			let end = ( index && geometry.groups[ index ] ) ? ( geometry.groups[ index ].start + geometry.groups[ index ].count ) : vertices.length;
+			let start = ( index !== null && geometry.groups[ index ] !== undefined ) ? geometry.groups[ index ].start : 0;
+			let end = ( index !== null && geometry.groups[ index ] !== undefined ) ? geometry.groups[ index ].start + geometry.groups[ index ].count : vertices.length;
+			if ( end === Infinity ) end = indices.length;
 
-			if ( index && geometry.groups[ index ] ) {
+			if ( index !== null && geometry.groups[ index ] !== undefined ) {
 
 				for ( let i = start; i < end; i ++ ) {
 
@@ -547,13 +548,14 @@
 			let trianglesString = '    <triangles>\n';
 
 			let start = 0;
-			let end = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].count : indices.length;
+			let end = ( index !== null && geometry.groups[ index ] !== undefined ) ? geometry.groups[ index ].count : indices.length;
+			if ( end === Infinity ) end = index !== null ? indices.length - geometry.groups[ index ].start : indices.length;
 
 			for ( let i = start; i < end; i += 3 ) {
 
-				let v1 = ( index && geometry.groups[ index ] ) ? i : indices[ i ];
-				let v2 = ( index && geometry.groups[ index ] ) ? i + 1 : indices[ i + 1 ];
-				let v3 = ( index && geometry.groups[ index ] ) ? i + 2 : indices[ i + 2 ];
+				let v1 = ( index !== null && geometry.groups[ index ] !== undefined ) ? i : indices[ i ];
+				let v2 = ( index !== null && geometry.groups[ index ] !== undefined ) ? i + 1 : indices[ i + 1 ];
+				let v3 = ( index !== null && geometry.groups[ index ] !== undefined ) ? i + 2 : indices[ i + 2 ];
 
 				if ( map_pid ) {
 
@@ -584,10 +586,10 @@
 
 			let uvsString = '  <m:texture2dgroup id="' + id + '" texid="' + texid + '">\n';
 
-			let start = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start : 0;
-			let end = ( index && geometry.groups[ index ] ) ? ( geometry.groups[ index ].start + geometry.groups[ index ].count ) : uvs.length;
+			let start = ( index !== null && geometry.groups[ index ] !== undefined ) ? geometry.groups[ index ].start : 0;
+			let end = ( index !== null && geometry.groups[ index ] !== undefined ) ? ( geometry.groups[ index ].start + geometry.groups[ index ].count ) : uvs.length;
 
-			if ( index && geometry.groups[ index ] ) {
+			if ( index !== null && geometry.groups[ index ] !== undefined ) {
 
 				for ( let i = start; i < end; i ++ ) {
 
