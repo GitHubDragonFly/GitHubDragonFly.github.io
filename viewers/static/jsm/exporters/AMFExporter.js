@@ -159,7 +159,8 @@ class AMFExporter {
 		let verticesString = '   <vertices>\n';
 
 		let start = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start : 0;
-		let end = ( index && geometry.groups[ index ] ) ? ( geometry.groups[ index ].start + geometry.groups[ index ].count ) : vertices.length;
+		let end = ( index && geometry.groups[ index ] ) ? ( geometry.groups[ index ].start + ( geometry.groups[ index ].count ) ) : vertices.length;
+		if ( end === Infinity ) end = indices.length;
 
 		if ( index && geometry.groups[ index ] ) {
 
@@ -199,8 +200,9 @@ class AMFExporter {
 
 		let trianglesString = '   <volume materialid="' + material.id + '">\n';
 
-		let start = 0;
-		let end = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].count : indices.length;
+		let start = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start : 0;
+		let end = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start + geometry.groups[ index ].count : indices.length;
+		if ( end === Infinity ) end = indices.length;
 
 		for ( let i = start; i < end; i += 3 ) {
 
