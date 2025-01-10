@@ -158,11 +158,11 @@ class AMFExporter {
 
 		let verticesString = '   <vertices>\n';
 
-		let start = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start : 0;
-		let end = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start + geometry.groups[ index ].count : vertices.length;
+		let start = ( index !== null && geometry.groups[ index ] !== undefined ) ? geometry.groups[ index ].start : 0;
+		let end = ( index !== null && geometry.groups[ index ] !== undefined ) ? geometry.groups[ index ].start + geometry.groups[ index ].count : vertices.length;
 		if ( end === Infinity ) end = indices.length;
 
-		if ( index && geometry.groups[ index ] ) {
+		if ( index !== null && geometry.groups[ index ] !== undefined ) {
 
 			for ( let i = start; i < end; i ++ ) {
 
@@ -200,15 +200,15 @@ class AMFExporter {
 
 		let trianglesString = '   <volume materialid="' + material.id + '">\n';
 
-		let start = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start : 0;
-		let end = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start + geometry.groups[ index ].count : indices.length;
+		let start = ( index !== null && geometry.groups[ index ] !== undefined ) ? geometry.groups[ index ].start : 0;
+		let end = ( index !== null && geometry.groups[ index ] !== undefined ) ? geometry.groups[ index ].start + geometry.groups[ index ].count : indices.length;
 		if ( end === Infinity ) end = indices.length;
 
 		for ( let i = start; i < end; i += 3 ) {
 
-			let v1 = ( index && geometry.groups[ index ] ) ? i : indices[ i ];
-			let v2 = ( index && geometry.groups[ index ] ) ? i + 1 : indices[ i + 1 ];
-			let v3 = ( index && geometry.groups[ index ] ) ? i + 2 : indices[ i + 2 ];
+			let v1 = ( index !== null && geometry.groups[ index ] !== undefined ) ? i : indices[ i ];
+			let v2 = ( index !== null && geometry.groups[ index ] !== undefined ) ? i + 1 : indices[ i + 1 ];
+			let v3 = ( index !== null && geometry.groups[ index ] !== undefined ) ? i + 2 : indices[ i + 2 ];
 
 			trianglesString += `    <triangle><v1>${ v1 }</v1><v2>${ v2 }</v2><v3>${ v3 }</v3></triangle>\n`;
 
