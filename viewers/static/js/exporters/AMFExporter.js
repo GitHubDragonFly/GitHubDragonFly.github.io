@@ -80,9 +80,6 @@
 					let geometry = this.interleaved_buffer_attribute_check( object.geometry.clone() );
 					let material = object.material;
 
-					if ( geometry.matrixAutoUpdate ) geometry.updateMatrix();
-					if ( geometry.matrix === undefined ) geometry.matrix = new THREE.Matrix4();
-
 					const matrix = new THREE.Matrix4();
 					matrix.copy( object.matrixWorld );
 
@@ -96,7 +93,7 @@
 					// Create the transformation string
 					const transform = new THREE.Matrix4().compose( pos, quat, scale );
 
-					geometry.matrix.premultiply( transform );
+					geometry.applyMatrix( transform );
 
 					if ( ! geometry.index ) geometry = this.mergeVertices( geometry, 1e-6 );
 					if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
@@ -154,7 +151,8 @@
 			let verticesString = '   <vertices>\n';
 
 			let start = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start : 0;
-			let end = ( index && geometry.groups[ index ] ) ? ( geometry.groups[ index ].start + geometry.groups[ index ].count ) : vertices.length;
+			let end = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start + geometry.groups[ index ].count : vertices.length;
+			if ( end === Infinity ) end = indices.length;
 
 			if ( index && geometry.groups[ index ] ) {
 
@@ -194,9 +192,10 @@
 
 			let trianglesString = '   <volume materialid="' + material.id + '">\n';
 
-			let start = 0;
-			let end = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].count : indices.length;
-
+			let start = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start : 0;
+			let end = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start + geometry.groups[ index ].count : indices.length;
+			if ( end === Infinity ) end = indices.length;
+	
 			for ( let i = start; i < end; i += 3 ) {
 
 				let v1 = ( index && geometry.groups[ index ] ) ? i : indices[ i ];
