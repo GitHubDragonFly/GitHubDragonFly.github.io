@@ -159,7 +159,7 @@ class AMFExporter {
 		let verticesString = '   <vertices>\n';
 
 		let start = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start : 0;
-		let end = ( index && geometry.groups[ index ] ) ? ( geometry.groups[ index ].start + ( geometry.groups[ index ].count ) ) : vertices.length;
+		let end = ( index && geometry.groups[ index ] ) ? geometry.groups[ index ].start + geometry.groups[ index ].count : vertices.length;
 		if ( end === Infinity ) end = indices.length;
 
 		if ( index && geometry.groups[ index ] ) {
