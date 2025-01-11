@@ -150,11 +150,13 @@
 
 			let verticesString = '   <vertices>\n';
 
-			let start = ( index !== null && geometry.groups[ index ] !== undefined ) ? geometry.groups[ index ].start : 0;
-			let end = ( index !== null && geometry.groups[ index ] !== undefined ) ? geometry.groups[ index ].start + geometry.groups[ index ].count : vertices.length;
+			const groups = index !== null && geometry.groups[ index ] !== undefined;
+
+			let start = groups === true ? geometry.groups[ index ].start : 0;
+			let end = groups === true ? geometry.groups[ index ].start + geometry.groups[ index ].count : vertices.length;
 			if ( end === Infinity ) end = indices.length;
 
-			if ( index !== null && geometry.groups[ index ] !== undefined ) {
+			if ( groups === true ) {
 
 				for ( let i = start; i < end; i ++ ) {
 
@@ -192,15 +194,17 @@
 
 			let trianglesString = '   <volume materialid="' + material.id + '">\n';
 
-			let start = ( index !== null && geometry.groups[ index ] !== undefined ) ? geometry.groups[ index ].start : 0;
-			let end = ( index !== null && geometry.groups[ index ] !== undefined ) ? geometry.groups[ index ].start + geometry.groups[ index ].count : indices.length;
+			const groups = index !== null && geometry.groups[ index ] !== undefined;
+
+			let start = groups === true ? geometry.groups[ index ].start : 0;
+			let end = groups === true ? geometry.groups[ index ].start + geometry.groups[ index ].count : indices.length;
 			if ( end === Infinity ) end = indices.length;
 
 			for ( let i = start; i < end; i += 3 ) {
 
-				let v1 = ( index !== null && geometry.groups[ index ] !== undefined ) ? i : indices[ i ];
-				let v2 = ( index !== null && geometry.groups[ index ] !== undefined ) ? i + 1 : indices[ i + 1 ];
-				let v3 = ( index !== null && geometry.groups[ index ] !== undefined ) ? i + 2 : indices[ i + 2 ];
+				let v1 = ( groups === true ) ? i : indices[ i ];
+				let v2 = ( groups === true ) ? i + 1 : indices[ i + 1 ];
+				let v3 = ( groups === true ) ? i + 2 : indices[ i + 2 ];
 
 				trianglesString += `    <triangle><v1>${ v1 }</v1><v2>${ v2 }</v2><v3>${ v3 }</v3></triangle>\n`;
 
