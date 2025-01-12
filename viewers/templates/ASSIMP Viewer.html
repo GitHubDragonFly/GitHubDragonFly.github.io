@@ -24,7 +24,8 @@
           "meshoptimizer_decoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_decoder.module.min.js",
           "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.22.0/meshopt_simplifier.module.min.js",
           "ktx2-encoder": "https://esm.sh/ktx2-encoder@0.1.1",
-          "@jsquash/avif": "https://esm.sh/@jsquash/avif@2.0.0"
+          "@jsquash/avif": "https://esm.sh/@jsquash/avif@2.0.0",
+          "xatlas-web": "https://esm.sh/xatlas-web@0.1.0"
         }
       }
     </script>
@@ -50,7 +51,7 @@
       var variants, variant_materials, current_variant, variants_available, tex, tex_res, tex_flip, tex_fmt;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, wireframe_enabled, dds_flip = true;
       var ambientLight, hemisphereLight, directionalLight, draco_material, isMobile, texture_maps;
-      var ww = window.innerWidth, wh = window.innerHeight, skeletonUtils;
+      var ww = window.innerWidth, wh = window.innerHeight, uvUnwrapper;
       var animation_running, extra_running, gif_export, equi_enabled;
       var depthTest_enabled, first_run = false, fr_count = 0;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
@@ -71,8 +72,8 @@
 
     <script type="module">
       import * as three_js from "three";
+      import * as XAtlas from "xatlas-web";
       import * as fflate_js from "three/addons/libs/fflate.module.min.js";
-      import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.min.js';
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
       import { KTX2Loader } from "three/addons/loaders/KTX2Loader.min.js";
       import { DRACOLoader } from "three/addons/loaders/DRACOLoader.min.js";
@@ -81,7 +82,6 @@
 
       THREE = three_js;
       fflate = fflate_js;
-      skeletonUtils = SkeletonUtils;
 
       default_camera = new THREE.Object3D();
 
@@ -106,6 +106,95 @@
 
       gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
       set_gui_position();
+
+      // Modified version of UVUnwrapper: https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/utils/UVUnwrapper.js
+      // Using xatlas-web: https://github.com/mozillareality/xatlas-web
+
+      const AddMeshStatus = {
+        Success: 0,
+        Error: 1,
+        IndexOutOfRange: 2,
+        InvalidIndexCount: 3
+      };
+
+      class UVUnwrapper {
+        constructor() {
+          this._module = null;
+        }
+
+        async load() {
+          const wasmurl = new URL( 'https://cdn.jsdelivr.net/npm/xatlas-web@0.1.0/dist/xatlas-web.wasm', import.meta.url );
+
+          this._module = XAtlas[ 'default' ]( {
+            locateFile( path ) {
+              if ( path.endsWith( '.wasm' ) ) {
+                return wasmurl.toString();
+              }
+
+              return path;
+            }
+          } );
+
+          return this._module.ready;
+        }
+
+        unwrapGeometry( geometry ) {
+          const xatlas = this._module;
+          const originalVertexCount = geometry.attributes.position.count;
+          const originalIndexCount = geometry.index.count;
+
+          xatlas.createAtlas();
+
+          const meshInfo = xatlas.createMesh( originalVertexCount, originalIndexCount, true, true );
+          xatlas.HEAPU16.set( geometry.index.array, meshInfo.indexOffset / Uint16Array.BYTES_PER_ELEMENT );
+          xatlas.HEAPF32.set( geometry.attributes.position.array, meshInfo.positionOffset / Float32Array.BYTES_PER_ELEMENT );
+          xatlas.HEAPF32.set( geometry.attributes.normal.array, meshInfo.normalOffset / Float32Array.BYTES_PER_ELEMENT );
+
+          const statusCode = xatlas.addMesh();
+
+          if ( statusCode !== AddMeshStatus.Success ) {
+            throw new Error( `UVUnwrapper: Error adding mesh. Status code ${ statusCode }` );
+          }
+
+          xatlas.generateAtlas();
+
+          const meshData = xatlas.getMeshData( meshInfo.meshId );
+          const oldPositionArray = geometry.attributes.position.array;
+          const oldNormalArray = geometry.attributes.normal.array;
+
+          const newPositionArray = new Float32Array( meshData.newVertexCount * 3 );
+          const newNormalArray = new Float32Array( meshData.newVertexCount * 3 );
+          const newUvArray = new Float32Array( xatlas.HEAPF32.buffer, meshData.uvOffset, meshData.newVertexCount * 2 );
+          const newIndexArray = new Uint32Array( xatlas.HEAPU32.buffer, meshData.indexOffset, meshData.newIndexCount );
+          const originalIndexArray = new Uint32Array(
+            xatlas.HEAPU32.buffer,
+            meshData.originalIndexOffset,
+            meshData.newVertexCount
+          );
+
+          for ( let i = 0; i < meshData.newVertexCount; i ++ ) {
+            const originalIndex = originalIndexArray[ i ];
+            newPositionArray[ i * 3 ] = oldPositionArray[ originalIndex * 3 ];
+            newPositionArray[ i * 3 + 1 ] = oldPositionArray[ originalIndex * 3 + 1 ];
+            newPositionArray[ i * 3 + 2 ] = oldPositionArray[ originalIndex * 3 + 2 ];
+            newNormalArray[ i * 3 ] = oldNormalArray[ originalIndex * 3 ];
+            newNormalArray[ i * 3 + 1 ] = oldNormalArray[ originalIndex * 3 + 1 ];
+            newNormalArray[ i * 3 + 2 ] = oldNormalArray[ originalIndex * 3 + 2 ];
+          }
+
+          geometry.deleteAttribute( 'position' );
+          geometry.deleteAttribute( 'normal' );
+
+          geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( newPositionArray, 3 ) );
+          geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( newNormalArray, 3 ) );
+          geometry.setAttribute( 'uv', new THREE.Float32BufferAttribute( newUvArray, 2 ) );
+          geometry.setIndex( new THREE.Uint32BufferAttribute( newIndexArray, 1 ) );
+
+          xatlas.destroyAtlas();
+        }
+      }
+
+      uvUnwrapper = UVUnwrapper;
     </script>
 
     <script src="../static/assimpjs/assimpjs.min.js" defer></script>
@@ -1169,6 +1258,7 @@
         if (gltf_obj) {
           await start_export();
 
+          const { SkeletonUtils } = await import( "three/addons/utils/SkeletonUtils.min.js" );
           const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
 
           let gltf_exporter = new GLTFExporter( manager );
@@ -1181,7 +1271,7 @@
             options = {	binary: binary, maxTextureSize: (binary === true ? Infinity : tex_res) };
           }
 
-          let mesh_clone = alternative === true ? await create_meshes( alternative ) : skeletonUtils.clone( gltf_obj );
+          let mesh_clone = alternative === true ? await create_meshes( alternative ) : SkeletonUtils.clone( gltf_obj );
 
           gltf_exporter.parse( mesh_clone, async json => {
             let blob;
@@ -1237,6 +1327,7 @@
         if (gltf_obj) {
           await start_export();
 
+          const { SkeletonUtils } = await import( "three/addons/utils/SkeletonUtils.min.js" );
           const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
 
           let gltf_exporter = new GLTFExporter( manager );
@@ -1249,7 +1340,7 @@
             options = {	binary: true };
           }
 
-          gltf_exporter.parse( (skeletonUtils.clone( gltf_obj )), async function( json ) {
+          gltf_exporter.parse( (SkeletonUtils.clone( gltf_obj )), async function( json ) {
             let simplified = await texture_compress( new Uint8Array( json ) );
 
             // Use ASSIMPJS to export files
@@ -1294,9 +1385,11 @@
         if (gltf_obj) {
           await start_export();
 
+          const { SkeletonUtils } = await import( "three/addons/utils/SkeletonUtils.min.js" );
+
           if (animations.length > 0) gltf_obj.animations = animations;
 
-          let json = JSON.stringify( (skeletonUtils.clone( gltf_obj )).toJSON() );
+          let json = JSON.stringify( (SkeletonUtils.clone( gltf_obj )).toJSON() );
           let blob = new Blob( [ json ], { type: 'text/plain' } );
 
           zip.file( filename + '.json', blob );
@@ -1460,13 +1553,14 @@
         if (gltf_obj) {
           await start_export();
 
+          const { SkeletonUtils } = await import( "three/addons/utils/SkeletonUtils.min.js" );
           const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
 
           let gltf_exporter = new GLTFExporter( manager );
 
           let options = {	binary: true };
 
-          gltf_exporter.parse( skeletonUtils.clone( gltf_obj ), async json => {
+          gltf_exporter.parse( SkeletonUtils.clone( gltf_obj ), async json => {
             try {
               await texture_only_export( new Uint8Array( json ) );
             } catch (error) {
@@ -3176,6 +3270,49 @@
           scenes = gltf.scenes;
           cameras = gltf.cameras;
 
+          let loader, tex;
+
+          if (!parser.json.images && local_files_indexes.length > 0) {
+            let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
+            let ext = uc_name.substring( uc_name.lastIndexOf( '.' ) + 1 );
+
+            switch ( ext ) {
+              case 'DDS':
+                loader = dds_loader;
+                break;
+
+              case 'TGA':
+                loader = tga_loader;
+                break;
+
+              case 'KTX2':
+                loader = ktx2_loader;
+                break;
+
+              default:
+                loader = texture_loader;
+                break;
+            }
+
+            await new Promise( resolve => {
+              // Use as a texture the first loaded image
+              loader.load( URL.createObjectURL( local_files[ local_files_indexes[ 0 ] ] ), function( texture ) {
+                URL.revokeObjectURL( local_files[ local_files_indexes[ 0 ] ] );
+
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.colorSpace = THREE.SRGBColorSpace;
+                texture.needsUpdate = true;
+
+                if (texture.num_frames && texture.num_frames > 1) animated_gif_texture = true;
+
+                resolve( tex = texture );
+
+                texture.dispose();
+              });
+            });
+          }
+
           if (gltf.userData.vrm) {
             const { VRMUtils } = await import( 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.1/lib/three-vrm.module.min.js' );
 
@@ -3403,48 +3540,30 @@
                 child.material.needsUpdate = true;
               }
 
-              if (!gltf.parser.json.images) {
-                // Use as a texture the first loaded image if any
-
-                if (local_files_indexes.length > 0) {
-                  let loader;
-
-                  let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
-                  let ext = uc_name.substring( uc_name.lastIndexOf( '.' ) + 1 );
-
-                  switch ( ext ) {
-                    case 'DDS':
-                      loader = dds_loader;
-                      break;
-
-                    case 'TGA':
-                      loader = tga_loader;
-                      break;
-
-                    case 'KTX2':
-                      loader = ktx2_loader;
-                      break;
-
-                    default:
-                      loader = texture_loader;
-                      break;
+              if (!parser.json.images && local_files_indexes.length > 0) {
+                // If textures are loaded then try to unwrap the model and create uvs
+                if (child.isMesh && child.geometry.attributes.uv === undefined) {
+                  if (!child.geometry.index) {
+                    child.geometry = await merge_vertices( child.geometry.clone(), 1e-6 );
                   }
 
-                  loader.load( URL.createObjectURL( local_files[ local_files_indexes[ 0 ] ] ), function( texture ) {
-                    URL.revokeObjectURL( local_files[ local_files_indexes[ 0 ] ] );
+                  document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
+                  await new Promise( resolve => setTimeout( resolve, 100 ) );
 
-                    texture.colorSpace = THREE.SRGBColorSpace;
-                    texture.wrapS = THREE.RepeatWrapping;
-                    texture.wrapT = THREE.RepeatWrapping;
-                    texture.needsUpdate = true;
+                  let uvu = new uvUnwrapper();
+                  await uvu.load();
 
-                    // Apply texture
-                    child.material.map = texture.clone();
-                    child.material.needsUpdate = true;
-
-                    texture.dispose();
-                  });
+                  try {
+                    await uvu.unwrapGeometry( child.geometry );
+                    uvu._module._free();
+                  } catch ( error ) {
+                    console.warn( 'Error unwrapping geometry: ' + error.message );
+                  }
                 }
+
+                // Apply texture
+                child.material.map = tex;
+                child.material.needsUpdate = true;
               }
             }
 
@@ -3469,7 +3588,7 @@
       }
 
       function loadDRACO() {
-        draco_loader.load( URL.createObjectURL( local_files[ selected_draco_file ] ), function( geometry ) {
+        draco_loader.load( URL.createObjectURL( local_files[ selected_draco_file ] ), async function( geometry ) {
           URL.revokeObjectURL( local_files[ selected_draco_file ] );
 
           if (!geometry.attributes.normal) geometry.computeVertexNormals();
@@ -3487,6 +3606,26 @@
           // Use as a texture either the first loaded image or default
 
           if (local_files_indexes.length > 0) {
+            // If textures are loaded then try to unwrap the model and create uvs
+            if (geometry.attributes.uv === undefined) {
+              if (!geometry.index) {
+                geometry = await merge_vertices( geometry.clone(), 1e-6 );
+              }
+
+              document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
+              await new Promise( resolve => setTimeout( resolve, 100 ) );
+
+              let uvu = new uvUnwrapper();
+              await uvu.load();
+
+              try {
+                await uvu.unwrapGeometry( geometry );
+                uvu._module._free();
+              } catch ( error ) {
+                console.warn( 'Error unwrapping geometry: ' + error.message );
+              }
+            }
+
             let loader;
 
             let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
