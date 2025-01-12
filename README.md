@@ -520,13 +520,13 @@ Number Type Converter
   - Show a points version of the loaded model and export it as such:
     - Tip: export this points model into PLY format and then drop the PLY file into [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/) to get SPLAT file
   - Export edges, when enabled, in OBJ and GLTF exports of both solid and points model (a popup alert will notify about this)
-- GLTF, OBJ+MTL, PLY+STL, PRWM and VTK viewers are using a modified version of [UVUnwrapper](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/utils/UVUnwrapper.js) to create UVs for the model:
+- ASSIMP, GLTF, GLTFS, GLTF WebGPU, OBJ+MTL, PLY+STL, PRWM and VTK desktop viewers are using a modified version of [UVUnwrapper](https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/utils/UVUnwrapper.js) to create UVs for the model:
     - This experimental feature requires the following:
       - A textureless model that does not have built-in UVs
       - At least 1 optional texture is loaded together with the model:
-        - GLTF Viewer will only use the first encountered texture
+        - ASSIMP, GLTF, GLTFS and GLTF WebGPU viewers will only use the first encountered texture
         - Other viewers have the `T` button to switch between multiple textures
-      - Apart from GLTF Viewer, all other models with vertex colors will have the colors removed since they don't seem to work properly with UV creation
+      - Apart from ASSIMP, GLTF, GLTFS and GLTF WebGPU viewers, all other models with vertex colors will have the colors removed since they don't seem to work properly with UV creation
     - The unwrapping process might be slow with complex models and the scene might also freeze
 - Using Animated GIF as a texture is experimental and powered by modified [gif-loader](https://github.com/movableink/three-gif-loader) using [omggif](https://github.com/deanm/omggif) library
     - Currently available only in GLTF, OBJ+STL, PLY+STL, PRWM and VTK desktop viewers and should be tried on simple models
