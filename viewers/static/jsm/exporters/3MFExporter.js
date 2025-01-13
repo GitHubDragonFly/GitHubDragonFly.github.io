@@ -368,9 +368,9 @@ class ThreeMFExporter {
 
 						let hex_uc = '#' + mtl.color.getHexString().toUpperCase();
 
-						if ( mtl.opacity < 1 ) {
+						if ( mtl.opacity < 1 || mtl.transparent === true ) {
 
-							let hex_opacity = ( parseInt( mtl.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
+							let hex_opacity = mtl.opacity === 1 ? 'FD' : ( parseInt( mtl.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
 							hex_uc += hex_opacity;
 
 						}
@@ -489,9 +489,9 @@ class ThreeMFExporter {
 
 						let hex_uc = '#' + material.color.getHexString().toUpperCase();
 
-						if ( material.opacity < 1 ) {
+						if ( material.opacity < 1 || material.transparent === true ) {
 
-							let hex_opacity = ( parseInt( material.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
+							let hex_opacity = material.opacity === 1 ? 'FD' : ( parseInt( material.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
 							hex_uc += hex_opacity;
 
 						}
