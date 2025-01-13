@@ -107,9 +107,13 @@ class AMFExporter {
 				if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
 				geometry.normalizeNormals();
 
+				let opacity;
+
 				if ( Array.isArray( material ) && geometry.groups.length === material.length ) {
 
 					material.forEach( ( mtl, index ) => {
+
+						opacity = ( mtl.opacity === 1 && mtl.transparent === true ) ? 0.99 : mtl.opacity;
 
 						resourcesString += this.generateVertices( geometry, index );
 						resourcesString += this.generateTriangles( geometry, mtl, index );
@@ -117,7 +121,7 @@ class AMFExporter {
 						let r = '' + mtl.color.r;
 						let g = '' + mtl.color.g;
 						let b = '' + mtl.color.b;
-						let a = '' + mtl.opacity;
+						let a = '' + opacity;
 
 						materialsString += ` <material id="${ mtl.id }"><color><r>${ r }</r><g>${ g }</g><b>${ b }</b><a>${ a }</a></color></material>\n`;
 
@@ -125,13 +129,15 @@ class AMFExporter {
 
 				} else {
 
+					opacity = ( material.opacity === 1 && material.transparent === true ) ? 0.99 : material.opacity;
+
 					resourcesString += this.generateVertices( geometry );
 					resourcesString += this.generateTriangles( geometry, material );
 
 					let r = '' + material.color.r;
 					let g = '' + material.color.g;
 					let b = '' + material.color.b;
-					let a = '' + material.opacity;
+					let a = '' + opacity;
 
 					materialsString += ` <material id="${ material.id }"><color><r>${ r }</r><g>${ g }</g><b>${ b }</b><a>${ a }</a></color></material>\n`;
 
