@@ -14,6 +14,7 @@
           "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/",
           "three-viewport-gizmo": "https://cdn.jsdelivr.net/npm/three-viewport-gizmo@1.0.1/dist/three-viewport-gizmo.min.js",
+          "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/decode.min.js",
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.1.0",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.1.0",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.1.0",
@@ -2697,26 +2698,50 @@
             } else if (fmt === 'exr') {
               const { EXRExporter } = await import( 'three/addons/exporters/EXRExporter.min.js' );
 
-              const length = data[ 1 ].data.length;
+              const hd = ( mime_type.endsWith( '.exr' ) === true || mime_type.endsWith( '.hdr' ) === true );
 
-              const f32_array = new Float32Array( length );
-              const coeff = ( mime_type.endsWith( '.exr' ) === true || mime_type.endsWith( '.hdr' ) === true ) ? 160 : 112;
+              let data_texture;
 
-              for ( let i = 0; i < length; i++ ) {
-                f32_array[ i ] = data[ 1 ].data[ i ] * coeff / 0x7FFF;
+              if (hd === true) {
+                let length = data[ 1 ].data.length;
+
+                let f32_array = new Float32Array( length );
+
+                for ( let i = 0; i < length; i++ ) {
+                  f32_array[ i ] = data[ 1 ].data[ i ] * 127.0 / ( data[ 1 ].data[ i ] > 127 ? 0x8000 : 0x7FFF );
+                }
+
+                data_texture = new THREE.DataTexture(
+                  f32_array,
+                  data[ 2 ][ 0 ],
+                  data[ 2 ][ 1 ],
+                  THREE.RGBAFormat,
+                  THREE.FloatType
+                );
+
+                data_texture.needsUpdate = true;
+
+                f32_array.length = 0;
+              } else {
+                const { HDRJPGLoader } = await import( "@monogrid/gainmap-js/decode" );
+
+                let hdrJPGLoader = new HDRJPGLoader( renderer );
+                let url_blob = new Blob( [ data[ 0 ] ], { type: mime_type } );
+
+                await new Promise( resolve => {
+                  hdrJPGLoader.load( URL.createObjectURL( url_blob ), async function( sdr ) {
+                    URL.revokeObjectURL( url_blob );
+
+                    let data_tex = await sdr.toDataTexture();
+
+                    sdr.renderTarget.texture.dispose();
+                    sdr.renderTarget.dispose();
+                    sdr.dispose();
+
+                    resolve( data_texture = data_tex, data_tex.dispose() );
+                  });
+                });
               }
-
-              const data_texture = new THREE.DataTexture(
-                f32_array,
-                data[ 2 ][ 0 ],
-                data[ 2 ][ 1 ],
-                THREE.RGBAFormat,
-                THREE.FloatType
-              );
-
-              data_texture.needsUpdate = true;
-
-              f32_array.length = 0;
 
               await new EXRExporter().parse( data_texture ).then( exr => {
                 data_texture.dispose();
