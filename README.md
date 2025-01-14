@@ -189,8 +189,7 @@ Number Type Converter
       - GitHub URLs are supported
   - Supports exporting to the following formats:
     - Animated GIF and PNG (see general notes about these formats further below)
-    - AVIF, EXR, JPEG, PNG, KTX2 and WEBP images at unchanged original image size:
-      - EXR seems to be fine for exporting from HDR or EXR format but is a little bit greyish for other formats
+    - AVIF, EXR, JPEG, PNG, KTX2 and WEBP images at unchanged original image size
     - 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
       - Maximum exported texture size is currently limited only for 3DM exports to 2.5k
     - [glTF Transform](https://gltf-transform.dev) is used for some exports
