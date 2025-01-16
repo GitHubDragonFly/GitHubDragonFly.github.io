@@ -65,6 +65,9 @@
       set_gui_position();
     </script>
 
+    <!-- For encoding image to HDR format -->
+    <script src="../static/js/hdrpng/hdrpng.min.js" defer></script>
+
     <script src="../static/js/upng/UPNG.min.js" defer></script>
     <script src="../static/js/omggif/omggif.min.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
@@ -300,6 +303,7 @@
     <!-- When applicable, using @jsquash/avif encoder for AVIF compression: https://github.com/jamsinclair/jSquash -->
     <!--  - Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0 -->
     <!-- When applicable, using experimental ktx2-encoder for KTX2 compression: https://github.com/gz65555/ktx2-encoder -->
+    <!-- When applicable, using gainmap-js decoder: https://github.com/MONOGRID/gainmap-js -->
     <!-- When applicable, using JSZip to export maps: https://github.com/Stuk/jszip -->
     <!-- When applicable, using Animated GIF export based on the following example and library: -->
     <!--   https://github.com/mrdoob/omggif-example  -->
@@ -307,6 +311,7 @@
     <!-- When applicable, using Animated PNG file export powered by: -->
     <!--   https://github.com/photopea/UPNG.js -->
     <!--   https://github.com/nodeca/pako -->
+    <!-- When applicable, using modified version of hdrpng to encode image to HDR: https://github.com/enkimute/hdrpng.js/ -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
@@ -352,6 +357,7 @@
           <option title="GIF - Animated GIF" value="gif" onclick="export_animated_gif();">GIF</option>
           <option title="PNG - Animated PNG (APNG)" value="apng" onclick="export_animated_png();">PNG</option>
           <option title="Image Exports" value="img" disabled>- IMG -</option>
+          <option title="HDR Image Format" value="hdr" onclick="export_image( 'hdr' );">HDR</option>
           <option title="EXR Image Format" value="exr" onclick="export_image( 'exr' );">EXR</option>
           <option title="PNG Image Format" value="png" onclick="export_image();">PNG</option>
           <option title="AVIF Image Format" value="avif" onclick="export_image( 'avif' );">AVIF</option>
@@ -359,6 +365,7 @@
           <option title="KTX2 Image Format ETC1S" value="ktx2e" onclick="export_image( 'ktx2e' );">KTX2e</option>
           <option title="KTX2 Image Format UASTC" value="ktx2u" onclick="export_image( 'ktx2u' );">KTX2u</option>
           <option title="WEBP Image Format" value="webp" onclick="export_image( 'webp' );">WEBP</option>
+          <option title="HDR Image Format Y-flipped" value="hdr_y" onclick="export_image( 'hdr', true );">HDR_Y</option>
           <option title="EXR Image Format Y-flipped" value="exr_y" onclick="export_image( 'exr', true );">EXR_Y</option>
           <option title="PNG Image Format Y-flipped" value="png_y" onclick="export_image( 'png', true );">PNG_Y</option>
           <option title="AVIF Image Format Y-flipped" value="avif_y" onclick="export_image( 'avif', true );">AVIF_Y</option>
@@ -2591,7 +2598,7 @@
         return compressedArrayBuffer;
       }
 
-      /* Export texture only as either AVIF or PNG or WEBP or KTX2 */
+      /* Export texture only as either of AVIF, EXR, PNG, WEBP or KTX2 */
 
       async function texture_only_export( arrayBuffer, tex_fmt, tex_flip ) {
         const { WebIO } = await import( "@gltf-transform/core" );
@@ -2695,7 +2702,7 @@
               const { encode } = await import( '@jsquash/avif' );
               const avif = await encode( data[ 1 ] );
               blob = new Blob( [ avif ], { type: 'image/avif' } );
-            } else if (fmt === 'exr') {
+            } else if (fmt === 'exr' || fmt === 'hdr') {
               const { EXRExporter } = await import( 'three/addons/exporters/EXRExporter.min.js' );
 
               const hd = ( mime_type.endsWith( '.exr' ) === true || mime_type.endsWith( '.hdr' ) === true );
@@ -2743,10 +2750,69 @@
                 });
               }
 
-              await new EXRExporter().parse( data_texture ).then( exr => {
-                data_texture.dispose();
-                blob = new Blob( [ exr ], { type: 'image/x.exr' } );
-              });
+              if (fmt === 'hdr') {
+                // HDR export code created with assistance from Microsoft Copilot
+
+                let hdr, m_data = data_texture.image.data;
+
+                if (hd === false) {
+                  // HDRJPGLoader returned Uint16Array data
+                  // Re-pack the array and strip alpha bytes
+
+                  let rgbArray = new Uint16Array( ( m_data.length / 4.0 ) * 3 );
+
+                  for ( let i = 0; i < m_data.length; i += 4 ) {
+                    let index = ( i / 4.0 ) * 3;
+
+                    rgbArray[ index ] = m_data[ i ]; // R
+                    rgbArray[ index + 1 ] = m_data[ i + 1 ]; // G
+                    rgbArray[ index + 2 ] = m_data[ i + 2 ]; // B
+                  }
+
+                  let f32Array = new Float32Array( rgbArray.length );
+
+                  for ( let i = 0; i < rgbArray.length; i++ ) {
+                    f32Array[ i ] = await decodeFloat16( rgbArray[ i ] );
+                  }
+
+                  hdr = await HDRImage.floatToRgbe( f32Array );
+                } else {
+                  // Re-pack manually created float32 array and strip alpha bytes
+
+                  let rgbArray = new Float32Array( ( m_data.length / 4.0 ) * 3 );
+
+                  for ( let i = 0; i < m_data.length; i += 4 ) {
+                    let index = ( i / 4.0 ) * 3;
+
+                    rgbArray[ index ] = m_data[ i ]; // R
+                    rgbArray[ index + 1 ] = m_data[ i + 1 ]; // G
+                    rgbArray[ index + 2 ] = m_data[ i + 2 ]; // B
+                  }
+
+                  hdr = await HDRImage.floatToRgbe( rgbArray );
+                }
+
+                // Define the HDR header
+                let header = `#?RADIANCE
+                FORMAT=32-bit_rle_rgbe
+                EXPOSURE=1.0000000000000
+                \n-Y ${ data[ 2 ][ 1 ] } +X ${ data[ 2 ][ 0 ] }\n`;
+
+                // Convert the header string to a Uint8Array
+                let headerUint8Array = new Uint8Array( header.split( '' ).map( char => char.charCodeAt( 0 ) ) );
+
+                // Create the final HDR file array by concatenating the header and the pixel data
+                let hdrFileArray = new Uint8Array( headerUint8Array.length + hdr.length );
+                hdrFileArray.set( headerUint8Array );
+                hdrFileArray.set( hdr, headerUint8Array.length );
+
+                blob = new Blob( [ hdrFileArray ], { type: 'image/x.hdr' } );
+              } else {
+                await new EXRExporter().parse( data_texture ).then( exr => {
+                  data_texture.dispose();
+                  blob = new Blob( [ exr ], { type: 'image/x.exr' } );
+                });
+              }
             } else {
               await compressTexture( texture, { targetFormat: fmt } );
               blob = new Blob( [ texture.getImage() ], { type: 'image/' + fmt } );
@@ -2842,6 +2908,15 @@
         });
 
         return texture;
+      }
+
+      // Function decodeFloat16 from three.js EXR Exporter
+
+      async function decodeFloat16( binary ) {
+        let exponent = ( binary & 0x7C00 ) >> 10;
+        let fraction = binary & 0x03FF;
+
+        return ( binary >> 15 ? - 1 : 1 ) * ( exponent ? ( exponent === 0x1F ? fraction ? NaN : Infinity : Math.pow( 2, exponent - 15 ) * ( 1 + fraction / 0x400 )) : 6.103515625e-5 * ( fraction / 0x400 ));
       }
 
       function show_polar_grid() {
