@@ -189,7 +189,7 @@ Number Type Converter
       - GitHub URLs are supported
   - Supports exporting to the following formats:
     - Animated GIF and PNG (see general notes about these formats further below)
-    - AVIF, HDR, EXR, JPEG, PNG, KTX2 and WEBP images at unchanged original image size:
+    - AVIF, HDR, EXR, JPEG, PNG, KTX2 and WEBP images at unchanged original image size up to 16k:
       - HDR encoding is powered by a modified version of [hdrpng.js](https://github.com/enkimute/hdrpng.js/) library
       - HDR code was created with assistance from Microsoft Copilot
     - 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
