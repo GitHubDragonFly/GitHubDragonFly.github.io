@@ -189,7 +189,9 @@ Number Type Converter
       - GitHub URLs are supported
   - Supports exporting to the following formats:
     - Animated GIF and PNG (see general notes about these formats further below)
-    - AVIF, EXR, JPEG, PNG, KTX2 and WEBP images at unchanged original image size
+    - AVIF, HDR, EXR, JPEG, PNG, KTX2 and WEBP images at unchanged original image size:
+      - HDR encoding is powered by a modified version of [hdrpng.js](https://github.com/enkimute/hdrpng.js/) library
+      - HDR code was created with assistance from Microsoft Copilot
     - 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
       - Maximum exported texture size is currently limited only for 3DM exports to 2.5k
     - [glTF Transform](https://gltf-transform.dev) is used for some exports
