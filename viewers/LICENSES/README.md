@@ -21,6 +21,8 @@ Google's [Model Viewer](https://github.com/google/model-viewer) element Apache L
 
 [ktx2-encoder](https://github.com/gz65555/ktx2-encoder) MIT license can be seen [here](https://github.com/gz65555/ktx2-encoder?tab=MIT-1-ov-file#readme)
 
+[hdrpng](https://github.com/enkimute/hdrpng.js/) MIT license can be seen [here](https://github.com/enkimute/hdrpng.js/?tab=MIT-1-ov-file#readme)
+
 [JSZip](https://github.com/Stuk/jszip) MIT license can be seen [here](https://github.com/Stuk/jszip?tab=License-1-ov-file#readme)
 
 [UPNG](https://github.com/photopea/UPNG.js) MIT license can be seen [here](https://github.com/photopea/UPNG.js?tab=MIT-1-ov-file#readme)
