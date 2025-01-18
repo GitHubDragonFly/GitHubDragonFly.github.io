@@ -12,7 +12,35 @@ This website is designed to serve as a hub with links to:
   - Number Type Converter up to 128-bit
   - [nunuStudio](https://github.com/tentone/nunuStudio/tree/master/source/page/src/examples) games and experiences examples
   - FREE online in-browser [three.js](https://threejs.org) based `3D Model` and `Texture` viewers
-  - Three.js based `Cube Shading`, `Celestial Bodies` and `IMG2MESH` pages
+  - Three.js based `Cube Shading`, `Celestial Bodies` and `IMG2MESH` pages:
+    - Cube Shading notes:
+      - It is fully automatic and manipulates each of the RGBA components
+      - Ref: [The Book of Shaders](https://thebookofshaders.com/04/) by Patricio Gonzalez Vivo & Jen Lowe
+      - It also has a little bit of:
+        - [three.quarks](https://github.com/Alchemist0823/three.quarks) atom thanks to its own [example](https://codesandbox.io/p/sandbox/three-quarks-atom-particle-system-xp3fvz?file=%2Findex.html)
+        - [Proton](https://github.com/drawcall/three.proton) mouse flare thanks to [threejs-mesh-modifiers](https://github.com/drawcall/threejs-mesh-modifiers) example
+    - Cube Shading notes:
+      - Astronomically inacurrate, designed just to please the eye
+    - IMG2MESH viewer / converter notes:
+      - Versatile tool to convert an image to simple 3D mesh and also export that same image to other formats
+      - Based on thrax version of code: `https://tartan-swanky-plutonium.glitch.me/`
+        - Original code: `https://github.com/shaoruu/three-extruded-image`
+      - Supported import image formats:
+        - AVIF, BMP, DDS, DIB, EXR, GIF, HDR, ICO, JPEG, KTX2, PNG, SVG, TGA, TIFF, WEBP
+          - Using [@jsquash/avif](https://github.com/jamsinclair/jSquash) encoder for AVIF compression
+            - This encoder appears to be limited to 4k resolution
+          - Using experimental [ktx2-encoder](https://github.com/gz65555/ktx2-encoder) for KTX2 compression
+        - Local blobs and remote URL loading are supported:
+          - URLs have to end with supported extension
+          - GitHub URLs are supported
+      - Supports exporting to the following formats:
+        - Animated GIF and PNG (see general notes about these formats further below)
+        - AVIF, HDR, EXR, JPEG, PNG, KTX2 and WEBP images at unchanged original image size up to 16k:
+          - HDR encoding is powered by a modified version of [hdrpng.js](https://github.com/enkimute/hdrpng.js/) library
+          - HDR code was created with assistance from Microsoft Copilot
+        - 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
+          - Maximum exported texture size is currently limited only for 3DM exports to 2.5k
+        - [glTF Transform](https://gltf-transform.dev) is used for some exports
 
 Originally designed for a desktop but has been adapted to also show properly on mobile devices with some limitations:
   - See screenshots below for different appearances of the main menu page
@@ -174,27 +202,6 @@ Number Type Converter
   - Most viewers have the `zoomToCursor` feature enabled, which should work with touch controls as well
   - Hover the mouse over controls in the desktop viewers to se a popup description of the control:
     - If the control is not disabled then it might show a red border around it (applicable to button, color and select controls)
-
-- Special notes about `Image to 3D Mesh Viewer`:
-  - It shows as `IMG2MESH` under the `General` option of the main menu
-  - Based on thrax version of code: `https://tartan-swanky-plutonium.glitch.me/`
-    - Original code: `https://github.com/shaoruu/three-extruded-image`
-  - Supported import image formats:
-    - AVIF, BMP, DDS, DIB, EXR, GIF, HDR, ICO, JPEG, KTX2, PNG, SVG, TGA, TIFF, WEBP
-      - Using [@jsquash/avif](https://github.com/jamsinclair/jSquash) encoder for AVIF compression
-        - This encoder appears to be limited to 4k resolution
-      - Using experimental [ktx2-encoder](https://github.com/gz65555/ktx2-encoder) for KTX2 compression
-    - Local blobs and remote URL loading are supported:
-      - URLs have to end with supported extension
-      - GitHub URLs are supported
-  - Supports exporting to the following formats:
-    - Animated GIF and PNG (see general notes about these formats further below)
-    - AVIF, HDR, EXR, JPEG, PNG, KTX2 and WEBP images at unchanged original image size up to 16k:
-      - HDR encoding is powered by a modified version of [hdrpng.js](https://github.com/enkimute/hdrpng.js/) library
-      - HDR code was created with assistance from Microsoft Copilot
-    - 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
-      - Maximum exported texture size is currently limited only for 3DM exports to 2.5k
-    - [glTF Transform](https://gltf-transform.dev) is used for some exports
 
 - Special notes about `AR / VR Viewer`:
   - Using slightly modified version of the three.js `DeviceOrientationControls`, last available in r133
@@ -536,12 +543,6 @@ Number Type Converter
 
       ![Cube with Animated GIF texture](https://github.com/user-attachments/assets/bb87f931-f50b-4c2c-8016-495fe9df2e13)
 
-- There is also a simple cube shading example available in the `General` section of the menu:
-    - It is fully automatic and manipulates each of the RGBA components
-    - Ref: [The Book of Shaders](https://thebookofshaders.com/04/) by Patricio Gonzalez Vivo & Jen Lowe
-    - It also has a little bit of:
-      - [three.quarks](https://github.com/Alchemist0823/three.quarks) atom thanks to its own [example](https://codesandbox.io/p/sandbox/three-quarks-atom-particle-system-xp3fvz?file=%2Findex.html)
-      - [Proton](https://github.com/drawcall/three.proton) mouse flare thanks to [threejs-mesh-modifiers](https://github.com/drawcall/threejs-mesh-modifiers) example
 - Tips:
   - If you think that the model is correctly loaded but you cannot see it then check the following:
     - If the viewer has Gizmo but it is not showing then there might be something wrong with the model
