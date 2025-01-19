@@ -1441,7 +1441,11 @@
           document.getElementById('div_message').innerHTML = '';
           document.getElementById('div_message').style.display = 'none';
         } else {
-          document.getElementById('div_message').innerHTML = 'Background changing ' + (isMobile === true ? '(2k limit) ' : '(16k limit) ') + '... ' + pw;
+          let part1 = 'Background changing (2k limit) ';
+          let part2 = 'Background changing (8k limit) ';
+          let part3 = 'Background changing (16k limit) ';
+          let message = ((isMobile === true || isOldiPad === true) && isNewiPad === false) ? part1 : (isNewiPad === true ? part2 : part3);
+          document.getElementById('div_message').innerHTML = message + '... ' + pw;
           document.getElementById('div_message').style.display = '';
         }
 
@@ -1468,9 +1472,11 @@
             texture_loader.load( URL.createObjectURL( fii ) , async function( texture ) {
               URL.revokeObjectURL( fii );
 
-              if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
+              if (((isMobile === true || isOldiPad === true) && isNewiPad === false) && (texture.image.width > 2048 || texture.image.height > 2048)) {
                 texture = await resize_texture( texture.image );
-              } else if (isMobile === false && (texture.image.width > 16384 || texture.image.height > 16384)) {
+              } else if (isNewiPad === true && (texture.image.width > 8192 || texture.image.height > 8192)) {
+                texture = await resize_texture( texture.image, 8192 );
+              } else if (texture.image.width > 16384 || texture.image.height > 16384) {
                 texture = await resize_texture( texture.image, 16384 );
               }
 
@@ -1520,9 +1526,11 @@
               texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), async function( png_tex ) {
                 canvas_tex.dispose();
 
-                if (isMobile === true && (png_tex.image.width > 2048 || png_tex.image.height > 2048)) {
+                if (((isMobile === true || isOldiPad === true) && isNewiPad === false) && (png_tex.image.width > 2048 || png_tex.image.height > 2048)) {
                   png_tex = await resize_texture( png_tex.image );
-                } else if (isMobile === false && (png_tex.image.width > 16384 || png_tex.image.height > 16384)) {
+                } else if (isNewiPad === true && (png_tex.image.width > 8192 || png_tex.image.height > 8192)) {
+                  png_tex = await resize_texture( png_tex.image, 8192 );
+                } else if (png_tex.image.width > 16384 || png_tex.image.height > 16384) {
                   png_tex = await resize_texture( png_tex.image, 16384 );
                 }
 
@@ -1574,10 +1582,12 @@
             hd_loader.load( URL.createObjectURL( fii ), async function( texture ) {
               URL.revokeObjectURL( fii );
 
-              if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
-                texture = await decompress( texture, 2048 );
-              } else if (isMobile === false && (texture.image.width > 16384 || texture.image.height > 16384)) {
-                texture = await decompress( texture, 16384 );
+              if (((isMobile === true || isOldiPad === true) && isNewiPad === false) && (texture.image.width > 2048 || texture.image.height > 2048)) {
+                texture = await resize_texture( texture.image );
+              } else if (isNewiPad === true && (texture.image.width > 8192 || texture.image.height > 8192)) {
+                texture = await resize_texture( texture.image, 8192 );
+              } else if (texture.image.width > 16384 || texture.image.height > 16384) {
+                texture = await resize_texture( texture.image, 16384 );
               }
 
               texture.needsUpdate = true;
@@ -2923,9 +2933,25 @@
 
           if ( image instanceof ImageData ) {
             ctx.putImageData( image, 0, 0 );
+          } else if ( image.data && image.data.constructor === Float32Array ) {
+            let u8 = new Uint8Array( image.data.length );
+
+            for ( let i = 0; i < image.data.length; i ++ ) {
+              let tmp = Math.max( -1, Math.min( 1, image.data[ i ] ) );
+              tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
+              u8[ i ] = Math.floor( tmp / 128.0 );
+            }
+
+            let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
+            ctx.putImageData( imgData, 0, 0 );
           } else if ( image.data && image.data.constructor === Uint16Array ) {
-            let u8 = new Uint8Array( image.data );
-            let imgData = new ImageData( new Uint8ClampedArray( u8 ), image.width, image.height );
+            let u8 = new Uint8Array( image.data.length );
+
+            for ( let i = 0; i < image.data.length; i ++ ) {
+              u8[ i ] = Math.floor( image.data[ i ] / 65535.0 * 255.0 );
+            }
+
+            let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
             ctx.putImageData( imgData, 0, 0 );
           } else if ( image.data && image.data.constructor === Uint8Array ) {
             let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
@@ -3228,8 +3254,15 @@
 
     <script>
       async function document_ready() {
-        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
-          (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
+        isMobile = (/iPhone|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent ));
+
+        /* iOS pre 13 */
+        isOldiPad = ((/iPad/.test( navigator.platform )) || (/iPad/i.test( navigator.userAgent ))) &&
+          (!(navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform )));
+
+        /* iOS 13+ */
+        isNewiPad = ((/iPad/.test( navigator.platform )) || (/iPad/i.test( navigator.userAgent ))) &&
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
 
         $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
@@ -3245,10 +3278,13 @@
           $('button').each( function() { $(this)[ 0 ].style.display = ''; });
           $('input[type=radio]').each( function() { $(this)[ 0 ].style.display = ''; });
           $('input[type=color]').each( function() { $(this)[ 0 ].style.display = ''; });
-          $('#drop-container')[ 0 ].style.display = 'flex';
-          $('#btn_desktop')[ 0 ].style.display = 'none';
 
-          initialize_dragndrop_listeners();
+          if (isOldiPad === false && isNewiPad === false) {
+            $('#drop-container')[ 0 ].style.display = 'flex';
+            $('#btn_desktop')[ 0 ].style.display = 'none';
+
+            initialize_dragndrop_listeners();
+          }
         } else {
           $('#btn_desktop')[ 0 ].style.display = '';
           $('#lbl_back_color')[ 0 ].style.display = '';
