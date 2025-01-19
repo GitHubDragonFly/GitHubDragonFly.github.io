@@ -19,7 +19,7 @@ This website is designed to serve as a hub with links to:
       - It also has a little bit of:
         - [three.quarks](https://github.com/Alchemist0823/three.quarks) atom thanks to its own [example](https://codesandbox.io/p/sandbox/three-quarks-atom-particle-system-xp3fvz?file=%2Findex.html)
         - [Proton](https://github.com/drawcall/three.proton) mouse flare thanks to [threejs-mesh-modifiers](https://github.com/drawcall/threejs-mesh-modifiers) example
-    - Cube Shading notes:
+    - Celestial Bodies notes:
       - Astronomically inacurrate, designed just to please the eye
     - IMG2MESH viewer / converter notes:
       - Versatile tool to convert an image to simple 3D mesh and also export that same image to other formats
