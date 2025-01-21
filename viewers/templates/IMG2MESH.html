@@ -366,7 +366,7 @@
           <option title="KTX2 Image Format ETC1S" value="ktx2e" onclick="export_image( 'ktx2e' );">KTX2e</option>
           <option title="KTX2 Image Format UASTC" value="ktx2u" onclick="export_image( 'ktx2u' );">KTX2u</option>
           <option title="WEBP Image Format" value="webp" onclick="export_image( 'webp' );">WEBP</option>
-          <option title="HDR Image Format Y-flipped" value="hdr_y" onclick="export_image( 'hdr', true );">HDR_Y</option>
+          <option title="HDR Image Format Y-flipped" value="hdr" onclick="export_image( 'hdr', true );">HDR_Y</option>
           <option title="EXR Image Format Y-flipped" value="exr_y" onclick="export_image( 'exr', true );">EXR_Y</option>
           <option title="PNG Image Format Y-flipped" value="png_y" onclick="export_image( 'png', true );">PNG_Y</option>
           <option title="AVIF Image Format Y-flipped" value="avif_y" onclick="export_image( 'avif', true );">AVIF_Y</option>
@@ -1193,6 +1193,8 @@
             scene.background = null;
           }
 
+          scene.backgroundIntensity = 1.0;
+          scene.backgroundBlurriness = 0.0;
           scene.environmentIntensity = 1.0;
         }
       }
@@ -1320,9 +1322,6 @@
             set_scene_image();
           }
 
-          scene.backgroundIntensity = 1.0;
-          scene.backgroundBlurriness = 0.0;
-
           document.getElementById('back_color').disabled = false;
           document.getElementById('btn_bgnd_linear_gradient').disabled = false;
 
@@ -1375,7 +1374,7 @@
           varying vec2 vUv;
 
           void main(){ 
-          gl_FragColor = vec4(vUv.xy, 0, 1);
+          gl_FragColor = vec4(vUv.xy, 0., 1.0);
 				
           #ifdef IS_SRGB
           gl_FragColor = sRGBTransferOETF( texture2D( blitTexture, vUv) );
@@ -1433,6 +1432,10 @@
           _renderer = null;
         }
 
+        fullscreenQuadMaterial.dispose();
+        fullscreenQuadGeometry.dispose();
+        texture.dispose();
+
         return readableTexture;
       }
 
@@ -1466,22 +1469,24 @@
 
           let fn_uc = fii.name.toUpperCase();
 
-          // Use max resolutions of 2k for mobile and 16k for desktops
+          // Use max resolutions of 2k for mobile, 8k for new iPad and 16k for desktops
+          // iPad appears able of loading 16k straight but limits the resize canvas size
 
           if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.KTX2') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
             texture_loader.load( URL.createObjectURL( fii ) , async function( texture ) {
               URL.revokeObjectURL( fii );
 
               if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
-                texture = await resize_texture( texture.image );
+                texture = await resize_texture( texture.image, 2048, false, fii.type );
               } else if (texture.image.width > 16384 || texture.image.height > 16384) {
                 if (isNewiPad === true) {
-                  texture = await resize_texture( texture.image, 8192 );
+                  texture = await resize_texture( texture.image, 8192, false, fii.type );
                 } else {
-                  texture = await resize_texture( texture.image, 16384 );
+                  texture = await resize_texture( texture.image, 16384, false, fii.type );
                 }
               }
 
+              texture.minFilter = texture.magFilter = THREE.LinearFilter;
               texture.colorSpace = THREE.SRGBColorSpace;
               texture.needsUpdate = true;
 
@@ -1529,7 +1534,7 @@
                 canvas_tex.dispose();
 
                 if (isMobile === true && (png_tex.image.width > 2048 || png_tex.image.height > 2048)) {
-                  png_tex = await resize_texture( png_tex.image );
+                  png_tex = await resize_texture( png_tex.image, 2048 );
                 } else if (png_tex.image.width > 16384 || png_tex.image.height > 16384) {
                   if (isNewiPad === true) {
                     png_tex = await resize_texture( png_tex.image, 8192 );
@@ -1577,7 +1582,7 @@
             } else {
               if (rgbe_loader === undefined) {
                 const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
-                rgbe_loader = new RGBELoader();
+                rgbe_loader = new RGBELoader( manager );
               }
 
               hd_loader = rgbe_loader;
@@ -1586,16 +1591,20 @@
             hd_loader.load( URL.createObjectURL( fii ), async function( texture ) {
               URL.revokeObjectURL( fii );
 
+              let m_type = fn_uc.endsWith('.EXR') ? 'image/x.exr' : 'image/x.hdr';
+              let flip = fn_uc.endsWith('.EXR') === true;
+
               if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
-                texture = await resize_texture( texture.image );
+                texture = await resize_texture( texture.image, 2048, flip, m_type );
               } else if (texture.image.width > 16384 || texture.image.height > 16384) {
                 if (isNewiPad === true) {
-                  texture = await resize_texture( texture.image, 8192 );
+                  texture = await resize_texture( texture.image, 8192, flip, m_type );
                 } else {
-                  texture = await resize_texture( texture.image, 16384 );
+                  texture = await resize_texture( texture.image, 16384, flip, m_type );
                 }
               }
 
+              texture.colorSpace = THREE.SRGBColorSpace;
               texture.needsUpdate = true;
 
               if (equi_enabled === true) {
@@ -1645,8 +1654,8 @@
 
           let gradient = context.createLinearGradient( 0, 0, 0, wh );
           let gradient_colors = [
-            [ 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.15 ],
-            [ '#151525', '#252535', '#454555', '#656575', '#787888', '#8A8A9A', '#9A9AAA', '#A5A5B5' ]
+            [ 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.15 ],
+            [ '#151525', '#252535', '#353545', '#454555', '#656575', '#787888', '#8A8A9A', '#9A9AAA', '#A5A5B5' ]
           ];
 
           let i = gradient_colors[ 0 ].length;
@@ -1655,7 +1664,7 @@
           context.fillStyle = gradient;
           context.fillRect( 0, 0, ww, wh );
 
-          let texture = new THREE.Texture( canvas );
+          let texture = new THREE.CanvasTexture( canvas );
           texture.mapping = THREE.EquirectangularReflectionMapping;
           texture.colorSpace = THREE.SRGBColorSpace;
           texture.needsUpdate = true;
@@ -1870,11 +1879,6 @@
         let canv = document.createElement( 'canvas' );
         let { width, height } = image;
 
-        let scale = (isMobile === true) ? 2048 : (isNewiPad === true ? 8192 : 16384) / Math.max( width, height );
-
-        width = width * Math.min( 1, scale );
-        height = height * Math.min( 1, scale );
-
         canv.width = width;
         canv.height = height;
         let ctx = canv.getContext( '2d', { willReadFrequently: true } );
@@ -1991,12 +1995,12 @@
         }
 
         if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
-          tex = await resize_texture( tex.image );
+          tex = await resize_texture( tex.image, 2048, tex.flipY === false, mime_type, true );
         } else if (tex.image.width > 16384 || tex.image.height > 16384) {
           if (isNewiPad === true) {
-            tex = await resize_texture( tex.image, 8192 );
+            tex = await resize_texture( tex.image, 8192, tex.flipY === false, mime_type, true );
           } else {
-            tex = await resize_texture( tex.image, 16384 );
+            tex = await resize_texture( tex.image, 16384, tex.flipY === false, mime_type, true );
           }
         }
 
@@ -2443,7 +2447,6 @@
         }
 
         console.timeEnd( 'Loading Time' );
-
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_message').style.display = 'none';
 
@@ -2929,51 +2932,97 @@
         return [ buff, image_data, size ];
       }
 
-      async function resize_texture( image, res = 2048 ) {
-        let tex;
+      async function resize_texture( image, res = 2048, tex_flip = false, m_type = 'image/png', isMeshTex = false ) {
+        let image_types = [ 'avif', 'bmp', 'gif', 'jpeg', 'ktx2', 'png', 'svg+xml', 'tiff', 'webp' ];
+        let image_hd_types = [ 'x.hdr', 'x.exr' ];
+
+        let img_ext = image_types.some( ext => m_type.endsWith( ext ) );
+        let img_hd_ext = image_hd_types.some( ext => m_type.endsWith( ext ) );
+
+        let tex, img = new Image();
 
         await new Promise( resolve => {
-          let canvas = document.createElement('canvas');
+          img.onload = function() {
+            let canvas2 = document.createElement('canvas');
 
-          let scale = res / Math.max( image.width, image.height );
+            let scale = res / Math.max( img.naturalWidth, img.naturalHeight );
 
-          canvas.width = image.width * Math.min( 1, scale );
-          canvas.height = image.height * Math.min( 1, scale );
+            canvas2.width = img.naturalWidth * Math.min( 1, scale );
+            canvas2.height = img.naturalHeight * Math.min( 1, scale );
 
-          let ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+            let ctx2 = canvas2.getContext( '2d', { willReadFrequently: true } );
 
-          if ( image instanceof ImageData ) {
-            ctx.putImageData( image, 0, 0 );
-          } else if ( image.data && image.data.constructor === Float32Array ) {
-            let u8 = new Uint8Array( image.data.length );
-
-            for ( let i = 0; i < image.data.length; i ++ ) {
-              let tmp = Math.max( -1, Math.min( 1, image.data[ i ] ) );
-              tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
-              u8[ i ] = tmp / 128.0;
+            // Flip image vertically
+            if (tex_flip === true) {
+              ctx2.translate( 0, canvas2.height );
+              ctx2.scale( 1, -1 );
             }
 
-            let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
-            ctx.putImageData( imgData, 0, 0 );
-          } else if ( image.data && image.data.constructor === Uint16Array ) {
-            let u8 = new Uint8Array( image.data.length );
+            ctx2.drawImage( img, 0, 0, canvas2.width, canvas2.height );
 
-            for ( let i = 0; i < image.data.length; i ++ ) {
-              let tmp = Math.max( -1, Math.min( 1, THREE.DataUtils.fromHalfFloat( image.data[ i ] ) ) );
-              tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
-              u8[ i ] = tmp / 128.0;
-            }
-
-            let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
-            ctx.putImageData( imgData, 0, 0 );
-          } else if ( image.data && image.data.constructor === Uint8Array ) {
-            let imgData = new ImageData( new Uint8ClampedArray( image.data.buffer ), image.width, image.height );
-            ctx.putImageData( imgData, 0, 0 );
-          } else {
-            ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+            resolve( tex = new THREE.CanvasTexture( canvas2 ) );
           }
 
-          resolve( tex = new THREE.CanvasTexture( canvas ) );
+          if ( image.src ) {
+            img.src = image.src;
+          } else if ( image.data && ( img_ext === true || ( isMeshTex === true && ( img_ext === true || img_hd_ext === true ) ) ) ) {
+
+            let blob = new Blob( [ image.data ], { type: m_type } );
+
+            img.src = URL.createObjectURL( blob );
+            URL.revokeObjectURL( blob );
+          } else {
+            let canvas1 = document.createElement('canvas');
+
+            canvas1.width = image.width;
+            canvas1.height = image.height;
+
+            let ctx1 = canvas1.getContext( '2d', { willReadFrequently: true } );
+
+            if ( image instanceof ImageData ) {
+              ctx1.putImageData( image, 0, 0 );
+            } else if ( image.data && image.data.constructor === Float32Array ) {
+              let u8 = new Uint8Array( image.data.length );
+
+              for ( let i = 0; i < image.data.length; i ++ ) {
+                let tmp = Math.max( -1, Math.min( 1, image.data[ i ] ) );
+                tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
+                u8[ i ] = tmp / 128.0;
+              }
+
+              let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
+              ctx1.putImageData( imgData, 0, 0 );
+            } else if ( image.data && image.data.constructor === Uint16Array ) {
+              let u8 = new Uint8Array( image.data.length );
+
+              for ( let i = 0; i < image.data.length; i ++ ) {
+                let tmp = Math.max( -1, Math.min( 1, THREE.DataUtils.fromHalfFloat( image.data[ i ] ) ) );
+                tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
+                u8[ i ] = tmp / 128.0;
+              }
+
+              let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
+              ctx1.putImageData( imgData, 0, 0 );
+            } else if ( image.data && image.data.constructor === Uint8Array ) {
+              let imgData = new ImageData( new Uint8ClampedArray( image.data.buffer ), image.width, image.height );
+              ctx1.putImageData( imgData, 0, 0 );
+            } else {
+              ctx1.drawImage( image, 0, 0, canvas1.width, canvas1.height );
+            }
+
+            let base64data = canvas1.toDataURL( 'image/png', 1 ).replace( /^data:image\/(avif|png|gif|ktx2|jpeg|webp);base64,/, '' );
+            let a2b = atob( base64data );
+            let buff = new Uint8Array( a2b.length );
+
+            for ( let i = 0, l = buff.length; i < l; i ++ ) {
+              buff[ i ] = a2b.charCodeAt( i );
+            }
+
+            let blob = new Blob( [ buff ], { type: 'image/png' } );
+
+            img.src = URL.createObjectURL( blob );
+            URL.revokeObjectURL( blob );
+          }
         });
 
         return tex;
