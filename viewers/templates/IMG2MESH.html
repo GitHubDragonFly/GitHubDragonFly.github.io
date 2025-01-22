@@ -328,7 +328,7 @@
         <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".zip, .dds, .dib, .exr, .hdr, .ico, .ktx2, .tga, .tif, .tiff, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" />
         <button title="Background Image" id="btn_file_image_input" style="display: none; min-width: 54px;" onclick="document.getElementById('file_image_input').click();">BGND</button>
         <label for="btn_file_image_input" title="Background Image"></label>
-        <input type="file" id="file_image_input" style="display: none;" onchange="set_scene_image();" accept=".exr, .hdr, .ktx2, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" />
+        <input type="file" id="file_image_input" style="display: none;" onchange="set_scene_image();" accept=".exr, .hdr, .ktx2, .tif, .tiff, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" />
         <label for="back_color" title="Background Color" id="lbl_back_color">B<input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled /></label>
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
@@ -1472,7 +1472,9 @@
           // Use max resolutions of 2k for mobile, 8k for new iPad and 16k for desktops
           // iPad appears able of loading 16k straight but limits the resize canvas size
 
-          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.KTX2') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
+          const exclude_extensions = [ 'EXR', 'HDR', 'KTX2', 'TIF', 'TIFF' ];
+
+          if (fii.type.startsWith('image/') && ! (exclude_extensions.some( ext => fn_uc.endsWith( ext ) ))) {
             texture_loader.load( URL.createObjectURL( fii ) , async function( texture ) {
               URL.revokeObjectURL( fii );
 
@@ -1510,6 +1512,55 @@
               set_bgenv_message( true );
             }, function ( xhr ) {
             }, function ( error ) {
+              document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
+              console.log( 'Error loading Background Image File!' );
+              console.log( error );
+
+              URL.revokeObjectURL( fii );
+            });
+          } else if (fn_uc.endsWith('.TIF') || fn_uc.endsWith('.TIFF')) {
+            if (tiff_loader === undefined) {
+              const { TIFFLoader } = await import( "three/addons/loaders/TIFFLoader.min.js" );
+              tiff_loader = new TIFFLoader( manager );
+            }
+
+            tiff_loader.load( URL.createObjectURL( fii ), async function( texture ) {
+              URL.revokeObjectURL( fii );
+
+              if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
+                try {
+                  texture = await resize_texture( texture, 2048, false, fii.type );
+                } catch ( error ) {
+                  document.getElementById('div_message').innerText = 'Error: ' + error.message;
+                  URL.revokeObjectURL( fii );
+                  return;
+                }
+              } else if (texture.image.width > 16384 || texture.image.height > 16384) {
+                if (isNewiPad === true) {
+                  texture = await resize_texture( texture, 8192, false, fii.type );
+                } else {
+                  texture = await resize_texture( texture, 16384, false, fii.type );
+                }
+              }
+
+              texture.colorSpace = THREE.SRGBColorSpace;
+              texture.needsUpdate = true;
+
+              if (equi_enabled === true) {
+                texture.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = texture.clone();
+                scene.environment = texture.clone();
+              } else {
+                scene.background = texture.clone();
+              }
+
+              mouse_wheel = true;
+
+              texture.dispose();
+
+              set_bgenv_message( true );
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
               document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
               console.log( 'Error loading Background Image File!' );
               console.log( error );
@@ -2953,8 +3004,8 @@
       async function resize_texture( texture, res = 2048, tex_flip = false, m_type = 'image/png', isMeshTex = false ) {
         const image = texture.image;
 
-        let image_types = [ 'avif', 'bmp', 'gif', 'jpeg', 'ktx2', 'png', 'svg+xml', 'tiff', 'webp' ];
-        let image_hd_types = [ 'x.hdr', 'x.exr' ];
+        let image_types = [ 'avif', 'bmp', 'gif', 'jpeg', 'png', 'svg+xml', 'webp' ];
+        let image_hd_types = [ 'x.hdr', 'x.exr', 'ktx2' ];
 
         let img_ext = image_types.some( ext => m_type.endsWith( ext ) );
         let img_hd_ext = image_hd_types.some( ext => m_type.endsWith( ext ) );
