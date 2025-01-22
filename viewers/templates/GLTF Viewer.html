@@ -2106,7 +2106,7 @@
       }
 
       async function set_scene_image( reset = false ) {
-        const fii = document.getElementById('file_image_input').files[ 0 ];
+        let fii = document.getElementById('file_image_input').files[ 0 ];
 
         await reset_scene_params();
 
@@ -2114,111 +2114,144 @@
           if (reset === false) set_bgenv_message();
 
           bgnd_linear_gradient = false;
+          document.body.style.backgroundImage = 'none';
+          document.body.style.backgroundColor = '#000000';
           document.getElementById('back_color').value = '#000000';
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
 
           let fn_uc = fii.name.toUpperCase();
 
-          // Use max resolutions of 2k for mobile, 8k for new iPad and 16k for desktops
+          // Use max resolution of 2k for mobile, 8k for new iPad and 16k for desktops
           // iPad appears able of loading 16k straight but limits the resize canvas size
 
           if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.KTX2') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
             texture_loader.load( URL.createObjectURL( fii ) , async function( texture ) {
               URL.revokeObjectURL( fii );
 
-              if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
-                texture = await resize_texture( texture.image );
-              } else if (texture.image.width > 16384 || texture.image.height > 16384) {
-                if (isNewiPad === true) {
-                  texture = await resize_texture( texture.image, 8192 );
-                } else {
-                  texture = await resize_texture( texture.image, 16384 );
+              // If image is SVG or resize is required then keep using the loaded texture, else
+              // use hdrJPGLoader and load image again for any gainmap effect and less distortion
+
+              if (fn_uc.endsWith('.SVG') || (texture.image.width > 16384 || texture.image.height > 16384) ||
+                (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048))) {
+
+                if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
+                  texture = await resize_texture( texture.image, 2048, false, fii.type );
+                } else if (texture.image.width > 16384 || texture.image.height > 16384) {
+                  if (isNewiPad === true) {
+                    texture = await resize_texture( texture.image, 8192, false, fii.type );
+                  } else {
+                    texture = await resize_texture( texture.image, 16384, false, fii.type );
+                  }
                 }
-              }
 
-              texture.colorSpace = THREE.SRGBColorSpace;
-              texture.needsUpdate = true;
+                texture.colorSpace = THREE.SRGBColorSpace;
+                texture.flipY = (bg_flip === false);
+                texture.needsUpdate = true;
 
-              if (equi_enabled === true) {
-                texture.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = texture.clone();
-                scene.environment = texture.clone();
+                if (equi_enabled === true) {
+                  texture.mapping = THREE.EquirectangularReflectionMapping;
+                  scene.background = texture.clone();
+                  scene.environment = texture.clone();
+                } else {
+                  scene.background = texture.clone();
+                }
+
+                mouse_wheel = true;
+
+                texture.dispose();
+
+                set_bgenv_message( true );
               } else {
-                scene.background = texture.clone();
+                texture.dispose();
+
+                hdrJPGLoader.load( URL.createObjectURL( fii ) , async function( texture2 ) {
+                  URL.revokeObjectURL( fii );
+
+                  let tex = await texture2.toDataTexture();
+
+                  texture2.renderTarget.texture.dispose();
+                  texture2.renderTarget.dispose();
+                  texture2.dispose();
+
+                  tex.colorSpace = THREE.LinearSRGBColorSpace;
+                  tex.flipY = (bg_flip === true);
+                  tex.needsUpdate = true;
+
+                  if (equi_enabled === true) {
+                    tex.mapping = THREE.EquirectangularReflectionMapping;
+                    scene.background = tex.clone();
+                    scene.environment = tex.clone();
+                  } else {
+                    scene.background = tex.clone();
+                  }
+
+                  mouse_wheel = true;
+
+                  tex.dispose();
+
+                  set_bgenv_message( true );
+                }, function ( xhr ) {
+                }, function ( error ) {
+                  document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
+                  console.log( 'Error loading Background Image File!' );
+                  console.log( error );
+
+                  URL.revokeObjectURL( fii );
+                });
               }
-
-              mouse_wheel = true;
-
-              texture.dispose();
-
-              set_bgenv_message( true );
             }, function ( xhr ) {
             }, function ( error ) {
-              document.getElementById('div_message').innerText = 'Error loading image';
+              document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
               console.log( 'Error loading Background Image File!' );
               console.log( error );
 
               URL.revokeObjectURL( fii );
             });
           } else if (fn_uc.endsWith('.KTX2')) {
-            if (ktx2_loader === undefined) {
-              const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
-              ktx2_loader = new KTX2Loader( manager );
-              ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/libs/basis/" );
-              ktx2_loader.detectSupport( renderer );
-              await ktx2_loader.init();
-            }
-
             ktx2_loader.load( URL.createObjectURL( fii ), async function( texture ) {
               URL.revokeObjectURL( fii );
 
-              // Convert to PNG so it shows on most platforms
               // Unsupported KTX2 formats might log a warning
 
-              let canvas_tex = await decompress( texture );
+              // Decompress the texture in order to resize it and manipulate its flip
+              let canvas_texture = await decompress( texture );
 
-              texture.dispose();
-
-              texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), async function( png_tex ) {
-                canvas_tex.dispose();
-
-                if (isMobile === true && (png_tex.image.width > 2048 || png_tex.image.height > 2048)) {
-                  png_tex = await resize_texture( png_tex.image );
-                } else if (png_tex.image.width > 16384 || png_tex.image.height > 16384) {
-                  if (isNewiPad === true) {
-                    png_tex = await resize_texture( png_tex.image, 8192 );
-                  } else {
-                    png_tex = await resize_texture( png_tex.image, 16384 );
-                  }
-                }
-
-                png_tex.colorSpace = THREE.SRGBColorSpace;
-                png_tex.flipY = false;
-                png_tex.needsUpdate = true;
-
-                if (equi_enabled === true) {
-                  png_tex.mapping = THREE.EquirectangularReflectionMapping;
-                  scene.background = png_tex.clone();
-                  scene.environment = png_tex.clone();
+              if (isMobile === true && (canvas_texture.image.width > 2048 || canvas_texture.image.height > 2048)) {
+                canvas_texture = await resize_texture( canvas_texture.image, 2048 );
+              } else if (canvas_texture.image.width > 16384 || canvas_texture.image.height > 16384) {
+                if (isNewiPad === true) {
+                  canvas_texture = await resize_texture( canvas_texture.image, 8192 );
                 } else {
-                  scene.background = png_tex.clone();
+                  canvas_texture = await resize_texture( canvas_texture.image, 16384 );
                 }
+              }
 
-                mouse_wheel = true;
+              canvas_texture.colorSpace = THREE.SRGBColorSpace;
+              canvas_texture.flipY = (bg_flip === true);
+              canvas_texture.needsUpdate = true;
 
-                png_tex.dispose();
+              if (equi_enabled === true) {
+                canvas_texture.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = canvas_texture.clone();
+                scene.environment = canvas_texture.clone();
+              } else {
+                scene.background = canvas_texture.clone();
+              }
 
-                set_bgenv_message( true );
-              });
+              mouse_wheel = true;
+
+              canvas_texture.dispose();
+
+              set_bgenv_message( true );
             }, function ( xhr ) { // onProgress
             }, function ( error ) { // onError
-              document.getElementById('div_message').innerText = 'Error loading image';
+              document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
               console.log( 'Error loading Background Image File!' );
               console.log( error );
 
               URL.revokeObjectURL( fii );
             });
-        } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
+          } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
             let hd_loader;
 
             if (fn_uc.endsWith('.EXR')) {
@@ -2231,48 +2264,146 @@
             } else {
               if (rgbe_loader === undefined) {
                 const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
-                rgbe_loader = new RGBELoader();
+                rgbe_loader = new RGBELoader( manager );
               }
 
               hd_loader = rgbe_loader;
             }
 
-            hd_loader.load( URL.createObjectURL( fii ), async function( texture ) {
-              URL.revokeObjectURL( fii );
+            let image = await hd_loader.loadAsync( URL.createObjectURL( fii ));
+            URL.revokeObjectURL( fii );
 
-              if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
-                texture = await resize_texture( texture.image );
-              } else if (texture.image.width > 16384 || texture.image.height > 16384) {
+            // If resize is required then keep using the loaded texture,
+            // else use hdrJPGLoader to process HD texture
+
+            if ((image.image.width > 16384 || image.image.height > 16384) ||
+              (isMobile === true && (image.image.width > 2048 || image.image.height > 2048))) {
+
+              let m_type = fn_uc.endsWith('.EXR') ? 'image/x.exr' : 'image/x.hdr';
+              let flip = fn_uc.endsWith('.EXR') === true;
+
+              if (isMobile === true && (image.image.width > 2048 || image.image.height > 2048)) {
+                image = await resize_texture( image.image, 2048, flip, m_type );
+              } else if (image.image.width > 16384 || image.image.height > 16384) {
                 if (isNewiPad === true) {
-                  texture = await resize_texture( texture.image, 8192 );
+                  image = await resize_texture( image.image, 8192, flip, m_type );
                 } else {
-                  texture = await resize_texture( texture.image, 16384 );
+                  image = await resize_texture( image.image, 16384, flip, m_type );
                 }
               }
 
-              texture.needsUpdate = true;
+              image.colorSpace = THREE.SRGBColorSpace;
+              image.needsUpdate = true;
 
               if (equi_enabled === true) {
-                texture.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = texture.clone();
-                scene.environment = texture.clone();
+                image.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = image.clone();
+                scene.environment = image.clone();
               } else {
-                scene.background = texture.clone();
+                scene.background = image.clone();
               }
 
               mouse_wheel = true;
 
-              texture.dispose();
+              image.dispose();
 
               set_bgenv_message( true );
-            }, function ( xhr ) {
-            }, function ( error ) {
-              document.getElementById('div_message').innerText = 'Error loading image';
-              console.log( 'Error loading Background Image File!' );
-              console.log( error );
+            } else {
+              const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
+              const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
 
-              URL.revokeObjectURL( fii );
-            });
+              // Encode a Gain map from EXR or HDR file
+              // See the code example at: https://github.com/MONOGRID/gainmap-js
+
+              const textureMax = findTextureMinMax( image );
+
+              // Encode the gainmap
+              const encodingResult = encode({
+                image,
+                maxContentBoost: Math.max.apply( this, textureMax ) // this will encode the full HDR range
+              });
+
+              // obtain the RAW RGBA SDR buffer and create an ImageData
+              const sdrImageData = new ImageData( encodingResult.sdr.toArray(), encodingResult.sdr.width, encodingResult.sdr.height );
+              // obtain the RAW RGBA Gain map buffer and create an ImageData
+              const gainMapImageData = new ImageData( encodingResult.gainMap.toArray(), encodingResult.gainMap.width, encodingResult.gainMap.height );
+
+              // parallel compress the RAW buffers into the specified mimeType
+              const mimeType = 'image/jpeg';
+              const quality = 1.0;
+
+              const [sdr, gainMap] = await Promise.all([
+                compress({
+                  source: sdrImageData,
+                  mimeType,
+                  quality,
+                  flipY: true // output needs to be flipped
+                }),
+                compress({
+                  source: gainMapImageData,
+                  mimeType,
+                  quality,
+                  flipY: true // output needs to be flipped
+                })
+              ]);
+
+              // obtain the metadata which will be embedded into and XMP tag inside the final JPEG file
+              const metadata = encodingResult.getMetadata();
+
+              // embed the compressed images + metadata into a single JPEG file
+              const jpeg = await encodeJPEGMetadata({
+                ...encodingResult,
+                ...metadata,
+                sdr,
+                gainMap
+              });
+
+              // jpeg will be a Uint8Array
+              const jpeg_file = new File( [ jpeg ], 'file.jpg' );
+
+              // load the encoded jpeg with HDRJPGLoader
+
+              hdrJPGLoader.load( URL.createObjectURL( jpeg_file ), async function( texture ) {
+                URL.revokeObjectURL( jpeg_file );
+
+                let hdrJpgEquirectangularMap = await texture.toDataTexture();
+
+                texture.renderTarget.texture.dispose();
+                texture.renderTarget.dispose();
+                texture.dispose();
+
+                hdrJpgEquirectangularMap.colorSpace = THREE.LinearSRGBColorSpace;
+                hdrJpgEquirectangularMap.flipY = (bg_flip === true);
+                hdrJpgEquirectangularMap.needsUpdate = true;
+
+                if (equi_enabled === true) {
+                  hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
+                  scene.background = hdrJpgEquirectangularMap.clone();
+                  scene.environment = hdrJpgEquirectangularMap.clone();
+                  if (params.setEnvMap === true) set_envMap( true );
+                } else {
+                  scene.background = hdrJpgEquirectangularMap.clone();
+                }
+
+                mouse_wheel = true;
+
+                hdrJpgEquirectangularMap.dispose();
+
+                set_bgenv_message( true );
+
+                // encoder must be manually disposed when no longer needed
+                encodingResult.gainMap.dispose();
+                encodingResult.sdr.dispose();
+                image.dispose();
+              }, function ( xhr ) {
+              }, function ( error ) {
+                document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
+                console.log( 'Error loading Background Image File!' );
+                console.log( error );
+
+                URL.revokeObjectURL( jpeg_file );
+              });
+            }
           } else {
             console.log( 'Not a valid image file!' );
             document.getElementById('file_image_input').value = '';
@@ -2293,14 +2424,15 @@
           bgnd_linear_gradient = true;
 
           let canvas = document.createElement('canvas');
-          let context = canvas.getContext('2d');
           canvas.width = ww;
           canvas.height = wh;
 
+          let context = canvas.getContext( '2d', { willReadFrequently: true } );
+
           let gradient = context.createLinearGradient( 0, 0, 0, wh );
           let gradient_colors = [
-            [ 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.15 ],
-            [ '#151525', '#252535', '#454555', '#656575', '#787888', '#8A8A9A', '#9A9AAA', '#A5A5B5' ]
+            [ 0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.15 ],
+            [ '#151525', '#252535', '#353545', '#454555', '#656575', '#787888', '#8A8A9A', '#9A9AAA', '#A5A5B5' ]
           ];
 
           let i = gradient_colors[ 0 ].length;
@@ -2309,23 +2441,30 @@
           context.fillStyle = gradient;
           context.fillRect( 0, 0, ww, wh );
 
-          let texture = new THREE.CanvasTexture( canvas );
-          texture.mapping = THREE.EquirectangularReflectionMapping;
-          texture.needsUpdate = true;
+          await canvas.toBlob( function( blob ) {
+            let url = URL.createObjectURL( blob );
 
-          scene.background = texture.clone();
-          scene.environment = texture.clone();
-          scene.environmentIntensity = 0.05;
+            hdrJPGLoader.load( url, async function( texture ) {
+              let tex = await texture.toDataTexture();
 
-          texture.dispose();
+              tex.mapping = THREE.EquirectangularReflectionMapping;
+              tex.needsUpdate = true;
 
-          document.getElementById('file_image_input').value = '';
-          document.getElementById('back_color').value = '#000000';
-          document.body.style.backgroundColor = document.getElementById('back_color').value;
-          document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'lightgreen';
+              scene.background = tex.clone();
+              scene.environment = tex.clone();
+              scene.environmentIntensity = 0.1;
+
+              tex.dispose();
+
+              document.getElementById('file_image_input').value = '';
+              document.body.style.backgroundColor = '#000000';
+              document.getElementById('back_color').value = '#000000';
+              document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'lightgreen';
+
+              mouse_wheel = true;
+            });
+          }, 'image/png', 1 );
         }
-
-        mouse_wheel = true;
       }
 
       function set_ambient_light_color() {
@@ -4121,51 +4260,93 @@
         return [ buff, image_data, size ];
       }
 
-      async function resize_texture( image, res = 2048 ) {
-        let tex;
+      async function resize_texture( image, res = 2048, tex_flip = false, m_type = 'image/png' ) {
+        let image_types = [ 'avif', 'bmp', 'gif', 'jpeg', 'ktx2', 'png', 'svg+xml', 'tiff', 'webp' ];
+        let img_ext = image_types.some( ext => m_type.endsWith( ext ) );
+
+        let tex, img = new Image();
 
         await new Promise( resolve => {
-          let canvas = document.createElement('canvas');
+          img.onload = function() {
+            let canvas2 = document.createElement('canvas');
 
-          let scale = res / Math.max( image.width, image.height );
+            let scale = res / Math.max( img.naturalWidth, img.naturalHeight );
 
-          canvas.width = image.width * Math.min( 1, scale );
-          canvas.height = image.height * Math.min( 1, scale );
+            canvas2.width = img.naturalWidth * Math.min( 1, scale );
+            canvas2.height = img.naturalHeight * Math.min( 1, scale );
 
-          let ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+            let ctx2 = canvas2.getContext( '2d', { willReadFrequently: true } );
 
-          if ( image instanceof ImageData ) {
-            ctx.putImageData( image, 0, 0 );
-          } else if ( image.data && image.data.constructor === Float32Array ) {
-            let u8 = new Uint8Array( image.data.length );
-
-            for ( let i = 0; i < image.data.length; i ++ ) {
-              let tmp = Math.max( -1, Math.min( 1, image.data[ i ] ) );
-              tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
-              u8[ i ] = tmp / 128.0;
+            // Flip image vertically
+            if (tex_flip === true) {
+              ctx2.translate( 0, canvas2.height );
+              ctx2.scale( 1, -1 );
             }
 
-            let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
-            ctx.putImageData( imgData, 0, 0 );
-          } else if ( image.data && image.data.constructor === Uint16Array ) {
-            let u8 = new Uint8Array( image.data.length );
+            ctx2.drawImage( img, 0, 0, canvas2.width, canvas2.height );
 
-            for ( let i = 0; i < image.data.length; i ++ ) {
-              let tmp = Math.max( -1, Math.min( 1, THREE.DataUtils.fromHalfFloat( image.data[ i ] ) ) );
-              tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
-              u8[ i ] = tmp / 128.0;
-            }
-
-            let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
-            ctx.putImageData( imgData, 0, 0 );
-          } else if ( image.data && image.data.constructor === Uint8Array ) {
-            let imgData = new ImageData( new Uint8ClampedArray( image.data.buffer ), image.width, image.height );
-            ctx.putImageData( imgData, 0, 0 );
-          } else {
-            ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+            resolve( tex = new THREE.CanvasTexture( canvas2 ) );
           }
 
-          resolve( tex = new THREE.CanvasTexture( canvas ) );
+          if ( image.src ) {
+            img.src = image.src;
+          } else if ( image.data && img_ext === true ) {
+            let blob = new Blob( [ image.data ], { type: m_type } );
+
+            img.src = URL.createObjectURL( blob );
+            URL.revokeObjectURL( blob );
+          } else {
+            let canvas1 = document.createElement('canvas');
+
+            canvas1.width = image.width;
+            canvas1.height = image.height;
+
+            let ctx1 = canvas1.getContext( '2d', { willReadFrequently: true } );
+
+            if ( image instanceof ImageData ) {
+              ctx1.putImageData( image, 0, 0 );
+            } else if ( image.data && image.data.constructor === Float32Array ) {
+              let u8 = new Uint8Array( image.data.length );
+
+              for ( let i = 0; i < image.data.length; i ++ ) {
+                let tmp = Math.max( -1, Math.min( 1, image.data[ i ] ) );
+                tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
+                u8[ i ] = tmp / 128.0;
+              }
+
+              let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
+              ctx1.putImageData( imgData, 0, 0 );
+            } else if ( image.data && image.data.constructor === Uint16Array ) {
+              let u8 = new Uint8Array( image.data.length );
+
+              for ( let i = 0; i < image.data.length; i ++ ) {
+                let tmp = Math.max( -1, Math.min( 1, THREE.DataUtils.fromHalfFloat( image.data[ i ] ) ) );
+                tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
+                u8[ i ] = tmp / 128.0;
+              }
+
+              let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
+              ctx1.putImageData( imgData, 0, 0 );
+            } else if ( image.data && image.data.constructor === Uint8Array ) {
+              let imgData = new ImageData( new Uint8ClampedArray( image.data.buffer ), image.width, image.height );
+              ctx1.putImageData( imgData, 0, 0 );
+            } else {
+              ctx1.drawImage( image, 0, 0, canvas1.width, canvas1.height );
+            }
+
+            let base64data = canvas1.toDataURL( 'image/png', 1 ).replace( /^data:image\/(avif|png|gif|ktx2|jpeg|webp);base64,/, '' );
+            let a2b = atob( base64data );
+            let buff = new Uint8Array( a2b.length );
+
+            for ( let i = 0, l = buff.length; i < l; i ++ ) {
+              buff[ i ] = a2b.charCodeAt( i );
+            }
+
+            let blob = new Blob( [ buff ], { type: 'image/png' } );
+
+            img.src = URL.createObjectURL( blob );
+            URL.revokeObjectURL( blob );
+          }
         });
 
         return tex;
