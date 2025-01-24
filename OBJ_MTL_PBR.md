@@ -10,9 +10,9 @@ All the entries have been set as such so they are compatible with `three.js` as 
 Most, if not all, of the available viewers do include the OBJ Exporter, thus can try to export their models to `OBJ + MTL + textures` format with whatever limitations there might be (like animations for example).
 
 As for the textures, any of the following image formats should work with OBJ models when specified in the MTL file:
-  - AVIF, BMP, DDS, GIF, JPEG, KTX2, PNG, TGA, WEBP:
-    - DDS, KTX2 and TGA textures will be converted to PNG format
-    - ASSIMP library used in my repository currently does not support KTX2
+  - AVIF, BMP, DDS, EXR, GIF, HDR, JPEG, KTX2, PNG, TGA, WEBP:
+    - DDS, EXR, HDR, KTX2 and TGA textures will be converted to PNG format
+    - ASSIMP library used in my repository currently should not support EXR, HDR or KTX2
   - Test model can be found [here](https://github.com/GitHubDragonFly/GitHubDragonFly.github.io/tree/main/viewers/examples/cerberus) and each of the zip files can be loaded as such:
     - clicking each of these zip files will take you to the page where you should look for 3 dots button in the top right corner and its option to copy permalink of the file to the clipboard which can then be pasted into the `URL` textbox of my [OBJ Viewer](https://githubdragonfly.github.io/viewers/templates/OBJ%20Viewer.html)
     - the other option would be to just download the file to a hard drive and load it with the `Browse` option of the OBJ Viewer
