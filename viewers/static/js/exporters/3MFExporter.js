@@ -566,11 +566,11 @@
 				let v2 = groups === true ? i + 1 : indices[ i + 1 ];
 				let v3 = groups === true ? i + 2 : indices[ i + 2 ];
 
-				if ( map_pid ) {
+				if ( map_pid !== null ) {
 
 					trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" pid="' + map_pid + '" p1="' + v1 + '" p2="' + v2 + '" p3="' + v3 + '" />\n';
 
-				} else if ( color_pid ) {
+				} else if ( color_pid !== null ) {
 
 					trianglesString += '     <triangle v1="' + v1 + '" v2="' + v2 + '" v3="' + v3 + '" pid="' + color_pid + '" p1="' + v1 + '" />\n';
 
