@@ -25,6 +25,7 @@ This website is designed to serve as a hub with links to:
       - Versatile tool to convert an image to simple 3D mesh and also export that same image to other formats
       - Based on thrax version of code: `https://tartan-swanky-plutonium.glitch.me/`
         - Original code: `https://github.com/shaoruu/three-extruded-image`
+      - Depending on the devices, the image resolution will be limited but could go as high as 16k on desktops
       - Supported import image formats:
         - AVIF, BMP, DDS, DIB, EXR, GIF, HDR, ICO, JPEG, KTX2, PNG, SVG, TGA, TIFF, WEBP
           - Using [@jsquash/avif](https://github.com/jamsinclair/jSquash) encoder for AVIF compression
@@ -36,7 +37,7 @@ This website is designed to serve as a hub with links to:
           - ZIP files are supported
       - Supports exporting to the following formats:
         - Animated GIF and PNG (see general notes about these formats further below)
-        - AVIF, HDR, EXR, JPEG, PNG, KTX2 and WEBP images at unchanged original image size up to 16k:
+        - AVIF, HDR, EXR, JPEG, PNG, KTX2 and WEBP images at unchanged device limited image size (up to 16k):
           - HDR encoding is powered by a modified version of [hdrpng.js](https://github.com/enkimute/hdrpng.js/) library
           - HDR code was created with assistance from Microsoft Copilot
         - 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
