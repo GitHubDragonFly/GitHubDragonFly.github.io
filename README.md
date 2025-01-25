@@ -33,6 +33,7 @@ This website is designed to serve as a hub with links to:
         - Local blobs and remote URL loading are supported:
           - URLs have to end with supported extension
           - GitHub URLs are supported
+          - ZIP files are supported
       - Supports exporting to the following formats:
         - Animated GIF and PNG (see general notes about these formats further below)
         - AVIF, HDR, EXR, JPEG, PNG, KTX2 and WEBP images at unchanged original image size up to 16k:
