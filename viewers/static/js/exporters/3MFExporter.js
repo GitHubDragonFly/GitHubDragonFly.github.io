@@ -78,9 +78,10 @@
 			const relsStringTextures = await this.createTexturesRelsFile( scene );
 
 			// Combine the XML and Relationships content into a single 3MF package
+			files[ '[Content_Types].xml' ] = await fflate.strToU8( this.createContentTypesFile( options, relsStringTextures ) );
+
 			if ( options.thumbnail ) files[ 'Metadata/thumbnail.png' ] = options.thumbnail;
 
-			files[ '[Content_Types].xml' ] = await fflate.strToU8( this.createContentTypesFile( options ) );
 			files[ '_rels/.rels' ] = await fflate.strToU8( relsString );
 
 			if ( relsStringTextures !== null ) {
@@ -182,13 +183,13 @@
 
 		}
 
-		createContentTypesFile( options ) {
+		createContentTypesFile( options, stringTextures ) {
 
 			let contentTypesString = '<?xml version="1.0" encoding="UTF-8"?>\n';
 			contentTypesString += '<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">\n';
 			contentTypesString += ' <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml" />\n';
 			contentTypesString += ' <Default Extension="model" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodel+xml" />\n';
-			contentTypesString += ' <Default Extension="png" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodeltexture" />\n';
+			if ( stringTextures !== null ) contentTypesString += ' <Default Extension="png" ContentType="application/vnd.ms-package.3dmanufacturing-3dmodeltexture" />\n';
 			if ( options.thumbnail !== null ) contentTypesString += ' <Override PartName="/Metadata/thumbnail.png" ContentType="image/png" />\n';
 			contentTypesString += '</Types>\n';
 
@@ -225,29 +226,22 @@
 					if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
 					geometry.normalizeNormals();
 
-					let map_id = null;
-					let color_id = null;
-
 					if ( geometry.attributes.color ) { // Check if vertex colors are present
 
-						color_id = geometry.id;
-
-						resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
-
-						resourcesString += '  <m:colorgroup id="' + color_id + '">\n';
+						resourcesString += '  <m:colorgroup id="' + geometry.id + '">\n';
 						resourcesString += this.generateColors( geometry );
 						resourcesString += '  </m:colorgroup>\n';
 
+						resourcesString += '  <object id="' + object.id + '" type="model">\n';
+
 						resourcesString += '   <mesh>\n';
 						resourcesString += this.generateVertices( geometry );
-						resourcesString += this.generateTriangles( geometry, map_id, color_id );
+						resourcesString += this.generateTriangles( geometry, null, geometry.id );
 						resourcesString += '   </mesh>\n';
 
 						resourcesString += '  </object>\n';
 
-					}
-
-					if ( Array.isArray( material ) && geometry.groups.length === material.length ) {
+					} else if ( Array.isArray( material ) && geometry.groups.length === material.length ) {
 
 						// Create new object for each group / material pair
 						// Add it as a component to the main object
@@ -259,7 +253,6 @@
 							// For id uniqueness let's hope there is not 1000000000+ objects in the model
 
 							let object_id = object.id + 1000000000 + mtl.id + index;
-							let object_name = ( object.name || object.id ) + '_group_' + index;
 
 							let hex_uc = '#' + mtl.color.getHexString().toUpperCase();
 
@@ -280,24 +273,19 @@
 								resourcesString += '   <m:pbmetallic name="Metallic" metallicness="' + metalness + '" roughness="' + roughness + '" />\n';
 								resourcesString += '  </m:pbmetallicdisplayproperties>\n';
 
-								resourcesString += '  <m:basematerials id="' + mtl.id + '">\n';
-								resourcesString += '   <m:base name="Metallic" displaycolor="' + hex_uc + '" displaypropertiesid="' + m_id + '" index="' + index + '" />\n';
-								resourcesString += '  </m:basematerials>\n';
+								resourcesString += '  <basematerials id="' + mtl.id + '">\n';
+								resourcesString += '   <base name="Metallic" displaycolor="' + hex_uc + '" displaypropertiesid="' + m_id + '" index="' + index + '" />\n';
+								resourcesString += '  </basematerials>\n';
 
 							} else {
 
-								resourcesString += '  <m:basematerials id="' + mtl.id + '">\n';
-								resourcesString += '   <m:base name="' + ( mtl.name || mtl.type ) + '" displaycolor="' + hex_uc + '" index="' + index + '" />\n';
-								resourcesString += '  </m:basematerials>\n';
+								resourcesString += '  <basematerials id="' + mtl.id + '">\n';
+								resourcesString += '   <base name="' + ( mtl.name || mtl.type ) + '" displaycolor="' + hex_uc + '" index="' + index + '" />\n';
+								resourcesString += '  </basematerials>\n';
 
 							}
 
 							if ( mtl.map ) { // Check if texture is present
-
-								resourcesString += '  <object id="' + object_id + '" name="' + object_name + '" type="model">\n';
-
-								map_id = object_id;
-
 								// If there is no name then use texture uuid as a part of new name
 
 								let name = mtl.map.name ? mtl.map.name : 'texture_' + mtl.map.uuid;
@@ -320,20 +308,22 @@
 
 								}
 
+								resourcesString += '  <object id="' + object_id + '" type="model">\n';
+
 								resourcesString += '   <mesh>\n';
 								resourcesString += this.generateVertices( geometry, index );
-								resourcesString += this.generateTriangles( geometry, map_id, color_id, index );
+								resourcesString += this.generateTriangles( geometry, object_id, null, index );
 								resourcesString += '   </mesh>\n';
 
 								resourcesString += '  </object>\n';
 
 							} else {
 
-								resourcesString += '  <object id="' + object_id + '" pid="' + mtl.id + '" pindex="0" name="' + object_name + '" type="model">\n';
+								resourcesString += '  <object id="' + object_id + '" pid="' + mtl.id + '" pindex="0" type="model">\n';
 
 								resourcesString += '   <mesh>\n';
 								resourcesString += this.generateVertices( geometry, index );
-								resourcesString += this.generateTriangles( geometry, map_id, color_id, index );
+								resourcesString += this.generateTriangles( geometry, null, null, index );
 								resourcesString += '   </mesh>\n';
 
 								resourcesString += '  </object>\n';
@@ -344,7 +334,7 @@
 
 						});
 
-						resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
+						resourcesString += '  <object id="' + object.id + '" type="model">\n';
 						resourcesString += '   <components>\n';
 						resourcesString += componentsString;
 						resourcesString += '   </components>\n';
@@ -354,9 +344,15 @@
 
 						if ( material.map ) { // Check if texture is present
 
-							map_id = object.id;
+							resourcesString += '  <basematerials id="' + material.id + '">\n';
+							resourcesString += '   <base name="' + ( material.name || material.type ) + '" displaycolor="FFFFFF" />\n';
+							resourcesString += '  </basematerials>\n';
 
-							resourcesString += '  <object id="' + object.id + '" name="' + object.name + '" type="model">\n';
+							// For id uniqueness let's hope there is not 1000000000+ objects in the model
+
+							let object_id = object.id + 1000000000 + material.id;
+
+							resourcesString += '  <object id="' + object.id + '" type="model">\n';
 
 							// If there is no name then use texture uuid as a part of new name
 
@@ -376,9 +372,18 @@
 
 							if ( geometry.attributes.uv ) {
 
-								resourcesString += this.generateUVs( geometry, object.id, material.map.id );
+								resourcesString += this.generateUVs( geometry, object_id, material.map.id );
 
 							}
+
+							resourcesString += '  <object id="' + object.id + '" type="model">\n';
+
+							resourcesString += '   <mesh>\n';
+							resourcesString += this.generateVertices( geometry );
+							resourcesString += this.generateTriangles( geometry, object_id, null );
+							resourcesString += '   </mesh>\n';
+
+							resourcesString += '  </object>\n';
 
 						} else { // Material only
 
@@ -401,28 +406,28 @@
 								resourcesString += '   <m:pbmetallic name="Metallic" metallicness="' + metalness + '" roughness="' + roughness + '" />\n';
 								resourcesString += '  </m:pbmetallicdisplayproperties>\n';
 
-								resourcesString += '  <m:basematerials id="' + material.id + '">\n';
-								resourcesString += '   <m:base name="Metallic" displaycolor="' + hex_uc + '" displaypropertiesid="' + m_id + '" />\n';
-								resourcesString += '  </m:basematerials>\n';
+								resourcesString += '  <basematerials id="' + material.id + '">\n';
+								resourcesString += '   <base name="Metallic" displaycolor="' + hex_uc + '" displaypropertiesid="' + m_id + '" />\n';
+								resourcesString += '  </basematerials>\n';
 
 							} else {
 
-								resourcesString += '  <m:basematerials id="' + material.id + '">\n';
-								resourcesString += '   <m:base name="' + ( material.name || material.type ) + '" displaycolor="' + hex_uc + '" />\n';
-								resourcesString += '  </m:basematerials>\n';
+								resourcesString += '  <basematerials id="' + material.id + '">\n';
+								resourcesString += '   <base name="' + ( material.name || material.type ) + '" displaycolor="' + hex_uc + '" />\n';
+								resourcesString += '  </basematerials>\n';
 
 							}
 
 							resourcesString += '  <object id="' + object.id + '" pid="' + material.id + '" pindex="0" name="' + object.name + '" type="model">\n';
 
+							resourcesString += '   <mesh>\n';
+							resourcesString += this.generateVertices( geometry );
+							resourcesString += this.generateTriangles( geometry, null, null );
+							resourcesString += '   </mesh>\n';
+
+							resourcesString += '  </object>\n';
+
 						}
-
-						resourcesString += '   <mesh>\n';
-						resourcesString += this.generateVertices( geometry );
-						resourcesString += this.generateTriangles( geometry, map_id, color_id );
-						resourcesString += '   </mesh>\n';
-
-						resourcesString += '  </object>\n';
 
 					}
 
