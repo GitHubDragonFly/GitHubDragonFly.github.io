@@ -352,8 +352,6 @@
 
 							let object_id = object.id + 1000000000 + material.id;
 
-							resourcesString += '  <object id="' + object.id + '" type="model">\n';
-
 							// If there is no name then use texture uuid as a part of new name
 
 							let name = material.map.name ? material.map.name : 'texture_' + material.map.uuid;
