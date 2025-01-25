@@ -226,7 +226,8 @@
 					if ( ! geometry.attributes.normal ) geometry.computeVertexNormals();
 					geometry.normalizeNormals();
 
-					if ( geometry.attributes.color ) { // Check if vertex colors are present
+					// Check if vertex colors are present without diffuse map
+					if ( geometry.attributes.color && ! material.map ) {
 
 						resourcesString += '  <m:colorgroup id="' + geometry.id + '">\n';
 						resourcesString += this.generateColors( geometry );
