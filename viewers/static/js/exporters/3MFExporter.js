@@ -482,14 +482,14 @@
 			let name = map.name ? map.name : 'texture_' + map.uuid;
 			if ( name.indexOf( '.' ) === -1 ) name += '.png';
 
-			let styleu = map.wrapS === MirroredRepeatWrapping ? 'mirror' :
-				( map.wrapS === ClampToEdgeWrapping ? 'clamp' :'wrap' );
+			let styleu = map.wrapS === THREE.MirroredRepeatWrapping ? 'mirror' :
+				( map.wrapS === THREE.ClampToEdgeWrapping ? 'clamp' :'wrap' );
 
-			let stylev = map.wrapT === MirroredRepeatWrapping ? 'mirror' :
-				( map.wrapT === ClampToEdgeWrapping ? 'clamp' : 'wrap' );
+			let stylev = map.wrapT === THREE.MirroredRepeatWrapping ? 'mirror' :
+				( map.wrapT === THREE.ClampToEdgeWrapping ? 'clamp' : 'wrap' );
 
-			let filter = ( map.magFilter === NearestFilter && map.minFilter === NearestFilter ) ? 'nearest' :
-				( ( map.magFilter === LinearFilter && map.minFilter === LinearFilter ) ? 'linear' : 'auto' );
+			let filter = ( map.magFilter === THREE.NearestFilter && map.minFilter === THREE.NearestFilter ) ? 'nearest' :
+				( ( map.magFilter === THREE.LinearFilter && map.minFilter === THREE.LinearFilter ) ? 'linear' : 'auto' );
 
 			resString += '  <m:texture2d id="' + map.id + '" path="/3D/Textures/' + name + '" contenttype="image/png" tilestyleu="' + styleu + '" tilestylev="' + stylev + '" filter="' + filter + '" />\n';
 
