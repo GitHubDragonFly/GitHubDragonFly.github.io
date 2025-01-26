@@ -246,7 +246,7 @@
 
 						resourcesString += '  </object>\n';
 
-					} else if ( Array.isArray( material ) && geometry.groups.length === material.length ) {
+					} else if ( Array.isArray( material ) && material.length > 1 && geometry.groups.length === material.length ) {
 
 						// Create new object for each group / material pair
 						// Add it as a component to the main object
@@ -261,7 +261,9 @@
 
 							let color_hex = mtl.color.getHexString().toUpperCase();
 
-							let hex_uc = '#' + color_hex === '000000' ? mtl.emissive.getHexString().toUpperCase() : color_hex;
+							if ( color_hex === '000000' ) color_hex = mtl.emissive.getHexString().toUpperCase();
+
+							let hex_uc = '#' + color_hex;
 
 							if ( mtl.opacity < 1 || mtl.transparent === true ) {
 
@@ -340,13 +342,15 @@
 
 					} else {
 
-						// For id uniqueness let's hope there is not 1000000000+ objects in the model
-
-						let object_id = object.id + 1000000000 + material.id;
+						if ( Array.isArray( material ) && material.length === 1 ) material = material[ 0 ];
 
 						// Check if diffuse texture is present, if not present then include emissive map check
 
 						if ( material.map !== null || material.emissiveMap !== null ) {
+
+							// For id uniqueness let's hope there is not 1000000000+ objects in the model
+
+							let object_id = object.id + 1000000000 + material.id;
 
 							const map = material.map !== null ? material.map : material.emissiveMap;
 
@@ -371,7 +375,9 @@
 
 							let color_hex = material.color.getHexString().toUpperCase();
 
-							let hex_uc = '#' + color_hex === '000000' ? material.emissive.getHexString().toUpperCase() : color_hex;
+							if ( color_hex === '000000' ) color_hex = material.emissive.getHexString().toUpperCase();
+
+							let hex_uc = '#' + color_hex;
 
 							if ( material.opacity < 1 || material.transparent === true ) {
 
