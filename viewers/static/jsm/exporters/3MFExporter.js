@@ -233,12 +233,14 @@ class ThreeMFExporter {
 
 					object.material.forEach( mtl => {
 
-						if ( mtl.map ) {
+						if ( mtl.map !== null || mtl.emissiveMap !== null ) {
+
+							const map = mtl.map !== null ? mtl.map : mtl.emissiveMap;
 
 							// If there is no name then use texture uuid as a part of new name
 
 							map_found = true;
-							let name = mtl.map.name ? mtl.map.name : 'texture_' + mtl.map.uuid;
+							let name = map.name ? map.name : 'texture_' + map.uuid;
 							if ( name.indexOf( '.' ) === -1 ) name += '.png';
 
 							if ( ! image_names[ name ] ) {
@@ -247,7 +249,7 @@ class ThreeMFExporter {
 
 								let texture_url = 'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture';
 
-								relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + mtl.map.id + '" Type="' + texture_url + '" />\n';
+								relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + map.id + '" Type="' + texture_url + '" />\n';
 
 							}
 
@@ -257,12 +259,14 @@ class ThreeMFExporter {
 
 				} else {
 
-					if ( object.material.map ) {
+					if ( object.material.map !== null || object.material.emissiveMap !== null ) {
+
+						const map = object.material.map !== null ? object.material.map : object.material.emissiveMap;
 
 						// If there is no name then use texture uuid as a part of new name
 
 						map_found = true;
-						let name = object.material.map.name ? object.material.map.name : 'texture_' + object.material.map.uuid;
+						let name = map.name ? map.name : 'texture_' + map.uuid;
 						if ( name.indexOf( '.' ) === -1 ) name += '.png';
 
 						if ( ! image_names[ name ] ) {
@@ -271,7 +275,7 @@ class ThreeMFExporter {
 
 							let texture_url = 'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture';
 
-							relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + object.material.map.id + '" Type="' + texture_url + '" />\n';
+							relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + map.id + '" Type="' + texture_url + '" />\n';
 
 						}
 
@@ -361,7 +365,9 @@ class ThreeMFExporter {
 
 						let object_id = object.id + 1000000000 + mtl.id + index;
 
-						let hex_uc = '#' + mtl.color.getHexString().toUpperCase();
+						let color_hex = mtl.color.getHexString().toUpperCase();
+
+						let hex_uc = '#' + color_hex === '000000' ? mtl.emissive.getHexString().toUpperCase() : color_hex;
 
 						if ( mtl.opacity < 1 || mtl.transparent === true ) {
 
@@ -392,27 +398,17 @@ class ThreeMFExporter {
 
 						}
 
-						if ( mtl.map ) { // Check if texture is present
+						// Check if diffuse texture is present, if not present then include emissive map check
 
-							// If there is no name then use texture uuid as a part of new name
+						if ( mtl.map !== null || mtl.emissiveMap !== null ) {
 
-							let name = mtl.map.name ? mtl.map.name : 'texture_' + mtl.map.uuid;
-							if ( name.indexOf( '.' ) === -1 ) name += '.png';
+							const map = mtl.map !== null ? mtl.map : mtl.emissiveMap;
 
-							let styleu = mtl.map.wrapS === MirroredRepeatWrapping ? 'mirror' :
-								( mtl.map.wrapS === ClampToEdgeWrapping ? 'clamp' :'wrap' );
-
-							let stylev = mtl.map.wrapT === MirroredRepeatWrapping ? 'mirror' :
-								( mtl.map.wrapT === ClampToEdgeWrapping ? 'clamp' : 'wrap' );
-
-							let filter = ( mtl.map.magFilter === NearestFilter && mtl.map.minFilter === NearestFilter ) ? 'nearest' :
-								( ( mtl.map.magFilter === LinearFilter && mtl.map.minFilter === LinearFilter ) ? 'linear' : 'auto' );
-
-							resourcesString += '  <m:texture2d id="' + mtl.map.id + '" path="/3D/Textures/' + name + '" contenttype="image/png" tilestyleu="' + styleu + '" tilestylev="' + stylev + '" filter="' + filter + '" />\n';
+							resourcesString += this.processMap( mtl, mtl.id, map );
 
 							if ( geometry.hasAttribute( 'uv' ) ) {
 
-								resourcesString += this.generateUVs( geometry, object_id, mtl.map.id, index );
+								resourcesString += this.generateUVs( geometry, object_id, map.id, index );
 
 							}
 
@@ -450,35 +446,21 @@ class ThreeMFExporter {
 
 				} else {
 
-					if ( material.map ) { // Check if texture is present
+					// For id uniqueness let's hope there is not 1000000000+ objects in the model
 
-						resourcesString += '  <basematerials id="' + material.id + '">\n';
-						resourcesString += '   <base name="' + ( material.name || material.type ) + '" displaycolor="FFFFFF" />\n';
-						resourcesString += '  </basematerials>\n';
+					let object_id = object.id + 1000000000 + material.id;
 
-						// For id uniqueness let's hope there is not 1000000000+ objects in the model
+					// Check if diffuse texture is present, if not present then include emissive map check
 
-						let object_id = object.id + 1000000000 + material.id;
+					if ( material.map !== null || material.emissiveMap !== null ) {
 
-						// If there is no name then use texture uuid as a part of new name
+						const map = material.map !== null ? material.map : material.emissiveMap;
 
-						let name = material.map.name ? material.map.name : 'texture_' + material.map.uuid;
-						if ( name.indexOf( '.' ) === -1 ) name += '.png';
-
-						let styleu = material.map.wrapS === MirroredRepeatWrapping ? 'mirror' :
-						( material.map.wrapS === ClampToEdgeWrapping ? 'clamp' :'wrap' );
-
-						let stylev = material.map.wrapT === MirroredRepeatWrapping ? 'mirror' :
-						( material.map.wrapT === ClampToEdgeWrapping ? 'clamp' : 'wrap' );
-
-						let filter = ( material.map.magFilter === NearestFilter && material.map.minFilter === NearestFilter ) ? 'nearest' :
-						( ( material.map.magFilter === LinearFilter && material.map.minFilter === LinearFilter ) ? 'linear' : 'auto' );
-
-						resourcesString += '  <m:texture2d id="' + material.map.id + '" path="/3D/Textures/' + name + '" contenttype="image/png" tilestyleu="' + styleu + '" tilestylev="' + stylev + '" filter="' + filter + '" />\n';
+						resourcesString += this.processMap( material, material.id, map, true );
 
 						if ( geometry.hasAttribute( 'uv' ) ) {
 
-							resourcesString += this.generateUVs( geometry, object_id, material.map.id );
+							resourcesString += this.generateUVs( geometry, object_id, map.id );
 
 						}
 
@@ -486,14 +468,16 @@ class ThreeMFExporter {
 
 						resourcesString += '   <mesh>\n';
 						resourcesString += this.generateVertices( geometry );
-						resourcesString += this.generateTriangles( geometry, object_id, null );
+						resourcesString += this.generateTriangles( geometry, object_id );
 						resourcesString += '   </mesh>\n';
 
 						resourcesString += '  </object>\n';
 
 					} else { // Material only
 
-						let hex_uc = '#' + material.color.getHexString().toUpperCase();
+						let color_hex = material.color.getHexString().toUpperCase();
+
+						let hex_uc = '#' + color_hex === '000000' ? material.emissive.getHexString().toUpperCase() : color_hex;
 
 						if ( material.opacity < 1 || material.transparent === true ) {
 
@@ -528,7 +512,7 @@ class ThreeMFExporter {
 
 						resourcesString += '   <mesh>\n';
 						resourcesString += this.generateVertices( geometry );
-						resourcesString += this.generateTriangles( geometry, null, null );
+						resourcesString += this.generateTriangles( geometry );
 						resourcesString += '   </mesh>\n';
 
 						resourcesString += '  </object>\n';
@@ -567,15 +551,15 @@ class ThreeMFExporter {
 
 				// Create the transformation string
 				const transform = new Matrix4().compose( pos, quat, scale );
-				const e = transform.elements;
+				const te = transform.elements;
 
-				let str = '';
+				let tr_str = '';
 
-				str += e[ 0 ] + ' ' + e[ 1 ] + ' ' + e[ 2 ] + ' ' + e[ 4 ] + ' ';
-				str += e[ 5 ] + ' ' + e[ 6 ] + ' ' + e[ 8 ] + ' ' + e[ 9 ] + ' ';
-				str += e[ 10 ] + ' ' + e[ 12 ] + ' ' + e[ 13 ] + ' ' + e[ 14 ];
+				tr_str += te[ 0 ] + ' ' + te[ 1 ] + ' ' + te[ 2 ] + ' ' + te[ 4 ] + ' ';
+				tr_str += te[ 5 ] + ' ' + te[ 6 ] + ' ' + te[ 8 ] + ' ' + te[ 9 ] + ' ';
+				tr_str += te[ 10 ] + ' ' + te[ 12 ] + ' ' + te[ 13 ] + ' ' + te[ 14 ];
 
-				buildString += '  <item objectid="' + object.id + '" transform="' + str + '" />\n';
+				buildString += '  <item objectid="' + object.id + '" transform="' + tr_str + '" />\n';
 
 			}
 
@@ -584,6 +568,38 @@ class ThreeMFExporter {
 		buildString += ' </build>\n';
 
 		return buildString;
+
+	}
+
+	processMap( material, id, map, add_basematerial = false ) {
+
+		let resString = '';
+
+		if ( add_basematerial === true ) {
+
+			resString += '  <basematerials id="' + id + '">\n';
+			resString += '   <base name="' + ( material.name || material.type ) + '" displaycolor="FFFFFF" />\n';
+			resString += '  </basematerials>\n';
+
+		}
+
+		// If there is no name then use texture uuid as a part of new name
+
+		let name = map.name ? map.name : 'texture_' + map.uuid;
+		if ( name.indexOf( '.' ) === -1 ) name += '.png';
+
+		let styleu = map.wrapS === MirroredRepeatWrapping ? 'mirror' :
+			( map.wrapS === ClampToEdgeWrapping ? 'clamp' :'wrap' );
+
+		let stylev = map.wrapT === MirroredRepeatWrapping ? 'mirror' :
+			( map.wrapT === ClampToEdgeWrapping ? 'clamp' : 'wrap' );
+
+		let filter = ( map.magFilter === NearestFilter && map.minFilter === NearestFilter ) ? 'nearest' :
+			( ( map.magFilter === LinearFilter && map.minFilter === LinearFilter ) ? 'linear' : 'auto' );
+
+		resString += '  <m:texture2d id="' + map.id + '" path="/3D/Textures/' + name + '" contenttype="image/png" tilestyleu="' + styleu + '" tilestylev="' + stylev + '" filter="' + filter + '" />\n';
+
+		return resString;
 
 	}
 
@@ -741,26 +757,28 @@ class ThreeMFExporter {
 
 			if ( object.isMesh === true ) {
 
+				let texture;
+
 				if ( Array.isArray( object.material ) ) {
 
 					for ( const mtl of object.material ) {
 
-						if ( mtl.map ) {
+						if ( mtl.map !== null || mtl.emissiveMap !== null ) {
+
+							const map = mtl.map !== null ? mtl.map : mtl.emissiveMap;
 
 							// Preserve original texture uuid in case if
 							// it was used as a part of the texture name
 
-							const uuid = mtl.map.uuid;
+							const uuid = map.uuid;
 
-							let texture;
+							if ( map.isCompressedTexture === true ) {
 
-							if ( mtl.map.isCompressedTexture === true ) {
-
-								texture = this.decompress( mtl.map.clone(), Infinity, this.renderer );
+								texture = this.decompress( map.clone(), Infinity, this.renderer );
 
 							} else {
 
-								texture = mtl.map.clone();
+								texture = map.clone();
 
 							}
 
@@ -800,22 +818,22 @@ class ThreeMFExporter {
 
 				} else {
 
-					if ( object.material.map ) {
+					if ( object.material.map !== null || object.material.emissiveMap !== null ) {
+
+						const map = object.material.map !== null ? object.material.map : object.material.emissiveMap;
 
 						// Preserve original texture uuid in case if
 						// it was used as a part of the texture name
 
-						const uuid = object.material.map.uuid;
+						const uuid = map.uuid;
 
-						let texture;
+						if ( map.isCompressedTexture === true ) {
 
-						if ( object.material.map.isCompressedTexture === true ) {
-
-							texture = this.decompress( object.material.map.clone(), Infinity, this.renderer );
+							texture = this.decompress( map.clone(), Infinity, this.renderer );
 
 						} else {
 
-							texture = object.material.map.clone();
+							texture = map.clone();
 
 						}
 
@@ -852,6 +870,8 @@ class ThreeMFExporter {
 					}
 
 				}
+
+				if ( texture ) texture.dispose();
 
 			}
 
