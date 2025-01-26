@@ -127,12 +127,14 @@
 
 						object.material.forEach( mtl => {
 
-							if ( mtl.map ) {
+							if ( mtl.map !== null || mtl.emissiveMap !== null ) {
+
+								const map = mtl.map !== null ? mtl.map : mtl.emissiveMap;
 
 								// If there is no name then use texture uuid as a part of new name
 
 								map_found = true;
-								let name = mtl.map.name ? mtl.map.name : 'texture_' + mtl.map.uuid;
+								let name = map.name ? map.name : 'texture_' + map.uuid;
 								if ( name.indexOf( '.' ) === -1 ) name += '.png';
 
 								if ( ! image_names[ name ] ) {
@@ -141,7 +143,7 @@
 
 									let texture_url = 'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture';
 
-									relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + mtl.map.id + '" Type="' + texture_url + '" />\n';
+									relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + map.id + '" Type="' + texture_url + '" />\n';
 
 								}
 
@@ -151,12 +153,14 @@
 
 					} else {
 
-						if ( object.material.map ) {
+						if ( object.material.map !== null || object.material.emissiveMap !== null ) {
+
+							const map = object.material.map !== null ? object.material.map : object.material.emissiveMap;
 
 							// If there is no name then use texture uuid as a part of new name
 
 							map_found = true;
-							let name = object.material.map.name ? object.material.map.name : 'texture_' + object.material.map.uuid;
+							let name = map.name ? map.name : 'texture_' + map.uuid;
 							if ( name.indexOf( '.' ) === -1 ) name += '.png';
 
 							if ( ! image_names[ name ] ) {
@@ -165,7 +169,7 @@
 
 								let texture_url = 'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture';
 
-								relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + object.material.map.id + '" Type="' + texture_url + '" />\n';
+								relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + map.id + '" Type="' + texture_url + '" />\n';
 
 							}
 
@@ -255,7 +259,9 @@
 
 							let object_id = object.id + 1000000000 + mtl.id + index;
 
-							let hex_uc = '#' + mtl.color.getHexString().toUpperCase();
+							let color_hex = mtl.color.getHexString().toUpperCase();
+
+							let hex_uc = '#' + color_hex === '000000' ? mtl.emissive.getHexString().toUpperCase() : color_hex;
 
 							if ( mtl.opacity < 1 || mtl.transparent === true ) {
 
@@ -286,26 +292,17 @@
 
 							}
 
-							if ( mtl.map ) { // Check if texture is present
-								// If there is no name then use texture uuid as a part of new name
+							// Check if diffuse texture is present, if not present then include emissive map check
 
-								let name = mtl.map.name ? mtl.map.name : 'texture_' + mtl.map.uuid;
-								if ( name.indexOf( '.' ) === -1 ) name += '.png';
+							if ( mtl.map !== null || mtl.emissiveMap !== null ) {
 
-								let styleu = mtl.map.wrapS === THREE.MirroredRepeatWrapping ? 'mirror' :
-									( mtl.map.wrapS === THREE.ClampToEdgeWrapping ? 'clamp' :'wrap' );
+								const map = mtl.map !== null ? mtl.map : mtl.emissiveMap;
 
-								let stylev = mtl.map.wrapT === THREE.MirroredRepeatWrapping ? 'mirror' :
-									( mtl.map.wrapT === THREE.ClampToEdgeWrapping ? 'clamp' : 'wrap' );
-
-								let filter = ( mtl.map.magFilter === THREE.NearestFilter && mtl.map.minFilter === THREE.NearestFilter ) ? 'nearest' :
-									( ( mtl.map.magFilter === THREE.LinearFilter && mtl.map.minFilter === THREE.LinearFilter ) ? 'linear' : 'auto' );
-
-								resourcesString += '  <m:texture2d id="' + mtl.map.id + '" path="/3D/Textures/' + name + '" contenttype="image/png" tilestyleu="' + styleu + '" tilestylev="' + stylev + '" filter="' + filter + '" />\n';
+								resourcesString += this.processMap( mtl, mtl.id, map );
 
 								if ( geometry.attributes.uv ) {
 
-									resourcesString += this.generateUVs( geometry, object_id, mtl.map.id, index );
+									resourcesString += this.generateUVs( geometry, object_id, map.id, index );
 
 								}
 
@@ -343,31 +340,17 @@
 
 					} else {
 
-						if ( material.map ) { // Check if texture is present
+						// For id uniqueness let's hope there is not 1000000000+ objects in the model
 
-							resourcesString += '  <basematerials id="' + material.id + '">\n';
-							resourcesString += '   <base name="' + ( material.name || material.type ) + '" displaycolor="FFFFFF" />\n';
-							resourcesString += '  </basematerials>\n';
+						let object_id = object.id + 1000000000 + material.id;
 
-							// For id uniqueness let's hope there is not 1000000000+ objects in the model
+						// Check if diffuse texture is present, if not present then include emissive map check
 
-							let object_id = object.id + 1000000000 + material.id;
+						if ( material.map !== null || material.emissiveMap !== null ) {
 
-							// If there is no name then use texture uuid as a part of new name
+							const map = material.map !== null ? material.map : material.emissiveMap;
 
-							let name = material.map.name ? material.map.name : 'texture_' + material.map.uuid;
-							if ( name.indexOf( '.' ) === -1 ) name += '.png';
-
-							let styleu = material.map.wrapS === THREE.MirroredRepeatWrapping ? 'mirror' :
-								( material.map.wrapS === THREE.ClampToEdgeWrapping ? 'clamp' :'wrap' );
-
-							let stylev = material.map.wrapT === THREE.MirroredRepeatWrapping ? 'mirror' :
-								( material.map.wrapT === THREE.ClampToEdgeWrapping ? 'clamp' : 'wrap' );
-
-							let filter = ( material.map.magFilter === THREE.NearestFilter && material.map.minFilter === THREE.NearestFilter ) ? 'nearest' :
-								( ( material.map.magFilter === THREE.LinearFilter && material.map.minFilter === THREE.LinearFilter ) ? 'linear' : 'auto' );
-
-							resourcesString += '  <m:texture2d id="' + material.map.id + '" path="/3D/Textures/' + name + '" contenttype="image/png" tilestyleu="' + styleu + '" tilestylev="' + stylev + '" filter="' + filter + '" />\n';
+							resourcesString += this.processMap( material, material.id, map, true );
 
 							if ( geometry.attributes.uv ) {
 
@@ -386,7 +369,9 @@
 
 						} else { // Material only
 
-							let hex_uc = '#' + material.color.getHexString().toUpperCase();
+							let color_hex = material.color.getHexString().toUpperCase();
+
+							let hex_uc = '#' + color_hex === '000000' ? material.emissive.getHexString().toUpperCase() : color_hex;
 
 							if ( material.opacity < 1 || material.transparent === true ) {
 
@@ -421,7 +406,7 @@
 
 							resourcesString += '   <mesh>\n';
 							resourcesString += this.generateVertices( geometry );
-							resourcesString += this.generateTriangles( geometry, null, null );
+							resourcesString += this.generateTriangles( geometry );
 							resourcesString += '   </mesh>\n';
 
 							resourcesString += '  </object>\n';
@@ -460,15 +445,15 @@
 
 					// Create the transformation string
 					const transform = new THREE.Matrix4().compose( pos, quat, scale );
-					const e = transform.elements;
+					const te = transform.elements;
 
-					let str = '';
+					let tr_str = '';
 
-					str += e[ 0 ] + ' ' + e[ 1 ] + ' ' + e[ 2 ] + ' ' + e[ 4 ] + ' ';
-					str += e[ 5 ] + ' ' + e[ 6 ] + ' ' + e[ 8 ] + ' ' + e[ 9 ] + ' ';
-					str += e[ 10 ] + ' ' + e[ 12 ] + ' ' + e[ 13 ] + ' ' + e[ 14 ];
+					tr_str += te[ 0 ] + ' ' + te[ 1 ] + ' ' + te[ 2 ] + ' ' + te[ 4 ] + ' ';
+					tr_str += te[ 5 ] + ' ' + te[ 6 ] + ' ' + te[ 8 ] + ' ' + te[ 9 ] + ' ';
+					tr_str += te[ 10 ] + ' ' + te[ 12 ] + ' ' + te[ 13 ] + ' ' + te[ 14 ];
 
-					buildString += '  <item objectid="' + object.id + '" transform="' + str + '" />\n';
+					buildString += '  <item objectid="' + object.id + '" transform="' + tr_str + '" />\n';
 
 				}
 
@@ -477,6 +462,38 @@
 			buildString += ' </build>\n';
 
 			return buildString;
+
+		}
+
+		processMap( material, id, map, add_basematerial = false ) {
+
+			let resString = '';
+
+			if ( add_basematerial === true ) {
+
+				resString += '  <basematerials id="' + id + '">\n';
+				resString += '   <base name="' + ( material.name || material.type ) + '" displaycolor="FFFFFF" />\n';
+				resString += '  </basematerials>\n';
+
+			}
+
+			// If there is no name then use texture uuid as a part of new name
+
+			let name = map.name ? map.name : 'texture_' + map.uuid;
+			if ( name.indexOf( '.' ) === -1 ) name += '.png';
+
+			let styleu = map.wrapS === MirroredRepeatWrapping ? 'mirror' :
+				( map.wrapS === ClampToEdgeWrapping ? 'clamp' :'wrap' );
+
+			let stylev = map.wrapT === MirroredRepeatWrapping ? 'mirror' :
+				( map.wrapT === ClampToEdgeWrapping ? 'clamp' : 'wrap' );
+
+			let filter = ( map.magFilter === NearestFilter && map.minFilter === NearestFilter ) ? 'nearest' :
+				( ( map.magFilter === LinearFilter && map.minFilter === LinearFilter ) ? 'linear' : 'auto' );
+
+			resString += '  <m:texture2d id="' + map.id + '" path="/3D/Textures/' + name + '" contenttype="image/png" tilestyleu="' + styleu + '" tilestylev="' + stylev + '" filter="' + filter + '" />\n';
+
+			return resString;
 
 		}
 
@@ -642,22 +659,24 @@
 
 						for ( const mtl of object.material ) {
 
-							if ( mtl.map ) {
+							if ( mtl.map !== null || mtl.emissiveMap !== null ) {
+
+								const map = mtl.map !== null ? mtl.map : mtl.emissiveMap;
 
 								// Preserve original texture uuid in case if
 								// it was used as a part of the texture name
 
-								const uuid = mtl.map.uuid;
+								const uuid = map.uuid;
 
 								let texture;
 
-								if ( mtl.map.isCompressedTexture === true ) {
+								if ( map.isCompressedTexture === true ) {
 
-									texture = this.decompress( mtl.map.clone(), Infinity, null );
+									texture = this.decompress( map.clone(), Infinity, null );
 
 								} else {
 
-									texture = mtl.map.clone();
+									texture = map.clone();
 
 								}
 
@@ -697,22 +716,24 @@
 
 					} else {
 
-						if ( object.material.map ) {
+						if ( object.material.map !== null || object.material.emissiveMap !== null ) {
+
+							const map = object.material.map !== null ? object.material.map : object.material.emissiveMap;
 
 							// Preserve original texture uuid in case if
 							// it was used as a part of the texture name
 
-							const uuid = object.material.map.uuid;
+							const uuid = map.uuid;
 
 							let texture;
 
-							if ( object.material.map.isCompressedTexture === true ) {
+							if ( map.isCompressedTexture === true ) {
 
-								texture = this.decompress( object.material.map.clone(), Infinity, null );
+								texture = this.decompress( map.clone(), Infinity, null );
 
 							} else {
 
-								texture = object.material.map.clone();
+								texture = map.clone();
 
 							}
 
