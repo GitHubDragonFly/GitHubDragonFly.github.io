@@ -15,6 +15,8 @@
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/",
           "three-viewport-gizmo": "https://cdn.jsdelivr.net/npm/three-viewport-gizmo@1.0.1/dist/three-viewport-gizmo.min.js",
           "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/decode.min.js",
+          "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/encode.min.js",
+          "@monogrid/gainmap-js/libultrahdr": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/libultrahdr.min.js",
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.1.1",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.1.1",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.1.1",
@@ -33,9 +35,9 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
-      var THREE, renderer, render_requested, scene, camera, loader, texture_loader;
-      var dds_loader, ktx2_loader, tiff_loader, tga_loader, exr_loader, rgbe_loader;
-      var manager, controls, gizmo, mouse_down, mouse_wheel, events_initialized;
+      var THREE, renderer, render_requested, scene, loader, texture_loader, dds_loader;
+      var ktx2_loader, tiff_loader, tga_loader, exr_loader, rgbe_loader, hdrJPGLoader;
+      var manager, camera, controls, gizmo, mouse_down, mouse_wheel, events_initialized;
       var img_obj, gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
       var grid, polar_grid, grid_visible, polar_grid_visible, slider_height = 0;
       var ambientLight, directionalLight, filename, zip, count = 0, isMobile;
@@ -1478,38 +1480,75 @@
             texture_loader.load( URL.createObjectURL( fii ) , async function( texture ) {
               URL.revokeObjectURL( fii );
 
-              if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
-                try {
+              // If image is SVG or resize is required then keep using the loaded texture, else
+              // use hdrJPGLoader and load image again for any gainmap effect and less distortion
+
+              if (fn_uc.endsWith('.SVG') || (texture.image.width > 16384 || texture.image.height > 16384) ||
+                (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048))) {
+
+                if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
                   texture = await resize_texture( texture, 2048, false, fii.type );
-                } catch ( error ) {
-                  document.getElementById('div_message').innerText = 'Error: ' + error.message;
-                  URL.revokeObjectURL( fii );
-                  return;
+                } else if (texture.image.width > 16384 || texture.image.height > 16384) {
+                  if (isNewiPad === true) {
+                    texture = await resize_texture( texture, 8192, false, fii.type );
+                  } else {
+                    texture = await resize_texture( texture, 16384, false, fii.type );
+                  }
                 }
-              } else if (texture.image.width > 16384 || texture.image.height > 16384) {
-                if (isNewiPad === true) {
-                  texture = await resize_texture( texture, 8192, false, fii.type );
+
+                texture.colorSpace = THREE.SRGBColorSpace;
+                texture.needsUpdate = true;
+
+                if (equi_enabled === true) {
+                  texture.mapping = THREE.EquirectangularReflectionMapping;
+                  scene.background = texture.clone();
+                  scene.environment = texture.clone();
                 } else {
-                  texture = await resize_texture( texture, 16384, false, fii.type );
+                  scene.background = texture.clone();
                 }
-              }
 
-              texture.colorSpace = THREE.SRGBColorSpace;
-              texture.needsUpdate = true;
+                mouse_wheel = true;
 
-              if (equi_enabled === true) {
-                texture.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = texture.clone();
-                scene.environment = texture.clone();
+                texture.dispose();
+
+                set_bgenv_message( true );
               } else {
-                scene.background = texture.clone();
+                texture.dispose();
+
+                hdrJPGLoader.load( URL.createObjectURL( fii ) , async function( texture2 ) {
+                  URL.revokeObjectURL( fii );
+
+                  let tex = await texture2.toDataTexture();
+
+                  texture2.renderTarget.texture.dispose();
+                  texture2.renderTarget.dispose();
+                  texture2.dispose();
+
+                  tex.colorSpace = THREE.LinearSRGBColorSpace;
+                  tex.needsUpdate = true;
+
+                  if (equi_enabled === true) {
+                    tex.mapping = THREE.EquirectangularReflectionMapping;
+                    scene.background = tex.clone();
+                    scene.environment = tex.clone();
+                  } else {
+                    scene.background = tex.clone();
+                  }
+
+                  mouse_wheel = true;
+
+                  tex.dispose();
+
+                  set_bgenv_message( true );
+                }, function ( xhr ) {
+                }, function ( error ) {
+                  document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
+                  console.log( 'Error loading Background Image File!' );
+                  console.log( error );
+
+                  URL.revokeObjectURL( fii );
+                });
               }
-
-              mouse_wheel = true;
-
-              texture.dispose();
-
-              set_bgenv_message( true );
             }, function ( xhr ) {
             }, function ( error ) {
               document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
@@ -1579,51 +1618,37 @@
             ktx2_loader.load( URL.createObjectURL( fii ), async function( texture ) {
               URL.revokeObjectURL( fii );
 
-              // Convert to PNG so it shows on most platforms
               // Unsupported KTX2 formats might log a warning
 
               let canvas_tex = await decompress( texture );
 
-              texture.dispose();
-
-              texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), async function( png_tex ) {
-                canvas_tex.dispose();
-
-                if (isMobile === true && (png_tex.image.width > 2048 || png_tex.image.height > 2048)) {
-                  png_tex = await resize_texture( png_tex, 2048 );
-                } else if (png_tex.image.width > 16384 || png_tex.image.height > 16384) {
-                  if (isNewiPad === true) {
-                    png_tex = await resize_texture( png_tex, 8192 );
-                  } else {
-                    png_tex = await resize_texture( png_tex, 16384 );
-                  }
-                }
-
-                png_tex.colorSpace = THREE.SRGBColorSpace;
-                png_tex.flipY = false;
-                png_tex.needsUpdate = true;
-
-                if (equi_enabled === true) {
-                  png_tex.mapping = THREE.EquirectangularReflectionMapping;
-                  scene.background = png_tex.clone();
-                  scene.environment = png_tex.clone();
+              if (isMobile === true && (canvas_texture.image.width > 2048 || canvas_texture.image.height > 2048)) {
+                canvas_texture = await resize_texture( canvas_texture, 2048 );
+              } else if (canvas_texture.image.width > 16384 || canvas_texture.image.height > 16384) {
+                if (isNewiPad === true) {
+                  canvas_texture = await resize_texture( canvas_texture, 8192 );
                 } else {
-                  scene.background = png_tex.clone();
+                  canvas_texture = await resize_texture( canvas_texture, 16384 );
                 }
+              }
 
-                mouse_wheel = true;
+              canvas_texture.colorSpace = THREE.SRGBColorSpace;
+              canvas_texture.needsUpdate = true;
 
-                png_tex.dispose();
+              if (equi_enabled === true) {
+                canvas_texture.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = canvas_texture.clone();
+                scene.environment = canvas_texture.clone();
+                if (params.setEnvMap === true) set_envMap( true );
+              } else {
+                scene.background = canvas_texture.clone();
+              }
 
-                set_bgenv_message( true );
-              }, function ( xhr ) { // onProgress
-              }, function ( error ) { // onError
-                document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
-                console.log( 'Error loading Background Image File!' );
-                console.log( error );
+              mouse_wheel = true;
 
-                URL.revokeObjectURL( fii );
-              });
+              canvas_texture.dispose();
+
+              set_bgenv_message( true );
             }, function ( xhr ) { // onProgress
             }, function ( error ) { // onError
               document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
@@ -1651,58 +1676,140 @@
               hd_loader = rgbe_loader;
             }
 
-            hd_loader.load( URL.createObjectURL( fii ), async function( texture ) {
-              URL.revokeObjectURL( fii );
+            let image = await hd_loader.loadAsync( URL.createObjectURL( fii ));
+            URL.revokeObjectURL( fii );
+
+            // If resize is required then keep using the loaded texture,
+            // else use hdrJPGLoader to process HD texture
+
+            if ((image.image.width > 16384 || image.image.height > 16384) ||
+              (isMobile === true && (image.image.width > 2048 || image.image.height > 2048))) {
 
               let m_type = fn_uc.endsWith('.EXR') ? 'image/x.exr' : 'image/x.hdr';
 
-              if ((isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) ||
-                (texture.image.width > 16384 || texture.image.height > 16384)) {
+              // Use decompress since resize is required
+              image = await decompress( image );
 
-                // Use decompress since resize is required
-                texture = await decompress( texture );
-
-                if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
-                  try {
-                    texture = await resize_texture( texture, 2048, false, m_type, true );
-                  } catch ( error ) {
-                    document.getElementById('div_message').innerText = 'Error: ' + error.message;
-                    URL.revokeObjectURL( fii );
-                    return;
-                  }
-                } else if (texture.image.width > 16384 || texture.image.height > 16384) {
-                  if (isNewiPad === true) {
-                    texture = await resize_texture( texture, 8192, false, m_type, true );
-                  } else {
-                    texture = await resize_texture( texture, 16384, false, m_type, true );
-                  }
+              if (isMobile === true && (image.image.width > 2048 || image.image.height > 2048)) {
+                image = await resize_texture( image, 2048, false, m_type, true );
+              } else if (image.image.width > 16384 || image.image.height > 16384) {
+                if (isNewiPad === true) {
+                  image = await resize_texture( image, 8192, false, m_type, true );
+                } else {
+                  image = await resize_texture( image, 16384, false, m_type, true );
                 }
               }
 
-              texture.colorSpace = THREE.LinearSRGBColorSpace;
-              texture.needsUpdate = true;
+              image.colorSpace = THREE.SRGBColorSpace;
+              image.needsUpdate = true;
 
               if (equi_enabled === true) {
-                texture.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = texture.clone();
-                scene.environment = texture.clone();
+                image.mapping = THREE.EquirectangularReflectionMapping;
+                scene.background = image.clone();
+                scene.environment = image.clone();
               } else {
-                scene.background = texture.clone();
+                scene.background = image.clone();
               }
 
               mouse_wheel = true;
 
-              texture.dispose();
+              image.dispose();
 
               set_bgenv_message( true );
-            }, function ( xhr ) {
-            }, function ( error ) {
-              document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
-              console.log( 'Error loading Background Image File!' );
-              console.log( error );
+            } else {
+              const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
+              const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
 
-              URL.revokeObjectURL( fii );
-            });
+              // Encode a Gain map from EXR or HDR file
+              // See the code example at: https://github.com/MONOGRID/gainmap-js
+
+              const textureMax = findTextureMinMax( image );
+
+              // Encode the gainmap
+              const encodingResult = encode({
+                image,
+                maxContentBoost: Math.max.apply( this, textureMax ) // this will encode the full HDR range
+              });
+
+              // obtain the RAW RGBA SDR buffer and create an ImageData
+              const sdrImageData = new ImageData( encodingResult.sdr.toArray(), encodingResult.sdr.width, encodingResult.sdr.height );
+              // obtain the RAW RGBA Gain map buffer and create an ImageData
+              const gainMapImageData = new ImageData( encodingResult.gainMap.toArray(), encodingResult.gainMap.width, encodingResult.gainMap.height );
+
+              // parallel compress the RAW buffers into the specified mimeType
+              const mimeType = 'image/jpeg';
+              const quality = 1.0;
+
+              const [sdr, gainMap] = await Promise.all([
+                compress({
+                  source: sdrImageData,
+                  mimeType,
+                  quality,
+                  flipY: true // output needs to be flipped
+                }),
+                compress({
+                  source: gainMapImageData,
+                  mimeType,
+                  quality,
+                  flipY: true // output needs to be flipped
+                })
+              ]);
+
+              // obtain the metadata which will be embedded into and XMP tag inside the final JPEG file
+              const metadata = encodingResult.getMetadata();
+
+              // embed the compressed images + metadata into a single JPEG file
+              const jpeg = await encodeJPEGMetadata({
+                ...encodingResult,
+                ...metadata,
+                sdr,
+                gainMap
+              });
+
+              // jpeg will be a Uint8Array
+              const jpeg_file = new File( [ jpeg ], 'file.jpg' );
+
+              // load the encoded jpeg with HDRJPGLoader
+
+              hdrJPGLoader.load( URL.createObjectURL( jpeg_file ), async function( texture ) {
+                URL.revokeObjectURL( jpeg_file );
+
+                let hdrJpgEquirectangularMap = await texture.toDataTexture();
+
+                texture.renderTarget.texture.dispose();
+                texture.renderTarget.dispose();
+                texture.dispose();
+
+                hdrJpgEquirectangularMap.colorSpace = THREE.LinearSRGBColorSpace;
+                hdrJpgEquirectangularMap.needsUpdate = true;
+
+                if (equi_enabled === true) {
+                  hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
+                  scene.background = hdrJpgEquirectangularMap.clone();
+                  scene.environment = hdrJpgEquirectangularMap.clone();
+                } else {
+                  scene.background = hdrJpgEquirectangularMap.clone();
+                }
+
+                mouse_wheel = true;
+
+                hdrJpgEquirectangularMap.dispose();
+
+                set_bgenv_message( true );
+
+                // encoder must be manually disposed when no longer needed
+                encodingResult.gainMap.dispose();
+                encodingResult.sdr.dispose();
+                image.dispose();
+              }, function ( xhr ) {
+              }, function ( error ) {
+                document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
+                console.log( 'Error loading Background Image File!' );
+                console.log( error );
+
+                URL.revokeObjectURL( jpeg_file );
+              });
+            }
           } else {
             console.log( 'Not a valid image file!' );
             document.getElementById('file_image_input').value = '';
@@ -1739,21 +1846,29 @@
           context.fillStyle = gradient;
           context.fillRect( 0, 0, ww, wh );
 
-          let texture = new THREE.CanvasTexture( canvas );
-          texture.mapping = THREE.EquirectangularReflectionMapping;
-          texture.colorSpace = THREE.SRGBColorSpace;
-          texture.needsUpdate = true;
+          await canvas.toBlob( function( blob ) {
+            let url = URL.createObjectURL( blob );
 
-          scene.background = texture.clone();
-          scene.environment = texture.clone();
-          scene.environmentIntensity = 0.15;
+            hdrJPGLoader.load( url, async function( texture ) {
+              let tex = await texture.toDataTexture();
 
-          texture.dispose();
+              tex.mapping = THREE.EquirectangularReflectionMapping;
+              tex.needsUpdate = true;
 
-          document.getElementById('file_image_input').value = '';
-          document.getElementById('back_color').value = '#000000';
-          document.body.style.backgroundColor = document.getElementById('back_color').value;
-          document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'lightgreen';
+              scene.background = tex.clone();
+              scene.environment = tex.clone();
+              scene.environmentIntensity = 0.15;
+
+              tex.dispose();
+
+              document.getElementById('file_image_input').value = '';
+              document.body.style.backgroundColor = '#000000';
+              document.getElementById('back_color').value = '#000000';
+              document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'lightgreen';
+
+              mouse_wheel = true;
+            });
+          }, 'image/png', 1 );
         }
 
         mouse_wheel = true;
@@ -2326,6 +2441,11 @@
           document.body.appendChild( renderer.domElement );
         }
 
+        if (hdrJPGLoader === undefined) {
+          const { HDRJPGLoader } = await import( "@monogrid/gainmap-js/decode" );
+          hdrJPGLoader = new HDRJPGLoader( renderer );
+        }
+
         if (url_loading === false) {
           let img_extensions = [ '.AVIF', '.BMP', '.DDS', '.DIB', '.EXR', '.HDR', '.GIF', '.ICO', '.JPG', '.JPEG', '.JFIF',
             '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.TIF', '.TIFF', '.WEBP' ];
@@ -2858,9 +2978,6 @@
 
                 f32_array.length = 0;
               } else {
-                const { HDRJPGLoader } = await import( "@monogrid/gainmap-js/decode" );
-
-                let hdrJPGLoader = new HDRJPGLoader( renderer );
                 let url_blob = new Blob( [ data[ 0 ] ], { type: mime_type } );
 
                 await new Promise( resolve => {
