@@ -3157,8 +3157,8 @@
 			const options = this.options;
 			const textureDef = json.textures[ textureIndex ];
 			const source = json.images[ textureDef.source ];
-			let loader = this.textureLoader;
 			let texture_set = false;
+			let loader;
 
 			if ( options.resourcePath.includes( ',' ) === true ) {
 
@@ -3260,30 +3260,63 @@
 
 			if ( source.uri && source.uri.toLowerCase().endsWith( '.tga' ) || ( source.name && source.name.toLowerCase().endsWith( '.tga' ) ) ) {
 
-				if ( THREE.TGALoader ) {
+				loader = options.manager.getHandler( '.tga' );
+
+				if ( ! loader && THREE.TGALoader ) {
 
 					loader = new THREE.TGALoader( options.manager );
-					source.mimeType = 'image/tga';
 
 				}
+
+				source.mimeType = 'image/tga';
 
 			} else if ( source.uri && source.uri.toLowerCase().endsWith( '.dds' ) || ( source.name && source.name.toLowerCase().endsWith( '.dds' ) ) ) {
 
-				if ( THREE.DDSLoader ) {
+				loader = options.manager.getHandler( '.dds' );
+
+				if ( ! loader && THREE.DDSLoader ) {
 
 					loader = new THREE.DDSLoader( options.manager );
-					source.mimeType = 'image/dds';
 
 				}
+
+				source.mimeType = 'image/dds';
+
+			} else if ( source.uri && source.uri.toLowerCase().endsWith( '.ktx2' ) || ( source.name && source.name.toLowerCase().endsWith( '.ktx2' ) ) ) {
+
+				loader = options.manager.getHandler( '.ktx2' );
+
+				if ( ! loader && THREE.KTX2Loader ) {
+
+					loader = new THREE.KTX2Loader( options.manager );
+
+				}
+
+				source.mimeType = 'image/ktx2';
 
 			} else if ( source.uri && source.uri.toLowerCase().endsWith( '.exr' ) || ( source.name && source.name.toLowerCase().endsWith( '.exr' ) ) ) {
 
-				if ( THREE.EXRLoader ) {
+				loader = options.manager.getHandler( '.exr' );
+
+				if ( ! loader && THREE.EXRLoader ) {
 
 					loader = new THREE.EXRLoader( options.manager );
-					source.mimeType = 'image/exr';
 
 				}
+
+				source.mimeType = 'image/x.exr';
+
+			} else if ( source.uri && source.uri.toLowerCase().endsWith( '.hdr' ) || ( source.name && source.name.toLowerCase().endsWith( '.hdr' ) ) ) {
+
+				loader = options.manager.getHandler( '.hdr' );
+
+				if ( ! loader && THREE.RGBELoader ) {
+
+					loader = new THREE.RGBELoader( options.manager );
+
+				}
+
+				source.mimeType = 'image/x.exr';
 
 			} else if ( source.uri ) {
 
@@ -3291,6 +3324,8 @@
 				if ( handler !== null ) loader = handler;
 
 			}
+
+			if ( ! loader ) loader = this.textureLoader;
 
 			return this.loadTextureImage( textureIndex, source, loader );
 
