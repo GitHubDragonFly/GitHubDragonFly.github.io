@@ -3916,7 +3916,7 @@ class GLTFParser {
 
 			if ( ! loader ) {
 
-				const { TGALoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/loaders/TGALoader.min.js" );
+				const { TGALoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/loaders/TGALoader.min.js" );
 				loader = new TGALoader( options.manager );
 
 			}
@@ -3929,7 +3929,7 @@ class GLTFParser {
 
 			if ( ! loader ) {
 
-				const { DDSLoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/loaders/DDSLoader.min.js" );
+				const { DDSLoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/loaders/DDSLoader.min.js" );
 				loader = new DDSLoader( options.manager );
 
 			}
