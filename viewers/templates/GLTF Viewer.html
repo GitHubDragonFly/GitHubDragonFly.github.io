@@ -3137,7 +3137,7 @@
           scenes = gltf.scenes;
           cameras = gltf.cameras;
 
-          let loader, tex, is_ext_exr = false, is_ext_hdr = false;
+          let loader, is_ext_exr = false, is_ext_hdr = false;
 
           if (!parser.json.images && local_files_indexes.length > 0) {
             let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
@@ -3174,21 +3174,6 @@
                 loader = texture_loader;
                 break;
             }
-
-            // Use as a texture the first loaded image
-
-            let lfilei = local_files[ local_files_indexes[ 0 ] ];
-
-            tex = loader.load( URL.createObjectURL( lfilei ) );
-            URL.revokeObjectURL( lfilei );
-
-            if (is_ext_hdr === true) tex.flipY = false;
-            tex.wrapS = THREE.RepeatWrapping;
-            tex.wrapT = THREE.RepeatWrapping;
-            tex.colorSpace = (is_ext_exr === true || is_ext_hdr === true) ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
-            tex.needsUpdate = true;
-
-            if (tex.num_frames && tex.num_frames > 1) animated_gif_texture = true;
           }
 
           if (gltf.userData.vrm) {
@@ -3339,29 +3324,44 @@
               }
 
               if (!parser.json.images && local_files_indexes.length > 0) {
-                // If textures are loaded then try to unwrap the model and create uvs
-                if (child.isMesh && child.geometry.attributes.uv === undefined) {
-                  if (!child.geometry.index) {
-                    child.geometry = await merge_vertices( child.geometry.clone(), 1e-6 );
+                // Use as a texture the first loaded image
+
+                let lfilei = local_files[ local_files_indexes[ 0 ] ];
+
+                await loader.load( URL.createObjectURL( lfilei ), async function( texture ) {
+                  URL.revokeObjectURL( lfilei );
+
+                  if (is_ext_hdr === true) texture.flipY = false;
+                  texture.wrapS = THREE.RepeatWrapping;
+                  texture.wrapT = THREE.RepeatWrapping;
+                  texture.colorSpace = (is_ext_exr === true || is_ext_hdr === true) ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
+                  texture.needsUpdate = true;
+
+                  if (texture.num_frames && texture.num_frames > 1) animated_gif_texture = true;
+
+                  if (child.isMesh && child.geometry.attributes.uv === undefined) {
+                    if (!child.geometry.index) {
+                      child.geometry = await merge_vertices( child.geometry.clone(), 1e-6 );
+                    }
+
+                    document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
+                    await new Promise( resolve => setTimeout( resolve, 100 ) );
+
+                    let uvu = new uvUnwrapper();
+                    await uvu.load();
+
+                    try {
+                      await uvu.unwrapGeometry( child.geometry );
+                      uvu._module._free();
+                    } catch ( error ) {
+                      console.warn( 'Error unwrapping geometry: ' + error.message );
+                    }
                   }
 
-                  document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
-                  await new Promise( resolve => setTimeout( resolve, 100 ) );
-
-                  let uvu = new uvUnwrapper();
-                  await uvu.load();
-
-                  try {
-                    await uvu.unwrapGeometry( child.geometry );
-                    uvu._module._free();
-                  } catch ( error ) {
-                    console.warn( 'Error unwrapping geometry: ' + error.message );
-                  }
-                }
-
-                // Apply texture
-                child.material.map = tex;
-                child.material.needsUpdate = true;
+                  // Apply texture
+                  child.material.map = texture;
+                  child.material.needsUpdate = true;
+                });
               }
             }
 
