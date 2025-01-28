@@ -3936,18 +3936,44 @@ class GLTFParser {
 
 			source.mimeType = 'image/vnd-ms.dds';
 
+		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.ktx2' ) || ( source.name && source.name.toLowerCase().endsWith( '.ktx2' ) ) ) {
+
+			loader = options.manager.getHandler( '.ktx2' ); 
+
+			if ( ! loader ) {
+
+				const { KTX2Loader } = await import( "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/loaders/KTX2Loader.min.js" );
+				loader = new KTX2Loader( options.manager );
+
+			}
+
+			source.mimeType = 'image/ktx2';
+
 		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.exr' ) || ( source.name && source.name.toLowerCase().endsWith( '.exr' ) ) ) {
 
 			loader = options.manager.getHandler( '.exr' ); 
 
 			if ( ! loader ) {
 
-				const { EXRLoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/loaders/EXRLoader.min.js" );
+				const { EXRLoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/loaders/EXRLoader.min.js" );
 				loader = new EXRLoader( options.manager );
 
 			}
 
-			source.mimeType = 'image/exr';
+			source.mimeType = 'image/x.exr';
+
+		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.hdr' ) || ( source.name && source.name.toLowerCase().endsWith( '.hdr' ) ) ) {
+
+			loader = options.manager.getHandler( '.hdr' ); 
+
+			if ( ! loader ) {
+
+				const { RGBELoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/loaders/RGBELoader.min.js" );
+				loader = new RGBELoader( options.manager );
+
+			}
+
+			source.mimeType = 'image/x.hdr';
 
 		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.pcx' ) || ( source.name && source.name.toLowerCase().endsWith( '.pcx' ) ) ) {
 
@@ -4023,7 +4049,8 @@ class GLTFParser {
 
 			if ( any_texture === true ) {
 
-				let image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF', '.SVG', '.WEBP', 'DIB', '.DDS', '.EXR', '.KTX2', '.TGA' ];
+				let image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP',
+					'.GIF', '.SVG', '.WEBP', 'DIB', '.DDS', '.EXR', '.HDR', '.KTX2', '.TGA' ];
 
 				if ( texture_set === false ) {
 
