@@ -2694,7 +2694,7 @@
       }
 
       async function process_loaded_zip() {
-        let img_extensions = [ '.AVIF', '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF',
+        let img_extensions = [ '.AVIF', '.BMP', '.DDS', '.DIB', '.EXR', '.GIF', '.HDR', '.JPG', '.JPEG', '.JFIF',
           '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
 
         for ( const key of Object.keys( unzipped_files ) ) {
@@ -2877,8 +2877,8 @@
         });
 
         if (url_loading === false) {
-          let img_extensions = [ '.AVIF', '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF', '.KTX2',
-            '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
+          let img_extensions = [ '.AVIF', '.BMP', '.DDS', '.DIB', '.EXR', '.GIF', '.HDR', '.JPG', '.JPEG', '.JFIF',
+            '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
 
           // Loaded file(s)
           local_files = files !== null ? files : document.getElementById('file_input').files;
@@ -3038,6 +3038,185 @@
         }
       }
 
+      async function parse_gltf( gltf, parser, tex = null ) {
+        if (cameras && cameras.length > 0) {
+          document.getElementById('btn_cameras').disabled = false;
+          document.getElementById('btn_cameras').style.backgroundColor = 'lightgreen';
+        } else {
+          document.getElementById('btn_cameras').disabled = true;
+        }
+
+        animations = gltf.animations;
+
+        if (animations.length > 0) {
+          animation_mixer = new THREE.AnimationMixer( gltf.scene );
+          current_animation = 0;
+          animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+        }
+
+        if (gltf.userData.gltfExtensions && gltf.userData.gltfExtensions[ 'KHR_materials_variants' ]) {
+          variants = gltf.userData.gltfExtensions[ 'KHR_materials_variants' ].variants.map( ( variant ) => variant.name );
+        }
+
+        if (variants) {
+          current_variant = 0;
+          variants_available = true;
+          document.getElementById('btn_variants').disabled = false;
+          document.getElementById('btn_variants').innerHTML = 'V0';
+          document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
+        }
+
+        let child_count = 1;
+
+        gltf_obj.traverse( async function( child ) {
+          if (child.isMesh || child.isPoints || child.isLine) {
+            if (child.name === '') child.name = 'child_' + child_count;
+
+            if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+            child.geometry.normalizeNormals();
+
+            child.geometry.computeBoundingBox();
+            child.geometry.computeBoundingSphere();
+
+            if (child.geometry.hasAttribute( 'color' )) {
+              vertex_colors_enabled = true;
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+            }
+
+            if (child.isLine) {
+              lines_present = lines_visible = true;
+              document.getElementById('btn_lines').disabled = false;
+              document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
+            }
+
+            if (child.isMesh) {
+              if (child.isSkinnedMesh) child.frustumCulled = false;
+
+              if (variants_available === true && child.material && child.userData.gltfExtensions) {
+                variant_materials[ child.id ] = {};
+                const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
+
+                for (let i = 0; i < variants.length; i++) {
+                  const mapping = meshVariants.mappings.find( ( mapping ) => mapping.variants.includes( i ) );
+
+                  if (mapping) {
+                    await parser.getDependency( 'material', mapping.material ).then( function( material ) {
+                      variant_materials[ child.id ][ variants[ i ] ] = material;
+                      if (i === 0) child.material = material;
+                    });
+                  }
+                }
+              }
+            } else if (child.isPoints) {
+              object_is_points = true;
+              child.sizeAttenuation = true;
+              child.sortPoints = true;
+            }
+
+            // Check for morph targets
+            if (child.morphTargetDictionary) {
+              Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
+                extras.push( [ child.id, key, index ] );
+              });
+            }
+
+            if (Array.isArray( child.material )) {
+              let child_count_array = 1;
+
+              initial_transparency_array[ child.name ] = {};
+              initial_opacity_array[ child.name ] = {};
+              original_side_array[ child.name ] = {};
+              original_vertex_color_array[ child.name ] = {};
+
+              child.material.forEach( mtl => {
+                if (mtl.name === '') mtl.name = 'material_' + child_count_array;
+
+                if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
+
+                // Enable post processing button
+                if (mtl.emissiveMap || (mtl.emissive && (mtl.emissive.r !== 0 ||
+                  mtl.emissive.g !== 0 || mtl.emissive.b !== 0))) {
+
+                  document.getElementById('btn_bloom').disabled = false;
+                  emissive_present = true;
+                }
+
+                initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
+                initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                original_side_array[ child.name ][ child_count_array ] = mtl.side;
+                original_vertex_color_array[ child.name ][ child_count_array ] = mtl.vertexColors;
+
+                mtl.flatShading = false;
+                mtl.needsUpdate = true;
+
+                child_count_array += 1;
+              });
+            } else {
+              let mtl = child.material;
+
+              if (mtl.name === '') mtl.name = 'material_' + child_count;
+
+              if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
+
+              // Enable post processing button
+              if (mtl.emissiveMap || (mtl.emissive && (mtl.emissive.r !== 0 ||
+                mtl.emissive.g !== 0 || mtl.emissive.b !== 0))) {
+
+                document.getElementById('btn_bloom').disabled = false;
+                emissive_present = true;
+              }
+
+              initial_transparency[ child.name ] = mtl.transparent;
+              initial_opacity[ child.name ] = mtl.opacity;
+              original_side[ child.name ] = mtl.side;
+              original_vertex_colors[ child.name ] = mtl.vertexColors;
+
+              mtl.flatShading = false;
+              mtl.needsUpdate = true;
+            }
+
+            if (!parser.json.images && local_files_indexes.length > 0) {
+              // If textures are loaded then try to unwrap the model and create uvs
+              if (child.isMesh && child.geometry.attributes.uv === undefined) {
+                if (!child.geometry.index) {
+                  child.geometry = await merge_vertices( child.geometry.clone(), 1e-6 );
+                }
+
+                document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
+                await new Promise( resolve => setTimeout( resolve, 100 ) );
+
+                let uvu = new uvUnwrapper();
+                await uvu.load();
+
+                try {
+                  await uvu.unwrapGeometry( child.geometry );
+                  uvu._module._free();
+                } catch ( error ) {
+                  console.warn( 'Error unwrapping geometry: ' + error.message );
+                }
+              }
+
+              // Apply texture
+              child.material.map = tex;
+              child.material.needsUpdate = true;
+            }
+          }
+
+          child_count ++;
+        });
+
+        gltf_obj.name = 'local_model';
+
+        initial_rotation = gltf_obj.rotation;
+
+        // Add gltf model to scene
+        scene.add( gltf_obj );
+        gltf_obj.position.set( 0, 0, 0 );
+        default_camera.lookAt( gltf_obj.position );
+
+        finish_loading();
+      }
+
       function loadFile() {
         gltf_loader.load( zip_file !== null ? selected_gltf_file : URL.createObjectURL( local_files[ selected_gltf_file ] ), async function( gltf ) {
           if (zip_file === null) URL.revokeObjectURL( local_files[ selected_gltf_file ] );
@@ -3047,10 +3226,10 @@
           cameras = gltf.cameras;
           gltf_obj = gltf.scene;
 
-          let loader, tex;
+          let loader, is_ext_exr = false, is_ext_hdr = false;
 
           if (!parser.json.images && local_files_indexes.length > 0) {
-            let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
+            let uc_name = (zip_file !== null ? local_files_indexes[ 0 ] : local_files[ local_files_indexes[ 0 ] ].name).toUpperCase();
             let ext = uc_name.substring( uc_name.lastIndexOf( '.' ) + 1 );
 
             switch ( ext ) {
@@ -3060,10 +3239,12 @@
 
               case 'EXR':
                 loader = exr_loader;
+                is_ext_exr = true;
                 break;
 
               case 'HDR':
                 loader = rgbe_loader;
+                is_ext_hdr = true;
                 break;
 
               case 'TGA':
@@ -3079,199 +3260,27 @@
                 break;
             }
 
-            await new Promise( resolve => {
-              // Use as a texture the first loaded image
-              loader.load( URL.createObjectURL( local_files[ local_files_indexes[ 0 ] ] ), function( texture ) {
-                URL.revokeObjectURL( local_files[ local_files_indexes[ 0 ] ] );
+            let lfilei = zip_file !== null ? local_files_indexes[ 0 ] : local_files[ local_files_indexes[ 0 ] ];
 
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
-                texture.colorSpace = THREE.SRGBColorSpace;
-                texture.needsUpdate = true;
+            // Use as a texture the first loaded image
+            loader.load( zip_file !== null ? lfilei : URL.createObjectURL( lfilei ), function( texture ) {
+              if (zip_file === null) URL.revokeObjectURL( lfilei );
 
-                if (texture.num_frames && texture.num_frames > 1) animated_gif_texture = true;
+              if (is_ext_hdr === true) texture.flipY = false;
+              texture.wrapS = THREE.RepeatWrapping;
+              texture.wrapT = THREE.RepeatWrapping;
+              texture.colorSpace = (is_ext_exr === true || is_ext_hdr === true) ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
+              texture.needsUpdate = true;
 
-                resolve( tex = texture );
-
-                texture.dispose();
-              });
+              parse_gltf( gltf, parser, texture );
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              console.log( 'Error loading texture!' );
+              if (zip_file === null) URL.revokeObjectURL( lfilei );
             });
-          }
-
-          if (cameras && cameras.length > 0) {
-            document.getElementById('btn_cameras').disabled = false;
-            document.getElementById('btn_cameras').style.backgroundColor = 'lightgreen';
           } else {
-            document.getElementById('btn_cameras').disabled = true;
+            await parse_gltf( gltf, parser );
           }
-
-          animations = gltf.animations;
-
-          if (animations.length > 0) {
-            animation_mixer = new THREE.AnimationMixer( gltf.scene );
-            current_animation = 0;
-            animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
-          }
-
-          if (gltf.userData.gltfExtensions && gltf.userData.gltfExtensions[ 'KHR_materials_variants' ]) {
-            variants = gltf.userData.gltfExtensions[ 'KHR_materials_variants' ].variants.map( ( variant ) => variant.name );
-          }
-
-          if (variants) {
-            current_variant = 0;
-            variants_available = true;
-            document.getElementById('btn_variants').disabled = false;
-            document.getElementById('btn_variants').innerHTML = 'V0';
-            document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
-          }
-
-          let child_count = 1;
-
-          gltf_obj.traverse( async function( child ) {
-            if (child.isMesh || child.isPoints || child.isLine) {
-              if (child.name === '') child.name = 'child_' + child_count;
-
-              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-              child.geometry.normalizeNormals();
-
-              child.geometry.computeBoundingBox();
-              child.geometry.computeBoundingSphere();
-
-              if (child.geometry.hasAttribute( 'color' )) {
-                vertex_colors_enabled = true;
-                document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-              }
-
-              if (child.isLine) {
-                lines_present = lines_visible = true;
-                document.getElementById('btn_lines').disabled = false;
-                document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
-              }
-
-              if (child.isMesh) {
-                if (child.isSkinnedMesh) child.frustumCulled = false;
-
-                if (variants_available === true && child.material && child.userData.gltfExtensions) {
-                  variant_materials[ child.id ] = {};
-                  const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
-
-                  for (let i = 0; i < variants.length; i++) {
-                    const mapping = meshVariants.mappings.find( ( mapping ) => mapping.variants.includes( i ) );
-
-                    if (mapping) {
-                      await parser.getDependency( 'material', mapping.material ).then( function( material ) {
-                        variant_materials[ child.id ][ variants[ i ] ] = material;
-                        if (i === 0) child.material = material;
-                      });
-                    }
-                  }
-                }
-              } else if (child.isPoints) {
-                object_is_points = true;
-                child.sizeAttenuation = true;
-                child.sortPoints = true;
-              }
-
-              // Check for morph targets
-              if (child.morphTargetDictionary) {
-                Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
-                  extras.push( [ child.id, key, index ] );
-                });
-              }
-
-              if (Array.isArray( child.material )) {
-                let child_count_array = 1;
-
-                initial_transparency_array[ child.name ] = {};
-                initial_opacity_array[ child.name ] = {};
-                original_side_array[ child.name ] = {};
-                original_vertex_color_array[ child.name ] = {};
-
-                child.material.forEach( mtl => {
-                  if (mtl.name === '') mtl.name = 'material_' + child_count_array;
-
-                  if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
-
-                  // Enable post processing button
-                  if (mtl.emissiveMap || (mtl.emissive && (mtl.emissive.r !== 0 ||
-                    mtl.emissive.g !== 0 || mtl.emissive.b !== 0))) {
-
-                    document.getElementById('btn_bloom').disabled = false;
-                    emissive_present = true;
-                  }
-
-                  initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
-                  initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
-                  original_side_array[ child.name ][ child_count_array ] = mtl.side;
-                  original_vertex_color_array[ child.name ][ child_count_array ] = mtl.vertexColors;
-
-                  mtl.flatShading = false;
-                  mtl.needsUpdate = true;
-
-                  child_count_array += 1;
-                });
-              } else {
-                if (child.material.name === '') child.material.name = 'material_' + child_count;
-
-                if (child.isPoints === true) child.material.size = isMobile === true ? 0.8 : 1.25;
-
-                // Enable post processing button
-                if (child.material.emissiveMap || (child.material.emissive && (child.material.emissive.r !== 0 ||
-                  child.material.emissive.g !== 0 || child.material.emissive.b !== 0))) {
-
-                  document.getElementById('btn_bloom').disabled = false;
-                  emissive_present = true;
-                }
-
-                initial_transparency[ child.name ] = child.material.transparent;
-                initial_opacity[ child.name ] = child.material.opacity;
-                original_side[ child.name ] = child.material.side;
-                original_vertex_colors[ child.name ] = child.material.vertexColors;
-
-                child.material.flatShading = false;
-                child.material.needsUpdate = true;
-              }
-
-              if (!parser.json.images && local_files_indexes.length > 0) {
-                // If textures are loaded then try to unwrap the model and create uvs
-                if (child.isMesh && child.geometry.attributes.uv === undefined) {
-                  if (!child.geometry.index) {
-                    child.geometry = await merge_vertices( child.geometry.clone(), 1e-6 );
-                  }
-
-                  document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
-                  await new Promise( resolve => setTimeout( resolve, 100 ) );
-
-                  let uvu = new uvUnwrapper();
-                  await uvu.load();
-
-                  try {
-                    await uvu.unwrapGeometry( child.geometry );
-                    uvu._module._free();
-                  } catch ( error ) {
-                    console.warn( 'Error unwrapping geometry: ' + error.message );
-                  }
-                }
-
-                // Apply texture
-                child.material.map = tex;
-                child.material.needsUpdate = true;
-              }
-            }
-
-            child_count += 1;
-          });
-
-          gltf_obj.name = 'local_model';
-
-          initial_rotation = gltf_obj.rotation;
-
-          // Add gltf model to scene
-          scene.add( gltf_obj );
-          gltf_obj.position.set( 0, 0, 0 );
-          default_camera.lookAt( gltf_obj.position );
-
-          finish_loading();
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
           URL.revokeObjectURL( selected_gltf_file );
@@ -3309,7 +3318,7 @@
               }
             }
 
-            let loader, tex;
+            let loader, is_ext_exr = false, is_ext_hdr = false;
 
             let uc_name = (zip_file !== null ? local_files_indexes[ 0 ] : local_files[ local_files_indexes[ 0 ] ].name).toUpperCase();
             let ext = uc_name.substring( uc_name.lastIndexOf( '.' ) + 1 );
@@ -3321,10 +3330,12 @@
 
               case 'EXR':
                 loader = exr_loader;
+                is_ext_exr = true;
                 break;
 
               case 'HDR':
                 loader = rgbe_loader;
+                is_ext_hdr = true;
                 break;
 
               case 'TGA':
@@ -3340,41 +3351,64 @@
                 break;
             }
 
-            await new Promise( resolve => {
-              loader.load( zip_file !== null ? local_files_indexes[ 0 ] : URL.createObjectURL( local_files[ local_files_indexes[ 0 ] ] ), function( texture ) {
-                if (zip_file === null) URL.revokeObjectURL( local_files[ local_files_indexes[ 0 ] ] );
+            let lfilei = zip_file !== null ? local_files_indexes[ 0 ] : local_files[ local_files_indexes[ 0 ] ];
 
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
-                texture.colorSpace = THREE.SRGBColorSpace;
-                texture.needsUpdate = true;
+            loader.load( zip_file !== null ? lfilei : URL.createObjectURL( lfilei ), function( texture ) {
+              if (zip_file === null) URL.revokeObjectURL( lfilei );
 
-                resolve( tex = texture.clone(), texture.dispose() );
+              if (is_ext_hdr === true) texture.flipY = false;
+              texture.wrapS = THREE.RepeatWrapping;
+              texture.wrapT = THREE.RepeatWrapping;
+              texture.colorSpace = (is_ext_exr === true || is_ext_hdr === true) ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
+              texture.needsUpdate = true;
+
+              // Apply texture
+              draco_material = new THREE.MeshPhongMaterial({
+                side: THREE.DoubleSide,
+                map: texture.clone(),
+                opacity: 1,
+                transparent: true,
+                vertexColors: geometry.hasAttribute( 'color' )
               });
+
+              texture.dispose();
+
+              gltf_obj = new THREE.Mesh( geometry, draco_material );
+              gltf_obj.name = 'child_0';
+
+              // Add DRACO model to scene
+              scene.add( gltf_obj );
+              gltf_obj.position.set( 0, 0, 0 );
+              default_camera.lookAt( gltf_obj.position );
+
+              mouse_wheel = true;
+
+              finish_loading();
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              console.log( 'Error loading texture!' );
+
+              if (zip_file === null) URL.revokeObjectURL( lfilei );
+
+              draco_material = new THREE.MeshPhongMaterial({
+                side: THREE.DoubleSide,
+                opacity: 1,
+                transparent: true,
+                vertexColors: geometry.hasAttribute( 'color' )
+              });
+
+              gltf_obj = new THREE.Mesh( geometry, draco_material );
+              gltf_obj.name = 'child_0';
+
+              // Add DRACO model to scene
+              scene.add( gltf_obj );
+              gltf_obj.position.set( 0, 0, 0 );
+              default_camera.lookAt( gltf_obj.position );
+
+              mouse_wheel = true;
+
+              finish_loading();
             });
-
-            // Apply texture
-            draco_material = new THREE.MeshPhongMaterial({
-              side: THREE.DoubleSide,
-              map: tex,
-              opacity: 1,
-              transparent: true,
-              vertexColors: geometry.hasAttribute( 'color' )
-            });
-
-            tex.dispose();
-
-            gltf_obj = new THREE.Mesh( geometry, draco_material );
-            gltf_obj.name = 'child_0';
-
-            // Add DRACO model to scene
-            scene.add( gltf_obj );
-            gltf_obj.position.set( 0, 0, 0 );
-            default_camera.lookAt( gltf_obj.position );
-
-            mouse_wheel = true;
-
-            finish_loading();
           } else {
             let draco_texture = texture_loader.load( 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAJcEhZcwAADsIAAA7CARUoSoAAAAAzSURBVBhXFYrJDQAxDAIHl5tG9pWOI8/aICGunO9qP0JRNZqwltgspltKdtmfihNMoc0PFNkQjHSfyTIAAAAASUVORK5CYII=' );
             draco_texture.colorSpace = THREE.SRGBColorSpace;
@@ -3406,7 +3440,7 @@
           }
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
-          URL.revokeObjectURL( selected_draco_file );
+          if (zip_file === null) URL.revokeObjectURL( local_files[ selected_draco_file ] );
           handle_error( error );
         });
 
@@ -3459,154 +3493,7 @@
               cameras = gltf.cameras;
               gltf_obj = gltf.scene;
 
-              if (cameras && cameras.length > 0) {
-                document.getElementById('btn_cameras').disabled = false;
-                document.getElementById('btn_cameras').style.backgroundColor = 'lightgreen';
-              } else {
-                document.getElementById('btn_cameras').disabled = true;
-              }
-
-              animations = gltf.animations;
-
-              if (animations.length > 0) {
-                animation_mixer = new THREE.AnimationMixer( gltf.scene );
-                current_animation = 0;
-                animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
-              }
-
-              if (gltf.userData.gltfExtensions && gltf.userData.gltfExtensions[ 'KHR_materials_variants' ]) {
-                variants = gltf.userData.gltfExtensions[ 'KHR_materials_variants' ].variants.map( ( variant ) => variant.name );
-              }
-
-              if (variants) {
-                current_variant = 0;
-                variants_available = true;
-                document.getElementById('btn_variants').disabled = false;
-                document.getElementById('btn_variants').innerHTML = 'V0';
-                document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
-              }
-
-              let child_count = 1;
-
-              gltf_obj.traverse( async function( child ) {
-                if (child.isMesh || child.isPoints || child.isLine) {
-                  if (child.name === '') child.name = 'child_' + child_count;
-
-                  if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                  child.geometry.normalizeNormals();
-
-                  child.geometry.computeBoundingBox();
-                  child.geometry.computeBoundingSphere();
-
-                  if (child.geometry.hasAttribute( 'color' )) {
-                    vertex_colors_enabled = true;
-                    document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                  }
-
-                  if (child.isLine) {
-                    lines_present = lines_visible = true;
-                    document.getElementById('btn_lines').disabled = false;
-                    document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
-                  }
-
-                  if (child.isMesh) {
-                    if (child.isSkinnedMesh) child.frustumCulled = false;
-
-                    if (variants_available === true && child.material && child.userData.gltfExtensions) {
-                      variant_materials[ child.id ] = {};
-                      const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
-
-                      for (let i = 0; i < variants.length; i++) {
-                        const mapping = meshVariants.mappings.find( ( mapping ) => mapping.variants.includes( i ) );
-
-                        if (mapping) {
-                          await parser.getDependency( 'material', mapping.material ).then( function( material ) {
-                            variant_materials[ child.id ][ variants[ i ] ] = material;
-                            if (i === 0) child.material = material;
-                          });
-                        }
-                      }
-                    }
-                  } else if (child.isPoints) {
-                    object_is_points = true;
-                    child.sizeAttenuation = true;
-                    child.sortPoints = true;
-                  }
-
-                  // Check for morph targets
-                  if (child.morphTargetDictionary) {
-                    Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
-                      extras.push( [ child.id, key, index ] );
-                    });
-                  }
-
-                  if (Array.isArray( child.material )) {
-                    let child_count_array = 1;
-
-                    initial_transparency_array[ child.name ] = {};
-                    initial_opacity_array[ child.name ] = {};
-                    original_side_array[ child.name ] = {};
-                    original_vertex_color_array[ child.name ] = {};
-
-                    child.material.forEach( mtl => {
-                      if (mtl.name === '') mtl.name = 'material_' + child_count_array;
-
-                      if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
-
-                      // Enable post processing button
-                      if (mtl.emissiveMap || (mtl.emissive && (mtl.emissive.r !== 0 ||
-                        mtl.emissive.g !== 0 || mtl.emissive.b !== 0))) {
-
-                        document.getElementById('btn_bloom').disabled = false;
-                        emissive_present = true;
-                      }
-
-                      initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
-                      initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
-                      original_side_array[ child.name ][ child_count_array ] = mtl.side;
-                      original_vertex_color_array[ child.name ][ child_count_array ] = mtl.vertexColors;
-
-                      mtl.flatShading = false;
-                      mtl.needsUpdate = true;
-
-                      child_count_array += 1;
-                    });
-                  } else {
-                    if (child.material.name === '') child.material.name = 'material_' + child_count;
-
-                    if (child.isPoints === true) child.material.size = isMobile === true ? 0.8 : 1.25;
-
-                    // Enable post processing button
-                    if (child.material.emissiveMap || (child.material.emissive && (child.material.emissive.r !== 0 ||
-                      child.material.emissive.g !== 0 || child.material.emissive.b !== 0))) {
-
-                      document.getElementById('btn_bloom').disabled = false;
-                      emissive_present = true;
-                    }
-
-                    initial_transparency[ child.name ] = child.material.transparent;
-                    initial_opacity[ child.name ] = child.material.opacity;
-                    original_side[ child.name ] = child.material.side;
-                    original_vertex_colors[ child.name ] = child.material.vertexColors;
-
-                    child.material.flatShading = false;
-                    child.material.needsUpdate = true;
-                  }
-                }
-
-                child_count += 1;
-              });
-
-              gltf_obj.name = 'url_model';
-
-              initial_rotation = gltf_obj.rotation;
-
-              // Add gltf model to scene
-              scene.add( gltf_obj );
-              gltf_obj.position.set( 0, 0, 0 );
-              default_camera.lookAt( gltf_obj.position );
-
-              finish_loading();
+              await parse_gltf( gltf, parser );
             }, function ( xhr ) { // onProgress
             }, function ( error1 ) { // onError
               console.log( 'Not a GLTF v2.0 file' );
@@ -3642,10 +3529,10 @@
                   vertexColors: vertex_colors_enabled
                 });
 
+                draco_texture.dispose();
+
                 gltf_obj = new THREE.Mesh( geometry, draco_material );
                 gltf_obj.name = 'child_0';
-
-                draco_texture.dispose();
 
                 initial_opacity[ gltf_obj.name ] = 1;
                 initial_rotation = gltf_obj.rotation;
