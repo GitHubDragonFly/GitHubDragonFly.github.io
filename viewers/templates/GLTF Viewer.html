@@ -3125,6 +3125,198 @@
         (selected_gltf_file !== null) ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : loadURLFile() );
       }
 
+      async function parse_gltf( gltf, parser, tex = null ) {
+        if (gltf.userData.vrm) {
+          const { VRMUtils } = await import( 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.1/lib/three-vrm.module.min.js' );
+
+          current_vrm = gltf.userData.vrm;
+          gltf_obj = gltf.userData.vrm.scene;
+
+          VRMUtils.removeUnnecessaryVertices( gltf.scene );
+          VRMUtils.removeUnnecessaryJoints( gltf.scene );
+
+          gltf_obj.traverse( ( obj ) => { obj.frustumCulled = false; });
+        } else {
+          gltf_obj = gltf.scene;
+        }
+
+        if (cameras && cameras.length > 0) {
+          document.getElementById('btn_cameras').disabled = false;
+          document.getElementById('btn_cameras').style.backgroundColor = 'lightgreen';
+        } else {
+          document.getElementById('btn_cameras').disabled = true;
+        }
+
+        animations = gltf.animations;
+
+        if (animations.length > 0) {
+          animation_mixer = new THREE.AnimationMixer( gltf.scene );
+          current_animation = 0;
+          animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+        }
+
+        if (gltf.userData.gltfExtensions && gltf.userData.gltfExtensions[ 'KHR_materials_variants' ]) {
+          variants = gltf.userData.gltfExtensions[ 'KHR_materials_variants' ].variants.map( ( variant ) => variant.name );
+        }
+
+        if (variants) {
+          current_variant = 0;
+          variants_available = true;
+          document.getElementById('btn_variants').disabled = false;
+          document.getElementById('btn_variants').innerHTML = 'V0';
+          document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
+        }
+
+        let child_count = 1;
+
+        gltf_obj.traverse( async function( child ) {
+          if (child.isLineSegments) {
+            if (child.name === '') child.name = 'childLines_' + child_count;
+
+            lines_present = lines_visible = true;
+            document.getElementById('btn_lines').disabled = false;
+            document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
+          }
+
+          if (child.isMesh || child.isPoints) {
+            if (child.name === '') child.name = 'child_' + child_count;
+
+            if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
+            child.geometry.normalizeNormals();
+
+            child.geometry.computeBoundingBox();
+            child.geometry.computeBoundingSphere();
+
+            if (child.geometry.hasAttribute( 'color' )) {
+              vertex_colors_enabled = true;
+              vertex_colors_present = true;
+              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+              random_vertex_changed();
+            }
+
+            if (child.isMesh) {
+              if (child.isSkinnedMesh) child.frustumCulled = false;
+
+              if (variants_available === true && child.material && child.userData.gltfExtensions) {
+                variant_materials[ child.id ] = {};
+                const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
+
+                for (let i = 0; i < variants.length; i++) {
+                  const mapping = meshVariants.mappings.find( ( mapping ) => mapping.variants.includes( i ) );
+
+                  if (mapping) {
+                    await parser.getDependency( 'material', mapping.material ).then( function( material ) {
+                      variant_materials[ child.id ][ variants[ i ] ] = material;
+                      if (i === 0) child.material = material;
+                    });
+                  }
+                }
+              }
+            } else {
+              object_is_points = true;
+              child.sizeAttenuation = true;
+              child.sortPoints = true;
+            }
+
+            // Check for morph targets
+            if (child.morphTargetDictionary) {
+              Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
+                extras.push( [ child.id, key, index ] );
+              });
+            }
+
+            if (Array.isArray( child.material )) {
+              let child_count_array = 1;
+
+              initial_transparency_array[ child.name ] = {};
+              initial_opacity_array[ child.name ] = {};
+              original_side_array[ child.name ] = {};
+              original_vertex_color_array[ child.name ] = {};
+
+              child.material.forEach( mtl => {
+                if (mtl.name === '') mtl.name = 'material_' + child_count_array;
+
+                if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
+
+                initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
+                initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
+                original_side_array[ child.name ][ child_count_array ] = mtl.side;
+                original_vertex_color_array[ child.name ][ child_count_array ] = mtl.vertexColors;
+
+                if (!mtl.isMeshStandardMaterial) {
+                  mtl.castShadow = true;
+                  mtl.receiveShadow = true;
+                }
+
+                mtl.flatShading = false;
+                mtl.needsUpdate = true;
+
+                child_count_array += 1;
+              });
+            } else {
+              let mtl = child.material;
+
+              if (mtl.name === '') mtl.name = 'material_' + child_count;
+
+              if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
+
+              initial_transparency[ child.name ] = mtl.transparent;
+              initial_opacity[ child.name ] = mtl.opacity;
+              original_side[ child.name ] = mtl.side;
+              original_vertex_colors[ child.name ] = mtl.vertexColors;
+
+              if (!mtl.isMeshStandardMaterial) {
+                mtl.castShadow = true;
+                mtl.receiveShadow = true;
+              }
+
+              mtl.flatShading = false;
+              mtl.needsUpdate = true;
+            }
+
+            if (!parser.json.images && local_files_indexes.length > 0) {
+              // If textures are loaded then try to unwrap the model and create uvs
+              if (child.isMesh && child.geometry.attributes.uv === undefined) {
+                if (!child.geometry.index) {
+                  child.geometry = await merge_vertices( child.geometry.clone(), 1e-6 );
+                }
+
+                document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
+                await new Promise( resolve => setTimeout( resolve, 100 ) );
+
+                let uvu = new uvUnwrapper();
+                await uvu.load();
+
+                try {
+                  await uvu.unwrapGeometry( child.geometry );
+                  uvu._module._free();
+                } catch ( error ) {
+                  console.warn( 'Error unwrapping geometry: ' + error.message );
+                }
+              }
+
+              // Apply texture
+              child.material.map = tex;
+              child.material.needsUpdate = true;
+            }
+          }
+
+          child_count ++;
+        });
+
+        gltf_obj.name = 'local_model';
+
+        initial_rotation = gltf_obj.rotation;
+
+        // Add gltf model to scene
+        scene.add( gltf_obj );
+        gltf_obj.position.set( 0, 0, 0 );
+        default_camera.lookAt( gltf_obj.position );
+
+        finish_loading();
+      }
+
       function loadFile() {
         let lfile = local_files[ selected_gltf_file ];
 
@@ -3175,213 +3367,27 @@
 
             let lfilei = local_files[ local_files_indexes[ 0 ] ];
 
-            await new Promise( resolve => {
-              // Use as a texture the first loaded image
-              loader.load( URL.createObjectURL( lfilei ), function( texture ) {
-                URL.revokeObjectURL( lfilei );
+            // Use as a texture the first loaded image
+            loader.load( URL.createObjectURL( lfilei ), function( texture ) {
+              URL.revokeObjectURL( lfilei );
 
-                if (is_ext_hdr === true) texture.flipY = false;
-                texture.wrapS = THREE.RepeatWrapping;
-                texture.wrapT = THREE.RepeatWrapping;
-                texture.colorSpace = (is_ext_exr === true || is_ext_hdr === true) ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
-                texture.needsUpdate = true;
+              if (is_ext_hdr === true) texture.flipY = false;
+              texture.wrapS = THREE.RepeatWrapping;
+              texture.wrapT = THREE.RepeatWrapping;
+              texture.colorSpace = (is_ext_exr === true || is_ext_hdr === true) ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
+              texture.needsUpdate = true;
 
-                if (texture.num_frames && texture.num_frames > 1) animated_gif_texture = true;
+              if (texture.num_frames && texture.num_frames > 1) animated_gif_texture = true;
 
-                resolve( tex = texture.clone(), texture.dispose() );
-              });
+              parse_gltf( gltf, parser, texture );
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              console.log( 'Error loading texture!' );
+              URL.revokeObjectURL( lfilei );
             });
-          }
-
-          if (gltf.userData.vrm) {
-            const { VRMUtils } = await import( 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.1/lib/three-vrm.module.min.js' );
-
-            current_vrm = gltf.userData.vrm;
-            gltf_obj = gltf.userData.vrm.scene;
-
-            VRMUtils.removeUnnecessaryVertices( gltf.scene );
-            VRMUtils.removeUnnecessaryJoints( gltf.scene );
-
-            gltf_obj.traverse( ( obj ) => { obj.frustumCulled = false; });
           } else {
-            gltf_obj = gltf.scene;
+            await parse_gltf( gltf, parser );
           }
-
-          if (cameras && cameras.length > 0) {
-            document.getElementById('btn_cameras').disabled = false;
-            document.getElementById('btn_cameras').style.backgroundColor = 'lightgreen';
-          } else {
-            document.getElementById('btn_cameras').disabled = true;
-          }
-
-          animations = gltf.animations;
-
-          if (animations.length > 0) {
-            animation_mixer = new THREE.AnimationMixer( gltf.scene );
-            current_animation = 0;
-            animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
-          }
-
-          if (gltf.userData.gltfExtensions && gltf.userData.gltfExtensions[ 'KHR_materials_variants' ]) {
-            variants = gltf.userData.gltfExtensions[ 'KHR_materials_variants' ].variants.map( ( variant ) => variant.name );
-          }
-
-          if (variants) {
-            current_variant = 0;
-            variants_available = true;
-            document.getElementById('btn_variants').disabled = false;
-            document.getElementById('btn_variants').innerHTML = 'V0';
-            document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
-          }
-
-          let child_count = 1;
-
-          gltf_obj.traverse( async function( child ) {
-            if (child.isLineSegments) {
-              if (child.name === '') child.name = 'childLines_' + child_count;
-
-              lines_present = lines_visible = true;
-              document.getElementById('btn_lines').disabled = false;
-              document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
-            }
-
-            if (child.isMesh || child.isPoints) {
-              if (child.name === '') child.name = 'child_' + child_count;
-
-              if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-              child.geometry.normalizeNormals();
-
-              child.geometry.computeBoundingBox();
-              child.geometry.computeBoundingSphere();
-
-              if (child.geometry.hasAttribute( 'color' )) {
-                vertex_colors_enabled = true;
-                vertex_colors_present = true;
-                document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                document.getElementById('btn_random_vertex_colors').disabled = false;
-                random_vertex_changed();
-              }
-
-              if (child.isMesh) {
-                if (child.isSkinnedMesh) child.frustumCulled = false;
-
-                if (variants_available === true && child.material && child.userData.gltfExtensions) {
-                  variant_materials[ child.id ] = {};
-                  const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
-
-                  for (let i = 0; i < variants.length; i++) {
-                    const mapping = meshVariants.mappings.find( ( mapping ) => mapping.variants.includes( i ) );
-
-                    if (mapping) {
-                      await parser.getDependency( 'material', mapping.material ).then( function( material ) {
-                        variant_materials[ child.id ][ variants[ i ] ] = material;
-                        if (i === 0) child.material = material;
-                      });
-                    }
-                  }
-                }
-              } else {
-                object_is_points = true;
-                child.sizeAttenuation = true;
-                child.sortPoints = true;
-              }
-
-              // Check for morph targets
-              if (child.morphTargetDictionary) {
-                Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
-                  extras.push( [ child.id, key, index ] );
-                });
-              }
-
-              if (Array.isArray( child.material )) {
-                let child_count_array = 1;
-
-                initial_transparency_array[ child.name ] = {};
-                initial_opacity_array[ child.name ] = {};
-                original_side_array[ child.name ] = {};
-                original_vertex_color_array[ child.name ] = {};
-
-                child.material.forEach( mtl => {
-                  if (mtl.name === '') mtl.name = 'material_' + child_count_array;
-
-                  if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
-
-                  initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
-                  initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
-                  original_side_array[ child.name ][ child_count_array ] = mtl.side;
-                  original_vertex_color_array[ child.name ][ child_count_array ] = mtl.vertexColors;
-
-                  if (!mtl.isMeshStandardMaterial) {
-                    mtl.castShadow = true;
-                    mtl.receiveShadow = true;
-                  }
-
-                  mtl.flatShading = false;
-                  mtl.needsUpdate = true;
-
-                  child_count_array += 1;
-                });
-              } else {
-                let mtl = child.material;
-
-                if (mtl.name === '') mtl.name = 'material_' + child_count;
-
-                if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
-
-                initial_transparency[ child.name ] = mtl.transparent;
-                initial_opacity[ child.name ] = mtl.opacity;
-                original_side[ child.name ] = mtl.side;
-                original_vertex_colors[ child.name ] = mtl.vertexColors;
-
-                if (!mtl.isMeshStandardMaterial) {
-                  mtl.castShadow = true;
-                  mtl.receiveShadow = true;
-                }
-
-                mtl.flatShading = false;
-                mtl.needsUpdate = true;
-              }
-
-              if (!parser.json.images && local_files_indexes.length > 0) {
-                // If textures are loaded then try to unwrap the model and create uvs
-                if (child.isMesh && child.geometry.attributes.uv === undefined) {
-                  if (!child.geometry.index) {
-                    child.geometry = await merge_vertices( child.geometry.clone(), 1e-6 );
-                  }
-
-                  document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
-                  await new Promise( resolve => setTimeout( resolve, 100 ) );
-
-                  let uvu = new uvUnwrapper();
-                  await uvu.load();
-
-                  try {
-                    await uvu.unwrapGeometry( child.geometry );
-                    uvu._module._free();
-                  } catch ( error ) {
-                    console.warn( 'Error unwrapping geometry: ' + error.message );
-                  }
-                }
-
-                // Apply texture
-                child.material.map = tex;
-                child.material.needsUpdate = true;
-              }
-            }
-
-            child_count += 1;
-          });
-
-          gltf_obj.name = 'local_model';
-
-          initial_rotation = gltf_obj.rotation;
-
-          // Add gltf model to scene
-          scene.add( gltf_obj );
-          gltf_obj.position.set( 0, 0, 0 );
-          default_camera.lookAt( gltf_obj.position );
-
-          finish_loading();
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
           URL.revokeObjectURL( lfile );
@@ -3584,170 +3590,7 @@
             scenes = gltf.scenes;
             cameras = gltf.cameras;
 
-            if (gltf.userData.vrm) {
-              const { VRMUtils } = await import( 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.1/lib/three-vrm.module.min.js' );
-
-              current_vrm = gltf.userData.vrm;
-              gltf_obj = gltf.userData.vrm.scene;
-              vrm = true;
-
-              VRMUtils.removeUnnecessaryVertices( gltf.scene );
-              VRMUtils.removeUnnecessaryJoints( gltf.scene );
-
-              gltf_obj.traverse( ( obj ) => { obj.frustumCulled = false; });
-            } else {
-              gltf_obj = gltf.scene;
-            }
-
-            if (cameras && cameras.length > 0) {
-              document.getElementById('btn_cameras').disabled = false;
-              document.getElementById('btn_cameras').style.backgroundColor = 'lightgreen';
-            } else {
-              document.getElementById('btn_cameras').disabled = true;
-            }
-
-            animations = gltf.animations;
-
-            if (animations.length > 0) {
-              animation_mixer = new THREE.AnimationMixer( gltf.scene );
-              current_animation = 0;
-              animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
-            }
-
-            if (gltf.userData.gltfExtensions && gltf.userData.gltfExtensions[ 'KHR_materials_variants' ]) {
-              variants = gltf.userData.gltfExtensions[ 'KHR_materials_variants' ].variants.map( ( variant ) => variant.name );
-            }
-
-            if (variants) {
-              current_variant = 0;
-              variants_available = true;
-              document.getElementById('btn_variants').disabled = false;
-              document.getElementById('btn_variants').innerHTML = 'V0';
-              document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
-            }
-
-            let child_count = 1;
-
-            gltf_obj.traverse( async function( child ) {
-              if (child.isLineSegments) {
-                if (child.name === '') child.name = 'childLines_' + child_count;
-
-                lines_present = lines_visible = true;
-                document.getElementById('btn_lines').disabled = false;
-                document.getElementById('btn_lines').style.backgroundColor = 'lightgreen';
-              }
-
-              if (child.isMesh || child.isPoints) {
-                if (child.name === '') child.name = 'child_' + child_count;
-
-                if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-                child.geometry.normalizeNormals();
-
-                child.geometry.computeBoundingBox();
-                child.geometry.computeBoundingSphere();
-
-                if (child.geometry.hasAttribute( 'color' )) {
-                  vertex_colors_enabled = true;
-                  vertex_colors_present = true;
-                  document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                  document.getElementById('btn_random_vertex_colors').disabled = false;
-                  random_vertex_changed();
-                }
-
-                if (child.isMesh) {
-                  if (child.isSkinnedMesh) child.frustumCulled = false;
-
-                  if (variants_available === true && child.material && child.userData.gltfExtensions) {
-                    variant_materials[ child.id ] = {};
-                    const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
-
-                    for (let i = 0; i < variants.length; i++) {
-                      const mapping = meshVariants.mappings.find( ( mapping ) => mapping.variants.includes( i ) );
-
-                      if (mapping) {
-                        await parser.getDependency( 'material', mapping.material ).then( function( material ) {
-                          variant_materials[ child.id ][ variants[ i ] ] = material;
-                          if (i === 0) child.material = material;
-                        });
-                      }
-                    }
-                  }
-                } else {
-                  object_is_points = true;
-                  child.sizeAttenuation = true;
-                  child.sortPoints = true;
-                }
-
-                // Check for morph targets
-                if (child.morphTargetDictionary) {
-                  Object.keys( child.morphTargetDictionary ).forEach( ( key, index ) => {
-                    extras.push( [ child.id, key, index ] );
-                  });
-                }
-
-                if (Array.isArray( child.material )) {
-                  let child_count_array = 1;
-
-                  initial_transparency_array[ child.name ] = {};
-                  initial_opacity_array[ child.name ] = {};
-                  original_side_array[ child.name ] = {};
-                  original_vertex_color_array[ child.name ] = {};
-
-                  child.material.forEach( mtl => {
-                    if (mtl.name === '') mtl.name = 'material_' + child_count_array;
-
-                    if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
-
-                    initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
-                    initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
-                    original_side_array[ child.name ][ child_count_array ] = mtl.side;
-                    original_vertex_color_array[ child.name ][ child_count_array ] = mtl.vertexColors;
-
-                    if (!mtl.isMeshStandardMaterial) {
-                      mtl.castShadow = true;
-                      mtl.receiveShadow = true;
-                    }
-
-                    mtl.flatShading = false;
-                    mtl.needsUpdate = true;
-
-                    child_count_array += 1;
-                  });
-                } else {
-                  let mtl = child.material;
-
-                  if (mtl.name === '') mtl.name = 'material_' + child_count;
-
-                  if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
-
-                  initial_transparency[ child.name ] = mtl.transparent;
-                  initial_opacity[ child.name ] = mtl.opacity;
-                  original_side[ child.name ] = mtl.side;
-                  original_vertex_colors[ child.name ] = mtl.vertexColors;
-
-                  if (!mtl.isMeshStandardMaterial) {
-                    mtl.castShadow = true;
-                    mtl.receiveShadow = true;
-                  }
-
-                  mtl.flatShading = false;
-                  mtl.needsUpdate = true;
-                }
-              }
-
-              child_count += 1;
-            });
-
-            gltf_obj.name = 'url_model';
-
-            initial_rotation = gltf_obj.rotation;
-
-            // Add gltf model to scene
-            scene.add( gltf_obj );
-            gltf_obj.position.set( 0, 0, 0 );
-            default_camera.lookAt( gltf_obj.position );
-
-            finish_loading();
+            await parse_gltf( gltf, parser );
           }, function ( xhr ) { // onProgress
           }, function ( error1 ) { // onError
             console.log( error1 );
