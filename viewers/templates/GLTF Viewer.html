@@ -3125,19 +3125,17 @@
         (selected_gltf_file !== null) ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : loadURLFile() );
       }
 
-      async function loadFile() {
-        const { VRMUtils } = await import( 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.1/lib/three-vrm.module.min.js' );
-
+      function loadFile() {
         let lfile = local_files[ selected_gltf_file ];
 
-        gltf_loader.load( URL.createObjectURL( lfile ), function( gltf ) {
+        gltf_loader.load( URL.createObjectURL( lfile ), async function( gltf ) {
           URL.revokeObjectURL( lfile );
 
           parser = gltf.parser;
           scenes = gltf.scenes;
           cameras = gltf.cameras;
 
-          let loader, is_ext_exr = false, is_ext_hdr = false;
+          let loader, tex, is_ext_exr = false, is_ext_hdr = false;
 
           if (!parser.json.images && local_files_indexes.length > 0) {
             let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
@@ -3174,9 +3172,30 @@
                 loader = texture_loader;
                 break;
             }
+
+            let lfilei = local_files[ local_files_indexes[ 0 ] ];
+
+            await new Promise( resolve => {
+              // Use as a texture the first loaded image
+              loader.load( URL.createObjectURL( lfilei ), function( texture ) {
+                URL.revokeObjectURL( lfilei );
+
+                if (is_ext_hdr === true) texture.flipY = false;
+                texture.wrapS = THREE.RepeatWrapping;
+                texture.wrapT = THREE.RepeatWrapping;
+                texture.colorSpace = (is_ext_exr === true || is_ext_hdr === true) ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
+                texture.needsUpdate = true;
+
+                if (texture.num_frames && texture.num_frames > 1) animated_gif_texture = true;
+
+                resolve( tex = texture.clone(), texture.dispose() );
+              });
+            });
           }
 
           if (gltf.userData.vrm) {
+            const { VRMUtils } = await import( 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.1/lib/three-vrm.module.min.js' );
+
             current_vrm = gltf.userData.vrm;
             gltf_obj = gltf.userData.vrm.scene;
 
@@ -3324,44 +3343,29 @@
               }
 
               if (!parser.json.images && local_files_indexes.length > 0) {
-                // Use as a texture the first loaded image
-
-                let lfilei = local_files[ local_files_indexes[ 0 ] ];
-
-                await loader.load( URL.createObjectURL( lfilei ), async function( texture ) {
-                  URL.revokeObjectURL( lfilei );
-
-                  if (is_ext_hdr === true) texture.flipY = false;
-                  texture.wrapS = THREE.RepeatWrapping;
-                  texture.wrapT = THREE.RepeatWrapping;
-                  texture.colorSpace = (is_ext_exr === true || is_ext_hdr === true) ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
-                  texture.needsUpdate = true;
-
-                  if (texture.num_frames && texture.num_frames > 1) animated_gif_texture = true;
-
-                  if (child.isMesh && child.geometry.attributes.uv === undefined) {
-                    if (!child.geometry.index) {
-                      child.geometry = await merge_vertices( child.geometry.clone(), 1e-6 );
-                    }
-
-                    document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
-                    await new Promise( resolve => setTimeout( resolve, 100 ) );
-
-                    let uvu = new uvUnwrapper();
-                    await uvu.load();
-
-                    try {
-                      await uvu.unwrapGeometry( child.geometry );
-                      uvu._module._free();
-                    } catch ( error ) {
-                      console.warn( 'Error unwrapping geometry: ' + error.message );
-                    }
+                // If textures are loaded then try to unwrap the model and create uvs
+                if (child.isMesh && child.geometry.attributes.uv === undefined) {
+                  if (!child.geometry.index) {
+                    child.geometry = await merge_vertices( child.geometry.clone(), 1e-6 );
                   }
 
-                  // Apply texture
-                  child.material.map = texture;
-                  child.material.needsUpdate = true;
-                });
+                  document.getElementById('div_message').innerHTML = 'Loading ... ' + pw + ' : creating uv';
+                  await new Promise( resolve => setTimeout( resolve, 100 ) );
+
+                  let uvu = new uvUnwrapper();
+                  await uvu.load();
+
+                  try {
+                    await uvu.unwrapGeometry( child.geometry );
+                    uvu._module._free();
+                  } catch ( error ) {
+                    console.warn( 'Error unwrapping geometry: ' + error.message );
+                  }
+                }
+
+                // Apply texture
+                child.material.map = tex;
+                child.material.needsUpdate = true;
               }
             }
 
@@ -3465,7 +3469,7 @@
 
             let lfilei = local_files[ local_files_indexes[ 0 ] ];
 
-            loader.load( URL.createObjectURL( lfilei ), function( texture ) {
+            await loader.load( URL.createObjectURL( lfilei ), function( texture ) {
               URL.revokeObjectURL( lfilei );
 
               if (is_ext_hdr === true) texture.flipY = false;
