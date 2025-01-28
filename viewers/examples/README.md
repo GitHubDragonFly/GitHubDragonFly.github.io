@@ -12,6 +12,8 @@ Cerberus examples:
 - Original files from [three.js OBJ examples](https://github.com/mrdoob/three.js/tree/dev/examples/models/obj/cerberus).
 - Converted and modified to showcase multiple different `OBJ + MTL` loading options:
   - Can be loaded as ZIP files in the OBJ+MTL Viewer
+- GLB related ZIP files can be loaded as such in GLTF WebGPU Viewer:
+  - Designed to showcase loading EXR texture with DRC and GLB cerberus model that has a built-in `uv` set
 
 Damaged Helmet example from [three.js GLTF examples](https://github.com/mrdoob/three.js/tree/dev/examples/models/gltf/DamagedHelmet/glTF).
 - Zipped up for testing purposes
