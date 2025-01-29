@@ -39,11 +39,11 @@
     <script>
       var g_loader, gltf_loader, gltf_obj, ktx2_loader, texture_loader, draco_loader;
       var tiff_loader, tga_loader, dds_loader, exr_loader, rgbe_loader, hdrJPGLoader;
-      var THREE, vrm, vrm_registered = false, current_vrm, manager, renderer, bg_flip;
+      var THREE, fflate, vrm, vrm_registered = false, current_vrm, manager, renderer;
       var merge_vertices, scene, scenes, default_camera, camera, cameras, cam_id;
       var controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
       var animations, animation_mixer, current_animation, extras, current_extra;
-      var gif_loader, gif_writer, resource_path, object_is_points, clock, fflate;
+      var gif_loader, gif_writer, object_is_points, clock, bg_flip;
       var parser, gltf_VideoTextureExtension, current_side, edges, edges_visible;
       var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
       var tex_res, tex_flip, tex_fmt, draco_material, uvUnwrapper, count = 0;
@@ -58,13 +58,14 @@
       var initial_opacity, initial_opacity_array, enable_opacity;
       var initial_transparency, initial_transparency_array;
       var original_side, original_side_array, bgnd_linear_gradient;
-      var lines_present, lines_visible, bounding_box, zip, outline_material;
+      var lines_present, lines_visible, bounding_box, outline_material;
       var random_vertex_colors_enabled, random_vertex_color_array;
       var vertex_colors_enabled, vertex_colors_present, current_colors;
       var original_vertex_colors, original_vertex_color_array, animated_gif_texture;
-      var local_files, local_files_indexes, local_bin_files, slider_height = 0;
-      var url_displayed = false, url_loading = false, menu_location_bottom = false;
+      var local_files, local_files_indexes, slider_height = 0;
+      var zip, zip_file, unzipped_files, filesMap;
       var selected_gltf_file, selected_draco_file, selected_url_file = '';
+      var url_displayed = false, url_loading = false, menu_location_bottom = false;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
     </script>
@@ -963,14 +964,6 @@
       }
 
       function set_filename() {
-        if (selected_gltf_file !== null) {
-          filename = local_files[ selected_gltf_file ].name.substring( 0, local_files[ selected_gltf_file ].name.lastIndexOf('.') );
-        } else if (selected_draco_file !== null) {
-          filename = local_files[ selected_draco_file ].name.substring( 0, local_files[ selected_draco_file ].name.lastIndexOf('.') );
-        } else {
-          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') );
-        }
-
         if (!filename || filename === '') {
           filename = 'Model';
         } else {
@@ -2819,8 +2812,41 @@
         mouse_wheel = true;
       }
 
-      async function init(){
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+      async function process_loaded_zip() {
+        let img_extensions = [ '.AVIF', '.BMP', '.DDS', '.DIB', '.EXR', '.GIF', '.HDR', '.JPG', '.JPEG', '.JFIF',
+          '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
+
+        for ( const key of Object.keys( unzipped_files ) ) {
+          let key_uc = key.toUpperCase();
+
+          if (key_uc.endsWith('.GLB') || key_uc.endsWith('.GLTF') || key_uc.endsWith('.VRM')) {
+            selected_gltf_file = 'blob:null/' + key;
+
+            filename = key.slice( 0, key_uc.endsWith('.GLTF') ? -5 : -4 );
+            if (filename.indexOf( '\\' )) filename = filename.substring( filename.lastIndexOf( '\\' ) + 1 );
+            if (filename.indexOf( '/' )) filename = filename.substring( filename.lastIndexOf( '/' ) + 1 );
+          }
+          else if (key_uc.endsWith('.DRC')) {
+            selected_draco_file = 'blob:null/' + key;
+
+            filename = key.slice( 0, -4 );
+            if (filename.indexOf( '\\' )) filename = filename.substring( filename.lastIndexOf( '\\' ) + 1 );
+            if (filename.indexOf( '/' )) filename = filename.substring( filename.lastIndexOf( '/' ) + 1 );
+          }
+          else {
+            if (local_files_indexes.length === 0 && img_extensions.some( ext => key_uc.endsWith( ext ) )) {
+              local_files_indexes.push( 'blob:null/' + key );
+            }
+          }
+
+          let blob = new Blob( [ unzipped_files[ key ].buffer ], { type: 'application/octet-stream' } );
+          filesMap[ 'blob:null/' + key ] = URL.createObjectURL( blob );
+          URL.revokeObjectURL( blob );
+        }
+      }
+
+      async function init( reset = false, files = null ) {
+        if (reset === false && files === null && url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
         document.getElementById('div_message').innerHTML = 'Loading ... ' + pw;
         document.getElementById('div_message').style.display = '';
@@ -2895,6 +2921,9 @@
         selected_gltf_file = null;
         selected_draco_file = null;
         object_is_points = false;
+        unzipped_files = {};
+        zip_file = null;
+        filesMap = {};
         current_vrm = null;
         vrm = false;
         mouse_down = false;
@@ -2903,10 +2932,8 @@
         tex_flip = false;
         tex_res = Infinity;
         local_files = null;
-        local_bin_files = [];
         local_files_indexes = [];
         current_side = 'OS';
-        resource_path = '';
         variants = null;
         variant_materials = {};
         cameras = null;
@@ -2967,42 +2994,49 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
+        manager.setURLModifier( function( url ) {
+          const file = filesMap[ url ];
+          if ( file ) return file;
+          return url;
+        });
+
         if (url_loading === false) {
           let image_extensions = [ '.AVIF', '.BMP', '.DDS', '.DIB', '.EXR', '.GIF', '.HDR', '.JPG', '.JPEG', '.JFIF',
             '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
 
           // Loaded file(s)
-          local_files = document.getElementById('file_input').files;
+          local_files = files !== null ? files : document.getElementById('file_input').files;
 
           for (let i = 0; i < local_files.length; i++) {
             let fn_uc = local_files[ i ].name.toUpperCase();
 
             if (fn_uc.endsWith('.GLB') || fn_uc.endsWith('.GLTF') || fn_uc.endsWith('.VRM')) {
+              filename = local_files[ i ].name.slice( 0, fn_uc.endsWith('.GLTF') ? -5 : -4 );
               selected_gltf_file = i;
               if (fn_uc.endsWith('.VRM')) vrm = true;
             }
-            else if (fn_uc.endsWith('.DRC')) { selected_draco_file = i; }
-            else if (fn_uc.endsWith('.BIN')) { local_bin_files.push( i ); }
-            else if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) { local_files_indexes.push( i ); }
+            else if (fn_uc.endsWith('.DRC')) {
+              filename = local_files[ i ].name.slice( 0, -4 );
+              selected_draco_file = i;
+            }
+            else if (fn_uc.endsWith('.ZIP') && zip_file === null) { zip_file = i; }
+            else {
+              if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) {
+                local_files_indexes.push( i );
+              }
+
+              let url = URL.createObjectURL( local_files[ i ] );
+              URL.revokeObjectURL( local_files[ i ] );
+
+              let base = THREE.LoaderUtils.extractUrlBase( url );
+
+              filesMap[ base + local_files[ i ].name ] = url;
+            }
           };
 
-          if (selected_gltf_file === null && selected_draco_file === null) {
+          if (selected_gltf_file === null && selected_draco_file === null && zip_file === null) {
             handle_error( 'No valid GLTF or GLB or VRM or DRACO file selected!' );
             return;
-          }
-
-          if (local_bin_files.length > 0) {
-            local_bin_files.forEach( file_index => {
-              resource_path += local_files[ file_index ].name + ',' + URL.createObjectURL( local_files[ file_index ] ) + ',';
-              URL.revokeObjectURL( local_files[ file_index ] );
-            });
-          }
-
-          if (local_files_indexes.length > 0) {
-            local_files_indexes.forEach( file_index => {
-              resource_path += local_files[ file_index ].name + ',' + URL.createObjectURL( local_files[ file_index ] ) + ',';
-              URL.revokeObjectURL( local_files[ file_index ] );
-            });
           }
 
           selected_url_file = '';
@@ -3049,12 +3083,6 @@
           const { VRMLoaderPlugin } = await import( 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.1/lib/three-vrm.module.min.js' );
           gltf_loader.register( ( parser ) => { return new VRMLoaderPlugin( parser ); });
           vrm_registered = true;
-        }
-
-        if (selected_url_file === '') {
-          if (resource_path !== '') gltf_loader.setResourcePath( resource_path.substring( 0, resource_path.length - 1 ) );
-        } else {
-          gltf_loader.setResourcePath( '' );
         }
 
         if (clock === undefined) clock = new THREE.Clock();
@@ -3121,8 +3149,23 @@
           //controls.maxDistance = 500;
         }
 
-        // Load DRACO or GLTF file
-        (selected_gltf_file !== null) ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : loadURLFile() );
+        if (zip_file !== null) {
+          let file_loader = new THREE.FileLoader( manager );
+          file_loader.setResponseType( 'arraybuffer' );
+
+          file_loader.load( URL.createObjectURL( local_files[ zip_file ] ), async function( buffer ) {
+            URL.revokeObjectURL( local_files[ zip_file ] );
+
+            unzipped_files = await fflate.unzipSync( new Uint8Array( buffer ) );
+
+            await process_loaded_zip();
+
+            selected_gltf_file !== null ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : handle_error( 'No valid GLTF v2.0 file found!' ) );
+          });
+        } else {
+          // Load file
+          (selected_gltf_file !== null) ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : loadURLFile() );
+        }
       }
 
       async function process_gltf( gltf, parser, tex = null ) {
@@ -3322,10 +3365,10 @@
       }
 
       function loadFile() {
-        let lfile = local_files[ selected_gltf_file ];
+        let lfile = local_files ? local_files[ selected_gltf_file ] : null;
 
-        gltf_loader.load( URL.createObjectURL( lfile ), async function( gltf ) {
-          URL.revokeObjectURL( lfile );
+        gltf_loader.load( zip_file !== null ? selected_gltf_file : URL.createObjectURL( lfile ), async function( gltf ) {
+          if (zip_file === null) URL.revokeObjectURL( lfile );
 
           parser = gltf.parser;
           scenes = gltf.scenes;
@@ -3334,7 +3377,8 @@
           let loader;
 
           if (!parser.json.images && local_files_indexes.length > 0) {
-            let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
+            let lfi0 = local_files_indexes[ 0 ];
+            let uc_name = (zip_file !== null ? lfi0 : local_files[ lfi0 ].name).toUpperCase();
             let ext = uc_name.substring( uc_name.lastIndexOf( '.' ) + 1 );
 
             switch ( ext ) {
@@ -3367,11 +3411,11 @@
                 break;
             }
 
-            let lfilei = local_files[ local_files_indexes[ 0 ] ];
+            let lfilei = zip_file !== null ? local_files_indexes[ 0 ] : local_files[ local_files_indexes[ 0 ] ];
 
             // Use as a texture the first loaded image
-            loader.load( URL.createObjectURL( lfilei ), function( texture ) {
-              URL.revokeObjectURL( lfilei );
+            loader.load( zip_file !== null ? lfilei : URL.createObjectURL( lfilei ), function( texture ) {
+              if (zip_file === null) URL.revokeObjectURL( lfilei );
 
               if (ext === 'HDR') texture.flipY = false;
               texture.wrapS = THREE.RepeatWrapping;
@@ -3385,23 +3429,23 @@
             }, function ( xhr ) { // onProgress
             }, function ( error ) { // onError
               console.log( 'Error loading texture!' );
-              URL.revokeObjectURL( lfilei );
+              if (zip_file === null) URL.revokeObjectURL( lfilei );
             });
           } else {
             await process_gltf( gltf, parser );
           }
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
-          URL.revokeObjectURL( lfile );
+          if (zip_file === null) URL.revokeObjectURL( lfile );
           handle_error( error );
         });
       }
 
       function loadDRACO() {
-        let lfile = local_files[ selected_draco_file ];
+        let lfile = local_files ? local_files[ selected_draco_file ] : null;
 
-        draco_loader.load( URL.createObjectURL( lfile ), async function( geometry ) {
-          URL.revokeObjectURL( lfile );
+        draco_loader.load( zip_file !== null ? selected_draco_file : URL.createObjectURL( lfile ), async function( geometry ) {
+          if (zip_file === null) URL.revokeObjectURL( lfile );
 
           if (!geometry.attributes.normal) geometry.computeVertexNormals();
           geometry.normalizeNormals();
@@ -3448,7 +3492,8 @@
 
             let loader;
 
-            let uc_name = local_files[ local_files_indexes[ 0 ] ].name.toUpperCase();
+            let lfi0 = local_files_indexes[ 0 ];
+            let uc_name = (zip_file !== null ? lfi0 : local_files[ lfi0 ].name).toUpperCase();
             let ext = uc_name.substring( uc_name.lastIndexOf( '.' ) + 1 );
 
             switch ( ext ) {
@@ -3481,10 +3526,10 @@
                 break;
             }
 
-            let lfilei = local_files[ local_files_indexes[ 0 ] ];
+            let lfilei = zip_file !== null ? local_files_indexes[ 0 ] : local_files[ local_files_indexes[ 0 ] ];
 
-            await loader.load( URL.createObjectURL( lfilei ), function( texture ) {
-              URL.revokeObjectURL( lfilei );
+            loader.load( zip_file !== null ? lfilei : URL.createObjectURL( lfilei ), function( texture ) {
+              if (zip_file === null) URL.revokeObjectURL( lfilei );
 
               if (ext === 'HDR') texture.flipY = false;
               texture.wrapS = THREE.RepeatWrapping;
@@ -3515,7 +3560,7 @@
             }, function ( xhr ) { // onProgress
             }, function ( error ) { // onError
               console.log( 'Error loading texture!' );
-              URL.revokeObjectURL( lfilei );
+              if (zip_file === null) URL.revokeObjectURL( lfilei );
 
               gltf_obj = new THREE.Mesh( geometry, draco_material );
               gltf_obj.name = 'child_0';
@@ -3544,7 +3589,7 @@
           }
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
-          URL.revokeObjectURL( lfile );
+          if (zip_file === null) URL.revokeObjectURL( lfile );
           handle_error( error );
         });
 
@@ -3564,62 +3609,92 @@
             selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          // No extension checking for URL so it has to point to VRM or GLTF or GLB or DRC model
+          // No extension checking for URL so it has to point to either of ZIP, VRM, GLTF, GLB or DRC model
 
           const { VRMLoaderPlugin } = await import( 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.1/lib/three-vrm.module.min.js' );
           gltf_loader.register( ( parser ) => { return new VRMLoaderPlugin( parser ); });
 
-          console.log( 'Trying GLTF Loader...' );
+          // Check if a ZIP file
+          console.log( 'Checking if ZIP file...' );
 
-          gltf_loader.load( selected_url_file, async gltf => {
-            parser = gltf.parser;
-            scenes = gltf.scenes;
-            cameras = gltf.cameras;
+          try {
+            await fetch( selected_url_file ).then( async res => {
+              zip_file = await res.arrayBuffer();
+              unzipped_files = await fflate.unzipSync( new Uint8Array( zip_file ) );
+              await process_loaded_zip();
 
-            await process_gltf( gltf, parser );
-          }, function ( xhr ) { // onProgress
-          }, function ( error1 ) { // onError
-            console.log( error1 );
+              return selected_gltf_file !== null ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : handle_error( 'No valid GLTF v2.0 file found!' ) );
+            });
+          } catch ( error ) {
+            console.log( 'Not a ZIP file: ' );
+            zip_file = null;
 
-            console.log( 'Trying DRACO Loader...' );
+            console.log( 'Trying GLTF Loader...' );
 
-            draco_loader.load( selected_url_file, function( geometry ) {
-              if (!geometry.attributes.normal) geometry.computeVertexNormals();
+            gltf_loader.load( selected_url_file, async gltf => {
+              let url_uc = selected_url_file.toUpperCase();
 
-              if (geometry.hasAttribute( 'color' )) {
-                vertex_colors_enabled = true;
-                vertex_colors_present = true;
-                original_vertex_colors[ 'child_0' ] = true;
-                document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                document.getElementById('btn_random_vertex_colors').disabled = false;
-                random_vertex_changed();
+              if (url_uc.endsWith('.GLB') || url_uc.endsWith('.GLTF') || url_uc.endsWith('.VRM')) {
+                filename = selected_url_file.slice( 0, url_uc.endsWith('.GLTF') ? -5 : -4 );
+                if (filename.indexOf( '\\' )) filename = filename.substring( filename.lastIndexOf( '\\' ) + 1 );
+                if (filename.indexOf( '/' )) filename = filename.substring( filename.lastIndexOf( '/' ) + 1 );
               }
 
-              draco_material = new THREE.MeshStandardMaterial({
-                side: THREE.DoubleSide,
-                metalness: 0.2,
-                roughness: 0.8,
-                opacity: 1,
-                vertexColors: vertex_colors_enabled
-              });
+              parser = gltf.parser;
+              scenes = gltf.scenes;
+              cameras = gltf.cameras;
+              gltf_obj = gltf.scene;
 
-              gltf_obj = new THREE.Mesh( geometry, draco_material );
-              gltf_obj.name = 'child_0';
-
-              initial_opacity[ gltf_obj.name ] = 1;
-              initial_rotation = gltf_obj.rotation;
-
-              // Add DRACO model to scene
-              scene.add( gltf_obj );
-              gltf_obj.position.set( 0, 0, 0 );
-              default_camera.lookAt( gltf_obj.position );
-
-              finish_loading();
+              await process_gltf( gltf, parser );
             }, function ( xhr ) { // onProgress
-            }, function ( error2 ) { // onError
-              handle_error( error2 );
+            }, function ( error1 ) { // onError
+              console.log( 'Not a GLTF v2.0 file' );
+              console.log( 'Trying DRACO Loader...' );
+
+              draco_loader.load( selected_url_file, function( geometry ) {
+                if (selected_url_file.toUpperCase().endsWith('.DRC')) {
+                  filename = selected_url_file.slice( 0, -4 );
+                  if (filename.indexOf( '\\' )) filename = filename.substring( filename.lastIndexOf( '\\' ) + 1 );
+                  if (filename.indexOf( '/' )) filename = filename.substring( filename.lastIndexOf( '/' ) + 1 );
+                }
+
+                if (!geometry.attributes.normal) geometry.computeVertexNormals();
+                geometry.normalizeNormals();
+
+                if (geometry.hasAttribute( 'color' )) {
+                  vertex_colors_enabled = true;
+                  vertex_colors_present = true;
+                  original_vertex_colors[ 'child_0' ] = true;
+                  document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+                }
+
+                draco_material = new THREE.MeshStandardNodeMaterial({
+                  side: THREE.DoubleSide,
+                  metalness: 0.2,
+                  roughness: 0.8,
+                  opacity: 1,
+                  transparent: true,
+                  vertexColors: vertex_colors_enabled
+                });
+
+                gltf_obj = new THREE.Mesh( geometry, draco_material );
+                gltf_obj.name = 'child_0';
+
+                initial_opacity[ gltf_obj.name ] = 1;
+                initial_rotation = gltf_obj.rotation;
+
+                // Add DRACO model to scene
+                scene.add( gltf_obj );
+                gltf_obj.position.set( 0, 0, 0 );
+                default_camera.lookAt( gltf_obj.position );
+
+                finish_loading();
+              }, function ( xhr ) { // onProgress
+              }, function ( error2 ) { // onError
+                handle_error( error2 );
+              });
             });
-          });
+          }
 
           mouse_wheel = true;
         }
