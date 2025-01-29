@@ -68,10 +68,6 @@ import {
 	InstancedBufferAttribute
 } from "three";
 
-import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/DDSLoader.min.js";
-import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/TGALoader.min.js";
-import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/EXRLoader.min.js";
-
 class GLTFLoader extends Loader {
 
 	constructor( manager ) {
@@ -3330,13 +3326,13 @@ class GLTFParser {
 	* @return {Promise<Texture>}
 	*/
 
-	loadTexture( textureIndex ) {
+	async loadTexture( textureIndex ) {
 
 		const json = this.json;
 		const options = this.options;
 		const textureDef = json.textures[ textureIndex ];
 		const source = json.images[ textureDef.source ];
-		let loader = this.textureLoader;
+		let loader;
 
 		if ( options.resourcePath.includes( ',' ) === true ) {
 
@@ -3387,18 +3383,67 @@ class GLTFParser {
 
 		if ( source.uri && source.uri.toLowerCase().endsWith( '.tga' ) || ( source.name && source.name.toLowerCase().endsWith( '.tga' ) ) ) {
 
-			loader = new TGALoader( options.manager );
+			loader = options.manager.getHandler( '.tga' ); 
+
+			if ( ! loader ) {
+
+				const { TGALoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/TGALoader.min.js" );
+				loader = new TGALoader( options.manager );
+
+			}
+
 			source.mimeType = 'image/tga';
 
 		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.dds' ) || ( source.name && source.name.toLowerCase().endsWith( '.dds' ) ) ) {
 
-			loader = new DDSLoader( options.manager );
-			source.mimeType = 'image/dds';
+			loader = options.manager.getHandler( '.dds' ); 
+
+			if ( ! loader ) {
+
+				const { DDSLoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/DDSLoader.min.js" );
+				loader = new DDSLoader( options.manager );
+
+			}
+
+			source.mimeType = 'image/vnd-ms.dds';
+
+		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.ktx2' ) || ( source.name && source.name.toLowerCase().endsWith( '.ktx2' ) ) ) {
+
+			loader = options.ktx2Loader; 
+
+			if ( ! loader ) {
+
+				throw new Error( 'THREE.GLTFLoader: setKTX2Loader must be called before loading KTX2 textures' );
+
+			}
+
+			source.mimeType = 'image/ktx2';
 
 		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.exr' ) || ( source.name && source.name.toLowerCase().endsWith( '.exr' ) ) ) {
 
-			loader = new EXRLoader( options.manager );
-			source.mimeType = 'image/exr';
+			loader = options.manager.getHandler( '.exr' ); 
+
+			if ( ! loader ) {
+
+				const { EXRLoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/EXRLoader.min.js" );
+				loader = new EXRLoader( options.manager );
+
+			}
+
+			source.mimeType = 'image/x.exr';
+
+		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.hdr' ) || ( source.name && source.name.toLowerCase().endsWith( '.hdr' ) ) ) {
+
+			loader = options.manager.getHandler( '.hdr' ); 
+
+			if ( ! loader ) {
+
+				const { RGBELoader } = await import( "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/loaders/RGBELoader.min.js" );
+				loader = new RGBELoader( options.manager );
+
+			}
+
+			source.mimeType = 'image/x.hdr';
 
 		} else if ( source.uri ) {
 
@@ -3406,6 +3451,8 @@ class GLTFParser {
 			if ( handler !== null ) loader = handler;
 
 		}
+
+		if ( ! loader ) loader = this.textureLoader;
 
 		return this.loadTextureImage( textureIndex, source, loader );
 
@@ -3444,7 +3491,8 @@ class GLTFParser {
 
 			if ( any_texture === true ) {
 
-				let image_extensions = [ '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP', '.GIF', '.SVG', '.WEBP', 'DIB', '.DDS', '.EXR', '.KTX2', '.TGA' ];
+				let image_extensions = [ '.AVIF', '.PNG', '.JPG', '.JPEG', '.JFIF', '.PJPEG', '.PJP', '.BMP',
+					'.GIF', '.SVG', '.WEBP', 'DIB', '.DDS', '.EXR', '.HDR', '.KTX2', '.TGA' ];
 
 				if ( texture_set === false ) {
 
@@ -3532,7 +3580,8 @@ class GLTFParser {
 
 			}
 
-		} else if ( options.resourcePath.includes( ',' ) === true && source.uri && ( source.uri.toLowerCase().endsWith( '.ktx2' ) || source.uri.toLowerCase().endsWith( '.avif' ) ) ) {
+		} else if ( options.resourcePath.includes( ',' ) === true && source.uri &&
+			( source.uri.toLowerCase().endsWith( '.ktx2' ) || source.uri.toLowerCase().endsWith( '.avif' ) ) ) {
 
 			this.processLocalBlobs( source, options );
 

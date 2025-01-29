@@ -3938,12 +3938,11 @@ class GLTFParser {
 
 		} else if ( source.uri && source.uri.toLowerCase().endsWith( '.ktx2' ) || ( source.name && source.name.toLowerCase().endsWith( '.ktx2' ) ) ) {
 
-			loader = options.manager.getHandler( '.ktx2' ); 
+			loader = options.ktx2Loader; 
 
 			if ( ! loader ) {
 
-				const { KTX2Loader } = await import( "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/loaders/KTX2Loader.min.js" );
-				loader = new KTX2Loader( options.manager );
+				throw new Error( 'THREE.GLTFLoader: setKTX2Loader must be called before loading KTX2 textures' );
 
 			}
 
