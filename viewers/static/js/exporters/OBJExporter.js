@@ -648,7 +648,7 @@
 						if ( mat.depthTest !== undefined ) mtlOutput += 'Pdt ' + ( mat.depthTest === true ? 1 : 0 ) + '\n';
 						mtlOutput += 's ' + mat.side + '\n';
 
-						if ( mat.map && mat.map.type === 1009 && mat.map.image ) {
+						if ( mat.map && mat.map.image ) {
 
 							let map_to_process = mat.map;
 
@@ -693,7 +693,7 @@
 
 						}
 
-						if ( mat.specularMap && mat.specularMap.type === 1009 && mat.specularMap.image ) {
+						if ( mat.specularMap && mat.specularMap.image ) {
 
 							let map_to_process = mat.specularMap;
 
@@ -740,7 +740,7 @@
 
 						}
 
-						if ( mat.emissiveMap && mat.emissiveMap.type === 1009 && mat.emissiveMap.image ) {
+						if ( mat.emissiveMap && mat.emissiveMap.image ) {
 
 							let map_to_process = mat.emissiveMap;
 
@@ -787,7 +787,7 @@
 
 						}
 
-						if ( mat.bumpMap && mat.bumpMap.type === 1009 && mat.bumpMap.image ) {
+						if ( mat.bumpMap && mat.bumpMap.image ) {
 
 							let map_to_process = mat.bumpMap;
 
@@ -850,7 +850,7 @@
 
 						}
 
-						if ( mat.lightMap && mat.lightMap.type === 1009 && mat.lightMap.image ) {
+						if ( mat.lightMap && mat.lightMap.image ) {
 
 							let map_to_process = mat.lightMap;
 
@@ -897,7 +897,7 @@
 
 						}
 
-						if ( mat.metalnessMap && mat.metalnessMap.type === 1009 && mat.metalnessMap.image ) {
+						if ( mat.metalnessMap && mat.metalnessMap.image ) {
 
 							if ( map_Px_set === false ) {
 
@@ -966,7 +966,7 @@
 
 						}
 
-						if ( mat.roughnessMap && mat.roughnessMap.type === 1009 && mat.roughnessMap.image ) {
+						if ( mat.roughnessMap && mat.roughnessMap.image ) {
 
 							if ( map_Px_set === false ) {
 
@@ -1035,7 +1035,7 @@
 
 						}
 
-						if ( mat.displacementMap && mat.displacementMap.type === 1009 && mat.displacementMap.image ) {
+						if ( mat.displacementMap && mat.displacementMap.image ) {
 
 							let map_to_process = mat.displacementMap;
 
@@ -1082,7 +1082,7 @@
 
 						}
 
-						if ( mat.normalMap && mat.normalMap.type === 1009 && mat.normalMap.image ) {
+						if ( mat.normalMap && mat.normalMap.image ) {
 
 							let map_to_process = mat.normalMap;
 
@@ -1129,7 +1129,7 @@
 
 						}
 
-						if ( mat.alphaMap && mat.alphaMap.type === 1009 && mat.alphaMap.image ) {
+						if ( mat.alphaMap && mat.alphaMap.image ) {
 
 							let map_to_process = mat.alphaMap;
 
@@ -1176,7 +1176,7 @@
 
 						}
 
-						if ( mat.aoMap && mat.aoMap.type === 1009 && mat.aoMap.image ) {
+						if ( mat.aoMap && mat.aoMap.image ) {
 
 							let map_to_process = mat.aoMap;
 
@@ -1223,7 +1223,7 @@
 
 						}
 
-						if ( mat.anisotropyMap && mat.anisotropyMap.type === 1009 && mat.anisotropyMap.image ) {
+						if ( mat.anisotropyMap && mat.anisotropyMap.image ) {
 
 							let map_to_process = mat.anisotropyMap;
 
@@ -1270,7 +1270,7 @@
 
 						}
 
-						if ( mat.clearcoatMap && mat.clearcoatMap.type === 1009 && mat.clearcoatMap.image ) {
+						if ( mat.clearcoatMap && mat.clearcoatMap.image ) {
 
 							let map_to_process = mat.clearcoatMap;
 
@@ -1317,7 +1317,7 @@
 
 						}
 
-						if ( mat.clearcoatNormalMap && mat.clearcoatNormalMap.type === 1009 && mat.clearcoatNormalMap.image ) {
+						if ( mat.clearcoatNormalMap && mat.clearcoatNormalMap.image ) {
 
 							let map_to_process = mat.clearcoatNormalMap;
 
@@ -1364,7 +1364,7 @@
 
 						}
 
-						if ( mat.clearcoatRoughnessMap && mat.clearcoatRoughnessMap.type === 1009 && mat.clearcoatRoughnessMap.image ) {
+						if ( mat.clearcoatRoughnessMap && mat.clearcoatRoughnessMap.image ) {
 
 							let map_to_process = mat.clearcoatRoughnessMap;
 
@@ -1411,7 +1411,7 @@
 
 						}
 
-						if ( mat.iridescenceMap && mat.iridescenceMap.type === 1009 && mat.iridescenceMap.image ) {
+						if ( mat.iridescenceMap && mat.iridescenceMap.image ) {
 
 							let map_to_process = mat.iridescenceMap;
 
@@ -1458,7 +1458,7 @@
 
 						}
 
-						if ( mat.iridescenceThicknessMap && mat.iridescenceThicknessMap.type === 1009 && mat.iridescenceThicknessMap.image ) {
+						if ( mat.iridescenceThicknessMap && mat.iridescenceThicknessMap.image ) {
 
 							let map_to_process = mat.iridescenceThicknessMap;
 
@@ -1505,7 +1505,7 @@
 
 						}
 
-						if ( mat.sheenColorMap && mat.sheenColorMap.type === 1009 && mat.sheenColorMap.image ) {
+						if ( mat.sheenColorMap && mat.sheenColorMap.image ) {
 
 							let map_to_process = mat.sheenColorMap;
 
@@ -1552,7 +1552,7 @@
 
 						}
 
-						if ( mat.sheenRoughnessMap && mat.sheenRoughnessMap.type === 1009 && mat.sheenRoughnessMap.image ) {
+						if ( mat.sheenRoughnessMap && mat.sheenRoughnessMap.image ) {
 
 							let map_to_process = mat.sheenRoughnessMap;
 
@@ -1599,7 +1599,7 @@
 
 						}
 
-						if ( mat.specularIntensityMap && mat.specularIntensityMap.type === 1009 && mat.specularIntensityMap.image ) {
+						if ( mat.specularIntensityMap && mat.specularIntensityMap.image ) {
 
 							let map_to_process = mat.specularIntensityMap;
 
@@ -1646,7 +1646,7 @@
 
 						}
 
-						if ( mat.specularColorMap && mat.specularColorMap.type === 1009 && mat.specularColorMap.image ) {
+						if ( mat.specularColorMap && mat.specularColorMap.image ) {
 
 							let map_to_process = mat.specularColorMap;
 
@@ -1693,7 +1693,7 @@
 
 						}
 
-						if ( mat.thicknessMap && mat.thicknessMap.type === 1009 && mat.thicknessMap.image ) {
+						if ( mat.thicknessMap && mat.thicknessMap.image ) {
 
 							let map_to_process = mat.thicknessMap;
 
@@ -1740,7 +1740,7 @@
 
 						}
 
-						if ( mat.transmissionMap && mat.transmissionMap.type === 1009 && mat.transmissionMap.image ) {
+						if ( mat.transmissionMap && mat.transmissionMap.image ) {
 
 							let map_to_process = mat.transmissionMap;
 
@@ -1850,6 +1850,21 @@
 
 					ctx.putImageData( image, 0, 0 );
 	
+				} else if ( image.data && ( image.data.constructor === Float32Array || image.data.constructor === Uint16Array ) ) {
+
+					let f32 = image.data.constructor === Float32Array;
+					let u8 = new Uint8Array( image.data.length );
+					let fromHF = THREE.DataUtils.fromHalfFloat;
+
+					for ( let i = 0; i < image.data.length; i ++ ) {
+					  let tmp = Math.max( -1, Math.min( 1, f32 === true ? image.data[ i ] : fromHF( image.data[ i ] ) ) );
+					  tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
+					  u8[ i ] = tmp / 128.0;
+					}
+
+					let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
+					ctx.putImageData( imgData, 0, 0 );
+
 				} else if ( image.data && image.data.constructor === Uint8Array ) {
 
 					let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
@@ -1863,7 +1878,7 @@
 				}
 
 				// Get the base64 encoded data
-				const base64data = canvas.toDataURL( `image/${ext}`, 1 ).replace( /^data:image\/(png|jpg|jpeg);base64,/, '' );
+				const base64data = canvas.toDataURL( `image/${ext}`, 1 ).split( ',' )[ 1 ];
 
 				// Convert to a uint8 array
 				return base64ToBuffer( base64data );
@@ -1887,7 +1902,7 @@
 
 			// decompress function is from TextureUtils.js
 
-			function decompress( texture, maxTextureSize = Infinity, renderer = null ) {
+			function decompress( texture, maxTextureSize = 16384, renderer = null ) {
 
 				let _renderer;
 				let fullscreenQuadGeometry;
@@ -1908,7 +1923,7 @@
 						varying vec2 vUv;
 		
 						void main(){ 
-							gl_FragColor = vec4(vUv.xy, 0, 1);
+							gl_FragColor = vec4(vUv.xy, 0., 1.0);
 						
 							#ifdef IS_SRGB
 							gl_FragColor = LinearTosRGB( texture2D( blitTexture, vUv) );
@@ -1957,6 +1972,10 @@
 					_renderer = null;
 
 				}
+
+				fullscreenQuadMaterial.dispose();
+				fullscreenQuadGeometry.dispose();
+				texture.dispose();
 
 				return readableTexture;
 
