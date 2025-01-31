@@ -660,6 +660,8 @@
 
 							if ( mat.map.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
+								const hd = mat.map.type === 1016;
+
 								const xs = mat.map.repeat.x;
 								const ys = mat.map.repeat.y;
 								const xo = mat.map.offset.x;
@@ -681,11 +683,27 @@
 										data: imageToData( map_to_process.image, ext )
 									});
 
-									mtlOutput += 'map_Kd -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+									if ( hd === true ) {
+
+										mtlOutput += 'map_Kd -r ' + rot + ' -hd 1 -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Kd -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+
+									}
 
 								} else {
 
-									mtlOutput += 'map_Kd -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.map.uuid ] + '.png' + '\n';
+									if ( hd === true ) {
+
+										mtlOutput += 'map_Kd -r ' + rot + ' -hd 1 -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.map.uuid ] + '.png' + '\n';
+
+									} else {
+
+										mtlOutput += 'map_Kd -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.map.uuid ] + '.png' + '\n';
+
+									}
 
 								}
 
