@@ -3,10 +3,12 @@ import {
 	DefaultLoadingManager,
 	FileLoader,
 	FrontSide,
+	LinearSRGBColorSpace,
 	Loader,
 	LoaderUtils,
 	MeshPhongMaterial,
 	MeshPhysicalMaterial,
+	NoColorSpace,
 	RepeatWrapping,
 	Texture,
 	TextureLoader,
@@ -359,6 +361,8 @@ class MaterialCreator {
 
 			if ( params[ mapType ] ) return; // Keep the first encountered texture
 
+			const exr_or_hdr = ( value.toLowerCase().endsWith( '.exr' ) || value.toLowerCase().endsWith( '.hdr' ) );
+
 			const texParams = scope.getTextureParams( original_mat[ prop ] );
 			const map = scope.loadTexture( resolveURL( scope.baseUrl, value ) );
 
@@ -367,8 +371,9 @@ class MaterialCreator {
 			map.center.copy( texParams.center );
 
 			map.rotation = texParams.rotation;
-
 			map.channel = texParams.channel || 0;
+
+			map.colorSpace = exr_or_hdr === true ? LinearSRGBColorSpace : texParams.colorSpace;
 
 			map.wrapS = texParams.wrapS; // map.wrapS = scope.wrap;
 			map.wrapT = texParams.wrapT; // map.wrapT = scope.wrap;
@@ -843,6 +848,7 @@ class MaterialCreator {
 			scale: new Vector2( 1, 1 ),
 			offset: new Vector2( 0, 0 ),
 			center: new Vector2( 0, 0 ),
+			colorSpace: NoColorSpace,
 			wrapS: RepeatWrapping,
 			wrapT: RepeatWrapping,
 			rotation: 0,
@@ -867,6 +873,15 @@ class MaterialCreator {
 		if ( pos >= 0 ) {
 
 			texParams.bumpScale = parseFloat( items[ pos + 1 ] );
+			items.splice( pos, 2 );
+
+		}
+
+		pos = items.indexOf( '-hd' );
+
+		if ( pos >= 0 ) {
+
+			texParams.colorSpace = parseInt( items[ pos + 1 ] ) === 1 ? LinearSRGBColorSpace : NoColorSpace;
 			items.splice( pos, 2 );
 
 		}
