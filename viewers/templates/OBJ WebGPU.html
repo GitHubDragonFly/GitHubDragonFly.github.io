@@ -2947,12 +2947,68 @@
         mouse_wheel = true;
       }
 
+      // internally used modified decompress function from TextureUtilsGPu.js
+
+      async function decompress( blitTexture ) {
+        const { texture, uv } = await import( 'three/tsl' );
+
+        let _quadMesh = /*@__PURE__*/ new THREE.QuadMesh();
+
+        let _renderer = new THREE.WebGPURenderer( { antialias: true } );
+        await _renderer.init();
+
+        let blitTexture_clone = blitTexture.clone();
+
+        blitTexture_clone.offset.set( 0, 0 );
+        blitTexture_clone.repeat.set( 1, 1 );
+
+        let material = new THREE.NodeMaterial();
+        material.fragmentNode = texture( blitTexture_clone ).sample( uv().flipY() );
+
+        _renderer.setSize( blitTexture_clone.image.width, blitTexture_clone.image.height );
+        _renderer.outputColorSpace = blitTexture_clone.colorSpace;
+
+        _quadMesh.material = material;
+        _quadMesh.render( _renderer );
+
+        let canvas = document.createElement( 'canvas' );
+        let context = canvas.getContext( '2d' );
+
+        canvas.width = blitTexture_clone.image.width;
+        canvas.height = blitTexture_clone.image.height;
+
+        context.drawImage( _renderer.domElement, 0, 0, canvas.width, canvas.height );
+
+        let readableTexture = new THREE.CanvasTexture( canvas );
+
+        /* set to the original texture parameters */
+
+        readableTexture.offset.set( blitTexture.offset.x, blitTexture.offset.y );
+        readableTexture.repeat.set( blitTexture.repeat.x, blitTexture.repeat.y );
+        readableTexture.colorSpace = blitTexture.colorSpace;
+        readableTexture.minFilter = blitTexture.minFilter;
+        readableTexture.magFilter = blitTexture.magFilter;
+        readableTexture.wrapS = blitTexture.wrapS;
+        readableTexture.wrapT = blitTexture.wrapT;
+        readableTexture.name = blitTexture.name;
+
+        blitTexture_clone.dispose();
+        _renderer.dispose();
+        _renderer = null;
+
+        return readableTexture;
+      }
+
       function set_bgenv_message( end = false ) {
         if (end === true) {
           document.getElementById('div_message').innerHTML = '';
           document.getElementById('div_message').style.display = 'none';
         } else {
-          document.getElementById('div_message').innerHTML = 'Background changing ... ' + pw;
+          let part1 = 'Background changing (2k limit) ';
+          let part2 = 'Background changing (8k or 16k limit) ';
+          let part3 = 'Background changing (16k limit) ';
+          let message = (isMobile === true) ? part1 : (isNewiPad === true ? part2 : part3);
+          document.getElementById('div_message').innerHTML = message + '... ' + pw;
           document.getElementById('div_message').style.display = '';
         }
 
@@ -2973,11 +3029,23 @@
 
           let fn_uc = fii.name.toUpperCase();
 
+          const exclude_extensions = [ 'EXR', 'HDR', 'KTX2', 'TIF', 'TIFF' ];
+
           const { texture, equirectUV } = await import( 'three/tsl' );
 
-          if (fii.type.startsWith('image/') && ! (fn_uc.endsWith('.KTX2') || fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR'))) {
-            texture_loader.load( URL.createObjectURL( fii ) , function( tex ) {
+          if (fii.type.startsWith('image/') && ! (exclude_extensions.some( ext => fn_uc.endsWith( ext ) ))) {
+            texture_loader.load( URL.createObjectURL( fii ) , async function( tex ) {
               URL.revokeObjectURL( fii );
+
+              if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
+                tex = await resize_texture( tex, 2048, false, fii.type );
+              } else if (tex.image.width > 16384 || tex.image.height > 16384) {
+                if (isNewiPad === true) {
+                  tex = await resize_texture( tex, 8192, false, fii.type );
+                } else {
+                  tex = await resize_texture( tex, 16384, false, fii.type );
+                }
+              }
 
               tex.colorSpace = THREE.SRGBColorSpace;
               tex.flipY = (bg_flip === false);
@@ -3004,7 +3072,57 @@
               set_bgenv_message( true );
             }, function ( xhr ) {
             }, function ( error ) {
-              document.getElementById('div_message').innerText = 'Error loading image';
+              document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
+              console.log( 'Error loading Background Image File!' );
+              console.log( error );
+
+              URL.revokeObjectURL( fii );
+            });
+          } else if (fn_uc.endsWith('.TIF') || fn_uc.endsWith('.TIFF')) {
+            if (tiff_loader === undefined) {
+              const { TIFFLoader } = await import( "three/addons/loaders/TIFFLoader.min.js" );
+              tiff_loader = new TIFFLoader( manager );
+            }
+
+            tiff_loader.load( URL.createObjectURL( fii ), async function( tex ) {
+              URL.revokeObjectURL( fii );
+
+              if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
+                tex = await resize_texture( tex, 2048, false, fii.type );
+              } else if (tex.image.width > 16384 || tex.image.height > 16384) {
+                if (isNewiPad === true) {
+                  tex = await resize_texture( tex, 8192, false, fii.type );
+                } else {
+                  tex = await resize_texture( tex, 16384, false, fii.type );
+                }
+              }
+
+              tex.colorSpace = THREE.SRGBColorSpace;
+              tex.flipY = (bg_flip === false);
+              tex.needsUpdate = true;
+
+              if (equi_enabled === true) {
+                tex.mapping = THREE.EquirectangularReflectionMapping;
+
+                if (gpu === false) {
+                  scene.background = tex.clone();
+                  scene.environment = tex.clone();
+                } else {
+                  scene.backgroundNode = texture( tex.clone(), equirectUV(), 0 );
+                  scene.environmentNode = texture( tex.clone(), equirectUV(), 0 );
+                }
+              } else {
+                scene.background = tex.clone();
+              }
+
+              mouse_wheel = true;
+
+              tex.dispose();
+
+              set_bgenv_message( true );
+            }, function ( xhr ) { // onProgress
+            }, function ( error ) { // onError
+              document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
               console.log( 'Error loading Background Image File!' );
               console.log( error );
 
@@ -3014,44 +3132,49 @@
             ktx2_loader.load( URL.createObjectURL( fii ), async function( tex ) {
               URL.revokeObjectURL( fii );
 
-              // Convert to PNG so it shows on most platforms
               // Unsupported KTX2 formats might log a warning
 
-              tex.colorSpace = THREE.SRGBColorSpace;
-
-              let canvas_tex = await decompress( tex );
+              // Decompress the texture in order to resize it and manipulate its flip
+              let canvas_texture = await decompress( tex );
 
               tex.dispose();
 
-              texture_loader.load( canvas_tex.image.toDataURL( 'image/png', 1 ), function( png_tex ) {
-                canvas_tex.dispose();
-
-                png_tex.flipY = (bg_flip === true);
-                png_tex.needsUpdate = true;
-
-                if (equi_enabled === true) {
-                  png_tex.mapping = THREE.EquirectangularReflectionMapping;
-
-                  if (gpu === false) {
-                    scene.background = png_tex.clone();
-                    scene.environment = png_tex.clone();
-                  } else {
-                    scene.backgroundNode = texture( png_tex.clone(), equirectUV(), 0 );
-                    scene.environmentNode = texture( png_tex.clone(), equirectUV(), 0 );
-                  }
+              if (isMobile === true && (canvas_texture.image.width > 2048 || canvas_texture.image.height > 2048)) {
+                canvas_texture = await resize_texture( canvas_texture, 2048 );
+              } else if (canvas_texture.image.width > 16384 || canvas_texture.image.height > 16384) {
+                if (isNewiPad === true) {
+                  canvas_texture = await resize_texture( canvas_texture, 8192 );
                 } else {
-                  scene.background = png_tex.clone();
+                  canvas_texture = await resize_texture( canvas_texture, 16384 );
                 }
+              }
 
-                mouse_wheel = true;
+              canvas_texture.colorSpace = THREE.SRGBColorSpace;
+              canvas_texture.flipY = (bg_flip === true);
+              canvas_texture.needsUpdate = true;
 
-                png_tex.dispose();
+              if (equi_enabled === true) {
+                canvas_texture.mapping = THREE.EquirectangularReflectionMapping;
 
-                set_bgenv_message( true );
-              });
+                if (gpu === false) {
+                  scene.background = canvas_texture.clone();
+                  scene.environment = canvas_texture.clone();
+                } else {
+                  scene.backgroundNode = texture( canvas_texture.clone(), equirectUV(), 0 );
+                  scene.environmentNode = texture( canvas_texture.clone(), equirectUV(), 0 );
+                }
+              } else {
+                scene.background = canvas_texture.clone();
+              }
+
+              canvas_texture.dispose();
+
+              mouse_wheel = true;
+
+              set_bgenv_message( true );
             }, function ( xhr ) { // onProgress
             }, function ( error ) { // onError
-              document.getElementById('div_message').innerText = 'Error loading image';
+              document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
               console.log( 'Error loading Background Image File!' );
               console.log( error );
 
@@ -3060,8 +3183,27 @@
           } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
             let loader = fn_uc.endsWith('.EXR') ? exr_loader : rgbe_loader;
 
-            loader.load( URL.createObjectURL( fii ), function( tex ) {
+            loader.load( URL.createObjectURL( fii ), async function( tex ) {
               URL.revokeObjectURL( fii );
+
+              if ((tex.image.width > 16384 || tex.image.height > 16384) ||
+                (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048))) {
+
+                let m_type = fn_uc.endsWith('.EXR') ? 'image/x.exr' : 'image/x.hdr';
+
+                // Use decompress since resize is required
+                tex = await decompress( tex );
+
+                if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
+                  tex = await resize_texture( tex, 2048, false, m_type, true );
+                } else if (tex.image.width > 16384 || tex.image.height > 16384) {
+                  if (isNewiPad === true) {
+                    tex = await resize_texture( tex, 8192, false, m_type, true );
+                  } else {
+                    tex = await resize_texture( tex, 16384, false, m_type, true );
+                  }
+                }
+              }
 
               tex.colorSpace = THREE.LinearSRGBColorSpace;
               tex.flipY = fn_uc.endsWith('.HDR') ? !bg_flip : bg_flip;
@@ -3088,7 +3230,7 @@
               set_bgenv_message( true );
             }, function ( xhr ) {
             }, function ( error ) {
-              document.getElementById('div_message').innerText = 'Error loading image';
+              document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
               console.log( 'Error loading Background Image File!' );
               console.log( error );
 
@@ -3354,58 +3496,6 @@
         set_polar_grid_y();
 
         mouse_wheel = true;
-      }
-
-      // internally used modified decompress function from TextureUtilsGPu.js
-
-      async function decompress( blitTexture ) {
-        const { texture, uv } = await import( 'three/tsl' );
-
-        let _quadMesh = /*@__PURE__*/ new THREE.QuadMesh();
-
-        let _renderer = new THREE.WebGPURenderer( { antialias: true } );
-        await _renderer.init();
-
-        let blitTexture_clone = blitTexture.clone();
-
-        blitTexture_clone.offset.set( 0, 0 );
-        blitTexture_clone.repeat.set( 1, 1 );
-
-        let material = new THREE.NodeMaterial();
-        material.fragmentNode = texture( blitTexture_clone ).uv( uv().flipY() );
-
-        _renderer.setSize( blitTexture_clone.image.width, blitTexture_clone.image.height );
-        _renderer.outputColorSpace = blitTexture_clone.colorSpace;
-
-        _quadMesh.material = material;
-        _quadMesh.render( _renderer );
-
-        let canvas = document.createElement( 'canvas' );
-        let context = canvas.getContext( '2d' );
-
-        canvas.width = blitTexture_clone.image.width;
-        canvas.height = blitTexture_clone.image.height;
-
-        context.drawImage( _renderer.domElement, 0, 0, canvas.width, canvas.height );
-
-        let readableTexture = new THREE.CanvasTexture( canvas );
-
-        /* set to the original texture parameters */
-
-        readableTexture.offset.set( blitTexture.offset.x, blitTexture.offset.y );
-        readableTexture.repeat.set( blitTexture.repeat.x, blitTexture.repeat.y );
-        readableTexture.colorSpace = blitTexture.colorSpace;
-        readableTexture.minFilter = blitTexture.minFilter;
-        readableTexture.magFilter = blitTexture.magFilter;
-        readableTexture.wrapS = blitTexture.wrapS;
-        readableTexture.wrapT = blitTexture.wrapT;
-        readableTexture.name = blitTexture.name;
-
-        blitTexture_clone.dispose();
-        _renderer.dispose();
-        _renderer = null;
-
-        return readableTexture;
       }
 
       async function process_loaded_zip( z_file ) {
@@ -5912,9 +6002,11 @@
           throw new Error( 'No WebGPU or WebGL2 support detected' );
         }
 
-        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
-          (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
+        isNewiPad = (/iPad/.test( navigator.platform ) && (/Mac OS X/i.test( navigator.userAgent ))) ||
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        isMobile = isNewiPad === false && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
 
         map_strings = [ 'bump', 'map_bump', 'disp', 'map_disp', 'norm', 'map_kn', 'map_d', 'map_ka', 'map_kd',
   				'map_ke', 'map_emissive', 'map_ks', 'map_ns', 'map_pa', 'map_pi', 'map_pit', 'map_px', 'map_pm', 'map_pr',
