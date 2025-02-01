@@ -20,24 +20,14 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var THREE, SVG, manager, mesh, svg_loader, texture_loader, dds_loader, gif_writer;
-      var ktx2_loader, tga_loader, tiff_loader, exr_loader, rgbe_loader, hdrJPGLoader;
-      var renderer, scene, camera, render_requested, isMobile, isNewiPad;
-      var controls, gizmo, equi_enabled, bgnd_linear_gradient, bg_flip;
-      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
-      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
-      var grid, polar_grid, grid_visible, polar_grid_visible;
-      var ambientLight, directionalLight, original_colors;
+      var THREE, SVG, manager, mesh, svg_loader, texture_loader;
+      var renderer, scene, camera, render_requested, isMobile;
+      var controls, bgnd_linear_gradient, alt_loader = false;
+      var mouse_down, mouse_wheel, events_initialized, count = 0;
+      var bounding_box, directionalLight, wireframe_enabled;
       var ww = window.innerWidth, wh = window.innerHeight;
-      var rot_x = 0, rot_y = 0, rot_z = 0, count = 0;
-      var filename, enable_opacity, slider_height = 0;
-      var bounding_box, gif_export, zip, wireframe_enabled;
-      var selected_svg_file, selected_url_file = '', link;
-      var vertex_colors_enabled, original_vertex_color_array;
-      var random_vertex_colors_enabled, random_vertex_color_array;
-      var url_displayed = false, url_loading = false, menu_location_bottom = false;
-
-      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
+      var selected_svg_file, selected_url_file = '';
+      var url_displayed = false, url_loading = false;
     </script>
 
     <script type="module">
@@ -50,6 +40,8 @@
       manager.onLoad = function() { mouse_wheel = true; }
 
       SVG = SVGLoader;
+
+      texture_loader = new THREE.TextureLoader( manager );
     </script>
 
     <style>
@@ -197,6 +189,8 @@
       <div class="fm" id="fm1">
         <button id="btn_desktop" title="Open Desktop Version" onclick="switch_to_desktop();">D</button>
         <label for="btn_desktop" title="Open Desktop Version"></label>
+        <button title="Try using Texture Loader if SVG Loader fails to load, useful for some SVG images" id="btn_alt_loader" onclick="change_loader();" style="background-color: transparent; color: blue; min-width: 25px;">TL</button>
+        <label for="btn_alt_loader" title="Try using Texture Loader if SVG Loader fails to load, useful for some SVG images"></label>
         <button title="Get remote model via URL" id="btn_url" onclick="show_url()" style="min-width: 38px;">URL</button>
         <label for="btn_url" title="Get remote model via URL"></label>
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
@@ -235,17 +229,6 @@
       function show_hide_dropdown_dli() {
         if ($('#dc_dli')[ 0 ].style.display === 'none') {
           $('#dc_dli').fadeIn();
-
-          if (menu_location_bottom === true) {
-            if (slider_height === 0) {
-              slider_height = (-24 - $('#directional_light_intensity').height() - $('#dli_val').height()).toString() + 'px';
-            }
-
-            $('#dc_dli')[ 0 ].style.marginTop = slider_height;
-          } else {
-            $('#dc_dli')[ 0 ].style.marginTop = '2px';
-          }
-
           $('#directional_light_intensity').focus();
         } else {
           $('#dc_dli').fadeOut();
@@ -255,6 +238,16 @@
       }
 
       function return_false() { return false; }
+
+      function change_loader() {
+        if (alt_loader === true) {
+          document.getElementById('btn_alt_loader').style.backgroundColor = 'transparent';
+          alt_loader = false;
+        } else {
+          document.getElementById('btn_alt_loader').style.backgroundColor = 'lightgreen';
+          alt_loader = true;
+        }
+      }
 
       function switch_to_desktop() {
         let link = document.createElement( 'a' );
@@ -476,19 +469,10 @@
         selected_svg_file = null;
         mouse_down = false;
         mouse_wheel = true;
-        grid_visible = false;
-        polar_grid_visible = false;
-        enable_opacity = false;
-        equi_enabled = false;
         wireframe_enabled = false;
         bgnd_linear_gradient = false;
-        vertex_colors_enabled = false;
-        random_vertex_colors_enabled = false;
-        random_vertex_color_array = {};
-        original_vertex_color_array = {};
-        original_colors = {};
-        render_requested = false;
         bounding_box = new THREE.Box3();
+        render_requested = false;
 
         console.time( 'Loading Time' );
         document.body.style.backgroundImage = 'none';
@@ -585,7 +569,9 @@
 
       function loadFile() {
         if (selected_svg_file !== null) {
-          svg_loader.load( URL.createObjectURL( selected_svg_file ), addFileInScene,
+          const loader = alt_loader === false ? svg_loader : texture_loader; 
+
+          loader.load( URL.createObjectURL( selected_svg_file ), addFileInScene,
           function( xhr ) { }, // onProgress
           function ( error ) { // onError
             handle_error( error );
@@ -597,57 +583,30 @@
       async function addFileInScene( data ) {
         if (selected_svg_file !== null) URL.revokeObjectURL( selected_svg_file );
 
-        let renderOrder = 0;
+        if (alt_loader === false) {
+          let renderOrder = 0, child_count = 1;
 
-        for ( const path of data.paths ) {
-          const fillColor = path.userData.style.fill;
+          for ( const path of data.paths ) {
+            const fillColor = path.userData.style.fill;
 
-          if ( fillColor !== undefined && fillColor !== 'none' ) {
-            const opacity = path.userData.style.fillOpacity || 1;
+            if ( fillColor !== undefined && fillColor !== 'none' ) {
+              const opacity = path.userData.style.fillOpacity || 1;
 
-            const material = new THREE.MeshStandardMaterial( {
-              color: new THREE.Color().setStyle( fillColor ),
-              opacity: opacity,
-              transparent: (opacity < 1) ? true : false,
-              side: THREE.DoubleSide,
-              depthTest: false,
-              wireframe: false,
-              metalness: 0.5,
-              roughness:0.5
-            } );
+              const material = new THREE.MeshStandardMaterial( {
+                color: new THREE.Color().setStyle( fillColor ),
+                opacity: opacity,
+                transparent: (opacity < 1) ? true : false,
+                side: THREE.DoubleSide,
+                depthTest: false,
+                wireframe: false,
+                metalness: 0.5,
+                roughness:0.5
+              } );
 
-            const shapes = SVG.createShapes( path );
+              const shapes = SVG.createShapes( path );
 
-            for ( const shape of shapes ) {
-              const geometry = new THREE.ShapeGeometry( shape );
-              const svg_mesh = new THREE.Mesh( geometry, material );
-              svg_mesh.renderOrder = renderOrder ++;
-              svg_mesh.rotateX( Math.PI );
-
-              mesh.add( svg_mesh );
-            }
-          }
-
-          const strokeColor = path.userData.style.stroke;
-
-          if ( strokeColor !== undefined && strokeColor !== 'none' ) {
-            const opacity = path.userData.style.strokeOpacity || 1;
-
-            const material = new THREE.MeshStandardMaterial( {
-              color: new THREE.Color().setStyle( strokeColor ),
-              opacity: opacity,
-              transparent: (opacity < 1) ? true : false,
-              side: THREE.DoubleSide,
-              depthTest: false,
-              wireframe: false,
-              metalness: 0.5,
-              roughness:0.5
-            } );
-
-            for ( const subPath of path.subPaths ) {
-              const geometry = SVG.pointsToStroke( subPath.getPoints(), path.userData.style );
-
-              if ( geometry ) {
+              for ( const shape of shapes ) {
+                const geometry = new THREE.ShapeGeometry( shape );
                 const svg_mesh = new THREE.Mesh( geometry, material );
                 svg_mesh.renderOrder = renderOrder ++;
                 svg_mesh.rotateX( Math.PI );
@@ -655,18 +614,75 @@
                 mesh.add( svg_mesh );
               }
             }
+
+            const strokeColor = path.userData.style.stroke;
+
+            if ( strokeColor !== undefined && strokeColor !== 'none' ) {
+              const opacity = path.userData.style.strokeOpacity || 1;
+
+              const material = new THREE.MeshStandardMaterial( {
+                color: new THREE.Color().setStyle( strokeColor ),
+                opacity: opacity,
+                transparent: (opacity < 1) ? true : false,
+                side: THREE.DoubleSide,
+                depthTest: false,
+                wireframe: false,
+                metalness: 0.5,
+                roughness:0.5
+              } );
+
+              for ( const subPath of path.subPaths ) {
+                const geometry = SVG.pointsToStroke( subPath.getPoints(), path.userData.style );
+
+                if ( geometry ) {
+                  const svg_mesh = new THREE.Mesh( geometry, material );
+                  svg_mesh.renderOrder = renderOrder ++;
+                  svg_mesh.rotateX( Math.PI );
+
+                  mesh.add( svg_mesh );
+                }
+              }
+            }
+
           }
+
+          // Add mesh to the scene
+          scene.add( mesh );
+          camera.lookAt( mesh.position );
+          camera.updateMatrix();
+
+          set_initial_scale();
+          resize();
+
+          finish_loading();
+        } else {
+          // data is a texture so set it in a plane
+
+          data.colorSpace = THREE.SRGBColorSpace;
+
+          const svg_mesh = new THREE.Mesh(
+            new THREE.PlaneGeometry(
+              data.source.data.width,
+              data.source.data.height
+            ), new THREE.MeshStandardMaterial(
+              { transparent: true, side: THREE.DoubleSide, map: data, metalness: 0.5, roughness: 0.5 }
+            )
+          );
+
+          mesh.add( svg_mesh );
+
+          data.dispose();
+
+          // Add mesh to the scene
+          scene.add( mesh );
+          camera.lookAt( mesh.position );
+          camera.updateMatrix();
+
+          set_initial_scale();
+          resize();
+
+          finish_loading();
         }
-
-        // Add mesh to the scene
-        scene.add( mesh );
-        camera.lookAt( mesh.position );
-        camera.updateMatrix();
-
-        set_initial_scale();
-        resize();
-
-        finish_loading();
       }
 
       function loadURLFile() {
@@ -679,7 +695,9 @@
 
           // No extension checking for URL so it has to point to SVG file
 
-          svg_loader.load( selected_url_file, addFileInScene,
+          const loader = alt_loader === false ? svg_loader : texture_loader; 
+
+          loader.load( URL.createObjectURL( selected_url_file ), addFileInScene,
           function( xhr ) { }, // onProgress
           function ( error ) { handle_error( error ); }); // onError
         }
@@ -718,7 +736,7 @@
       function show_wireframe() {
         if (mesh) {
           if (wireframe_enabled === true) {
-            document.getElementById('btn_wireframe').style.backgroundColor = '#d1cefc';
+            document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
             wireframe_enabled = false;
           } else {
             document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
