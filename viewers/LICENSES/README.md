@@ -29,6 +29,10 @@ Google's [Model Viewer](https://github.com/google/model-viewer) element Apache L
 
 [Pako](https://github.com/nodeca/pako) MIT license can be seen [here](https://github.com/nodeca/pako?tab=MIT-1-ov-file#readme)
 
+[bitmap2vector](https://github.com/cancerberoSgx/univac) does not appear to have any specific license
+
+[svgo](https://github.com/svg/svgo) MIT license can be seen [here](https://github.com/svg/svgo?tab=MIT-1-ov-file#readme)
+
 The licenses for the [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and for the [ASSIMP](https://github.com/assimp/assimp) library can be found in the `viewers/static/assimpjs` folder
 
 jQuery license can be seen [here](https://jquery.org/license/)
