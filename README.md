@@ -481,6 +481,7 @@ Number Type Converter
   - `OS` - material side - Original (OS), Front (FS), Back (BS), Double (DS)
   - `PM` - show model as points (PLY+STL, PRWM and VTK viewers)
   - `PP` - emissive bloom post processing (GLTF and OBJ+MTL WebGPU desktop viewers)
+  - `TL` - use Texture Loader if SVG Loader fails to load, useful for some SVG images (available in SVG viewers only)
   - `VC` - vertex colors
     - `!` - random vertex colors
   - `XS` - xtra smooth (available in OBJ Viewer only)
