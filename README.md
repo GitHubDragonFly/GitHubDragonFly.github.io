@@ -41,8 +41,10 @@ This website is designed to serve as a hub with links to:
           - HDR encoding is powered by a modified version of [hdrpng.js](https://github.com/enkimute/hdrpng.js/) library
             - HDR code was created with assistance from Microsoft Copilot
           - SVG encoding is powered by [bitmap2vector](https://github.com/cancerberoSgx/univac) library
-            - This is a low color output and should be used with low color images
             - SVG output is additionally optimized with [SVG Optimizer](https://github.com/svg/svgo)
+            - SVG output should be of a lower quality than the original image:
+              - Lower color and resolution images should be used but also try others
+              - Higher color and resolution images might take some time to convert
         - 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
           - Maximum exported texture size is currently limited only for 3DM exports to 2.5k
         - [glTF Transform](https://gltf-transform.dev) is used for some exports
