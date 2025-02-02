@@ -37,9 +37,12 @@ This website is designed to serve as a hub with links to:
           - ZIP files are supported
       - Supports exporting to the following formats:
         - Animated GIF and PNG (see general notes about these formats further below)
-        - AVIF, HDR, EXR, JPEG, PNG, KTX2 and WEBP images at unchanged device limited image size (up to 16k):
+        - AVIF, HDR, EXR, JPEG, PNG, KTX2, SVG and WEBP images at unchanged device limited image size (up to 16k):
           - HDR encoding is powered by a modified version of [hdrpng.js](https://github.com/enkimute/hdrpng.js/) library
-          - HDR code was created with assistance from Microsoft Copilot
+            - HDR code was created with assistance from Microsoft Copilot
+          - SVG encoding is powered by [bitmap2vector](https://github.com/cancerberoSgx/univac) library
+            - This is a low color output and should be used with low color images
+            - SVG output is additionally optimized with [SVG Optimizer](https://github.com/svg/svgo)
         - 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
           - Maximum exported texture size is currently limited only for 3DM exports to 2.5k
         - [glTF Transform](https://gltf-transform.dev) is used for some exports
