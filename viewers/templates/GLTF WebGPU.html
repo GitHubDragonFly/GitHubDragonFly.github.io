@@ -1796,6 +1796,8 @@
           scene.background = new THREE.Color( 'black' );
           scene.backgroundBlurriness = 0.00001;
           scene.environmentIntensity = 1.0;
+
+          mouse_wheel = true;
         }
       }
 
@@ -2033,9 +2035,6 @@
             set_back_color();
           }
 
-          scene.backgroundIntensity = 1.0;
-          scene.backgroundBlurriness = 0.00001;
-
           document.getElementById('back_color').disabled = false;
           document.getElementById('btn_bgnd_linear_gradient').disabled = false;
 
@@ -2078,7 +2077,7 @@
           let part1 = 'Background changing (2k limit) ';
           let part2 = 'Background changing (8k or 16k limit) ';
           let part3 = 'Background changing (16k limit) ';
-          let message = (isMobile === true) ? part1 : (isNewiPad === true ? part2 : part3);
+          let message = (isMobile === true) ? part1 : ((gpu === true || isNewiPad === true) ? part2 : part3);
           document.getElementById('div_message').innerHTML = message + '... ' + pw;
           document.getElementById('div_message').style.display = '';
         }
@@ -2099,20 +2098,26 @@
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
 
           let fn_uc = fii.name.toUpperCase();
+          let tex_max = 67108864; // 8192 x 8192
+
+          const exclude_extensions = [ 'EXR', 'HDR', 'KTX2', 'TIF', 'TIFF' ];
 
           const { texture, equirectUV } = await import( 'three/tsl' );
 
           // Use max resolutions of 2k for mobile, 8k for new iPad and 16k for desktops
           // iPad appears able of loading 16k straight but limits the resize canvas size
-
-          const exclude_extensions = [ 'EXR', 'HDR', 'KTX2', 'TIF', 'TIFF' ];
+          // WebGPU renderer appears to also be limited to 67108864 size
 
           if (fii.type.startsWith('image/') && ! (exclude_extensions.some( ext => fn_uc.endsWith( ext ) ))) {
             texture_loader.load( URL.createObjectURL( fii ) , async function( tex ) {
               URL.revokeObjectURL( fii );
 
+              let size = tex.image.width * tex.image.height;
+
               if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
                 tex = await resize_texture( tex, 2048, false, fii.type );
+              } else if (gpu === true && size > tex_max) {
+                tex = await resize_texture( tex, 8192, false, fii.type );
               } else if (tex.image.width > 16384 || tex.image.height > 16384) {
                 if (isNewiPad === true) {
                   tex = await resize_texture( tex, 8192, false, fii.type );
@@ -2141,12 +2146,12 @@
 
               mouse_wheel = true;
 
-              set_bgenv_message( true );
-
               tex.dispose();
+
+              set_bgenv_message( true );
             }, function ( xhr ) {
             }, function ( error ) {
-              document.getElementById('div_message').innerText = 'Error loading image';
+              document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
               console.log( 'Error loading Background Image File!' );
               console.log( error );
 
@@ -2161,14 +2166,12 @@
             tiff_loader.load( URL.createObjectURL( fii ), async function( tex ) {
               URL.revokeObjectURL( fii );
 
+              let size = tex.image.width * tex.image.height;
+
               if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
-                try {
-                  tex = await resize_texture( tex, 2048, false, fii.type );
-                } catch ( error ) {
-                  document.getElementById('div_message').innerText = 'Error: ' + error.message;
-                  URL.revokeObjectURL( fii );
-                  return;
-                }
+                tex = await resize_texture( tex, 2048, false, fii.type );
+              } else if (gpu === true && size > tex_max) {
+                tex = await resize_texture( tex, 8192, false, fii.type );
               } else if (tex.image.width > 16384 || tex.image.height > 16384) {
                 if (isNewiPad === true) {
                   tex = await resize_texture( tex, 8192, false, fii.type );
@@ -2178,6 +2181,7 @@
               }
 
               tex.colorSpace = THREE.SRGBColorSpace;
+              tex.flipY = (bg_flip === false);
               tex.needsUpdate = true;
 
               if (equi_enabled === true) {
@@ -2208,63 +2212,69 @@
               URL.revokeObjectURL( fii );
             });
           } else if (fn_uc.endsWith('.KTX2')) {
-            const { decompress } = await import( 'three/addons/utils/WebGPUTextureUtils.min.js' );
-
             ktx2_loader.load( URL.createObjectURL( fii ), async function( tex ) {
               URL.revokeObjectURL( fii );
+
+              let size = tex.image.width * tex.image.height;
 
               // Unsupported KTX2 formats might log a warning
 
               // Decompress the texture in order to resize it and manipulate its flip
-              let canvas_texture = await decompress( tex );
+              tex = await decompress( tex );
 
-              tex.dispose();
-
-              if (isMobile === true && (canvas_texture.image.width > 2048 || canvas_texture.image.height > 2048)) {
-                canvas_texture = await resize_texture( canvas_texture, 2048 );
-              } else if (canvas_texture.image.width > 16384 || canvas_texture.image.height > 16384) {
+              if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
+                tex = await resize_texture( tex, 2048 );
+              } else if (gpu === true && size > tex_max) {
+                tex = await resize_texture( tex, 8192, false, fii.type );
+              } else if (tex.image.width > 16384 || tex.image.height > 16384) {
                 if (isNewiPad === true) {
-                  canvas_texture = await resize_texture( canvas_texture, 8192 );
+                  tex = await resize_texture( tex, 8192 );
                 } else {
-                  canvas_texture = await resize_texture( canvas_texture, 16384 );
+                  tex = await resize_texture( tex, 16384 );
                 }
               }
 
-              canvas_texture.colorSpace = THREE.SRGBColorSpace;
-              canvas_texture.flipY = (bg_flip === true);
-              canvas_texture.needsUpdate = true;
+              tex.colorSpace = THREE.SRGBColorSpace;
+              tex.flipY = (bg_flip === true);
+              tex.needsUpdate = true;
 
               if (equi_enabled === true) {
-                canvas_texture.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = canvas_texture.clone();
-                scene.environment = canvas_texture.clone();
+                tex.mapping = THREE.EquirectangularReflectionMapping;
+
+                if (gpu === false) {
+                  scene.background = tex.clone();
+                  scene.environment = tex.clone();
+                } else {
+                  scene.backgroundNode = texture( tex.clone(), equirectUV(), 0 );
+                  scene.environmentNode = texture( tex.clone(), equirectUV(), 0 );
+                }
               } else {
-                scene.background = canvas_texture.clone();
+                scene.background = tex.clone();
               }
 
-              mouse_wheel = true;
+              tex.dispose();
 
-              canvas_texture.dispose();
+              mouse_wheel = true;
 
               set_bgenv_message( true );
             }, function ( xhr ) { // onProgress
             }, function ( error ) { // onError
-              document.getElementById('div_message').innerText = 'Error loading image';
+              document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
               console.log( 'Error loading Background Image File!' );
               console.log( error );
 
               URL.revokeObjectURL( fii );
             });
           } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
-            const hd_loader = fn_uc.endsWith('.EXR') ? exr_loader : rgbe_loader;
+            let loader = fn_uc.endsWith('.EXR') ? exr_loader : rgbe_loader;
 
-            hd_loader.load( URL.createObjectURL( fii ), async function( tex ) {
+            loader.load( URL.createObjectURL( fii ), async function( tex ) {
               URL.revokeObjectURL( fii );
 
-              if ((tex.image.width > 16384 || tex.image.height > 16384) ||
-                (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048))) {
+              let size = tex.image.width * tex.image.height;
 
-                const { decompress } = await import( 'three/addons/utils/WebGPUTextureUtils.min.js' );
+              if ((tex.image.width > 16384 || tex.image.height > 16384) || (gpu === true && size > tex_max) ||
+                (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048))) {
 
                 let m_type = fn_uc.endsWith('.EXR') ? 'image/x.exr' : 'image/x.hdr';
 
@@ -2273,6 +2283,8 @@
 
                 if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
                   tex = await resize_texture( tex, 2048, false, m_type, true );
+                } else if (gpu === true && size > tex_max) {
+                  tex = await resize_texture( tex, 8192, false, fii.type );
                 } else if (tex.image.width > 16384 || tex.image.height > 16384) {
                   if (isNewiPad === true) {
                     tex = await resize_texture( tex, 8192, false, m_type, true );
@@ -2301,14 +2313,14 @@
                 scene.background = tex.clone();
               }
 
+              tex.dispose();
+
               mouse_wheel = true;
 
               set_bgenv_message( true );
-
-              tex.dispose();
             }, function ( xhr ) {
             }, function ( error ) {
-              document.getElementById('div_message').innerText = 'Error loading image';
+              document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
               console.log( 'Error loading Background Image File!' );
               console.log( error );
 

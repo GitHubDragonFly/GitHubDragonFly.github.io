@@ -2914,9 +2914,6 @@
             set_back_color();
           }
 
-          scene.backgroundBlurriness = 0.00001;
-          scene.backgroundIntensity = 1.0;
-
           document.getElementById('back_color').disabled = false;
           document.getElementById('btn_bgnd_linear_gradient').disabled = false;
 
@@ -3014,7 +3011,7 @@
           let part1 = 'Background changing (2k limit) ';
           let part2 = 'Background changing (8k or 16k limit) ';
           let part3 = 'Background changing (16k limit) ';
-          let message = (isMobile === true) ? part1 : (isNewiPad === true ? part2 : part3);
+          let message = (isMobile === true) ? part1 : ((gpu === true || isNewiPad === true) ? part2 : part3);
           document.getElementById('div_message').innerHTML = message + '... ' + pw;
           document.getElementById('div_message').style.display = '';
         }
@@ -3035,17 +3032,26 @@
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
 
           let fn_uc = fii.name.toUpperCase();
+          let tex_max = 67108864; // 8192 x 8192
 
           const exclude_extensions = [ 'EXR', 'HDR', 'KTX2', 'TIF', 'TIFF' ];
 
           const { texture, equirectUV } = await import( 'three/tsl' );
 
+          // Use max resolutions of 2k for mobile, 8k for new iPad and 16k for desktops
+          // iPad appears able of loading 16k straight but limits the resize canvas size
+          // WebGPU renderer appears to also be limited to 67108864 size
+
           if (fii.type.startsWith('image/') && ! (exclude_extensions.some( ext => fn_uc.endsWith( ext ) ))) {
             texture_loader.load( URL.createObjectURL( fii ) , async function( tex ) {
               URL.revokeObjectURL( fii );
 
+              let size = tex.image.width * tex.image.height;
+
               if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
                 tex = await resize_texture( tex, 2048, false, fii.type );
+              } else if (gpu === true && size > tex_max) {
+                tex = await resize_texture( tex, 8192, false, fii.type );
               } else if (tex.image.width > 16384 || tex.image.height > 16384) {
                 if (isNewiPad === true) {
                   tex = await resize_texture( tex, 8192, false, fii.type );
@@ -3094,8 +3100,12 @@
             tiff_loader.load( URL.createObjectURL( fii ), async function( tex ) {
               URL.revokeObjectURL( fii );
 
+              let size = tex.image.width * tex.image.height;
+
               if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
                 tex = await resize_texture( tex, 2048, false, fii.type );
+              } else if (gpu === true && size > tex_max) {
+                tex = await resize_texture( tex, 8192, false, fii.type );
               } else if (tex.image.width > 16384 || tex.image.height > 16384) {
                 if (isNewiPad === true) {
                   tex = await resize_texture( tex, 8192, false, fii.type );
@@ -3139,42 +3149,44 @@
             ktx2_loader.load( URL.createObjectURL( fii ), async function( tex ) {
               URL.revokeObjectURL( fii );
 
+              let size = tex.image.width * tex.image.height;
+
               // Unsupported KTX2 formats might log a warning
 
               // Decompress the texture in order to resize it and manipulate its flip
-              let canvas_texture = await decompress( tex );
+              tex = await decompress( tex );
 
-              tex.dispose();
-
-              if (isMobile === true && (canvas_texture.image.width > 2048 || canvas_texture.image.height > 2048)) {
-                canvas_texture = await resize_texture( canvas_texture, 2048 );
-              } else if (canvas_texture.image.width > 16384 || canvas_texture.image.height > 16384) {
+              if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
+                tex = await resize_texture( tex, 2048 );
+              } else if (gpu === true && size > tex_max) {
+                tex = await resize_texture( tex, 8192, false, fii.type );
+              } else if (tex.image.width > 16384 || tex.image.height > 16384) {
                 if (isNewiPad === true) {
-                  canvas_texture = await resize_texture( canvas_texture, 8192 );
+                  tex = await resize_texture( tex, 8192 );
                 } else {
-                  canvas_texture = await resize_texture( canvas_texture, 16384 );
+                  tex = await resize_texture( tex, 16384 );
                 }
               }
 
-              canvas_texture.colorSpace = THREE.SRGBColorSpace;
-              canvas_texture.flipY = (bg_flip === true);
-              canvas_texture.needsUpdate = true;
+              tex.colorSpace = THREE.SRGBColorSpace;
+              tex.flipY = (bg_flip === true);
+              tex.needsUpdate = true;
 
               if (equi_enabled === true) {
-                canvas_texture.mapping = THREE.EquirectangularReflectionMapping;
+                tex.mapping = THREE.EquirectangularReflectionMapping;
 
                 if (gpu === false) {
-                  scene.background = canvas_texture.clone();
-                  scene.environment = canvas_texture.clone();
+                  scene.background = tex.clone();
+                  scene.environment = tex.clone();
                 } else {
-                  scene.backgroundNode = texture( canvas_texture.clone(), equirectUV(), 0 );
-                  scene.environmentNode = texture( canvas_texture.clone(), equirectUV(), 0 );
+                  scene.backgroundNode = texture( tex.clone(), equirectUV(), 0 );
+                  scene.environmentNode = texture( tex.clone(), equirectUV(), 0 );
                 }
               } else {
-                scene.background = canvas_texture.clone();
+                scene.background = tex.clone();
               }
 
-              canvas_texture.dispose();
+              tex.dispose();
 
               mouse_wheel = true;
 
@@ -3193,7 +3205,9 @@
             loader.load( URL.createObjectURL( fii ), async function( tex ) {
               URL.revokeObjectURL( fii );
 
-              if ((tex.image.width > 16384 || tex.image.height > 16384) ||
+              let size = tex.image.width * tex.image.height;
+
+              if ((tex.image.width > 16384 || tex.image.height > 16384) || (gpu === true && size > tex_max) ||
                 (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048))) {
 
                 let m_type = fn_uc.endsWith('.EXR') ? 'image/x.exr' : 'image/x.hdr';
@@ -3203,6 +3217,8 @@
 
                 if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
                   tex = await resize_texture( tex, 2048, false, m_type, true );
+                } else if (gpu === true && size > tex_max) {
+                  tex = await resize_texture( tex, 8192, false, fii.type );
                 } else if (tex.image.width > 16384 || tex.image.height > 16384) {
                   if (isNewiPad === true) {
                     tex = await resize_texture( tex, 8192, false, m_type, true );
@@ -3231,9 +3247,9 @@
                 scene.background = tex.clone();
               }
 
-              mouse_wheel = true;
-
               tex.dispose();
+
+              mouse_wheel = true;
 
               set_bgenv_message( true );
             }, function ( xhr ) {
