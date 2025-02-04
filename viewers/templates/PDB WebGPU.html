@@ -3419,47 +3419,91 @@
         return compressedArrayBuffer;
       }
 
-      async function resize_texture( image, res = 2048 ) {
-        let tex;
+      async function resize_texture( texture, res = 2048, tex_flip = false, m_type = 'image/png', pass_to_img = false ) {
+        const image = texture.image;
+
+        let image_types = [ 'avif', 'bmp', 'gif', 'jpeg', 'png', 'svg+xml', 'webp' ];
+        let img_ext = image_types.some( ext => m_type.endsWith( ext ) );
+
+        let tex, img = new Image();
 
         await new Promise( resolve => {
-          let canvas = document.createElement('canvas');
+          img.onload = function() {
+            let canvas2 = document.createElement('canvas');
 
-          let scale = res / Math.max( image.width, image.height );
+            let scale = res / Math.max( img.naturalWidth, img.naturalHeight );
 
-          canvas.width = image.width * Math.min( 1, scale );
-          canvas.height = image.height * Math.min( 1, scale );
+            canvas2.width = img.naturalWidth * Math.min( 1, scale );
+            canvas2.height = img.naturalHeight * Math.min( 1, scale );
 
-          let ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+            let ctx2 = canvas2.getContext( '2d', { willReadFrequently: true } );
 
-          if ( image instanceof ImageData ) {
-            ctx.putImageData( image, 0, 0 );
-          } else if ( image.data && image.data.constructor === Uint16Array ) {
-            let u8 = new Uint8Array( image.data );
-            let imgData = new ImageData( new Uint8ClampedArray( u8 ), image.width, image.height );
-            ctx.putImageData( imgData, 0, 0 );
-          } else if ( image.data && image.data.constructor === Uint8Array ) {
-            let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
-            ctx.putImageData( imgData, 0, 0 );
-          } else {
-            ctx.drawImage( image, 0, 0, canvas.width, canvas.height );
+            // Flip image vertically
+            if (tex_flip === true) {
+              ctx2.translate( 0, canvas2.height );
+              ctx2.scale( 1, -1 );
+            }
+
+            ctx2.drawImage( img, 0, 0, canvas2.width, canvas2.height );
+
+            resolve( tex = new THREE.CanvasTexture( canvas2 ) );
           }
 
-          let base64data = canvas.toDataURL( 'image/png', 1 ).replace( /^data:image\/(avif|png|gif|ktx2|jpeg|webp);base64,/, '' );
-          let a2b = atob( base64data );
-          let buff = new Uint8Array( a2b.length );
+          if ( image.src ) {
+            img.src = image.src;
+          } else if ( image.data && (img_ext === true || pass_to_img === true) ) {
+            let blob = new Blob( [ image.data ], { type: m_type } );
 
-          for ( let i = 0, l = buff.length; i < l; i ++ ) {
-            buff[ i ] = a2b.charCodeAt( i );
-          }
-
-          let blob = new Blob( [ buff ], { type: 'image/png' } );
-
-          texture_loader.load( URL.createObjectURL( blob ), function( texture ) {
+            img.src = URL.createObjectURL( blob );
             URL.revokeObjectURL( blob );
-            resolve( tex = texture, texture.dispose() );
-          });
+          } else {
+            let canvas1 = document.createElement('canvas');
+
+            canvas1.width = image.width;
+            canvas1.height = image.height;
+
+            let ctx1 = canvas1.getContext( '2d', { willReadFrequently: true } );
+
+            if ( image instanceof ImageData ) {
+              ctx1.putImageData( image, 0, 0 );
+            } else if ( image.data && ( image.data.constructor === Float32Array || image.data.constructor === Uint16Array ) ) {
+              let f32 = image.data.constructor === Float32Array;
+              let u8 = new Uint8Array( image.data.length );
+              let fromHF = THREE.DataUtils.fromHalfFloat;
+
+              for ( let i = 0; i < image.data.length; i ++ ) {
+                let tmp = Math.max( -1, Math.min( 1, f32 === true ? image.data[ i ] : fromHF( image.data[ i ] ) ) );
+                tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
+                u8[ i ] = tmp / 128.0;
+              }
+
+              let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
+              ctx1.putImageData( imgData, 0, 0 );
+            } else if ( image.data && image.data.constructor === Uint8Array ) {
+              let imgData = new ImageData( new Uint8ClampedArray( image.data.buffer ), image.width, image.height );
+              ctx1.putImageData( imgData, 0, 0 );
+            } else {
+              ctx1.drawImage( image, 0, 0, canvas1.width, canvas1.height );
+            }
+
+            let base64data = canvas1.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
+            let a2b = atob( base64data );
+            let buff = new Uint8Array( a2b.length );
+
+            for ( let i = 0, l = buff.length; i < l; i ++ ) {
+              buff[ i ] = a2b.charCodeAt( i );
+            }
+
+            let blob = new Blob( [ buff ], { type: 'image/png' } );
+
+            img.src = URL.createObjectURL( blob );
+            URL.revokeObjectURL( blob );
+          }
         });
+
+        // Dispose of current texture and return a new one
+
+        if (texture.isTexture) texture.dispose();
 
         return tex;
       }
