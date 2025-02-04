@@ -47,8 +47,8 @@
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, wireframe_enabled;
       var gui, gui_set = false, guiExposure, params, toneMappingOptions, draco_material;
       var variants, variant_materials, current_variant, variants_available, link;
-      var ambientLight, directionalLight, isMobile, isNewiPad, equi_enabled;
-      var ww = window.innerWidth, wh = window.innerHeight;
+      var ambientLight, directionalLight, isMobile, isNewiPad, isFirefoxNightly;
+      var ww = window.innerWidth, wh = window.innerHeight, equi_enabled;
       var animation_running, extra_running, gif_export, object_is_points;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation, texture_maps;
       var render_requested, flat_shading_enabled, filename;
@@ -1997,6 +1997,9 @@
             set_bgenv_message();
 
             texture_loader.load( url, async function( tex ) {
+              // Firefox Nightly currently does not support 1016 texture type (HalfFloat RenderTarget)
+              if (isFirefoxNightly === true) tex = await resize_texture( tex, 8192, false, fii.type, true );
+
               tex.mapping = THREE.EquirectangularReflectionMapping;
               tex.colorSpace = THREE.SRGBColorSpace;
               tex.needsUpdate = true;
@@ -2069,6 +2072,63 @@
         mouse_wheel = true;
       }
 
+      // internally used modified decompress function from WebGPUTextureUtils.js
+
+      async function decompress( blitTexture, maxTextureSize = 16384, renderer = null ) {
+        const { texture, uv } = await import( 'three/tsl' );
+
+        let _quadMesh = /*@__PURE__*/ new THREE.QuadMesh();
+
+        let _renderer = renderer !== null ? renderer : new THREE.WebGPURenderer( { antialias: true } );
+        await _renderer.init();
+
+        let blitTexture_clone = blitTexture.clone();
+
+        blitTexture_clone.offset.set( 0, 0 );
+        blitTexture_clone.repeat.set( 1, 1 );
+
+        const scale = maxTextureSize / Math.max( blitTexture_clone.image.width, blitTexture_clone.image.height );
+
+        const width = blitTexture_clone.image.width * Math.min( 1, scale );
+        const height = blitTexture_clone.image.height * Math.min( 1, scale );
+
+        let material = new THREE.NodeMaterial();
+        material.fragmentNode = texture( blitTexture_clone, uv().flipY() );
+
+        _renderer.setSize( width, height );
+        _renderer.outputColorSpace = blitTexture_clone.colorSpace;
+
+        _quadMesh.material = material;
+        _quadMesh.render( _renderer );
+
+        const canvas = document.createElement( 'canvas' );
+        const context = canvas.getContext( '2d', { willReadFrequently: true } );
+
+        canvas.width = width;
+        canvas.height = height;
+
+        context.drawImage( _renderer.domElement, 0, 0, width, height );
+
+        const readableTexture = new THREE.CanvasTexture( canvas );
+
+        /* set to the original texture parameters */
+
+        readableTexture.offset.set( blitTexture.offset.x, blitTexture.offset.y );
+        readableTexture.repeat.set( blitTexture.repeat.x, blitTexture.repeat.y );
+        readableTexture.colorSpace = blitTexture.colorSpace;
+        readableTexture.minFilter = blitTexture.minFilter;
+        readableTexture.magFilter = blitTexture.magFilter;
+        readableTexture.wrapS = blitTexture.wrapS;
+        readableTexture.wrapT = blitTexture.wrapT;
+        readableTexture.name = blitTexture.name;
+
+        blitTexture_clone.dispose();
+        _renderer.dispose();
+        _renderer = null;
+
+        return readableTexture;
+      }
+
       function set_bgenv_message( end = false ) {
         if (end === true) {
           document.getElementById('div_message').innerHTML = '';
@@ -2111,6 +2171,9 @@
           if (fii.type.startsWith('image/') && ! (exclude_extensions.some( ext => fn_uc.endsWith( ext ) ))) {
             texture_loader.load( URL.createObjectURL( fii ) , async function( tex ) {
               URL.revokeObjectURL( fii );
+
+              // Firefox Nightly currently does not support 1016 texture type (HalfFloat RenderTarget)
+              if (isFirefoxNightly === true) tex = await resize_texture( tex, 8192, false, fii.type, true );
 
               let size = tex.image.width * tex.image.height;
 
@@ -2365,8 +2428,9 @@
           context.fillRect( 0, 0, ww, wh );
 
           let tex = new THREE.CanvasTexture( canvas );
-          tex.colorSpace = THREE.LinearSRGBColorSpace;
+
           tex.mapping = THREE.EquirectangularReflectionMapping;
+          tex.colorSpace = THREE.SRGBColorSpace;
           tex.needsUpdate = true;
 
           if (gpu === false) {
@@ -5012,6 +5076,8 @@
 
         isNewiPad = (/iPad/.test( navigator.platform ) && (/Mac OS X/i.test( navigator.userAgent ))) ||
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        isFirefoxNightly = (gpu === true) && (/Firefox/i.test( navigator.userAgent )) && (/Gecko/i.test( navigator.userAgent ));
 
         isMobile = (isNewiPad === false) && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
           (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
