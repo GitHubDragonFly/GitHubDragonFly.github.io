@@ -160,7 +160,8 @@ Number Type Converter
 - Currently experimental three.js `WebGPU` support is included in the following experimental viewers:
   - `GLTF`, `OBJ+MTL`, `PDB` and `PLY+STL` WebGPU viewers:
   - Use either Chrome or Safari or Opera browser with its `WebGPU experimental features` enabled to test these viewers (and your computer):
-    - Firefox Nightly browser seems to support WebGPU but does not seem to work properly yet
+    - Firefox Nightly browser seems to support WebGPU but does not seem to work properly yet:
+      - Some workarounds have been implemented to allow most images be set as an equirectangular background
   - All 4 viewers are customized and also have some export options available:
     -  `GLTF WebGPU` viewer can also be used to optimize and compress GLTF / GLB models
   - Mobile versions of `GLTF`, `OBJ+MTL` and `PDB` viewers are available but not properly tested yet
