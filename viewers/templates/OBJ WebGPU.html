@@ -51,6 +51,7 @@
       var isMobile, isNewiPad, isFirefoxNightly;
       var first_run = false, fr_count = 0;
       var bounding_box, x_smooth = true, zip;
+      var tsl_texture, tsl_uv, tsl_equirectUV;
       var initial_opacity, initial_opacity_array, enable_opacity;
       var initial_transparency, initial_transparency_array;
       var original_normals, original_indices, original_positions;
@@ -72,10 +73,26 @@
       import * as three_js from "three";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
       import { strFromU8, unzipSync } from "three/addons/libs/fflate.module.min.js";
+      import { texture, uv, equirectUV } from "three/tsl";
 
       THREE = three_js;
       strU8 = strFromU8;
       uSync = unzipSync;
+
+      tsl_uv = uv;
+      tsl_texture = texture;
+      tsl_equirectUV = equirectUV;
+
+      manager = new THREE.LoadingManager();
+      manager.onLoad = function() { mouse_wheel = true; }
+
+      file_loader = new THREE.FileLoader( manager );
+      file_loader.setResponseType( 'arraybuffer' );
+
+      texture_loader = new THREE.TextureLoader( manager );
+
+      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
+      set_gui_position();
 
       // Embedded MTL Loader - Start
 
@@ -1391,19 +1408,8 @@
 
       // OBJ Loader Ends
 
-      manager = new THREE.LoadingManager();
-      manager.onLoad = function() { mouse_wheel = true; }
-
-      file_loader = new THREE.FileLoader( manager );
-      file_loader.setResponseType( 'arraybuffer' );
-
       obj_loader = new OBJLoader( manager );
       mtl_loader = new MTLLoader( manager );
-
-      texture_loader = new THREE.TextureLoader( manager );
-
-      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
-      set_gui_position();
     </script>
 
     <style>
@@ -2870,8 +2876,6 @@
           if (document.getElementById('file_image_input').value !== '') {
             set_scene_image();
           } else {
-            const { texture, equirectUV } = await import( 'three/tsl' );
-
             const url = 'https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/textures/water.avif';
 
             const result = await fetch( url );
@@ -2883,7 +2887,7 @@
               URL.revokeObjectURL( base64 );
 
               // Firefox Nightly currently does not support 1016 texture type (HalfFloat RenderTarget)
-              if (isFirefoxNightly === true) tex = await resize_texture( tex, 8192, false, 'image/avif', true );
+              if (isFirefoxNightly === true) tex = await resize_texture( tex, 2048, false, 'image/avif', true );
 
               tex.mapping = THREE.EquirectangularReflectionMapping;
               tex.colorSpace = THREE.SRGBColorSpace;
@@ -2893,8 +2897,8 @@
                 scene.background = tex.clone();
                 scene.environment = tex.clone();
               } else {
-                scene.backgroundNode = texture( tex.clone(), equirectUV(), 0 );
-                scene.environmentNode = texture( tex.clone(), equirectUV(), 0 );
+                scene.backgroundNode = tsl_texture( tex.clone(), tsl_equirectUV(), 0 );
+                scene.environmentNode = tsl_texture( tex.clone(), tsl_equirectUV(), 0 );
               }
 
               mouse_wheel = true;
@@ -2958,8 +2962,6 @@
       // internally used modified decompress function from TextureUtilsGPu.js
 
       async function decompress( blitTexture, maxTextureSize = 16384 ) {
-        const { texture, uv } = await import( 'three/tsl' );
-
         let _quadMesh = /*@__PURE__*/ new THREE.QuadMesh();
 
         let _renderer = new THREE.WebGPURenderer( { antialias: true } );
@@ -2976,7 +2978,7 @@
         const height = blitTexture_clone.image.height * Math.min( 1, scale );
 
         let material = new THREE.NodeMaterial();
-        material.fragmentNode = texture( blitTexture_clone, uv().flipY() );
+        material.fragmentNode = tsl_texture( blitTexture_clone, tsl_uv().flipY() );
 
         _renderer.setSize( width, height );
         _renderer.outputColorSpace = blitTexture_clone.colorSpace;
@@ -3045,8 +3047,6 @@
 
           const exclude_extensions = [ 'EXR', 'HDR', 'KTX2', 'TIF', 'TIFF' ];
 
-          const { texture, equirectUV } = await import( 'three/tsl' );
-
           // Use max resolutions of 2k for mobile, 8k for new iPad and 16k for desktops
           // iPad appears able of loading 16k straight but limits the resize canvas size
           // WebGPU renderer appears to also be limited to 67108864 size
@@ -3055,12 +3055,19 @@
             texture_loader.load( URL.createObjectURL( fii ) , async function( tex ) {
               URL.revokeObjectURL( fii );
 
-              // Firefox Nightly currently does not support 1016 texture type (HalfFloat RenderTarget)
-              if (isFirefoxNightly === true) tex = await resize_texture( tex, 8192, false, fii.type, true );
+              if (fn_uc.endsWith('.SVG') && !tex.image) {
+                document.getElementById('div_message').innerText = 'Not a supported SVG image!';
+                console.log( 'Error loading Background Image File!' );
+                return;
+              }
 
               let size = tex.image.width * tex.image.height;
 
-              if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
+              // Firefox Nightly currently does not support 1016 texture type (HalfFloat RenderTarget)
+              if (isFirefoxNightly === true) {
+                let msize = isMobile === true ? 2048 : 8192;
+                tex = await resize_texture( tex, msize, false, fii.type, true );
+              } else if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
                 tex = await resize_texture( tex, 2048, false, fii.type );
               } else if (gpu === true && size > tex_max) {
                 tex = await resize_texture( tex, 8192, false, fii.type );
@@ -3083,8 +3090,8 @@
                   scene.background = tex.clone();
                   scene.environment = tex.clone();
                 } else {
-                  scene.backgroundNode = texture( tex.clone(), equirectUV(), 0 );
-                  scene.environmentNode = texture( tex.clone(), equirectUV(), 0 );
+                  scene.backgroundNode = tsl_texture( tex.clone(), tsl_equirectUV(), 0 );
+                  scene.environmentNode = tsl_texture( tex.clone(), tsl_equirectUV(), 0 );
                 }
               } else {
                 scene.background = tex.clone();
@@ -3137,8 +3144,8 @@
                   scene.background = tex.clone();
                   scene.environment = tex.clone();
                 } else {
-                  scene.backgroundNode = texture( tex.clone(), equirectUV(), 0 );
-                  scene.environmentNode = texture( tex.clone(), equirectUV(), 0 );
+                  scene.backgroundNode = tsl_texture( tex.clone(), tsl_equirectUV(), 0 );
+                  scene.environmentNode = tsl_texture( tex.clone(), tsl_equirectUV(), 0 );
                 }
               } else {
                 scene.background = tex.clone();
@@ -3191,8 +3198,8 @@
                   scene.background = tex.clone();
                   scene.environment = tex.clone();
                 } else {
-                  scene.backgroundNode = texture( tex.clone(), equirectUV(), 0 );
-                  scene.environmentNode = texture( tex.clone(), equirectUV(), 0 );
+                  scene.backgroundNode = tsl_texture( tex.clone(), tsl_equirectUV(), 0 );
+                  scene.environmentNode = tsl_texture( tex.clone(), tsl_equirectUV(), 0 );
                 }
               } else {
                 scene.background = tex.clone();
@@ -3252,8 +3259,8 @@
                   scene.background = tex.clone();
                   scene.environment = tex.clone();
                 } else {
-                  scene.backgroundNode = texture( tex.clone(), equirectUV(), 0 );
-                  scene.environmentNode = texture( tex.clone(), equirectUV(), 0 );
+                  scene.backgroundNode = tsl_texture( tex.clone(), tsl_equirectUV(), 0 );
+                  scene.environmentNode = tsl_texture( tex.clone(), tsl_equirectUV(), 0 );
                 }
               } else {
                 scene.background = tex.clone();
@@ -3289,8 +3296,6 @@
           bgnd_linear_gradient = false;
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
         } else {
-          const { texture, equirectUV } = await import( 'three/tsl' );
-
           bgnd_linear_gradient = true;
 
           let canvas = document.createElement('canvas');
@@ -3320,8 +3325,8 @@
             scene.background = tex.clone();
             scene.environment = tex.clone();
           } else {
-            scene.backgroundNode = texture( tex.clone(), equirectUV(), 0 );
-            scene.environmentNode = texture( tex.clone(), equirectUV(), 0 );
+            scene.backgroundNode = tsl_texture( tex.clone(), tsl_equirectUV(), 0 );
+            scene.environmentNode = tsl_texture( tex.clone(), tsl_equirectUV(), 0 );
           }
 
           scene.environmentIntensity = 0.15;
@@ -3594,7 +3599,7 @@
 
             // handle DDS, EXR, HDR, KTX2 and TGA separately
             if ( separate_extensions.some( s_ext => s_ext === ext ) ) {
-              let loader, tex, ktx2, dds;
+              let loader, tex, ktx2, dds, base64_url = '';
 
               switch ( ext ) {
                 case 'dds':
@@ -3651,11 +3656,9 @@
                 tex = new THREE.DataTexture( tex.data, tex.width, tex.height, THREE.RGBAFormat, THREE.HalfFloatType );
                 tex.needsUpdate = true;
 
-                let canvas_tex = await resize_texture( tex, tex_max, true, mime_type );
+                base64_url = await resize_texture( tex, tex_max, true, mime_type, false, true );
 
-                textures[ texture_path ] = canvas_tex.image.toDataURL( 'image/png', 1 );
-
-                canvas_tex.dispose();
+                textures[ texture_path ] = base64_url;
 
                 exr_or_hdr = true;
               } else {
@@ -3676,9 +3679,9 @@
 
               let tex_max = Math.min( 16384, Math.max( tex.image.width, tex.image.height ) );
 
-              tex = await resize_texture( tex, tex_max, false, 'image/png', true );
+              base64_url = await resize_texture( tex, tex_max, false, 'image/png', true, true );
 
-              textures[ texture_path ] = tex.image.toDataURL( 'image/png', 1 );
+              textures[ texture_path ] = base64_url;
             }
           }
         }
@@ -3922,20 +3925,24 @@
                 // DDS, KTX2 and TGA loaders will provide compressed texture so we can use decompress function
                 // EXR and RGBE loaders will provide data texture so we can use resize_texture function
 
+                let base64_url = '';
+
                 if (ext === 'EXR' || ext === 'HDR') {
                   let tex_max = Math.max( ctex.image.width, ctex.image.height );
                   let m_type = ext === 'EXR' ? 'image/x.exr' : 'image/x.hdr';
 
-                  canvas_tex = await resize_texture( ctex, tex_max, true, m_type  );
+                  base64_url = await resize_texture( ctex, tex_max, true, m_type, false, true  );
 
                   exr_or_hdr = true;
                 } else {
                   canvas_tex = await decompress( ctex );
+
+                  base64_url = canvas_tex.image.toDataURL( 'image/png', 1 );
+
+                  canvas_tex.dispose();
                 }
 
-                textures[ local_files[ i ].name ] = canvas_tex.image.toDataURL( 'image/png', 1 );
-
-                canvas_tex.dispose();
+                textures[ local_files[ i ].name ] = base64_url;
               } else {
                 let blob = new Blob( [ await local_files[ i ].arrayBuffer() ], { type: local_files[ i ].type } );
                 let tex = await texture_loader.loadAsync( URL.createObjectURL( blob ) );
@@ -3943,9 +3950,9 @@
 
                 let tex_max = Math.min( 16384, Math.max( tex.image.width, tex.image.height ) );
 
-                tex = await resize_texture( tex, tex_max, false, 'image/png', true );
+                base64_url = await resize_texture( tex, tex_max, false, 'image/png', true, true );
 
-                textures[ local_files[ i ].name ] = tex.image.toDataURL( 'image/png', 1 );
+                textures[ local_files[ i ].name ] = base64_url;
               }
 
               URL.revokeObjectURL( local_files[ i ] );
@@ -4369,21 +4376,25 @@
                   // DDS, KTX2 and TGA loaders will provide compressed texture so we can use decompress function
                   // EXR and RGBE loaders will provide data texture so we can use resize_texture function
 
+                  let base64_url = '';
+
                   if (ext === 'EXR' || ext === 'HDR') {
                     let tex_max = Math.max( ctex.image.width, ctex.image.height );
                     let m_type = ext === 'EXR' ? 'image/x.exr' : 'image/x.hdr';
 
-                    canvas_tex = await resize_texture( ctex, tex_max, true, m_type  );
+                    base64_url = await resize_texture( ctex, tex_max, true, m_type, false, true );
 
                     exr_or_hdr = true;
                   } else {
                     canvas_tex = await decompress( ctex );
+
+                    base64_url = canvas_tex.image.toDataURL( 'image/png', 1 );
+
+                    canvas_tex.dispose();
                   }
 
-                  textures[ tex_index ] = canvas_tex.image.toDataURL( 'image/png', 1 );
+                  textures[ tex_index ] = base64_url;
                   tex_index ++;
-
-                  canvas_tex.dispose();
                 } else {
                   texture_loader.load( url, function( texture ) {
                     textures[ tex_index ] = texture;
@@ -5139,7 +5150,7 @@
         return [ buff, image_data, size ];
       }
 
-      async function resize_texture( texture, res = 2048, tex_flip = false, m_type = 'image/png', pass_to_img = false ) {
+      async function resize_texture( texture, res = 2048, tex_flip = false, m_type = 'image/png', pass_to_img = false, return_base64 = false ) {
         const image = texture.image;
 
         let image_types = [ 'avif', 'bmp', 'gif', 'jpeg', 'png', 'svg+xml', 'webp' ];
@@ -5148,25 +5159,34 @@
         let tex, img = new Image();
 
         await new Promise( resolve => {
-          img.onload = function() {
-            let canvas2 = document.createElement('canvas');
+          img.onload = async function() {
+            const scale = res / Math.max( img.naturalWidth, img.naturalHeight );
 
-            let scale = res / Math.max( img.naturalWidth, img.naturalHeight );
+            const width = img.naturalWidth * Math.min( 1, scale );
+            const height = img.naturalHeight * Math.min( 1, scale );
 
-            canvas2.width = img.naturalWidth * Math.min( 1, scale );
-            canvas2.height = img.naturalHeight * Math.min( 1, scale );
+            const options = {
+              imageOrientation: (tex_flip === true ? 'flipY' : 'none'),
+              resizeWidth: width,
+              resizeHeight: height,
+              resizeQuality: 'high'
+            };
 
-            let ctx2 = canvas2.getContext( '2d', { willReadFrequently: true } );
+            const image_bitmap = await createImageBitmap( img, options );
 
-            // Flip image vertically
-            if (tex_flip === true) {
-              ctx2.translate( 0, canvas2.height );
-              ctx2.scale( 1, -1 );
+            if (return_base64 === false) {
+              resolve( tex = new THREE.CanvasTexture( image_bitmap ) );
+            } else {
+              let canvas2 = document.createElement('canvas');
+              canvas2.width = width;
+              canvas2.height = height;
+
+              let ctx2 = canvas2.getContext( '2d', { willReadFrequently: true } );
+
+              ctx2.drawImage( image_bitmap, 0, 0, width, height );
+
+              resolve( tex = canvas2.toDataURL( 'image/png', 1 ) );
             }
-
-            ctx2.drawImage( img, 0, 0, canvas2.width, canvas2.height );
-
-            resolve( tex = new THREE.CanvasTexture( canvas2 ) );
           }
 
           if ( image.src ) {
