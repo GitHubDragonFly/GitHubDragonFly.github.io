@@ -174,7 +174,8 @@ Number Type Converter
           - At least 1 texture is loaded together with the model otherwise it will just be standard loading without UV creation
           - Models with vertex colors will have the colors removed since they don't seem to work properly with UV creation
     - `GLTF WebGPU` standalone viewer is using the official three.js `GLTF Loader` import
-    - `OBJ+MTL WebGPU` standalone viewer is using built-in custom version of `OBJ Loader` and `MTL Loader`
+    - `OBJ+MTL WebGPU` standalone viewer is using built-in custom version of `OBJ Loader` and `MTL Loader`:
+      - It is currently using ImageBitmaps so it might work faster and use less memory
     - All standalone viewers additionally support drag-and-drop and ZIP files
     - Export functionality is currently limited to GLTF / GLB exports in these standalone viewers:
       - All standalone viewers are using the official three.js GLTF Exporter
