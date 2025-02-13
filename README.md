@@ -160,10 +160,10 @@ Number Type Converter
 - Currently experimental three.js `WebGPU` support is included in the following experimental viewers:
   - `GLTF`, `OBJ+MTL`, `PDB` and `PLY+STL` WebGPU viewers:
   - Use either Chrome or Safari or Opera browser with its `WebGPU experimental features` enabled to test these viewers (and your computer):
-    - Firefox Nightly browser seems to support WebGPU but does not seem to work properly yet:
+    - Firefox Nightly browser seems to support WebGPU and most features seem to work properly:
       - Some workarounds have been implemented to allow most images be set as an equirectangular background
   - All 4 viewers are customized and also have some export options available:
-    -  `GLTF WebGPU` viewer can also be used to optimize and compress GLTF / GLB models
+    - `GLTF WebGPU` viewer can also be used to optimize and compress GLTF / GLB models
   - Mobile versions of `GLTF`, `OBJ+MTL` and `PDB` viewers are available but not properly tested yet
   - Standalone versions of `GLTF WebGPU`, `OBJ+MTL WebGPU` and `PLY+STL WebGPU` viewers are available in the `viewers/webgpu/` folder:
     - `PLY+STL WebGPU` standalone viewer is using the official three.js `PLY Loader` and `STL Loader` imports:
@@ -174,8 +174,8 @@ Number Type Converter
           - At least 1 texture is loaded together with the model otherwise it will just be standard loading without UV creation
           - Models with vertex colors will have the colors removed since they don't seem to work properly with UV creation
     - `GLTF WebGPU` standalone viewer is using the official three.js `GLTF Loader` import
-    - `OBJ+MTL WebGPU` standalone viewer is using built-in custom version of `OBJ Loader` and `MTL Loader`:
-      - It is currently using ImageBitmaps so it might work faster and use less memory
+    - `OBJ+MTL WebGPU` viewers are using built-in custom version of `OBJ Loader` and `MTL Loader`:
+      - All viewers currently try to take advantage of using ImageBitmaps so they work faster and use less memory
     - All standalone viewers additionally support drag-and-drop and ZIP files
     - Export functionality is currently limited to GLTF / GLB exports in these standalone viewers:
       - All standalone viewers are using the official three.js GLTF Exporter
