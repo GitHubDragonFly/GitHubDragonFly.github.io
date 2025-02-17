@@ -1928,10 +1928,15 @@
         let hdr = (image_name.endsWith( '.HDR' ) === true);
         let hd = (exr === true || hdr === true);
 
-        const options = { imageOrientation: (bg_flip === true ? 'flipY' : 'none') };
-        const imageBitmap = await createImageBitmap( scene_bgnd.image, options );
-        let clone = new THREE.CanvasTexture( imageBitmap );
-        clone.encoding = (hd === true ? THREE.LinearEncoding : THREE.sRGBEncoding);
+        let clone;
+
+        if (bg_flip === true) {
+          const options = { imageOrientation: 'flipY' };
+          const imageBitmap = await createImageBitmap( scene_bgnd.image, options );
+          clone = new THREE.CanvasTexture( imageBitmap );
+        } else {
+          clone = scene_bgnd.clone();
+        }
 
         if (equi_enabled === true) {
           clone.mapping = THREE.EquirectangularReflectionMapping;
@@ -4113,7 +4118,7 @@
         return [ buff, image_data, size ];
       }
 
-      async function resize_texture( texture, res = M2K, tex_flip = false, m_type = 'image/png', pass_to_img = false ) {
+      async function resize_texture( texture, res = M2K, tex_flip = false, m_type = 'image/png', pass_to_img = false, return_bitmap = false, return_base64 = false ) {
         const image = texture.image;
 
         let image_types = [ 'avif', 'bmp', 'gif', 'jpeg', 'png', 'svg+xml', 'webp' ];
@@ -4124,28 +4129,44 @@
 
         await new Promise( resolve => {
           img.onload = async function() {
-            let scale = res / Math.max( img.naturalWidth, img.naturalHeight );
+            const scale = res / Math.max( img.naturalWidth, img.naturalHeight );
 
-            let width = img.naturalWidth * Math.min( 1, scale );
-            let height = img.naturalHeight * Math.min( 1, scale );
+            const width = img.naturalWidth * Math.min( 1, scale );
+            const height = img.naturalHeight * Math.min( 1, scale );
 
             const options = {
-              imageOrientation: tex_flip === true ? 'none' : 'flipY',
+              imageOrientation: (tex_flip === false ? 'flipY' : 'none'),
               resizeWidth: width,
               resizeHeight: height,
               resizeQuality: 'high'
             };
 
-            let image_bitmap = await createImageBitmap( img, options );
+            const image_bitmap = await createImageBitmap( img, options );
 
-            resolve( tex = new THREE.CanvasTexture( image_bitmap ) );
+            if (return_bitmap === false) {
+              if (return_base64 === false) {
+                resolve( tex = new THREE.CanvasTexture( image_bitmap ) );
+              } else {
+                let canvas2 = document.createElement('canvas');
+
+                canvas2.width = image_bitmap.width;
+                canvas2.height = image_bitmap.height;
+
+                let ctx2 = canvas2.getContext( '2d', { willReadFrequently: true } );
+
+                ctx2.drawImage( image_bitmap, 0, 0, canvas2.width, canvas2.height );
+
+                resolve( tex = canvas2.toDataURL( 'image/png', 1 ), image_bitmap.close() );
+              }
+            } else {
+              resolve( tex = image_bitmap );
+            }
           }
 
           if ( image.src ) {
             img.src = image.src;
           } else if ( image.data && (img_ext === true || pass_to_img === true) ) {
             let blob = new Blob( [ image.data ], { type: m_type } );
-
             img.src = URL.createObjectURL( blob );
             URL.revokeObjectURL( blob );
           } else {
@@ -4164,9 +4185,8 @@
               let fromHF = THREE.DataUtils.fromHalfFloat;
               const hex_lo = 0x8000, hex_hi = 0x7FFF, frac = 128.0;
 
-              for ( let i = 0, l = image.data.length; i < l; i ++ ) {
-                let d = (f32 === true ? image.data[ i ] : fromHF( image.data[ i ] ));
-                let tmp = Math.max( -1, Math.min( 1, d ) );
+              for ( let i = 0; i < image.data.length; i ++ ) {
+                let tmp = Math.max( -1, Math.min( 1, f32 === true ? image.data[ i ] : fromHF( image.data[ i ] ) ) );
                 tmp = tmp < 0 ? ( tmp * hex_lo ) : ( tmp * hex_hi );
                 u8[ i ] = tmp / frac;
               }
@@ -4177,7 +4197,7 @@
               let imgData = new ImageData( new Uint8ClampedArray( image.data.buffer ), image.width, image.height );
               ctx1.putImageData( imgData, 0, 0 );
             } else {
-              ctx1.drawImage( image, 0, 0, image.width, image.height );
+              ctx1.drawImage( image, 0, 0, canvas1.width, canvas1.height );
             }
 
             let base64data = canvas1.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
