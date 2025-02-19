@@ -11,8 +11,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.172.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.173.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.173.0/examples/jsm/",
           "three-viewport-gizmo": "https://cdn.jsdelivr.net/npm/three-viewport-gizmo@1.0.1/dist/three-viewport-gizmo.min.js",
           "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/decode.min.js",
           "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/encode.min.js",
@@ -34,7 +34,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
     <!-- For encoding GLB with draco compression -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.173.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
       var THREE, renderer, render_requested, scene, loader, texture_loader, dds_loader;
@@ -42,14 +42,19 @@
       var manager, camera, controls, gizmo, mouse_down, mouse_wheel, events_initialized;
       var img_obj, gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
       var grid, polar_grid, grid_visible, polar_grid_visible, slider_height = 0;
-      var ambientLight, directionalLight, filename, zip, count = 0, isMobile;
-      var ww = window.innerWidth, wh = window.innerHeight, mime_type, isKTX2;
-      var uSync, strU8, local_files, zip_file, unzipped_files, filesMap, isNewiPad;
-      var rot_x = 0, rot_y = 0, rot_z = 0, bounding_box, gif_export, bg_flip;
+      var ambientLight, directionalLight, filename, zip, count = 0, isMobile, isNewiPad;
+      var ww = window.innerWidth, wh = window.innerHeight, mime_type, isKTX2, bounding_box;
+      var uSync, strU8, local_files, zip_file, unzipped_files, filesMap, bgnd_linear_gradient;
+      var rot_x = 0, rot_y = 0, rot_z = 0, gif_export, bg_flip, scene_bgnd, hdrjpg_texture;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
       var selected_img_file, selected_url_file = '', equi_enabled, wireframe_enabled;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
+
+      const M2K = 2048; // Mobile 2k limit
+      const A4K = 4096; // AVIF 4k limit
+      const I8K = 8192; // iPad 8k limit
+      const D16K = 16384; // Desktop 16k limit
     </script>
 
     <script type="module">
@@ -322,7 +327,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>IMG2MESH Viewer (r172)</title>
+    <title>IMG2MESH Viewer (r173)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -575,23 +580,13 @@
           document.getElementById('btn_bg_flip').style.backgroundColor = 'transparent';
         }
 
-        if (document.getElementById('file_image_input').value) {
-          if (equi_enabled === true) {
-            scene.environment.dispose();
-            scene.environment = null;
-          }
+        if (scene_bgnd !== null) {
+          // Background already exists
 
-          scene.background.dispose();
-          scene.background = null;
-
-          await set_scene_image();
-
-          if (equi_enabled === true) {
-            scene.backgroundIntensity = params.backIntensity;
-            scene.backgroundBlurriness = params.backBlurriness;
-            scene.environmentIntensity = params.envMapIntensity;
-            if ( params.toneMapping !== 'None' ) renderer.toneMappingExposure = params.exposure;
-          }
+          await set_bgenv_message();
+          await reset_scene_params( false );
+          await set_bgnd();
+          await set_bgenv_message( true );
         }
       }
 
@@ -1221,7 +1216,7 @@
         addFrame();
       }
 
-      function reset_scene_params() {
+      function reset_scene_params( reset_color = true ) {
         if (scene) {
           if (scene.environment) {
             scene.environment.dispose();
@@ -1233,16 +1228,28 @@
             scene.background = null;
           }
 
-          scene.backgroundIntensity = 1.0;
-          scene.backgroundBlurriness = 0.0;
-          scene.environmentIntensity = 1.0;
+          if (bgnd_linear_gradient === true) {
+            bgnd_linear_gradient = false;
+            scene.environmentIntensity = 1.0;
+            document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
+          }
+
+          if (reset_color === true) {
+            document.body.style.backgroundColor = '#000000';
+            document.getElementById('back_color').value = '#000000';
+          }
 
           mouse_wheel = true;
         }
       }
 
       async function set_back_color() {
-        await reset_scene_params();
+        await reset_scene_params( false );
+
+        if (scene_bgnd !== null) {
+          scene_bgnd.dispose();
+          scene_bgnd = null;
+        }
 
         bgnd_linear_gradient = false;
         document.body.style.backgroundImage = 'none';
@@ -1256,6 +1263,48 @@
           parseInt( bg_colors.substring( 3, 5 ), 16 ) / 255.0,
           parseInt( bg_colors.substring( 5 ), 16 ) / 255.0
         );
+
+        mouse_wheel = true;
+      }
+
+      async function set_bgnd() {
+        if (!scene_bgnd) return;
+
+        mouse_wheel = true;
+
+        let image_name = (document.getElementById('file_image_input').value).toUpperCase();
+        let other_browser = (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Firefox') > -1);
+        let svg = (image_name.endsWith('.SVG') === true && !other_browser);
+        let exr = (image_name.endsWith( '.EXR' ) === true);
+        let hdr = (image_name.endsWith( '.HDR' ) === true);
+        let hd = (exr === true || hdr === true);
+
+        let clone;
+
+        if ((bg_flip === true && svg === false) || (bg_flip === false && svg === true)) {
+          const options = { imageOrientation: 'flipY', colorSpaceConversion: 'none' };
+          const imageBitmap = await createImageBitmap( scene_bgnd.image, options );
+          clone = new THREE.CanvasTexture( imageBitmap );
+        } else {
+          clone = scene_bgnd.clone();
+        }
+
+        clone.colorSpace = ((hd === true || hdrjpg_texture === true) ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace);
+
+        if (equi_enabled === true) {
+          clone.mapping = THREE.EquirectangularReflectionMapping;
+          clone.needsUpdate = true;
+
+          scene.background = clone.clone();
+          scene.environment = scene.background;
+        } else {
+          clone.mapping = THREE.UVMapping;
+          clone.needsUpdate = true;
+
+          scene.background = clone.clone();
+        }
+
+        clone.dispose();
 
         mouse_wheel = true;
       }
@@ -1278,7 +1327,7 @@
       }
 
       async function set_equi() {
-        await reset_scene_params();
+        await set_bgenv_message();
 
         if (equi_enabled === false) {
           if (gui_set === false) {
@@ -1315,60 +1364,68 @@
           document.getElementById('gui_position').style.display = 'block';
           set_gui_position();
 
-          bgnd_linear_gradient = false;
-
           document.getElementById('back_color').disabled = true;
-          document.getElementById('back_color').value = '#000000';
-
           document.getElementById('btn_bgnd_linear_gradient').disabled = true;
-          document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
 
           equi_enabled = true;
           document.getElementById('btn_equi').style.backgroundColor = 'lightgreen';
 
-          if (document.getElementById('file_image_input').value !== '') {
-            set_scene_image();
+          if (scene_bgnd !== null) {
+            // Background already exists
+
+            await reset_scene_params( false );
+            await set_bgnd();
+            await set_bgenv_message( true );
           } else {
-            let url = 'https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/textures/water.avif';
+            // Regardless of its name, this is actually 2048 x 1024 image
+            let url = 'https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/textures/planets/earth_atmos_4096.avif';
 
-            set_bgenv_message();
+            let result, blob;
 
-            texture_loader.load( url, async function( texture ) {
-              texture.mapping = THREE.EquirectangularReflectionMapping;
-              texture.needsUpdate = true;
-
-              scene.background = texture.clone();
-              scene.environment = texture.clone();
-
-              mouse_wheel = true;
-
-              set_bgenv_message( true );
-
-              texture.dispose();
-            }, function ( xhr ) {
-            }, function ( error ) {
-              document.getElementById('div_message').innerText = 'Error loading image';
+            try {
+              result = await fetch( url );
+              blob = await result.blob();
+            } catch ( error ) {
+              document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
               console.log( 'Error loading Background Image File!' );
               console.log( error );
-            });
+              return;
+            }
+
+            const image_bitmap = await createImageBitmap( blob, { imageOrientation: 'flipY' } );
+            const texture = new THREE.CanvasTexture( image_bitmap );
+
+            if (scene_bgnd !== null) scene_bgnd.dispose();
+            scene_bgnd = texture.clone();
+            await set_bgnd();
+
+            texture.dispose();
+
+            await set_bgenv_message( true );
           }
 
           scene.backgroundIntensity = params.backIntensity;
           scene.backgroundBlurriness = params.backBlurriness;
           scene.environmentIntensity = params.envMapIntensity;
+
+          disabled_changed();
         } else {
           if (gui) gui_reset();
 
-          if (document.getElementById('file_image_input').value !== '') {
-            set_bgenv_message();
-            set_scene_image();
-          }
+          equi_enabled = false;
+          document.getElementById('btn_equi').style.backgroundColor = 'transparent';
 
           document.getElementById('back_color').disabled = false;
           document.getElementById('btn_bgnd_linear_gradient').disabled = false;
 
-          equi_enabled = false;
-          document.getElementById('btn_equi').style.backgroundColor = 'transparent';
+          if (scene_bgnd !== null) {
+            await reset_scene_params( false );
+            await set_bgnd();
+          }
+
+          await set_bgenv_message( true );
+
+          disabled_changed();
         }
 
         equi_changed();
@@ -1377,6 +1434,10 @@
       }
 
       function gui_reset() {
+        scene.backgroundIntensity = 1.0;
+        scene.backgroundBlurriness = 0.0;
+        scene.environmentIntensity = 1.0;
+
         params.toneMapping = 'Neutral';
         renderer.toneMapping = THREE.NeutralToneMapping;
         renderer.toneMappingExposure = 1.0;
@@ -1384,8 +1445,6 @@
         params.backBlurriness = 0.0;
         params.backIntensity = 1.0;
         params.exposure = 1.0;
-
-        mouse_wheel = true;
 
         if (guiExposure) { guiExposure.destroy(); guiExposure = null; }
 
@@ -1398,7 +1457,7 @@
 
       // internally used modified decompress function from WebGLTextureUtils.js
 
-      async function decompress( texture, maxTextureSize = 16384, renderer = null ) {
+      async function decompress( texture, maxTextureSize = D16K, renderer = null ) {
         let _renderer = renderer;
         let fullscreenQuad;
 
@@ -1439,14 +1498,14 @@
         const _scene = new THREE.Scene();
         _scene.add( fullscreenQuad );
 
-        if ( _renderer === null ) {
-          _renderer = new THREE.WebGLRenderer( { antialias: false } );
-        }
-
         const scale = maxTextureSize / Math.max( texture.image.width, texture.image.height );
 
         const width = texture.image.width * Math.min( 1, scale );
         const height = texture.image.height * Math.min( 1, scale );
+
+        if ( _renderer === null ) {
+          _renderer = new THREE.WebGLRenderer( { antialias: false } );
+        }
 
         _renderer.setSize( width, height );
         _renderer.clear();
@@ -1462,6 +1521,8 @@
 
         const readableTexture = new THREE.CanvasTexture( canvas );
 
+        readableTexture.offset.set( texture.offset.x, texture.offset.y );
+        readableTexture.repeat.set( texture.repeat.x, texture.repeat.y );
         readableTexture.minFilter = texture.minFilter;
         readableTexture.magFilter = texture.magFilter;
         readableTexture.wrapS = texture.wrapS;
@@ -1481,20 +1542,22 @@
         return readableTexture;
       }
 
-      function set_bgenv_message( end = false ) {
+      async function set_bgenv_message( end = false ) {
         if (end === true) {
           document.getElementById('div_message').innerHTML = '';
           document.getElementById('div_message').style.display = 'none';
         } else {
           let part1 = 'Background changing (2k limit) ';
-          let part2 = 'Background changing (8k or 16k limit) ';
+          let part2 = 'Background changing (8k limit) ';
           let part3 = 'Background changing (16k limit) ';
           let message = (isMobile === true) ? part1 : (isNewiPad === true ? part2 : part3);
           document.getElementById('div_message').innerHTML = message + '... ' + pw;
           document.getElementById('div_message').style.display = '';
         }
 
-        if (gui) set_gui_position();
+        set_gui_position();
+
+        await new Promise( resolve => setTimeout( resolve, 20 ) );
       }
 
       async function set_scene_image( reset = false ) {
@@ -1505,16 +1568,14 @@
         if (fii) {
           if (reset === false) set_bgenv_message();
 
-          bgnd_linear_gradient = false;
-          document.getElementById('back_color').value = '#000000';
-          document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
-
           let fn_uc = fii.name.toUpperCase();
 
           // Use max resolutions of 2k for mobile, 8k for new iPad and 16k for desktops
           // iPad appears able of loading 16k straight but limits the resize canvas size
 
           const exclude_extensions = [ 'EXR', 'HDR', 'KTX2', 'TIF', 'TIFF' ];
+
+          const res = (isMobile === true ? M2K : (isNewiPad === true ? I8K : D16K));
 
           if (fii.type.startsWith('image/') && ! (exclude_extensions.some( ext => fn_uc.endsWith( ext ) ))) {
             texture_loader.load( URL.createObjectURL( fii ) , async function( texture ) {
@@ -1523,8 +1584,9 @@
               // If image is SVG or resize is required then keep using the loaded texture, else
               // use hdrJPGLoader and load image again for any gainmap effect and less distortion
 
-              if (fn_uc.endsWith('.SVG') || (texture.image.width > 16384 || texture.image.height > 16384) ||
-                (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048))) {
+              if (fn_uc.endsWith('.SVG') || (texture.image.width > D16K || texture.image.height > D16K) ||
+                (isNewiPad === true && (texture.image.width > I8K || texture.image.height > I8K)) ||
+                (isMobile === true && (texture.image.width > M2K || texture.image.height > M2K))) {
 
                 if (fn_uc.endsWith('.SVG') && !texture.image) {
                   document.getElementById('div_message').innerText = 'Not a supported SVG image!';
@@ -1532,33 +1594,18 @@
                   return;
                 }
 
-                if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
-                  texture = await resize_texture( texture, 2048, false, fii.type );
-                } else if (texture.image.width > 16384 || texture.image.height > 16384) {
-                  if (isNewiPad === true) {
-                    texture = await resize_texture( texture, 8192, false, fii.type );
-                  } else {
-                    texture = await resize_texture( texture, 16384, false, fii.type );
-                  }
-                }
+                // Get canvas texture with bitmap image
+                texture = await resize_texture( texture, res, false, fii.type );
 
-                texture.colorSpace = THREE.SRGBColorSpace;
-                texture.flipY = (bg_flip === false);
-                texture.needsUpdate = true;
+                hdrjpg_texture = false;
 
-                if (equi_enabled === true) {
-                  texture.mapping = THREE.EquirectangularReflectionMapping;
-                  scene.background = texture.clone();
-                  scene.environment = texture.clone();
-                } else {
-                  scene.background = texture.clone();
-                }
-
-                mouse_wheel = true;
+                if (scene_bgnd !== null) scene_bgnd.dispose();
+                scene_bgnd = texture.clone();
+                await set_bgnd();
 
                 texture.dispose();
 
-                set_bgenv_message( true );
+                await set_bgenv_message( true );
               } else {
                 texture.dispose();
 
@@ -1571,23 +1618,18 @@
                   texture2.renderTarget.dispose();
                   texture2.dispose();
 
-                  tex.colorSpace = THREE.LinearSRGBColorSpace;
-                  tex.flipY = (bg_flip === true);
-                  tex.needsUpdate = true;
+                  // Get canvas texture with bitmap image
+                  tex = await resize_texture( tex, res, true, null );
 
-                  if (equi_enabled === true) {
-                    tex.mapping = THREE.EquirectangularReflectionMapping;
-                    scene.background = tex.clone();
-                    scene.environment = tex.clone();
-                  } else {
-                    scene.background = tex.clone();
-                  }
+                  hdrjpg_texture = true;
 
-                  mouse_wheel = true;
+                  if (scene_bgnd !== null) scene_bgnd.dispose();
+                  scene_bgnd = tex.clone();
+                  await set_bgnd();
 
                   tex.dispose();
 
-                  set_bgenv_message( true );
+                  await set_bgenv_message( true );
                 }, function ( xhr ) {
                 }, function ( error ) {
                   document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
@@ -1614,39 +1656,18 @@
             tiff_loader.load( URL.createObjectURL( fii ), async function( texture ) {
               URL.revokeObjectURL( fii );
 
-              if (isMobile === true && (texture.image.width > 2048 || texture.image.height > 2048)) {
-                try {
-                  texture = await resize_texture( texture, 2048, false, fii.type );
-                } catch ( error ) {
-                  document.getElementById('div_message').innerText = 'Error: ' + error.message;
-                  URL.revokeObjectURL( fii );
-                  return;
-                }
-              } else if (texture.image.width > 16384 || texture.image.height > 16384) {
-                if (isNewiPad === true) {
-                  texture = await resize_texture( texture, 8192, false, fii.type );
-                } else {
-                  texture = await resize_texture( texture, 16384, false, fii.type );
-                }
-              }
+              // Get canvas texture with bitmap image
+              texture = await resize_texture( texture, res, false, fii.type );
 
-              texture.colorSpace = THREE.SRGBColorSpace;
-              texture.flipY = (bg_flip === false);
-              texture.needsUpdate = true;
+              hdrjpg_texture = false;
 
-              if (equi_enabled === true) {
-                texture.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = texture.clone();
-                scene.environment = texture.clone();
-              } else {
-                scene.background = texture.clone();
-              }
-
-              mouse_wheel = true;
+              if (scene_bgnd !== null) scene_bgnd.dispose();
+              scene_bgnd = texture.clone();
+              await set_bgnd();
 
               texture.dispose();
 
-              set_bgenv_message( true );
+              await set_bgenv_message( true );
             }, function ( xhr ) { // onProgress
             }, function ( error ) { // onError
               document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
@@ -1659,46 +1680,36 @@
             if (ktx2_loader === undefined) {
               const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
               ktx2_loader = new KTX2Loader( manager );
-              ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/libs/basis/" );
+              ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.173.0/examples/jsm/libs/basis/" );
               ktx2_loader.detectSupport( renderer );
               await ktx2_loader.init();
             }
 
-            ktx2_loader.load( URL.createObjectURL( fii ), async function( texture ) {
+            ktx2_loader.load( URL.createObjectURL( fii ), async function( tex ) {
               URL.revokeObjectURL( fii );
 
               // Unsupported KTX2 formats might log a warning
 
-              let canvas_texture = await decompress( texture );
+              if (tex.colorSpace === 'display-p3') tex.colorSpace === 'srgb';
 
-              if (isMobile === true && (canvas_texture.image.width > 2048 || canvas_texture.image.height > 2048)) {
-                canvas_texture = await resize_texture( canvas_texture, 2048 );
-              } else if (canvas_texture.image.width > 16384 || canvas_texture.image.height > 16384) {
-                if (isNewiPad === true) {
-                  canvas_texture = await resize_texture( canvas_texture, 8192 );
-                } else {
-                  canvas_texture = await resize_texture( canvas_texture, 16384 );
-                }
-              }
+              // Get canvas texture with bitmap image
 
-              canvas_texture.colorSpace = THREE.SRGBColorSpace;
-              canvas_texture.flipY = (bg_flip === true);
-              canvas_texture.needsUpdate = true;
-
-              if (equi_enabled === true) {
-                canvas_texture.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = canvas_texture.clone();
-                scene.environment = canvas_texture.clone();
-                if (params.setEnvMap === true) set_envMap( true );
+              if (tex.isCompressedTexture) {
+                tex = await decompress( tex );
+                tex = await resize_texture( tex, res, true, 'image/ktx2' );
               } else {
-                scene.background = canvas_texture.clone();
+                tex = await resize_texture( tex, res, false, 'image/ktx2' );
               }
 
-              mouse_wheel = true;
+              hdrjpg_texture = false;
 
-              canvas_texture.dispose();
+              if (scene_bgnd !== null) scene_bgnd.dispose();
+              scene_bgnd = tex.clone();
+              await set_bgnd();
 
-              set_bgenv_message( true );
+              tex.dispose();
+
+              await set_bgenv_message( true );
             }, function ( xhr ) { // onProgress
             }, function ( error ) { // onError
               document.getElementById('div_message').innerText = 'Error loading image: ' + error.message;
@@ -1707,7 +1718,7 @@
 
               URL.revokeObjectURL( fii );
             });
-        } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
+          } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
             let hd_loader;
 
             if (fn_uc.endsWith('.EXR')) {
@@ -1732,41 +1743,27 @@
             // If resize is required then keep using the loaded texture,
             // else use hdrJPGLoader to process HD texture
 
-            if ((image.image.width > 16384 || image.image.height > 16384) ||
-              (isMobile === true && (image.image.width > 2048 || image.image.height > 2048))) {
+            if ((image.image.width > D16K || image.image.height > D16K) ||
+              (isNewiPad === true && (image.image.width > I8K || image.image.height > I8K)) ||
+              (isMobile === true && (image.image.width > M2K || image.image.height > M2K))) {
 
               let m_type = fn_uc.endsWith('.EXR') ? 'image/x.exr' : 'image/x.hdr';
 
-              // Use decompress since resize is required
+              // Use decompress to get readable texture
               image = await decompress( image );
 
-              if (isMobile === true && (image.image.width > 2048 || image.image.height > 2048)) {
-                image = await resize_texture( image, 2048, false, m_type, true );
-              } else if (image.image.width > 16384 || image.image.height > 16384) {
-                if (isNewiPad === true) {
-                  image = await resize_texture( image, 8192, false, m_type, true );
-                } else {
-                  image = await resize_texture( image, 16384, false, m_type, true );
-                }
-              }
+              // Get canvas texture with bitmap image
+              image = await resize_texture( image, res, false, m_type, true );
 
-              image.colorSpace = THREE.SRGBColorSpace;
-              image.flipY = (bg_flip === true);
-              image.needsUpdate = true;
+              hdrjpg_texture = true;
 
-              if (equi_enabled === true) {
-                image.mapping = THREE.EquirectangularReflectionMapping;
-                scene.background = image.clone();
-                scene.environment = image.clone();
-              } else {
-                scene.background = image.clone();
-              }
-
-              mouse_wheel = true;
+              if (scene_bgnd !== null) scene_bgnd.dispose();
+              scene_bgnd = image.clone();
+              await set_bgnd();
 
               image.dispose();
 
-              set_bgenv_message( true );
+              await set_bgenv_message( true );
             } else {
               const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
               const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
@@ -1831,23 +1828,18 @@
                 texture.renderTarget.dispose();
                 texture.dispose();
 
-                hdrJpgEquirectangularMap.colorSpace = THREE.LinearSRGBColorSpace;
-                hdrJpgEquirectangularMap.flipY = (bg_flip === true);
-                hdrJpgEquirectangularMap.needsUpdate = true;
+                // Get canvas texture with bitmap image
+                hdrJpgEquirectangularMap = await resize_texture( hdrJpgEquirectangularMap, res, true, null );
 
-                if (equi_enabled === true) {
-                  hdrJpgEquirectangularMap.mapping = THREE.EquirectangularReflectionMapping;
-                  scene.background = hdrJpgEquirectangularMap.clone();
-                  scene.environment = hdrJpgEquirectangularMap.clone();
-                } else {
-                  scene.background = hdrJpgEquirectangularMap.clone();
-                }
+                hdrjpg_texture = true;
 
-                mouse_wheel = true;
+                if (scene_bgnd !== null) scene_bgnd.dispose();
+                scene_bgnd = hdrJpgEquirectangularMap.clone();
+                await set_bgnd();
 
                 hdrJpgEquirectangularMap.dispose();
 
-                set_bgenv_message( true );
+                await set_bgenv_message( true );
 
                 // encoder must be manually disposed when no longer needed
                 encodingResult.gainMap.dispose();
@@ -1863,6 +1855,11 @@
               });
             }
           } else {
+            if (scene_bgnd !== null) {
+              scene_bgnd.dispose();
+              scene_bgnd = null;
+            }
+
             console.log( 'Not a valid image file!' );
             document.getElementById('file_image_input').value = '';
             document.getElementById('div_message').innerText = 'Not a valid image file';
@@ -1873,13 +1870,17 @@
       }
 
       async function set_bgnd_linear_gradient() {
+        let lg = bgnd_linear_gradient;
+
         await reset_scene_params();
 
-        if (bgnd_linear_gradient === true) {
-          bgnd_linear_gradient = false;
-          document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
-        } else {
+        if (lg === false) {
           bgnd_linear_gradient = true;
+
+          if (scene_bgnd !== null) {
+            scene_bgnd.dispose();
+            scene_bgnd = null;
+          }
 
           let canvas = document.createElement('canvas');
           let context = canvas.getContext("2d");
@@ -1914,8 +1915,6 @@
               tex.dispose();
 
               document.getElementById('file_image_input').value = '';
-              document.body.style.backgroundColor = '#000000';
-              document.getElementById('back_color').value = '#000000';
               document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'lightgreen';
 
               mouse_wheel = true;
@@ -2134,7 +2133,15 @@
           ctx.drawImage( image, 0, 0, canv.width, canv.height );
         }
 
-        let px = ctx.getImageData( 0, 0, canv.width, canv.height );
+        let px;
+
+        try {
+          px = ctx.getImageData( 0, 0, canv.width, canv.height );
+        } catch ( error ) {
+          handle_error( error );
+          return null;
+        }
+
         let d = px.data;
 
         let pixel = ( x, y ) => {
@@ -2236,19 +2243,19 @@
           tex.flipY = false;
         }
 
-        if (isMobile === true && (tex.image.width > 2048 || tex.image.height > 2048)) {
-          tex = await resize_texture( tex, 2048, tex.flipY === false, mime_type, true );
-        } else if (tex.image.width > 16384 || tex.image.height > 16384) {
-          if (isNewiPad === true) {
-            tex = await resize_texture( tex, 8192, tex.flipY === false, mime_type, true );
-          } else {
-            tex = await resize_texture( tex, 16384, tex.flipY === false, mime_type, true );
-          }
+        if (isMobile === true && (tex.image.width > M2K || tex.image.height > M2K)) {
+          tex = await resize_texture( tex, M2K, tex.flipY === false, mime_type, true );
+        } else if (isNewiPad === true && tex.image.width > I8K || tex.image.height > I8K) {
+          tex = await resize_texture( tex, I8K, tex.flipY === false, mime_type, true );
+        } else if (tex.image.width > D16K || tex.image.height > D16K) {
+          tex = await resize_texture( tex, D16K, tex.flipY === false, mime_type, true );
         }
 
         tex.colorSpace = (hd === false) ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
 
         let g = extrudedImageGeometry( { image: tex.source.data, depth, quadPerPixel } );
+
+        if (g === null) return null;
 
         return new THREE.Mesh(
           g,
@@ -2289,7 +2296,7 @@
             if (ktx2_loader === undefined) {
               const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
               ktx2_loader = new KTX2Loader( manager );
-              ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.172.0/examples/jsm/libs/basis/" );
+              ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.173.0/examples/jsm/libs/basis/" );
               ktx2_loader.detectSupport( renderer );
               await ktx2_loader.init();
             }
@@ -2465,6 +2472,8 @@
         zip_file = null;
         unzipped_files = null;
         loader = null;
+        hdrjpg_texture = false;
+        scene_bgnd = null;
         mouse_down = false;
         mouse_wheel = true;
         gif_export = false;
@@ -2473,6 +2482,7 @@
         equi_enabled = false;
         wireframe_enabled = false;
         render_requested = false;
+        bgnd_linear_gradient = false;
         bounding_box = new THREE.Box3();
 
         console.time( 'Loading Time' );
@@ -2619,6 +2629,8 @@
           quadPerPixel: false,
         });
 
+        if (img_obj === null) return;
+
         if (zip_file === null) URL.revokeObjectURL( local_files[ selected_img_file ] );
 
         scene.add( img_obj );
@@ -2666,6 +2678,8 @@
               depth: 0.1,
               quadPerPixel: false,
             });
+
+            if (img_obj === null) return;
 
             scene.add( img_obj );
             img_obj.position.set( 0, 0, 0 );
@@ -3152,12 +3166,12 @@
 
             let scale = 1;
 
-            if (export_fmt === 'avif' && (img.naturalWidth > 4096 || img.naturalHeight > 4096)) {
+            if (export_fmt === 'avif' && (img.naturalWidth > A4K || img.naturalHeight > A4K)) {
               console.warn( 'AVIF encoder is limited to 4k resolution and will resize the image!' );
-              scale = 4096 / Math.max( img.naturalWidth, img.naturalHeight );
-            } else if (img.naturalWidth > 16384 || img.naturalHeight > 16384) {
+              scale = A4K / Math.max( img.naturalWidth, img.naturalHeight );
+            } else if (img.naturalWidth > D16K || img.naturalHeight > D16K) {
               console.warn( 'THREE.WebGLRenderer is limited to 16k resolution and will resize the image!' );
-              scale = 16384 / Math.max( img.naturalWidth, img.naturalHeight );
+              scale = D16K / Math.max( img.naturalWidth, img.naturalHeight );
             }
 
             canvas.width = img.naturalWidth * Math.min( 1, scale );
@@ -3195,42 +3209,75 @@
         return [ buff, image_data, size ];
       }
 
-      async function resize_texture( texture, res = 2048, tex_flip = false, m_type = 'image/png', isMeshTex = false ) {
+      async function resize_texture( texture, res = M2K, tex_flip = false, m_type = 'image/png', pass_to_img = false, return_bitmap = false, return_base64 = false ) {
         const image = texture.image;
 
         let image_types = [ 'avif', 'bmp', 'gif', 'jpeg', 'png', 'svg+xml', 'webp' ];
-        let image_hd_types = [ 'hdr', 'exr', 'ktx2' ];
-
-        let img_ext = image_types.some( ext => m_type.endsWith( ext ) );
-        let img_hd_ext = image_hd_types.some( ext => m_type.endsWith( ext ) );
-        let mesh_texture = ( isMeshTex === true && ( img_ext === true || img_hd_ext === true ) );
+        let img_ext = m_type ? image_types.some( ext => m_type.endsWith( ext ) ) : false;
+        image_types.length = 0;
 
         let tex, img = new Image();
 
         await new Promise( resolve => {
           img.onload = async function() {
-            let scale = res / Math.max( img.naturalWidth, img.naturalHeight );
+            const scale = res / Math.max( img.naturalWidth, img.naturalHeight );
 
-            let width = img.naturalWidth * Math.min( 1, scale );
-            let height = img.naturalHeight * Math.min( 1, scale );
+            let options;
 
-            const options = {
-              imageOrientation: tex_flip === true ? 'none' : 'flipY',
-              resizeWidth: width,
-              resizeHeight: height,
-              resizeQuality: 'high'
-            };
+            if (scale >= 1) {
+              options = {
+                imageOrientation: (tex_flip === false ? 'flipY' : 'none')
+              };
+            } else {
+              const width = img.naturalWidth * Math.min( 1, scale );
+              const height = img.naturalHeight * Math.min( 1, scale );
 
-            let image_bitmap = await createImageBitmap( img, options );
+              options = {
+                imageOrientation: (tex_flip === false ? 'flipY' : 'none'),
+                resizeWidth: width,
+                resizeHeight: height,
+                resizeQuality: 'high'
+              };
+            }
 
-            resolve( tex = new THREE.CanvasTexture( image_bitmap ) );
+            const image_bitmap = await createImageBitmap( img, options );
+
+            if (return_bitmap === false) {
+              if (return_base64 === false) {
+                resolve( tex = new THREE.CanvasTexture( image_bitmap ) );
+              } else {
+                let canvas2 = document.createElement('canvas');
+
+                canvas2.width = image_bitmap.width;
+                canvas2.height = image_bitmap.height;
+
+                let ctx2 = canvas2.getContext( '2d', { willReadFrequently: true } );
+
+                ctx2.drawImage( image_bitmap, 0, 0, canvas2.width, canvas2.height );
+
+                resolve( tex = canvas2.toDataURL( 'image/png', 1 ), image_bitmap.close() );
+              }
+            } else {
+              resolve( tex = image_bitmap );
+            }
           }
 
           if ( image.src ) {
             img.src = image.src;
-          } else if ( image.data && ( img_ext === true || mesh_texture === true ) ) {
-
+          } else if ( image.data && (img_ext === true || pass_to_img === true) ) {
             let blob = new Blob( [ image.data ], { type: m_type } );
+            img.src = URL.createObjectURL( blob );
+            URL.revokeObjectURL( blob );
+          } else if (texture.source.data.nodeName && texture.source.data.nodeName.toLowerCase() === 'canvas') {
+            let base64data = texture.source.data.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
+            let a2b = atob( base64data );
+            let buff = new Uint8Array( a2b.length );
+
+            for ( let i = 0, l = buff.length; i < l; i ++ ) {
+              buff[ i ] = a2b.charCodeAt( i );
+            }
+
+            let blob = new Blob( [ buff ], { type: 'image/png' } );
 
             img.src = URL.createObjectURL( blob );
             URL.revokeObjectURL( blob );
@@ -3248,11 +3295,12 @@
               let f32 = image.data.constructor === Float32Array;
               let u8 = new Uint8Array( image.data.length );
               let fromHF = THREE.DataUtils.fromHalfFloat;
+              const hex_lo = 0x8000, hex_hi = 0x7FFF, frac = 128.0;
 
               for ( let i = 0; i < image.data.length; i ++ ) {
                 let tmp = Math.max( -1, Math.min( 1, f32 === true ? image.data[ i ] : fromHF( image.data[ i ] ) ) );
-                tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
-                u8[ i ] = tmp / 128.0;
+                tmp = tmp < 0 ? ( tmp * hex_lo ) : ( tmp * hex_hi );
+                u8[ i ] = tmp / frac;
               }
 
               let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
@@ -3538,6 +3586,11 @@
         if (gizmo) {
           gizmo.dispose();
           gizmo = undefined;
+        }
+
+        if (scene_bgnd) {
+          scene_bgnd.dispose();
+          scene_bgnd = null;
         }
 
         if (isMobile === false) {
