@@ -22,30 +22,34 @@ This website is designed to serve as a hub with links to:
     - Celestial Bodies notes:
       - Astronomically inacurrate, designed just to please the eye
     - IMG2MESH viewer / converter notes:
-      - Versatile tool to convert an image to simple 3D mesh and also export that same image to other formats
+      - Versatile tool that can do the following:
+        - Convert an image to simple 3D mesh
+        - Export this 3D mesh to different 3D formats
+        - Export that same image to other image formats
       - Based on thrax version of code: `https://tartan-swanky-plutonium.glitch.me/`
         - Original code: `https://github.com/shaoruu/three-extruded-image`
       - Depending on the devices, the image resolution will be limited but could go as high as 16k on desktops
       - Supported import image formats:
         - AVIF, BMP, DDS, DIB, EXR, GIF, HDR, ICO, JPEG, KTX2, PNG, SVG, TGA, TIFF, WEBP
-          - Using [@jsquash/avif](https://github.com/jamsinclair/jSquash) encoder for AVIF compression
-            - This encoder appears to be limited to 4k resolution
-          - Using experimental [ktx2-encoder](https://github.com/gz65555/ktx2-encoder) for KTX2 compression
         - Local blobs and remote URL loading are supported:
           - URLs have to end with supported extension
           - GitHub URLs are supported
           - ZIP files are supported
       - Supports exporting to the following formats:
         - Animated GIF and PNG (see general notes about these formats further below)
-        - AVIF, HDR, EXR, JPEG, PNG, KTX2, SVG and WEBP images at unchanged device limited image size (up to 16k):
-          - HDR encoding is powered by a modified version of [hdrpng.js](https://github.com/enkimute/hdrpng.js/) library
+        - AVIF, HDR, EXR, JPEG, PNG, KTX2, SVG and WEBP images at device limited image size (up to 16k):
+          - AVIF encoding is powered by [@jsquash/avif](https://github.com/jamsinclair/jSquash) encoder:
+            - This encoder appears to be limited to 4k resolution
+          - KTX2 encoding is powered by [ktx2-encoder](https://github.com/gz65555/ktx2-encoder):
+            - Either ETC1S (`KTX2e`) or UASTC (`KTX2u`) format can be selected
+          - HDR encoding is powered by a modified version of [hdrpng.js](https://github.com/enkimute/hdrpng.js/) library:
             - HDR code was created with assistance from Microsoft Copilot
-          - SVG encoding is powered by [bitmap2vector](https://github.com/cancerberoSgx/univac) library
+          - SVG encoding is powered by [bitmap2vector](https://github.com/cancerberoSgx/univac) library:
             - SVG output is additionally optimized with [SVG Optimizer](https://github.com/svg/svgo)
             - SVG output should be of a lower quality than the original image:
               - Lower color and resolution images should be used but also try others
               - Higher color and resolution images might take some time to convert
-        - 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
+        - 3D formats: 3DM, GLB, GLTF, JSON, OBJ+MTL, USDZ:
           - Maximum exported texture size is currently limited only for 3DM exports to 2.5k
         - [glTF Transform](https://gltf-transform.dev) is used for some exports
 
