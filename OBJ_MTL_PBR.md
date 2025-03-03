@@ -73,12 +73,11 @@ Entries currently not compatible with the `assimp` library but working fine in t
  - `-c` - texture center of rotation
  - `-r` - texture rotation value
  - `-w` - texture wrapping parameters (`wrapS` and `wrapT`)
+ - `-mm` - displacementBias and displacementScale
  - `Pns` - normalScale
  - `Pcn` - clearcoatNormalScale
  - `Pdt` - depthTest
  - `Pli` - lightMapIntensity
- - `disp_b` - displacementBias
- - `disp_s` - displacementScale
  - `Pbr_ps` - sheen (layer intensity)
  - `Pbr_pl_map` - lightMap
 
