@@ -363,7 +363,7 @@ class MaterialCreator {
 
 			const exr_or_hdr = ( value.toLowerCase().endsWith( '.exr' ) || value.toLowerCase().endsWith( '.hdr' ) );
 
-			const texParams = scope.getTextureParams( original_mat[ prop ] );
+			const texParams = scope.getTextureParams( original_mat[ prop ], params );
 			const map = scope.loadTexture( resolveURL( scope.baseUrl, value ) );
 
 			map.repeat.copy( texParams.scale );
@@ -461,16 +461,6 @@ class MaterialCreator {
 				case 'map_disp':
 					// Displacement map
 					setMapForType( 'displacementMap', value, lprop );
-					break;
-
-				case 'disp_b':
-					// Displacement bias
-					params.displacementBias = parseFloat( value );
-					break;
-
-				case 'disp_s':
-					// Displacement scale
-					params.displacementScale = parseFloat( value );
 					break;
 
 				case 'pli':
@@ -841,7 +831,7 @@ class MaterialCreator {
 
 	}
 
-	getTextureParams( value ) {
+	getTextureParams( value, matParams ) {
 
 		const texParams = {
 
@@ -883,6 +873,16 @@ class MaterialCreator {
 
 			texParams.colorSpace = parseInt( items[ pos + 1 ] ) === 1 ? LinearSRGBColorSpace : NoColorSpace;
 			items.splice( pos, 2 );
+
+		}
+
+		pos = items.indexOf( '-mm' );
+
+		if ( pos >= 0 ) {
+
+			matParams.displacementBias = parseFloat( items[ pos + 1 ] );
+			matParams.displacementScale = parseFloat( items[ pos + 2 ] );
+			items.splice( pos, 3 );
 
 		}
 
