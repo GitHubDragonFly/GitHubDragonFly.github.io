@@ -764,10 +764,6 @@ class OBJExporter {
 					if ( ( mat.normalScale && ! ( mat.normalScale.x === 1 && mat.normalScale.y === 1 ) && ! mat.sheen ) || vertexTangents === true ) {
 						mtlOutput += 'Pns ' + mat.normalScale.x + ' ' + ( vertexTangents === true ? mat.normalScale.y *= -1 : mat.normalScale.y ) + '\n';
 					}
-					if ( mat.displacementMap ) {
-						if ( mat.displacementBias && mat.displacementBias > 0 ) mtlOutput += 'disp_b ' + mat.displacementBias + '\n';
-						if ( mat.displacementScale && mat.displacementScale < 1 ) mtlOutput += 'disp_s ' + mat.displacementScale + '\n';
-					}
 					if ( mat.clearcoat && mat.clearcoat > 0 ) {
 						mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
 						if ( mat.clearcoatRoughness ) mtlOutput += 'Pcr ' + mat.clearcoatRoughness + '\n';
@@ -1261,7 +1257,7 @@ class OBJExporter {
 								map_uuids.push( mat.displacementMap.uuid );
 								map_names[ mat.displacementMap.uuid ] = name;
 
-								mtlOutput += 'disp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
+								mtlOutput += 'disp -mm ' + mat.displacementBias + ' ' + mat.displacementScale + ' -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
 								textures.push( {
 									name,
@@ -1271,7 +1267,7 @@ class OBJExporter {
 
 							} else {
 
-								mtlOutput += 'disp -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
+								mtlOutput += 'disp -mm ' + mat.displacementBias + ' ' + mat.displacementScale + ' -r ' + rot + ' -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.displacementMap.uuid ] + '.png' + '\n';
 
 							}
 
