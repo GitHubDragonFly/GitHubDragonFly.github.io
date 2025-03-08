@@ -1101,34 +1101,31 @@
 
       async function export_thumbnail() {
         // Create 512 x 512 thumbnail image, currently intended for 3MF exports
+        // The exporter is using fflate so it is sufficient to return Uint8Array
         // The model should be centered on the screen and sized to approximately 512 x 512 pixels
 
-        let frame_x = Math.ceil( ( renderer.domElement.width - 512 ) / 2.0 );
-        let frame_y = Math.ceil( ( renderer.domElement.height - 512 ) / 2.0 );
+        const size = 512;
+
+        let frame_x = Math.ceil( ( renderer.domElement.width - size ) / 2.0 );
+        let frame_y = Math.ceil( ( renderer.domElement.height - size ) / 2.0 );
 
         let canvas = document.createElement( 'canvas' );
-        canvas.width = 512;
-        canvas.height = 512;
+        canvas.width = size;
+        canvas.height = size;
 
         let context = canvas.getContext( '2d', { willReadFrequently: true } );
-        context.clearRect( 0, 0, 512, 512 );
+        context.clearRect( 0, 0, size, size );
 
         renderer.render( scene, camera );
 
-        context.drawImage( renderer.domElement, frame_x, frame_y, 512, 512, 0, 0, 512, 512 );
+        context.drawImage( renderer.domElement, frame_x, frame_y, size, size, 0, 0, size, size );
 
         const base64 = canvas.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
 
         const binaryString = atob( base64 );
-        const len = binaryString.length;
-        const bytes = new Uint8Array( len );
+        const u8 = new Uint8Array( binaryString.length );
 
-        for ( let i = 0; i < len; i++ ) { bytes[ i ] = binaryString.charCodeAt( i ); }
-
-        const blob = new Blob( [ bytes ], { name: 'thumbnail.png', type: 'image/png' } );
-
-        const buff = await blob.arrayBuffer();
-        const u8 = new Uint8Array( buff );
+        for ( let i = 0, l = u8.length; i < l; i++ ) { u8[ i ] = binaryString.charCodeAt( i ); }
 
         return u8;
       }
@@ -3453,10 +3450,12 @@
           }
         }
 
-        doc.createExtension( ALL_EXTENSIONS[ 4 ] )
+        const KHRDracoMeshCompression = ALL_EXTENSIONS.find( ( Extension ) => Extension.EXTENSION_NAME === 'KHR_draco_mesh_compression' );
+
+        doc.createExtension( KHRDracoMeshCompression )
         .setRequired( true )
         .setEncoderOptions({
-          method: ALL_EXTENSIONS[ 4 ].EncoderMethod.EDGEBREAKER,
+          method: KHRDracoMeshCompression.EncoderMethod.EDGEBREAKER,
           encodeSpeed: 5,
           quantizationBits: { "POSITION":14, "NORMAL":10, "COLOR":8, "TEX_COORD":12, "GENERIC":12 },
           quantizationVolume: "mesh"
@@ -3518,10 +3517,12 @@
           }
         }
 
-        doc.createExtension( ALL_EXTENSIONS[ 1 ] )
+        const EXTMeshoptCompression = ALL_EXTENSIONS.find( ( Extension ) => Extension.EXTENSION_NAME === 'EXT_meshopt_compression' );
+
+        doc.createExtension( EXTMeshoptCompression )
         .setRequired( true )
         .setEncoderOptions({
-          method: ALL_EXTENSIONS[ 1 ].EncoderMethod.QUANTIZE,  // or EncoderMethod.FILTER
+          method: EXTMeshoptCompression.EncoderMethod.QUANTIZE,  // or EncoderMethod.FILTER
         });
 
         const compressedArrayBuffer = await io.writeBinary( doc );
@@ -3531,95 +3532,6 @@
         for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
 
         return compressedArrayBuffer;
-      }
-
-      async function resize_texture( texture, res = M2K, tex_flip = false, m_type = 'image/png', pass_to_img = false ) {
-        const image = texture.image;
-
-        let image_types = [ 'avif', 'bmp', 'gif', 'jpeg', 'png', 'svg+xml', 'webp' ];
-        let img_ext = m_type ? image_types.some( ext => m_type.endsWith( ext ) ) : false;
-        image_types.length = 0;
-
-        let tex, img = new Image();
-
-        await new Promise( resolve => {
-          img.onload = async function() {
-            let scale = res / Math.max( img.naturalWidth, img.naturalHeight );
-
-            let width = img.naturalWidth * Math.min( 1, scale );
-            let height = img.naturalHeight * Math.min( 1, scale );
-
-            const options = {
-              imageOrientation: tex_flip === true ? 'none' : 'flipY',
-              resizeWidth: width,
-              resizeHeight: height,
-              resizeQuality: 'high'
-            };
-
-            let image_bitmap = await createImageBitmap( img, options );
-
-            resolve( tex = new THREE.CanvasTexture( image_bitmap ) );
-          }
-
-          if ( image.src ) {
-            img.src = image.src;
-          } else if ( image.data && (img_ext === true || pass_to_img === true) ) {
-            let blob = new Blob( [ image.data ], { type: m_type } );
-
-            img.src = URL.createObjectURL( blob );
-            URL.revokeObjectURL( blob );
-          } else {
-            let canvas1 = document.createElement('canvas');
-
-            canvas1.width = image.width;
-            canvas1.height = image.height;
-
-            let ctx1 = canvas1.getContext( '2d', { willReadFrequently: true } );
-
-            if ( image instanceof ImageData ) {
-              ctx1.putImageData( image, 0, 0 );
-            } else if ( image.data && ( image.data.constructor === Float32Array || image.data.constructor === Uint16Array ) ) {
-              let f32 = image.data.constructor === Float32Array;
-              let u8 = new Uint8Array( image.data.length );
-              let fromHF = THREE.DataUtils.fromHalfFloat;
-              const hex_lo = 0x8000, hex_hi = 0x7FFF, frac = 128.0;
-
-              for ( let i = 0, l = image.data.length; i < l; i ++ ) {
-                let d = (f32 === true ? image.data[ i ] : fromHF( image.data[ i ] ));
-                let tmp = Math.max( -1, Math.min( 1, d ) );
-                tmp = tmp < 0 ? ( tmp * hex_lo ) : ( tmp * hex_hi );
-                u8[ i ] = tmp / frac;
-              }
-
-              let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
-              ctx1.putImageData( imgData, 0, 0 );
-            } else if ( image.data && image.data.constructor === Uint8Array ) {
-              let imgData = new ImageData( new Uint8ClampedArray( image.data.buffer ), image.width, image.height );
-              ctx1.putImageData( imgData, 0, 0 );
-            } else {
-              ctx1.drawImage( image, 0, 0, image.width, image.height );
-            }
-
-            let base64data = canvas1.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
-            let a2b = atob( base64data );
-            let buff = new Uint8Array( a2b.length );
-
-            for ( let i = 0, l = buff.length; i < l; i ++ ) {
-              buff[ i ] = a2b.charCodeAt( i );
-            }
-
-            let blob = new Blob( [ buff ], { type: 'image/png' } );
-
-            img.src = URL.createObjectURL( blob );
-            URL.revokeObjectURL( blob );
-          }
-        });
-
-        // Dispose of current texture and return a new one
-
-        if (texture.isTexture) texture.dispose();
-
-        return tex;
       }
 
       function show_polar_grid() {

@@ -208,7 +208,7 @@
         height: 50vh;
         top: 50vh;
         left: 25vw;
-        padding: 10px;
+        padding: 5px;
         border: none;
       }
 
@@ -223,7 +223,7 @@
         height: 50vh;
         top: 50vh;
         left: 25vw;
-        padding: 10px;
+        padding: 5px;
         border: none;
       }
 
@@ -1782,13 +1782,9 @@
               // Encode a Gain map from EXR or HDR file
               // See the code example at: https://github.com/MONOGRID/gainmap-js
 
-              const textureMax = findTextureMinMax( image );
+              const textureMax = await findTextureMinMax( image, 'max' );
 
-              // Encode the gainmap
-              const encodingResult = encode({
-                image,
-                maxContentBoost: Math.max.apply( this, textureMax ) // this will encode the full HDR range
-              });
+              const encodingResult = encode( { image, maxContentBoost: Math.max.apply( this, textureMax ) } );
 
               // obtain the RAW RGBA SDR buffer and create an ImageData
               const sdrImageData = new ImageData( encodingResult.sdr.toArray(), encodingResult.sdr.width, encodingResult.sdr.height );
@@ -1826,12 +1822,12 @@
               });
 
               // jpeg will be a Uint8Array
-              const jpeg_file = new File( [ jpeg ], 'file.jpg' );
+              const jpeg_blob = new Blob( [ jpeg ], { type: 'image/jpeg' } );
 
               // load the encoded jpeg with HDRJPGLoader
 
-              hdrJPGLoader.load( URL.createObjectURL( jpeg_file ), async function( texture ) {
-                URL.revokeObjectURL( jpeg_file );
+              hdrJPGLoader.load( URL.createObjectURL( jpeg_blob ), async function( texture ) {
+                URL.revokeObjectURL( jpeg_blob );
 
                 let hdrJpgEquirectangularMap = await texture.toDataTexture();
 
@@ -2110,23 +2106,20 @@
         await new Promise( resolve => {
           loader.load( url, function( texture ) {
             texture.colorSpace = (hd === false) ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
-            resolve( tex = texture.clone() );
-            texture.dispose();
+            resolve( tex = texture.clone(), texture.dispose() );
           });
         });
 
-        let canvas_tex = await decompress( tex );
+        tex = await decompress( tex );
 
-        tex.dispose();
-
-        return canvas_tex;
+        return tex;
       }
 
       const extrudedImageGeometry = ({
         image,
-        depth = 1,
+        depth = 0.1,
         thresh = 255,
-        quadPerPixel = false,
+        quadPerPixel = false
       }) => {
         let canv = document.createElement( 'canvas' );
         let { width, height } = image;
@@ -2138,7 +2131,7 @@
         if ( image instanceof ImageData ) {
           ctx.putImageData( image, 0, 0 );
         } else if ( image.data && image.data.constructor === Uint8Array ) {
-          let imgData = new ImageData( new Uint8ClampedArray( image.data ), image.width, image.height );
+          let imgData = new ImageData( new Uint8ClampedArray( image.data.buffer ), image.width, image.height );
           ctx.putImageData( imgData, 0, 0 );
         } else {
           ctx.drawImage( image, 0, 0, canv.width, canv.height );
@@ -2235,7 +2228,7 @@
         return g;
       };
 
-      const createExtrudedImageMesh = async ( { url, depth = 0.1, quadPerPixel = false } ) => {
+      const createExtrudedImageMesh = async ( { url } ) => {
         let tex, hd = false;
 
         if (loader === dds_loader || loader === ktx2_loader) {
@@ -2257,7 +2250,7 @@
         // Mobile devices should be able to show 4k image in a mesh
         if (isMobile === true && (tex.image.width > A4K || tex.image.height > A4K)) {
           tex = await resize_texture( tex, A4K, tex.flipY === false, mime_type, true );
-        } else if (isNewiPad === true && tex.image.width > I8K || tex.image.height > I8K) {
+        } else if (isNewiPad === true && (tex.image.width > I8K || tex.image.height > I8K)) {
           tex = await resize_texture( tex, I8K, tex.flipY === false, mime_type, true );
         } else if (tex.image.width > D16K || tex.image.height > D16K) {
           tex = await resize_texture( tex, D16K, tex.flipY === false, mime_type, true );
@@ -2265,7 +2258,7 @@
 
         tex.colorSpace = (hd === false) ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
 
-        let g = extrudedImageGeometry( { image: tex.source.data, depth, quadPerPixel } );
+        let g = extrudedImageGeometry( { image: tex.source.data } );
 
         if (g === null) return null;
 
@@ -2286,7 +2279,7 @@
           '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.TIF', '.TIFF', '.WEBP' ];
 
         if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) {
-          let ext = (fn_uc.substring( fn_uc.lastIndexOf( '.' ) + 1)).toLowerCase();
+          let ext = (fn_uc.substring( fn_uc.lastIndexOf( '.' ) + 1 )).toLowerCase();
 
           if (fn_uc.endsWith( '.TIF' ) || fn_uc.endsWith( '.TIFF' )) {
             if (tiff_loader === undefined) {
@@ -2636,9 +2629,7 @@
 
       async function loadFile() {
         img_obj = await createExtrudedImageMesh({
-          url: zip_file !== null ? selected_img_file : URL.createObjectURL( local_files[ selected_img_file ] ),
-          depth: 0.1,
-          quadPerPixel: false,
+          url: zip_file !== null ? selected_img_file : URL.createObjectURL( local_files[ selected_img_file ] )
         });
 
         if (img_obj === null) return;
@@ -2686,9 +2677,7 @@
             if (filename.indexOf( '/' )) filename = filename.substring( filename.lastIndexOf( '/' ) + 1 );
 
             img_obj = await createExtrudedImageMesh({
-              url: selected_url_file,
-              depth: 0.1,
-              quadPerPixel: false,
+              url: selected_url_file
             });
 
             if (img_obj === null) return;
@@ -2945,12 +2934,11 @@
           let data;
 
           // Flip and scale the texture
-          let mime = await texture.getMimeType();
-          let blob = new Blob( [ texture.getImage() ], { type: mime } );
+          let blob = new Blob( [ texture.getImage() ], { type: mime_type } );
 
-          data = await transform_texture( blob, mime, tex_fmt, tex_flip );
+          data = await transform_texture( blob, mime_type, tex_fmt, tex_flip );
           texture.setImage( data[ 0 ] );
-          texture.setMimeType( mime );
+          texture.setMimeType( mime_type );
 
           if (tex_fmt.startsWith( 'ktx' )) {
             const { encodeToKTX2 } = await import( "ktx2-encoder" );
@@ -3046,6 +3034,9 @@
 
               const hd = ( mime_type.endsWith( '.exr' ) === true || mime_type.endsWith( '.hdr' ) === true );
 
+              const toHF = THREE.DataUtils.toHalfFloat;
+              const fromHF = THREE.DataUtils.fromHalfFloat;
+
               let data_texture;
 
               if (hd === true) {
@@ -3054,7 +3045,7 @@
                 let f32_array = new Float32Array( length );
 
                 for ( let i = 0; i < length; i++ ) {
-                  f32_array[ i ] = data[ 1 ].data[ i ] * 127.0 / ( data[ 1 ].data[ i ] > 127 ? 0x8000 : 0x7FFF );
+                  f32_array[ i ] = ( data[ 1 ].data[ i ] / 255.0 );
                 }
 
                 data_texture = new THREE.DataTexture(
@@ -3075,13 +3066,13 @@
                   hdrJPGLoader.load( URL.createObjectURL( url_blob ), async function( sdr ) {
                     URL.revokeObjectURL( url_blob );
 
-                    let data_tex = await sdr.toDataTexture();
+                    data_texture = await sdr.toDataTexture();
 
                     sdr.renderTarget.texture.dispose();
                     sdr.renderTarget.dispose();
                     sdr.dispose();
 
-                    resolve( data_texture = data_tex, data_tex.dispose() );
+                    resolve( data_texture );
                   });
                 });
               }
@@ -3108,7 +3099,7 @@
                   let f32Array = new Float32Array( rgbArray.length );
 
                   for ( let i = 0; i < rgbArray.length; i++ ) {
-                    f32Array[ i ] = await decodeFloat16( rgbArray[ i ] );
+                    f32Array[ i ] = fromHF( rgbArray[ i ] );
                   }
 
                   rgbArray.length = 0;
@@ -3151,10 +3142,12 @@
                 blob = new Blob( [ hdrFileArray ], { type: 'image/x.hdr' } );
 
                 hdr.length = 0;
+                hdrFileArray.length = 0;
+                headerUint8Array.length = 0;
               } else {
-                await new EXRExporter().parse( data_texture ).then( exr => {
-                  data_texture.dispose();
+                await new EXRExporter().parse( data_texture, { type: data_texture.type } ).then( exr => {
                   blob = new Blob( [ exr ], { type: 'image/x.exr' } );
+                  data_texture.dispose();
                 });
               }
             } else {
@@ -3263,7 +3256,7 @@
               if (return_base64 === false) {
                 resolve( tex = new THREE.CanvasTexture( image_bitmap ) );
               } else {
-                let canvas2 = document.createElement('canvas');
+                let canvas2 = document.createElement( 'canvas' );
 
                 canvas2.width = image_bitmap.width;
                 canvas2.height = image_bitmap.height;
@@ -3309,7 +3302,7 @@
               URL.revokeObjectURL( blob );
             }
           } else {
-            let canvas1 = document.createElement('canvas');
+            let canvas1 = document.createElement( 'canvas' );
 
             canvas1.width = image.width;
             canvas1.height = image.height;
@@ -3322,12 +3315,11 @@
               let f32 = image.data.constructor === Float32Array;
               let u8 = new Uint8Array( image.data.length );
               let fromHF = THREE.DataUtils.fromHalfFloat;
-              const hex_lo = 0x8000, hex_hi = 0x7FFF, frac = 128.0;
+              const ulo = -255, uhi = 255;
 
               for ( let i = 0; i < image.data.length; i ++ ) {
                 let tmp = Math.max( -1, Math.min( 1, f32 === true ? image.data[ i ] : fromHF( image.data[ i ] ) ) );
-                tmp = tmp < 0 ? ( tmp * hex_lo ) : ( tmp * hex_hi );
-                u8[ i ] = tmp / frac;
+                u8[ i ] = tmp < 0 ? ( tmp * ulo ) : ( tmp * uhi );
               }
 
               let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
@@ -3382,18 +3374,6 @@
         if (texture.isTexture) texture.dispose();
 
         return tex;
-      }
-
-      // Function decodeFloat16 from three.js EXR Exporter
-
-      async function decodeFloat16( binary ) {
-        let exponent = ( binary & 0x7C00 ) >> 10;
-        let fraction = binary & 0x03FF;
-
-        return ( binary >> 15 ? - 1 : 1 ) * ( exponent ?
-          ( exponent === 0x1F ? fraction ? NaN : Infinity :
-            Math.pow( 2, exponent - 15 ) * ( 1 + fraction / 0x400 )) :
-              6.103515625e-5 * ( fraction / 0x400 ));
       }
 
       function show_polar_grid() {
