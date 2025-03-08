@@ -245,7 +245,7 @@
       res[i*4]   = (r/s)|0;
       res[i*4+1] = (g/s)|0;
       res[i*4+2] = (b/s)|0;
-      res[i*4+3] = (ee+128);
+      res[i*4+3] = (ee+129);
     }
     return res;
   }
