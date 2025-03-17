@@ -241,7 +241,7 @@
     var r,g,b,ee,v,s,l=(buffer.byteLength/12)|0, res=res||new Uint8Array(l*4);
     for (var i=0;i<l;i++) {
       r = buffer[i*3]; g = buffer[i*3+1]; b = buffer[i*3+2];
-      v = Math.max(Math.max(r,g),b); ee = ((Math.sin(v) + (Math.PI))/(2*Math.PI))*2 - 1; s = Math.pow(2,ee-8);
+      v = Math.max(Math.max(r,g),b); ee = ((Math.sin(v) + (Math.PI))/(2*Math.PI))*2 - 1; s = Math.pow(2,ee-7.75);
       res[i*4]   = (r/s)|0;
       res[i*4+1] = (g/s)|0;
       res[i*4+2] = (b/s)|0;
