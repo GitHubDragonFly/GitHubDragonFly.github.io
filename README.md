@@ -11,7 +11,8 @@ This website is designed to serve as a hub with links to:
   - My repositories
   - Starry AI Night:
     - A poetic collaboration with AI (Microsoft Copilot and in part Google Gemini)
-    - Includes down-to-earth parts about Climate Change
+    - Space exploration with some quantum DNA computing considerations
+    - Also includes down-to-earth parts about Climate Change
   - Number Type Converter up to 128-bit
   - [nunuStudio](https://github.com/tentone/nunuStudio/tree/master/source/page/src/examples) games and experiences examples
   - FREE online in-browser [three.js](https://threejs.org) based `3D Model` and `Texture` viewers
