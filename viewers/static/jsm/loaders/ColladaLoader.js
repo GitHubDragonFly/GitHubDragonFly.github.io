@@ -43,8 +43,8 @@ import {
 	VectorKeyframeTrack
 } from "three";
 
-import { TGALoader } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/loaders/TGALoader.min.js";
-import { DDSLoader } from "https://cdn.jsdelivr.net/npm/three@0.163.0/examples/jsm/loaders/DDSLoader.min.js";
+import { TGALoader } from "three/addons/loaders/TGALoader.min.js";
+import { DDSLoader } from "three/addons/loaders/DDSLoader.min.js";
 
 class ColladaLoader extends Loader {
 

@@ -28,7 +28,7 @@ import {
 	Vector2
 } from "three";
 
-import { EXRLoader } from "https://cdn.jsdelivr.net/npm/three@0.164.0/examples/jsm/loaders/EXRLoader.min.js";
+import { EXRLoader } from "three/addons/loaders/EXRLoader.min.js";
 
 const _taskCache = new WeakMap();
 
