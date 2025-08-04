@@ -9,7 +9,7 @@ import {
 
 import { deinterleaveAttribute } from "three/addons/utils/BufferGeometryUtils.min.js";
 
-import * as rhino3dm from "https://cdn.jsdelivr.net/npm/rhino3dm@8.9.0/rhino3dm.module.min.js";
+import * as rhino3dm from "https://cdn.jsdelivr.net/npm/rhino3dm@8.17.0/rhino3dm.module.min.js";
 
 async function import_decompress() {
 
