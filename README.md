@@ -14,10 +14,15 @@ This website is designed to serve as a hub with links to:
     - English and Srpsko-Hrvatski (ijekavska Latinica / Ћирилица) versions
     - Cosmic exploration with some quantum DNA computing considerations
     - Includes somewhat special vision of divine and Kardashev Scale
-    - Also includes down-to-earth contemplation:
-      - Preservation of Earth as primary goal
-      - Additional Climate Change reading in English only (no sugarcoating here so consider well whether to read it at all)
-    - Audio narration available in English only, separated into Poem and Appendicies
+    - Audio narration available in English only, separated into Poem and Appendices
+    - The collection of appendices reflects a journey of thought and includes:
+      - Steps on achieving the `impossible dream`
+      - Celestial illusion of angelic Moon
+      - Idea of repurposing the International Space Station (ISS)
+      - Down-to-earth contemplation:
+        - Preservation of Earth as primary goal
+        - Additional Climate Change reading in English only (no sugarcoating here so consider well whether to read it at all)
+      - Opinion on artificial minds (AI)
   - Number Type Converter up to 128-bit
   - [nunuStudio](https://github.com/tentone/nunuStudio/tree/master/source/page/src/examples) games and experiences examples
   - FREE online in-browser [three.js](https://threejs.org) based `3D Model` and `Texture` viewers
