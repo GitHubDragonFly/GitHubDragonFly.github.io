@@ -20,15 +20,19 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var THREE, texture_loader, obj_loader, mtl_loader, dds_loader, ktx2_loader, tga_loader;
-      var manager, file_loader, uSync, strU8, renderer, scene, camera, Obj, render_requested;
-      var ambientLight, directionalLight, bounding_box, flat_shading_enabled;
+      var texture_loader, obj_loader, mtl_loader, dds_loader, exr_loader, rgbe_loader, ktx2_loader, tga_loader;
+      var THREE, manager, file_loader, uSync, strU8, renderer, scene, camera, Obj, render_requested;
+      var ambientLight, directionalLight, bounding_box, flat_shading_enabled, exr_or_hdr;
       var controls, mouse_down, mouse_wheel, events_initialized;
       var ww = window.innerWidth, wh = window.innerHeight, isMobile, map_strings;
       var first_run = false, fr_count = 0, wireframe_enabled, count = 0;
       var selected_mtl_file, selected_mtl_url_file, selected_obj_file, zip_file, textures;
       var url_displayed = false, url_loading = false, vertex_colors_enabled, texture_maps;
       var selected_url_file = '', selected_obj_url_file, local_files, local_files_indexes;
+
+      const M2K = 2048; // Mobile 2k limit
+      const I8K = 8192; // iPad 8k limit
+      const D16K = 16384; // Desktop 16k limit
     </script>
 
     <script type="module">
@@ -204,7 +208,7 @@
         <label for="btn_url" title="Get remote model via URL"></label>
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="btn_file_input" title="Browse Local Files"></label>
-        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".zip, .obj, .mtl, .avif, .dds, .dib, .ktx2, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".zip, .obj, .mtl, .avif, .dds, .dib, .exr, .hdr, .ktx2, .tga, image/png, image/jpeg, image/bmp, image/gif, image/svg+xml, image/webp" multiple />
         <label for="back_color" title="Background Color">B</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
@@ -434,10 +438,11 @@
       }
 
       async function process_loaded_zip( z_file ) {
-        let image_extensions = [ '.avif', '.bmp', '.dds', '.dib', '.gif', '.jpg', '.jpeg', '.jfif',
+        let image_extensions = [ '.avif', '.bmp', '.dds', '.dib', '.exr', '.hdr', '.gif', '.jpg', '.jpeg', '.jfif',
           '.ktx2', '.pjpeg', '.pjp', '.png', '.svg', '.tga', '.webp' ];
 
         let mime_type = 'image/';
+        let max_size = (isMobile === true ? M2K : (isNewiPad === true ? I8K : D16K));
 
         for ( const key of Object.keys( z_file ) ) {
 
@@ -469,6 +474,11 @@
                 mime_type += 'bmp';
                 break;
 
+              case 'exr':
+              case 'hdr':
+                mime_type += 'x.' + ext;
+                break;
+
               case 'svg':
                 mime_type += 'svg+xml';
                 break;
@@ -484,11 +494,33 @@
                 break;
             }
 
-            // handle DDS, KTX2 and TGA separately
-            if ( ext === 'dds' || ext === 'ktx2' || ext === 'tga' ) {
-              let loader = (ext === 'dds') ? dds_loader : ((ext === 'ktx2') ? ktx2_loader : tga_loader);
+            let separate_extensions = [ 'dds', 'exr', 'hdr', 'ktx2', 'tga' ];
 
-              let tex, dds, ktx2;
+            // handle DDS, EXR, HDR, KTX2 and TGA separately
+            if ( separate_extensions.some( s_ext => s_ext === ext ) ) {
+              let loader, tex, dds, ktx2;
+
+              switch ( ext ) {
+                case 'dds':
+                  loader = dds_loader;
+                  break;
+
+                case 'exr':
+                  loader = exr_loader;
+                  break;
+
+                case 'hdr':
+                  loader = rgbe_loader;
+                  break;
+
+                case 'tga':
+                  loader = tga_loader;
+                  break;
+
+                default:
+                  loader = ktx2_loader;
+                  break;
+              }
 
               if ( ext === 'tga' ) {
                 tex = loader.parse( z_file[ key ].buffer );
@@ -513,6 +545,19 @@
                 let canvas_tex = await decompress( tex );
 
                 textures[ texture_path ] = canvas_tex.image.toDataURL( 'image/png', 1 );
+              } else if ( ext === 'exr' || ext === 'hdr' ) {
+                tex = await loader.parse( z_file[ key ].buffer );
+
+                let m_type = ext === 'exr' ? 'image/x.exr' : 'image/x.hdr';
+                let tex_max = Math.min( max_size, Math.max( tex.width, tex.height ) );
+
+                // convert EXR or HDR to PNG
+                tex = new THREE.DataTexture( tex.data, tex.width, tex.height, THREE.RGBAFormat, THREE.HalfFloatType );
+                tex.needsUpdate = true;
+
+                textures[ texture_path ] = await resize_texture( tex, tex_max, false, m_type, false, false, true );
+
+                exr_or_hdr = true;
               } else {
                 await new Promise( resolve => {
                   loader.parse( z_file[ key ].buffer, function( texture ) {
@@ -572,6 +617,18 @@
           manager.addHandler( /\.tga$/i, tga_loader );
         }
 
+        if (exr_loader === undefined) {
+          const { EXRLoader } = await import( "three/addons/loaders/EXRLoader.min.js" );
+          exr_loader = new EXRLoader( manager );
+          manager.addHandler( /\.exr$/i, exr_loader );
+        }
+
+        if (rgbe_loader === undefined) {
+          const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
+          rgbe_loader = new RGBELoader( manager );
+          manager.addHandler( /\.hdr$/i, rgbe_loader );
+        }
+
         obj_loader.setMaterials( null );
 
         selected_obj_file = null;
@@ -584,6 +641,7 @@
         textures = {};
         mouse_down = false;
         mouse_wheel = true;
+        exr_or_hdr = false;
         flat_shading_enabled = false;
         vertex_colors_enabled = false;
         wireframe_enabled = false;
@@ -619,11 +677,13 @@
         }
 
         if (url_loading === false) {
-          let img_extensions = [ '.AVIF', '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF',
+          let img_extensions = [ '.AVIF', '.BMP', '.DDS', '.DIB', '.EXR', '.GIF', '.HDR', '.JPG', '.JPEG', '.JFIF',
             '.KTX2', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
 
           // Loaded file(s)
           local_files = document.getElementById('file_input').files;
+
+          let max_size = (isMobile === true ? M2K : (isNewiPad === true ? I8K : D16K));
 
           for (let i = 0; i < local_files.length; i++) {
             let fn_uc = local_files[ i ].name.toUpperCase();
@@ -635,22 +695,57 @@
               let url = URL.createObjectURL( local_files[ i ] );
               local_files_indexes.push( i );
 
-              // handle DDS, KTX2 and TGA separately
-              if ( fn_uc.endsWith('.DDS') || fn_uc.endsWith('.KTX2') || fn_uc.endsWith('.TGA') ) {
-                let loader = fn_uc.endsWith('.DDS') ? dds_loader : (fn_uc.endsWith('.TGA') ? tga_loader : ktx2_loader);
+              let separate_extensions = [ '.DDS', '.EXR', '.HDR', '.KTX2', '.TGA' ];
 
-                let ctex, canvas_tex;
+              // handle DDS, EXR, HDR, KTX2 and TGA separately
+              if ( separate_extensions.some( ext => fn_uc.endsWith( ext ) ) ) {
+                let loader, ctex, ext = fn_uc.slice( -3 );
+
+                switch ( ext ) {
+                  case 'DDS':
+                    loader = dds_loader;
+                    break;
+
+                  case 'EXR':
+                    loader = exr_loader;
+                    break;
+
+                  case 'HDR':
+                    loader = rgbe_loader;
+                    break;
+
+                  case 'TGA':
+                    loader = tga_loader;
+                    break;
+
+                  default:
+                    loader = ktx2_loader;
+                    break;
+                }
 
                 await new Promise( resolve => {
                   loader.load( url, function( texture ) {
-                    resolve( ctex = texture );
+                    resolve( ctex = texture.clone(), texture.dispose() );
                   });
                 });
 
-                // All loaders will provide a compressed texture so we can just decompress it
-                canvas_tex = await decompress( ctex );
+                // DDS, KTX2 and TGA loaders will provide compressed texture so we can use decompress function
+                // EXR and RGBE loaders will provide data texture so we can use resize_texture function
 
-                textures[ local_files[ i ].name ] = canvas_tex.image.toDataURL( 'image/png', 1 );
+                if (ext === 'EXR' || ext === 'HDR') {
+                  let tex_max = Math.min( max_size, Math.max( ctex.image.width, ctex.image.height ) );
+                  let m_type = ext === 'EXR' ? 'image/x.exr' : 'image/x.hdr';
+
+                  textures[ local_files[ i ].name ] = await resize_texture( ctex, tex_max, false, m_type, false, false, true  );
+
+                  exr_or_hdr = true;
+                } else {
+                  ctex = await decompress( ctex );
+
+                  textures[ local_files[ i ].name ] = ctex.image.toDataURL( 'image/png', 1 );
+
+                  ctex.dispose();
+                }
               } else {
                 let blob = new Blob( [ await local_files[ i ].arrayBuffer() ], { type: local_files[ i ].type } );
                 textures[ local_files[ i ].name ] = URL.createObjectURL( blob );
@@ -1069,8 +1164,8 @@
       }
 
       function set_texture_colorSpace( material ) {
-        if (material.map && (!material.map.colorSpace || material.map.colorSpace === 'NoColorSpace')) {
-          material.map.colorSpace = THREE.SRGBColorSpace;
+        if (material.map && (!material.map.colorSpace || material.map.colorSpace !== 'srgb-linear')) {
+          material.map.colorSpace = exr_or_hdr === false ? THREE.SRGBColorSpace : THREE.LinearSRGBColorSpace;
         }
 
         if (material.aoMap && (!material.aoMap.colorSpace || material.aoMap.colorSpace === 'NoColorSpace')) {
@@ -1203,6 +1298,163 @@
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
+      }
+
+      async function resize_texture( texture, res = M2K, tex_flip = false, m_type = 'image/png', pass_to_img = false, return_bitmap = false, return_base64 = false ) {
+        const image = texture.image;
+        const image_orientation = (tex_flip === false ? 'flipY' : 'none');
+
+        let image_types = [ 'avif', 'bmp', 'gif', 'jpeg', 'png', 'svg+xml', 'webp' ];
+        let img_ext = m_type ? image_types.some( ext => m_type.endsWith( ext ) ) : false;
+        image_types.length = 0;
+
+        let tex, img = new Image();
+
+        await new Promise( async resolve => {
+          img.onload = async function() {
+            const scale = res / Math.max( img.naturalWidth, img.naturalHeight );
+
+            let options;
+
+            if (scale >= 1) {
+              options = {
+                imageOrientation: image_orientation
+              };
+            } else {
+              const width = img.naturalWidth * Math.min( 1, scale );
+              const height = img.naturalHeight * Math.min( 1, scale );
+
+              options = {
+                imageOrientation: image_orientation,
+                resizeWidth: width,
+                resizeHeight: height,
+                resizeQuality: 'high'
+              };
+            }
+
+            const image_bitmap = await createImageBitmap( img, options );
+
+            if (return_bitmap === false) {
+              if (return_base64 === false) {
+                resolve( tex = new THREE.CanvasTexture( image_bitmap ) );
+              } else {
+                let canvas2 = document.createElement('canvas');
+
+                canvas2.width = image_bitmap.width;
+                canvas2.height = image_bitmap.height;
+
+                let ctx2 = canvas2.getContext( '2d', { willReadFrequently: true } );
+
+                ctx2.drawImage( image_bitmap, 0, 0, canvas2.width, canvas2.height );
+
+                resolve( tex = canvas2.toDataURL( 'image/png', 1 ), image_bitmap.close() );
+              }
+            } else {
+              resolve( tex = image_bitmap );
+            }
+          }
+
+          if ( image.src ) {
+            img.src = image.src;
+          } else if ( image.data && (img_ext === true || pass_to_img === true) ) {
+            let blob = new Blob( [ image.data ], { type: m_type } );
+            img.src = URL.createObjectURL( blob );
+            URL.revokeObjectURL( blob );
+          } else if (texture.source.data.nodeName && texture.source.data.nodeName.toLowerCase() === 'canvas') {
+            if ((res / Math.max( image.width, image.height )) >= 1) {
+              if (return_base64 === true) {
+                resolve( tex = texture.source.data.toDataURL( 'image/png', 1 ) );
+              } else {
+                const image_bitmap = await createImageBitmap( texture.source.data, { imageOrientation: image_orientation } );
+                resolve( tex = ( return_bitmap === true ? image_bitmap :new THREE.CanvasTexture( image_bitmap ) ) );
+              }
+            } else {
+              let base64data = texture.source.data.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
+              let a2b = atob( base64data );
+              let buff = new Uint8Array( a2b.length );
+
+              for ( let i = 0, l = buff.length; i < l; i ++ ) {
+                buff[ i ] = a2b.charCodeAt( i );
+              }
+
+              let blob = new Blob( [ buff ], { type: 'image/png' } );
+
+              img.src = URL.createObjectURL( blob );
+              URL.revokeObjectURL( blob );
+            }
+          } else {
+            let canvas1 = document.createElement('canvas');
+
+            canvas1.width = image.width;
+            canvas1.height = image.height;
+
+            let ctx1 = canvas1.getContext( '2d', { willReadFrequently: true } );
+
+            if ( image instanceof ImageData ) {
+              ctx1.putImageData( image, 0, 0 );
+            } else if ( image.data && ( image.data.constructor === Float32Array || image.data.constructor === Uint16Array ) ) {
+              let f32 = image.data.constructor === Float32Array;
+              let u8 = new Uint8Array( image.data.length );
+              let fromHF = THREE.DataUtils.fromHalfFloat;
+              const ulo = -255, uhi = 255;
+
+              for ( let i = 0; i < image.data.length; i ++ ) {
+                let tmp = Math.max( -1, Math.min( 1, f32 === true ? image.data[ i ] : fromHF( image.data[ i ] ) ) );
+                u8[ i ] = tmp < 0 ? ( tmp * ulo ) : ( tmp * uhi );
+              }
+
+              let imgData = new ImageData( new Uint8ClampedArray( u8.buffer ), image.width, image.height );
+              ctx1.putImageData( imgData, 0, 0 );
+            } else if ( image.data && image.data.constructor === Uint8Array ) {
+              let max_length = Math.min( image.data.byteLength, image.width * image.height * 4 );
+              let imgData = new ImageData( new Uint8ClampedArray( image.data.buffer, image.data.byteOffset, max_length ), image.width, image.height );
+              ctx1.putImageData( imgData, 0, 0 );
+            } else {
+              ctx1.drawImage( image, 0, 0, canvas1.width, canvas1.height );
+            }
+
+            const scale = res / Math.max( image.width, image.height );
+
+            let options;
+
+            if (scale >= 1) {
+              options = {
+                imageOrientation: image_orientation
+              };
+            } else {
+              const width = image.width * Math.min( 1, scale );
+              const height = image.height * Math.min( 1, scale );
+
+              options = {
+                imageOrientation: image_orientation,
+                resizeWidth: width,
+                resizeHeight: height,
+                resizeQuality: 'high'
+              };
+            }
+
+            const image_bitmap = await createImageBitmap( canvas1, options );
+
+            if (return_bitmap === true) resolve( tex = image_bitmap );
+            else if (return_base64 === false) resolve( tex = new THREE.CanvasTexture( image_bitmap ) );
+            else {
+              ctx1.clearRect( 0, 0, canvas1.width, canvas1.height );
+
+              canvas1.width = image_bitmap.width;
+              canvas1.height = image_bitmap.height;
+
+              ctx1.drawImage( image_bitmap, 0, 0, canvas1.width, canvas1.height );
+
+              resolve( tex = canvas1.toDataURL( 'image/png', 1 ), image_bitmap.close() );
+            }
+          }
+        });
+
+        // Dispose of current texture and return a new one
+
+        if (texture.isTexture) texture.dispose();
+
+        return tex;
       }
 
       function quick_x_rotation( angle ) {
@@ -1406,9 +1658,11 @@
 
     <script>
       function document_ready() {
-        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
-          (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
+        isNewiPad = (/iPad/.test( navigator.platform ) && (/Mac OS X/i.test( navigator.userAgent ))) ||
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        isMobile = isNewiPad === false && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
 
         map_strings = [ 'bump', 'map_bump', 'disp', 'map_disp', 'norm', 'map_kn', 'map_d', 'map_ka', 'map_kd',
   				'map_ke', 'map_emissive', 'map_ks', 'map_ns', 'map_pa', 'map_pi', 'map_pit', 'map_px', 'map_pm', 'map_pr',
