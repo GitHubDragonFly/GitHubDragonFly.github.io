@@ -5,7 +5,7 @@ Even though this is all usable, none of it is perfect so try to set your expecta
 
 The description below is a bit lengthy but should provide pertinent information.
 
-Pictures or intro video might not reflect the current looks of any GUI.
+Pictures and/or intro video might not reflect the current looks of any GUI.
 
 This website is designed to serve as a hub with links to:
   - My repositories
@@ -16,8 +16,8 @@ This website is designed to serve as a hub with links to:
     - Includes somewhat special vision of divine and Kardashev Scale
     - Audio narration available in English only, separated into Poem and Appendices
     - The collection of appendices reflects a journey of thought and includes:
-      - Steps on achieving the `impossible dream`
-      - Celestial illusion of angelic Moon
+      - Steps on achieving the `impossible dream` of space exploration (currently rather distant future)
+      - Celestial illusion of angelic Moon and human perspective of it
       - Idea of repurposing the International Space Station (ISS)
       - Down-to-earth contemplation:
         - Preservation of Earth as primary goal
