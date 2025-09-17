@@ -12,6 +12,7 @@ Else, most of the passive links below are of the actual models so copy any of th
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gcode/benchy.gcode`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/fbx/Samba Dancing.fbx`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pdb/aspirin.pdb`
+  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/svg/tiger.svg`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ply/binary/Lucy100k.ply`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/stl/binary/colored.stl`
   - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3dm/Rhino_Logo.3dm`
@@ -76,7 +77,7 @@ Else, most of the passive links below are of the actual models so copy any of th
 - other examples:
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.obj`
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/dds/male02.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/dds/male02.obj`
-  - https://github.com/kovacsv/Online3DViewer/tree/master/website/assets/models
+  - `https://github.com/kovacsv/Online3DViewer/tree/master/website/assets/models`
   - `https://raw.githubusercontent.com/robertlong/GLTFExporterTextureSizes/master/BlendToFBX/Atrium.fbx`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/three/scene.json`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/vrml/cow.wrl`
