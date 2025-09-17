@@ -76,6 +76,7 @@ Else, most of the passive links below are of the actual models so copy any of th
 - other examples:
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/legobrick/legobrick.obj`
   - `https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/dds/male02.mtl, https://raw.githubusercontent.com/GitHubDragonFly/HTML_CSS_JS/main/Files/Images/obj/male02/dds/male02.obj`
+  - https://github.com/kovacsv/Online3DViewer/tree/master/website/assets/models
   - `https://raw.githubusercontent.com/robertlong/GLTFExporterTextureSizes/master/BlendToFBX/Atrium.fbx`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/three/scene.json`
   - `https://raw.githubusercontent.com/alteredq/model-tag/master/models/vrml/cow.wrl`
