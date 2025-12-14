@@ -381,7 +381,7 @@ Number Type Converter
         - Custom three.js compatible BIM Loader is also available
       - Alternative [three-iges-loader](https://github.com/Konsept-Design/three-iges-loader) when the main loader errors out
 - Export formats, where applicable:
-  - 3DM, 3MF, AMF, BIM, DAE, APNG, FBX, STEP, X3D, X, ASSJSON, GIF, GLB, GLTF, JSON, OBJ + MTL, OFF, PLY, STL, PRWM, USDZ
+  - 3DM, 3MF, AMF, BIM, DAE, APNG, FBX, STEP, X3D, X, ASSJSON, GCODE, GIF, GLB, GLTF, JSON, OBJ + MTL, OFF, PLY, STL, PRWM, USDZ
     - OFF exports are only available in the Quick Viewer, as stated further above
     - BIM exports are available in the Quick Viewer as well as some other viewers with custom BIM Exporter
     - 3MF exporter was created with assistance from Microsoft Copilot:
@@ -406,6 +406,7 @@ Number Type Converter
       - GLTFS Viewer might produce richer colors in exported 3DM models than GLTF Viewer
       - USDZ Viewer appears to produce more accurate output than other viewers
       - Exported 3dm files might not show properly in any other 3rd party 3DM viewer
+    - GCODE exports are powered by [Polyslice](https://github.com/jgphilpott/polyslice)
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
     - ASSJSON, FBX, STEP, X3D and X exports are powered by [ASSIMPJS](https://github.com/kovacsv/assimpjs) and [ASSIMP](https://github.com/assimp/assimp):
       - STEP exports don't appear to be optimizied in the assimp library so use only if needed
