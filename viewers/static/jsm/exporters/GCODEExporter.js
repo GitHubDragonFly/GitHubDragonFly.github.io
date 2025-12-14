@@ -3,13 +3,23 @@ import Polyslice from "https://cdn.jsdelivr.net/npm/@jgphilpott/polyslice@25.12.
 
 /**
 *
-*	Based on: https://github.com/jgphilpott/polyslice
+*	Based on: https://github.com/jgphilpott/polyslice:
+*
+*		- Printer defaults to: Ender3
+*		- See documentation for other preconfigured printers:
+*		- https://github.com/jgphilpott/polyslice/blob/dc361b12793fa29f7887da14adc1ae3497ba21b2/docs/config/PRINTER.md
+*
+*		- Filament defaults to: GenericPLA
+*		- See documentation for other preconfigured filaments:
+*		- https://github.com/jgphilpott/polyslice/blob/dc361b12793fa29f7887da14adc1ae3497ba21b2/docs/config/FILAMENT.md
 *
 *	Example Usage:
 *
 *		const { GcodeExporter } = await import( "path-to-exporter/GCODEExporter.js" );
 *
 *		const exporter = new GcodeExporter();
+*
+*		// Optional: here you could change printer and/or filament options
 *		const options = { printer: 'CR10', filament: 'PrusamentPLA' };
 *
 *		exporter.parse( scene, function( text ) {
@@ -43,33 +53,24 @@ class GcodeExporter {
 
 	async parseAsync( scene, onDone, onError, options = {} ) {
 
-		try {
+		// Check if Polyslice is loaded
 
-			// Check if Polyslice is loaded
+		if ( typeof Polyslice === 'undefined' ) {
 
-			if ( typeof Polyslice === 'undefined' ) {
+			alert( 'Polyslice library failed to load.\n\nCheck your network connection.' );
 
-				alert( 'Polyslice library failed to load.\n\nCheck your network connection.' );
-				return;
+			if ( typeof onError === 'function' ) {
+
+				onError( 'THREE.GCODEExporter: Polyslice library failed to load!' );
+				return null;
+
+			} else {
+
+				throw new Error( 'THREE.GCODEExporter: Polyslice library failed to load!' );
+
 			}
 
-		} catch ( error ) {
-
-			alert( 'Polyslice external library is required!' );
-			console.log(error);
-			return;
-
 		}
-
-		const scope = this;
-
-		// Printer defaults to: 'Ender3'
-		// See documentation for other preconfigured printers:
-		// https://github.com/jgphilpott/polyslice/blob/dc361b12793fa29f7887da14adc1ae3497ba21b2/docs/config/PRINTER.md
-
-		// Filament defaults to: 'GenericPLA'
-		// See documentation for other preconfigured filaments:
-		// https://github.com/jgphilpott/polyslice/blob/dc361b12793fa29f7887da14adc1ae3497ba21b2/docs/config/FILAMENT.md
 
 		const defaultOptions = {
 			printer: 'Ender3',
@@ -92,15 +93,18 @@ class GcodeExporter {
 
 		let mesh_count = 0, gcode = '';
 
+		scene.updateMatrixWorld( true, true );
+
 		function parse_objects() {
 
 			scene.traverse( function ( object ) {
 
-				if ( object.isMesh ) {
+				if ( object.isMesh && object.geometry ) {
 
 					mesh_count ++;
 
-					gcode = slicer.slice( object );
+					const cloned = object.clone();
+					gcode += slicer.slice( cloned ) + '\n';
 
 				}
 
