@@ -406,7 +406,9 @@ Number Type Converter
       - GLTFS Viewer might produce richer colors in exported 3DM models than GLTF Viewer
       - USDZ Viewer appears to produce more accurate output than other viewers
       - Exported 3dm files might not show properly in any other 3rd party 3DM viewer
-    - GCODE exports are powered by [Polyslice](https://github.com/jgphilpott/polyslice)
+    - GCODE exports are powered by [Polyslice](https://github.com/jgphilpott/polyslice):
+      - Single mesh model should be optimal for conversion
+      - Group or merge multiple mesh model before exporting
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
     - ASSJSON, FBX, STEP, X3D and X exports are powered by [ASSIMPJS](https://github.com/kovacsv/assimpjs) and [ASSIMP](https://github.com/assimp/assimp):
       - STEP exports don't appear to be optimizied in the assimp library so use only if needed
