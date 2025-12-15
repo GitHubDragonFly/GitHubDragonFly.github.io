@@ -114,16 +114,16 @@ class GcodeExporter {
 
 		parse_objects();
 
-		if ( mesh_count === 0 ) {
+		if ( mesh_count === 0 || gcode.trim().length === 0 ) {
 
 			if ( typeof onError === 'function' ) {
 
-				onError( 'THREE.GCODEExporter: No qualifying objects found!' );
+				onError( 'THREE.GCODEExporter: No qualifying objects found or G-code generation failed!' );
 				return null;
 
 			} else {
 
-				throw new Error( 'THREE.GCODEExporter: No qualifying objects found!' );
+				throw new Error( 'THREE.GCODEExporter: No qualifying objects found or G-code generation failed!' );
 
 			}
 
