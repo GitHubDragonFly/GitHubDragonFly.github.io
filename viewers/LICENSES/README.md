@@ -19,6 +19,8 @@ Google's [Model Viewer](https://github.com/google/model-viewer) element Apache L
 
 [@jsquash/avif](https://github.com/jamsinclair/jSquash) Apache License, Version 2.0 can be seen [here](https://www.apache.org/licenses/LICENSE-2.0)
 
+[Polyslice](https://github.com/jgphilpott/polyslice) MIT license can be seen [here](https://github.com/jgphilpott/polyslice?tab=MIT-1-ov-file#readme)
+
 [ktx2-encoder](https://github.com/gz65555/ktx2-encoder) MIT license can be seen [here](https://github.com/gz65555/ktx2-encoder?tab=MIT-1-ov-file#readme)
 
 [hdrpng](https://github.com/enkimute/hdrpng.js/) MIT license can be seen [here](https://github.com/enkimute/hdrpng.js/?tab=MIT-1-ov-file#readme)
