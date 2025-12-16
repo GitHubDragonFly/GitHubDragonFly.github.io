@@ -391,6 +391,7 @@ Number Type Converter
         - The model should be centered on the screen and sized to approximately 512 x 512 pixels
         - Most of the desktop viewers include this exporter as well as support for exporting thumbnail
       - Should be pretty much at par with three.js 3MF Loader
+      - Alternatively try using [three-3mf-exporter](https://github.com/littlesound/bekuto3d)
     - AMF exporter was created with assistance from Microsoft Copilot:
       - This is a custom exporter not officially available in the three.js library
       - It supports basic features: meshes, material arrays and material colors
