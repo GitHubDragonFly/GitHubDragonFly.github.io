@@ -1,5 +1,5 @@
 import { DefaultLoadingManager } from "three";
-import Polyslice from "https://cdn.jsdelivr.net/npm/@jgphilpott/polyslice@25.12.8/dist/index.browser.esm.js";
+import Polyslice from "https://cdn.jsdelivr.net/npm/@jgphilpott/polyslice@25.12.9/dist/index.browser.esm.js";
 
 /**
 *
