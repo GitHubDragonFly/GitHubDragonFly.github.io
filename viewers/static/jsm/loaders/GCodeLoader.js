@@ -36,6 +36,7 @@ class GCodeLoader extends Loader {
 			const scope = this;
 
 			const loader = new FileLoader( scope.manager );
+			loader.setPath( scope.path );
 			loader.setResponseType( 'text' );
 			loader.setRequestHeader( scope.requestHeader );
 			loader.setWithCredentials( scope.withCredentials );
