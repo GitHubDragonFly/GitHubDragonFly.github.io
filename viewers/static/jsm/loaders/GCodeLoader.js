@@ -39,14 +39,14 @@ class GCodeLoader extends Loader {
 			loader.setPath( scope.path );
 			loader.setRequestHeader( scope.requestHeader );
 			loader.setWithCredentials( scope.withCredentials );
+
 			loader.load( url, function ( text ) {
 
 				try {
-				
-					onLoad( scope.parse( text ) );
-				
-					// console.log(text);
-				
+
+					const lines = text.replace( /;.+/g, '' ).split( '\n' );
+					const gcode = scope.parse( lines );
+					onLoad( gcode );
 
 				} catch ( e ) {
 
@@ -68,8 +68,9 @@ class GCodeLoader extends Loader {
 
 		}
 	
+		parse( lines ) {
 
-		parse( data ) {
+			let cmd;
 
 			let state = { x: 0, y: 0, z: 0, e: 0, f: 0, i: 0, j: 0, extruding: false, relative: false };
 			const layers = [];
@@ -81,6 +82,9 @@ class GCodeLoader extends Loader {
 
 			const extrudingMaterial = new LineBasicMaterial( { color: 0x15A515 } );
 			extrudingMaterial.name = 'extruded';
+
+			const object = new Group();
+			object.name = 'gcode';
 
 			function newLayer( line ) {
 
@@ -123,12 +127,12 @@ class GCodeLoader extends Loader {
 				return state.relative ? v1 + v2 : v2;
 
 			}
-		
-			let cmd;
-			const lines = data.replace( /;.+/g, '' ).split( '\n' );
-			for ( let i = 0; i < lines.length; i ++ ) {
 
-				const tokens = lines[ i ].split( ' ' );
+			const regEx = /(([XxYyZz]) *(-?\d+.?\d*)) *(([XxYyZz]) *(-?\d+.?\d*))? *(([XxYyZz]) *(-?\d+.?\d*))?/g;
+
+			for ( const gcode_line of lines ) {
+
+				const tokens = gcode_line.split( ' ' );
 				cmd = tokens[ 0 ].toUpperCase();
 
 				//Argumments
@@ -144,10 +148,11 @@ class GCodeLoader extends Loader {
 					}
 
 				} );
+
 				//Process commands
+
 				//G0/G1 – Linear Movement
-				if ( cmd === 'G00' || cmd === 'G0' || cmd === 'G01' || cmd==='G1' ||
-						/(([XxYyZz]) *(-?\d+.?\d*)) *(([XxYyZz]) *(-?\d+.?\d*))? *(([XxYyZz]) *(-?\d+.?\d*))?/g.test(cmd) ) {
+				if ( cmd === 'G00' || cmd === 'G0' || cmd === 'G01' || cmd==='G1' || regEx.test(cmd) ) {
 
 					const line = {
 						x: args.x !== undefined ? absolute( state.x, args.x ) : state.x,
@@ -160,7 +165,7 @@ class GCodeLoader extends Loader {
 					//Layer change detection is or made by watching Z, it's made by watching when we extrude at a new Z position
 					if ( delta( state.e, line.e ) > 0 ) {
 
-						state.extruding = delta( state.e, line.e ) > 0;
+						state.extruding = true;
 
 						if ( currentLayer == undefined || line.z != currentLayer.z ) {
 
@@ -186,7 +191,7 @@ class GCodeLoader extends Loader {
 					
 						if ( delta( state.e, line.e ) > 0 ) {
 
-							state.extruding = delta( state.e, line.e ) > 0;
+							state.extruding = true;
 	
 							if ( currentLayer == undefined || line.z != currentLayer.z ) {
 	
@@ -256,9 +261,6 @@ class GCodeLoader extends Loader {
 
 			}
 
-			const object = new Group();
-			object.name = 'gcode';
-
 			if ( this.splitLayer ) {
 
 				for ( let i = 0; i < layers.length; i ++ ) {
@@ -271,18 +273,16 @@ class GCodeLoader extends Loader {
 
 			} else {
 
-				const vertex = [],
-					pathVertex = [];
+				const vertex = [], pathVertex = [];
 
-				for ( let i = 0; i < layers.length; i ++ ) {
+				for ( const layer of layers ) {
 
-					const layer = layers[ i ];
 					const layerVertex = layer.vertex;
 					const layerPathVertex = layer.pathVertex;
 
-					for ( let j = 0; j < layerVertex.length; j ++ ) {
+					for ( let i = 0; i < layerVertex.length; i ++ ) {
 
-						vertex.push( layerVertex[ j ] );
+						vertex.push( layerVertex[ i ] );
 
 					}
 
