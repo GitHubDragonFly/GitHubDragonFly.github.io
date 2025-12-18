@@ -36,7 +36,7 @@ class GCodeLoader extends Loader {
 			const scope = this;
 
 			const loader = new FileLoader( scope.manager );
-			loader.setPath( scope.path );
+			loader.setResponseType( 'text' );
 			loader.setRequestHeader( scope.requestHeader );
 			loader.setWithCredentials( scope.withCredentials );
 
@@ -44,7 +44,34 @@ class GCodeLoader extends Loader {
 
 				try {
 
-					const lines = text.replace( /;.+/g, '' ).split( '\n' );
+					// Normalize line endings
+					text = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+
+					// Ensure final newline
+					if (!text.endsWith('\n')) text += '\n';
+
+					// Strip comments safely
+					const lines = text.split('\n').map(line => line.replace(/;.*$/, '').trim());
+
+					// Detect Git LFS pointer file
+					if (text.startsWith('version https://git-lfs.github.com/spec')) {
+
+						alert('The selected file is stored in Git LFS!');
+
+						if ( onError ) {
+
+							onError( 'The selected file is stored in Git LFS!' );
+							return;
+
+						} else {
+
+							console.error( 'The selected file is stored in Git LFS!' );
+							return;
+
+						}
+
+					}
+
 					const gcode = scope.parse( lines );
 					onLoad( gcode );
 
