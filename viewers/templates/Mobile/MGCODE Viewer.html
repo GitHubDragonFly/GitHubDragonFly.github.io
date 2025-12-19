@@ -150,25 +150,58 @@
       }
 
       function set_initial_scale() {
-        // Set the initial scale of the object so it comes to view
+        // Set the initial scale of the object so it hopefully comes to view
 
         bounding_box.setFromObject( gcode_obj );
-        let size = bounding_box.getSize(new THREE.Vector3());
+        let size = bounding_box.getSize( new THREE.Vector3() );
+        let center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
 
-        if ( size.y > 1 ) {
-          gcode_obj.scale.multiplyScalar( 50 / size.y );
-        } else if ( size.y > 0.02 ) {
-          gcode_obj.scale.multiplyScalar( 25 / size.y );
-        } else if ( size.y > 0.01 ) {
-          gcode_obj.scale.multiplyScalar( 10 / size.y );
+        // Move to the center
+
+        if (center.x !== 0) gcode_obj.translateX( center.x );
+        if (center.y !== 0) gcode_obj.translateY( center.y );
+        if (center.z !== 0) gcode_obj.translateZ( center.z );
+
+        // Scale according to window width / height, whichever is greater
+
+        if (ww > wh) {
+          gcode_obj.scale.multiplyScalar( ( wh / size.y ) * 0.15 );
         } else {
-          gcode_obj.scale.multiplyScalar( 1 / size.y )
+          gcode_obj.scale.multiplyScalar( ( ww / size.x ) * 0.15 );
+        }
+
+        // Get center coordinates and move to the center again
+
+        bounding_box.setFromObject( gcode_obj );
+        size = bounding_box.getSize( new THREE.Vector3() );
+        center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
+
+        if (center.x !== 0) gcode_obj.translateX( center.x );
+        if (center.y !== 0) gcode_obj.translateY( center.y );
+        if (center.z !== 0) gcode_obj.translateZ( center.z );
+
+        // Scale again and re-center if the model's width / height is greater than the screen's width / height
+
+        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
+          gcode_obj.scale.multiplyScalar( ww / (ww > wh ? size.x : size.y) );
+
+          bounding_box.setFromObject( gcode_obj );
+          center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
+
+          if (center.x !== 0) gcode_obj.translateX( center.x );
+          if (center.y !== 0) gcode_obj.translateY( center.y );
+          if (center.z !== 0) gcode_obj.translateZ( center.z );
         }
 
         bounding_box.setFromObject( gcode_obj );
-        let center = bounding_box.getCenter(new THREE.Vector3());
 
-        controls.target.set( center.x, center.y, center.z );
+        gcode_obj.translateY( -bounding_box.min.y );
+        gcode_obj.updateMatrixWorld( true, true );
+
+        // Set camera's z distance
+
+        camera.position.z = bounding_box.max.z + 250;
+        camera.updateProjectionMatrix();
 
         mouse_wheel = true;
       }
@@ -269,20 +302,9 @@
       }
 
       function loadFile(){
-        gcode_loader.load( URL.createObjectURL( selected_gcode_file ), function( object ) {
+        gcode_loader.load( URL.createObjectURL( selected_gcode_file ), async function( gcode ) {
           URL.revokeObjectURL( selected_gcode_file );
-
-          object.children[ 0 ].name += '_extruded';
-          object.children[ 1 ].name += '_path';
-
-          path = object.children[ 1 ];
-          gcode_obj = object.children[ 0 ];
-
-          // Add gcode_obj to the scene
-          scene.add( gcode_obj );
-          camera.lookAt( gcode_obj.position );
-
-          finish_loading();
+          await finish_loading( gcode );
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
           handle_error( error );
@@ -300,18 +322,8 @@
 
           // No extension checking for URL so it has to point to GCODE / NCC / NGC model
 
-          gcode_loader.load( selected_url_file, function( object ) {
-            object.children[ 0 ].name += '_extruded';
-            object.children[ 1 ].name += '_path';
-
-            path = object.children[ 1 ];
-            gcode_obj = object.children[ 0 ];
-
-            // Add gcode_obj to the scene
-            scene.add( gcode_obj );
-            camera.lookAt( gcode_obj.position );
-
-            finish_loading();
+          gcode_loader.load( selected_url_file, async function( gcode ) {
+            await finish_loading( gcode );
           }, function ( xhr ) { // onProgress
           }, function ( error ) { // onError
             handle_error( error );
@@ -319,17 +331,33 @@
         }
       }
 
-      async function finish_loading() {
-        set_initial_scale();
-        resize();
+      async function finish_loading( gcode = null ) {
+        if (gcode === null) {
+          handle_error( 'G-code generation failed!' );
+          return;
+        }
 
         enable_disable( false );
 
         console.timeEnd( 'Loading Time' );
         document.getElementById('div_loading').style.display = 'none';
 
+        path = gcode.children[ 1 ];
+        path.name += '_path';
+
+        gcode_obj = gcode.children[ 0 ];
+        gcode_obj.name += '_extruded';
+
+        // Add gcode_obj to the scene
+        scene.add( gcode_obj );
+        camera.lookAt( gcode_obj.position );
+
+        set_initial_scale();
+        resize();
+
         render_requested = true;
         mouse_wheel = true;
+        count = 0;
         render();
 
         gcode_obj.rotation.x -= Math.PI / 2;
@@ -377,7 +405,7 @@
             renderer.render( scene, camera );
 
             if (mouse_wheel === true) {
-              if (count > 15) {
+              if (count > 30) {
                 mouse_wheel = false;
                 count = 0;
               } else {
