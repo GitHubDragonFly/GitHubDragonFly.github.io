@@ -412,6 +412,7 @@ Number Type Converter
       - Group or merge multiple mesh model before exporting
       - Scaling the model before export should change the size of exported file
       - Units and/or positioning might be off so make sure to check the exported `.gcode` file and do a simple model test
+      - Printer + Filament selection is included (not sure about details of how Polyslice is processing this information on its end)
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
     - ASSJSON, FBX, STEP, X3D and X exports are powered by [ASSIMPJS](https://github.com/kovacsv/assimpjs) and [ASSIMP](https://github.com/assimp/assimp):
       - STEP exports don't appear to be optimizied in the assimp library so use only if needed
