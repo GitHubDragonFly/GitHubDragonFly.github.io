@@ -410,7 +410,8 @@ Number Type Converter
     - GCODE exports are powered by [Polyslice](https://github.com/jgphilpott/polyslice):
       - Single mesh model should be optimal for conversion
       - Group or merge multiple mesh model before exporting
-      - Scaling the model before export should change the size of exported file
+      - Scaling the model before export should change the size of exported file:
+        - Scaling down might have the exported model lose some detail
       - Units and/or positioning might be off so make sure to check the exported `.gcode` file and do a simple model test
       - Printer + Filament selection is included (not sure about details of how Polyslice is processing this information on its end)
     - PRWM exports are powered by [PRWM](https://github.com/kchapelier/PRWM)
