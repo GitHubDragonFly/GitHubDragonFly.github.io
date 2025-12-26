@@ -366,7 +366,7 @@ Number Type Converter
     - For quick testing, see the `URLS4MODELS.md` file for corresponding URL examples
   - URLs should have no CORS restrictions
 - Import formats, where applicable, with any optional or required textures:
-  - 3DS, 3DM, 3MF, AMF, DAE, FBX, IFC, JSON, OBJ + MTL, PCD, PDB, PLY, VTK, VTP, STL, PRWM, USDZ, WRL, XYZ
+  - 3DS, 3DM, 3MF, AMF, DAE, FBX, IFC, JSON, LAS, LAZ, OBJ + MTL, PCD, PDB, PLY, PRWM, STL, USDZ, VTK, VTP, WRL, XYZ
   - GLTF supported formats: GLB, GLTF + BIN, DRC, VRM
   - GCODE supported formats: GCODE, NCC, NGC
   - LDRAW supported formats: DAT, L3B, LDR, MPD
