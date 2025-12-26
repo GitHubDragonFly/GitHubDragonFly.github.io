@@ -3,7 +3,7 @@
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="PCD (Point Cloud Data) and XYZ Viewer">
+    <meta name="description" content="PCD (Point Cloud Data), XYZ and LAS/LAZ Viewer">
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
@@ -13,7 +13,9 @@
       {
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/"
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/",
+          "loaders-core": "https://esm.sh/@loaders.gl/core@4.3.4",
+          "loaders-las": "https://esm.sh/@loaders.gl/las@4.3.4"
         }
       }
     </script>
@@ -21,8 +23,8 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var THREE, manager, pcd_loader, xyz_loader, xyz_format, render_requested;
-      var renderer, scene, camera, pcd_obj, controls, isMobile;
+      var THREE, manager, pcd_loader, xyz_loader, xyz_format, las_loader, las_format;
+      var renderer, scene, camera, pcd_obj, controls, isMobile, render_requested;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var ww = window.innerWidth, wh = window.innerHeight, count = 0;
       var selected_pcd_file, selected_url_file = '', bounding_box;
@@ -33,6 +35,7 @@
       import * as three_js from "three";
       import { PCDLoader } from "three/addons/loaders/PCDLoader.min.js";
       import { XYZLoader } from "../../static/jsm/loaders/XYZLoader.min.js";
+      import { LASZLoader } from "../../static/jsm/loaders/LASZLoader.min.js";
 
       THREE = three_js;
 
@@ -51,14 +54,16 @@
 
       pcd_loader = new PCDLoader( manager );
       xyz_loader = new XYZLoader( manager );
+      las_loader = new LASZLoader( manager );
     </script>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
+    <!-- Using loaders.gl library: https://github.com/visgl/loaders.gl -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>PCD+XYZ Viewer (r178)</title>
+    <title>PCD+XYZ+LAS Viewer (r178)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -69,7 +74,7 @@
         <label for="btn_url" title="Get remote model via URL"></label>
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="btn_file_input" title="Browse Local Files"></label>
-        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".pcd, .xyz" />
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".las, .laz, .pcd, .xyz" />
         <label for="back_color" title="Background Color">B</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <label for="points_color" title="Points Color">C</label>
@@ -237,9 +242,11 @@
         enable_disable( true );
 
         selected_pcd_file = null;
+        las_format = false;
         xyz_format = false;
         mouse_down = false;
         mouse_wheel = true;
+        count =0;
         render_requested = false;
         vertex_colors_enabled = false;
         bounding_box = new THREE.Box3();
@@ -253,12 +260,14 @@
         if (url_loading === false) {
           // Loaded file
           var fi = document.getElementById('file_input');
+          let uc_name = fi.files[ 0 ].name.toUpperCase();
 
-          if (fi.files[ 0 ].name.toUpperCase().endsWith('.PCD')) selected_pcd_file = fi.files[ 0 ];
-          else if (fi.files[ 0 ].name.toUpperCase().endsWith('.XYZ')) { selected_pcd_file = fi.files[ 0 ]; xyz_format = true; }
+          if (uc_name.endsWith('.PCD')) selected_pcd_file = fi.files[ 0 ];
+          else if (uc_name.endsWith('.XYZ')) { selected_pcd_file = fi.files[ 0 ]; xyz_format = true; }
+          else if (uc_name.endsWith('.LAS') || uc_name.endsWith('.LAZ')) { selected_pcd_file = fi.files[ 0 ]; las_format = true; }
 
           if (selected_pcd_file === null) {
-            handle_error( 'No valid PCD or XYZ file selected!' );
+            handle_error( 'No valid PCD or XYZ or LAS/LAZ file selected!' );
             return;
           }
 
@@ -313,17 +322,18 @@
           //controls.maxDistance = 500;
         }
 
-        // Load PCD or XYZ file
+        // Load PCD or XYZ or LAS/LAZ file
         selected_pcd_file !== null ? loadFile() : loadURLFile();
       }
 
       function loadFile() {
-        let loader = (xyz_format === true) ? xyz_loader : pcd_loader;
+        let loader = (xyz_format === true) ? xyz_loader : (las_format === true) ? las_loader : pcd_loader;
 
         loader.load( URL.createObjectURL( selected_pcd_file ), function( points ) {
           URL.revokeObjectURL( selected_pcd_file );
 
-          if (xyz_format === true) {
+          if (las_format === true || xyz_format === true) {
+            // points were returned as geometry
             points.computeVertexNormals();
             points.center();
             points.rotateX( - Math.PI / 2 );
@@ -332,9 +342,10 @@
 
             let material = new THREE.PointsMaterial( { size: 0.1, transparent: true } );
 
-            let xyz_points = new THREE.Points( points, material );
+            let las_xyz_points = new THREE.Points( points, material );
+            las_xyz_points.name = (las_format === true) ? 'las_points' : 'xyz_points';
 
-            pcd_obj = xyz_points;
+            pcd_obj = las_xyz_points;
           } else {
             points.geometry.computeVertexNormals();
             points.geometry.center();
@@ -410,9 +421,9 @@
           }, function ( xhr ) { // onProgress
           }, function ( error1 ) { // onError
             console.log( error1 );
-            console.log( 'Trying XYZ Loader...' );
+            console.log( 'Trying LAS/LAZ Loader...' );
 
-            xyz_loader.load( selected_url_file, function( points ) {
+            las_loader.load( selected_url_file, function( points ) {
               points.computeVertexNormals();
               points.center();
               points.rotateX( - Math.PI / 2 );
@@ -421,9 +432,10 @@
 
               let material = new THREE.PointsMaterial( { size: 0.1, transparent: true } );
 
-              let xyz_points = new THREE.Points( points, material );
+              let las_points = new THREE.Points( points, material );
+              las_points.name = 'las_points';
 
-              pcd_obj = xyz_points;
+              pcd_obj = las_points;
 
               pcd_obj.traverse( ( child ) => {
                 if (child.isPoints) {
@@ -440,7 +452,49 @@
               resize();
             }, function ( xhr ) { // onProgress
             }, function ( error2 ) { // onError
-              handle_error( error2 );
+              console.log( error2 );
+
+              let high_version = error2.message?.includes('<= 1.3');
+              let git_lfs = (error2.message === 'The selected file is stored in Git LFS!');
+
+              if (high_version || git_lfs) {
+                handle_error( error2 );
+                return;
+              }
+
+              console.log( 'Trying XYZ Loader...' );
+
+              xyz_loader.load( selected_url_file, function( points ) {
+                points.computeVertexNormals();
+                points.center();
+                points.rotateX( - Math.PI / 2 );
+
+                if ( points.hasAttribute( 'color' ) === true ) vertex_colors_enabled = true;
+
+                let material = new THREE.PointsMaterial( { size: 0.1, transparent: true } );
+
+                let xyz_points = new THREE.Points( points, material );
+                xyz_points.name = 'xyz_points';
+
+                pcd_obj = xyz_points;
+
+                pcd_obj.traverse( ( child ) => {
+                  if (child.isPoints) {
+                    child.material.vertexColors = vertex_colors_enabled;
+                    child.material.needsUpdate = true;
+                  }
+                });
+
+                // Add pcd_obj to the scene
+                scene.add( pcd_obj );
+                camera.lookAt( pcd_obj.position );
+
+                set_initial_scale();
+                resize();
+              }, function ( xhr ) { // onProgress
+              }, function ( error3 ) { // onError
+                handle_error( error3 );
+              });
             });
           });
 
