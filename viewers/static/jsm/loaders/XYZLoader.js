@@ -137,7 +137,7 @@ class XYZLoader extends Loader {
 
 		if ( normals.length > 0 ) {
 
-			geometry.setAttribute( 'normal', new THREE.Float32BufferAttribute( normals, 3 ) );
+			geometry.setAttribute( 'normal', new Float32BufferAttribute( normals, 3 ) );
 
 		}
 
