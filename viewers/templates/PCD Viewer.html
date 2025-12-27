@@ -41,8 +41,8 @@
       var ww = window.innerWidth, wh = window.innerHeight;
       var rot_x = 0, rot_y = 0, rot_z = 0, count = 0;
       var initial_transparency, filename, isMobile, isNewiPad;
-      var bounding_box, bgnd_linear_gradient, gif_export;
-      var selected_pcd_file, selected_url_file = '', zip, equi_enabled;
+      var bounding_box, bgnd_linear_gradient, modelColors, elevationColors, elevation;
+      var selected_pcd_file, selected_url_file = '', zip, equi_enabled, gif_export;
       var original_material_opacity, original_material_color, enable_opacity;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
       var vertex_colors_enabled, original_vertex_color_array;
@@ -395,7 +395,8 @@
           <button title="Decrease Points Size" id="btn_minus" onclick="decrease_points_size();" style="background-color: transparent; margin: 0 0 2px 0; color: maroon;" disabled>-</button>
         </label>
         <label for="back_color" title="Background Color">B<input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled /></label>
-        <button title="Toggle Vertex Colors" id="btn_vertex_colors" onclick="set_vertex_colors();" style="min-width: 28px; margin-left: 3px;" disabled>VC</button>
+        <button title="Toggle Elevation Colors" id="btn_elevation_colors" onclick="set_elevation_colors();" style="min-width: 28px; margin-left: 3px;" disabled>EC</button>
+        <button title="Toggle Vertex Colors" id="btn_vertex_colors" onclick="set_vertex_colors();" style="min-width: 28px;" disabled>VC</button>
         <button title="Toggle Random Vertex Colors" id="btn_random_vertex_colors" onclick="set_random_vertex_colors();" style="min-width: 12px;" disabled>!</button>
         <button title="Toggle Grid - 200 x 200" id="btn_grid" onclick="show_grid();" disabled>#</button>
         <button title="Toggle Polar Grid - radius 100" id="btn_polar_grid" onclick="show_polar_grid();" style="min-width: 24px;" disabled><p class="polar"></p></button>
@@ -2117,6 +2118,9 @@
         mouse_down = false;
         mouse_wheel = true;
         guiExposure = null;
+        elevation = false;
+        elevationColors = null;
+        modelColors = null;
         equi_enabled = false;
         original_material_color = null;
         vertex_colors_enabled = false;
@@ -2236,19 +2240,19 @@
         selected_pcd_file !== null ? loadFile() : loadURLFile();
       }
 
-      function elevation_coloring( points ) {
-        const pos = points.attributes.position.array;
+      function get_elevation_colors( points_cloud, pcd = false ) {
+        const pos = points_cloud.attributes.position.array;
         const count = pos.length / 3.0;
 
-        const minZ = points.boundingBox.min.z;
-        const maxZ = points.boundingBox.max.z;
+        const minZ = pcd ? points_cloud.boundingBox.max.y : points_cloud.boundingBox.min.z;
+        const maxZ = pcd ? points_cloud.boundingBox.min.y : points_cloud.boundingBox.max.z;
 
-        const rangeZ = maxZ - minZ || 1;
+        const rangeZ = (maxZ - minZ) || 1;
 
-        const elevationColors = new Float32Array( count * 3 );
+        elevationColors = new Float32Array( count * 3 );
 
         for (let i = 0; i < count; i++) {
-          const z = pos[i * 3 + 2];
+          const z = pos[i * 3 + (pcd ? 1 : 2)];
           const t = (z - minZ) / rangeZ; // normalized 0–1
 
           // Gradient: blue → cyan → green → yellow → red
@@ -2261,8 +2265,6 @@
           elevationColors[i * 3 + 1] = g;
           elevationColors[i * 3 + 2] = b;
         }
-
-        return elevationColors;
       }
 
       function loadFile() {
@@ -2277,16 +2279,16 @@
             points.computeBoundingSphere();
             points.computeVertexNormals();
             points.center();
-            points.rotateX( - Math.PI / 2 );
+
+            get_elevation_colors( points, false );
 
             if ( points.hasAttribute( 'color' ) === true ) {
-              //const elevColors = elevation_coloring( points );
-              //points.setAttribute( 'color', new THREE.Float32BufferAttribute( elevColors, 3 ) );
-
               vertex_colors_enabled = true;
               document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
               document.getElementById('btn_random_vertex_colors').disabled = false;
             }
+
+            points.rotateX( - Math.PI / 2 );
 
             let material = new THREE.PointsMaterial( { size: 0.1, opacity: 1 } );
             original_material_color = { r: 1, g: 1, b: 1 };
@@ -2302,7 +2304,8 @@
             points.geometry.computeBoundingSphere();
             points.geometry.computeVertexNormals();
             points.geometry.center();
-            points.geometry.rotateX( Math.PI );
+
+            get_elevation_colors( points.geometry, true );
 
             original_material_opacity = points.material.opacity;
             initial_transparency = points.material.transparent;
@@ -2316,6 +2319,8 @@
               original_material_color = new THREE.Color( points.material.color );
             }
 
+            points.geometry.rotateX( Math.PI );
+
             points.name = 'pcd_points';
 
             pcd_obj = points.clone();
@@ -2323,24 +2328,6 @@
 
           pcd_obj.sizeAttenuation = true;
           pcd_obj.sortPoints = true;
-
-          // Add pcd_obj to the scene
-          scene.add( pcd_obj );
-          camera.lookAt( pcd_obj.position );
-
-          set_initial_scale();
-          resize();
-
-          pcd_obj.traverse( ( child ) => {
-            if (child.isPoints) {
-              let length = child.geometry.attributes.position.array.length;
-              random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
-              original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
-
-              child.material.vertexColors = vertex_colors_enabled;
-              child.material.needsUpdate = true;
-            }
-          });
 
           finish_loading();
         }, function ( xhr ) { // onProgress
@@ -2367,7 +2354,8 @@
             points.geometry.computeBoundingSphere();
             points.geometry.computeVertexNormals();
             points.geometry.center();
-            points.geometry.rotateX( Math.PI );
+
+            get_elevation_colors( points.geometry, true );
 
             original_material_opacity = points.material.opacity;
             initial_transparency = points.material.transparent;
@@ -2381,30 +2369,14 @@
               original_material_color = new THREE.Color( points.material.color );
             }
 
+            points.geometry.rotateX( Math.PI );
+
             points.name = 'pcd_points';
 
             pcd_obj = points.clone();
 
             pcd_obj.sizeAttenuation = true;
             pcd_obj.sortPoints = true;
-
-            pcd_obj.traverse( ( child ) => {
-              if (child.isPoints) {
-                let length = child.geometry.attributes.position.array.length;
-                random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
-                original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
-
-                child.material.vertexColors = vertex_colors_enabled;
-                child.material.needsUpdate = true;
-              }
-            });
-
-            // Add pcd_obj to the scene
-            scene.add( pcd_obj );
-            camera.lookAt( pcd_obj.position );
-
-            set_initial_scale();
-            resize();
 
             finish_loading();
           }, function ( xhr ) { // onProgress
@@ -2417,7 +2389,8 @@
               points.computeBoundingSphere();
               points.computeVertexNormals();
               points.center();
-              points.rotateX( - Math.PI / 2 );
+
+              get_elevation_colors( points, false );
 
               if ( points.hasAttribute( 'color' ) === true ) {
                 vertex_colors_enabled = true;
@@ -2430,6 +2403,8 @@
               original_material_opacity = material.opacity;
               initial_transparency = false;
 
+              points.rotateX( - Math.PI / 2 );
+
               let las_points = new THREE.Points( points, material );
 
               las_points.name = 'las_points';
@@ -2438,24 +2413,6 @@
 
               pcd_obj.sizeAttenuation = true;
               pcd_obj.sortPoints = true;
-
-              pcd_obj.traverse( ( child ) => {
-                if (child.isPoints) {
-                  let length = child.geometry.attributes.position.array.length;
-                  random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
-                  original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
-
-                  child.material.vertexColors = vertex_colors_enabled;
-                  child.material.needsUpdate = true;
-                }
-              });
-
-              // Add pcd_obj to the scene
-              scene.add( pcd_obj );
-              camera.lookAt( pcd_obj.position );
-
-              set_initial_scale();
-              resize();
 
               finish_loading();
             }, function ( xhr ) { // onProgress
@@ -2477,7 +2434,8 @@
                 points.computeBoundingSphere();
                 points.computeVertexNormals();
                 points.center();
-                points.rotateX( - Math.PI / 2 );
+
+                get_elevation_colors( points, false );
 
                 if ( points.hasAttribute( 'color' ) === true ) {
                   vertex_colors_enabled = true;
@@ -2490,6 +2448,8 @@
                 original_material_opacity = material.opacity;
                 initial_transparency = false;
 
+                points.rotateX( - Math.PI / 2 );
+
                 let xyz_points = new THREE.Points( points, material );
 
                 xyz_points.name = 'xyz_points';
@@ -2498,24 +2458,6 @@
 
                 pcd_obj.sizeAttenuation = true;
                 pcd_obj.sortPoints = true;
-
-                pcd_obj.traverse( ( child ) => {
-                  if (child.isPoints) {
-                    let length = child.geometry.attributes.position.array.length;
-                    random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
-                    original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
-
-                    child.material.vertexColors = vertex_colors_enabled;
-                    child.material.needsUpdate = true;
-                  }
-                });
-
-                // Add pcd_obj to the scene
-                scene.add( pcd_obj );
-                camera.lookAt( pcd_obj.position );
-
-                set_initial_scale();
-                resize();
 
                 finish_loading();
               }, function ( xhr ) { // onProgress
@@ -2528,6 +2470,20 @@
       }
 
       async function finish_loading() {
+        let length = pcd_obj.geometry.attributes.position.array.length;
+        random_vertex_color_array[ pcd_obj.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
+        original_vertex_color_array[ pcd_obj.name ] = pcd_obj.geometry.getAttribute( 'color' );
+
+        pcd_obj.material.vertexColors = vertex_colors_enabled;
+        pcd_obj.material.needsUpdate = true;
+
+        // Add pcd_obj to the scene
+        scene.add( pcd_obj );
+        camera.lookAt( pcd_obj.position );
+
+        set_initial_scale();
+        resize();
+
         enable_disable( false );
 
         if (vertex_colors_enabled === true) random_vertex_changed();
@@ -2893,6 +2849,45 @@
         mouse_wheel = true;
       }
 
+      function set_elevation_colors() {
+        if (pcd_obj) {
+          if (elevation === true) {
+            document.getElementById('btn_elevation_colors').style.backgroundColor = '#d1cefc';
+            if (random_vertex_colors_enabled === true) {
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+            }
+            document.getElementById('btn_vertex_colors').disabled = false;
+
+            if (modelColors) {
+              pcd_obj.geometry.setAttribute( 'color', modelColors );
+              pcd_obj.material.vertexColors = vertex_colors_enabled || random_vertex_colors_enabled;
+            } else {
+              pcd_obj.geometry.deleteAttribute( 'color' );
+              pcd_obj.material.vertexColors = false;
+            }
+
+            modelColors = null;
+
+            elevation = false;
+          } else {
+            document.getElementById('btn_elevation_colors').style.backgroundColor = 'lightgreen';
+            document.getElementById('btn_random_vertex_colors').disabled = true;
+            document.getElementById('btn_vertex_colors').disabled = true;
+
+            if (!modelColors) modelColors = pcd_obj.geometry.getAttribute( 'color' );
+
+            pcd_obj.geometry.setAttribute( 'color', new THREE.BufferAttribute( elevationColors, 3 ) );
+            pcd_obj.material.vertexColors = true;
+
+            elevation = true;
+          }
+
+          pcd_obj.material.needsUpdate = true;
+
+          disabled_changed();
+        }
+      }
+
       function set_vertex_colors() {
         if (pcd_obj) {
           if (vertex_colors_enabled === true) {
@@ -2910,51 +2905,37 @@
 
           random_vertex_changed();
 
-          pcd_obj.traverse( ( child ) => {
-            if (child.isPoints) {
-              if (!random_vertex_color_array[ child.name ]) {
-                let length = child.geometry.attributes.position.array.length;
-                random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
-              }
+          if (!random_vertex_color_array[ pcd_obj.name ]) {
+            let length = pcd_obj.geometry.attributes.position.array.length;
+            random_vertex_color_array[ pcd_obj.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
+          }
 
-              if (!original_vertex_color_array[ child.name ]) original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+          pcd_obj.material.vertexColors = vertex_colors_enabled ? original_vertex_color_array[ pcd_obj.name ] !== undefined : false;
+          pcd_obj.material.needsUpdate = true;
 
-              child.material.vertexColors = vertex_colors_enabled ? original_vertex_color_array[ child.name ] : false;
-              child.material.needsUpdate = true;
-            }
-
-            mouse_wheel = true;
-          });
+          mouse_wheel = true;
         }
       }
 
       function set_random_vertex_colors() {
         if (random_vertex_colors_enabled === true) {
-          pcd_obj.traverse( ( child ) => {
-            if (child.isPoints) {
-              if (original_vertex_color_array[ child.name ]) {
-                child.geometry.setAttribute( 'color', original_vertex_color_array[ child.name ] );
-              } else {
-                child.geometry.deleteAttribute( 'color' );
-              }
-
-              child.material.needsUpdate = true;
-            }
-          });
+          if (original_vertex_color_array[ pcd_obj.name ]) {
+            pcd_obj.geometry.setAttribute( 'color', original_vertex_color_array[ pcd_obj.name ] );
+          } else {
+            pcd_obj.geometry.deleteAttribute( 'color' );
+          }
 
           document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
           random_vertex_colors_enabled = false;
         } else {
-          pcd_obj.traverse( ( child ) => {
-            if (child.isPoints) {
-              child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3 ) );
-              child.material.needsUpdate = true;
-            }
-          });
+          pcd_obj.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ pcd_obj.name ], 3 ) );
 
           document.getElementById('btn_random_vertex_colors').style.backgroundColor = 'lightgreen';
           random_vertex_colors_enabled = true;
         }
+
+        pcd_obj.material.vertexColors = random_vertex_colors_enabled ? true : original_vertex_color_array[ pcd_obj.name ] !== undefined;
+        pcd_obj.material.needsUpdate = true;
 
         mouse_wheel = true;
       }
@@ -3153,6 +3134,7 @@
         document.getElementById('btn_quick_x').disabled = disable;
         document.getElementById('btn_dc_opacity').disabled = disable;
         document.getElementById('btn_vertex_colors').disabled = disable;
+        document.getElementById('btn_elevation_colors').disabled = disable;
         document.getElementById('btn_bgnd_linear_gradient').disabled = disable;
         document.getElementById('btn_polar_grid').disabled = disable;
         document.getElementById('btn_grid').disabled = disable;
