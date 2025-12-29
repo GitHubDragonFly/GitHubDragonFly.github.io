@@ -26,28 +26,30 @@ class LASZLoader extends Loader {
 			skipPoints: 1,
 			skipColor: false,
 			skipIntensity: false,
-			skipClassification: false
+			skipClassification: false,
+			intensityGammaFactor: 1.0,
+			applyIntensityToColor: true
 
 		};
 
 	}
 
-	setSkipPoints( sp ) {
+	setSkipPoints( number_of_points ) {
 
 		// Set how many points get processed
-		// by reading one in every "sp" points
+		// by reading one in every "number_of_points" points
 
-		if ( !Number.isInteger( sp ) ) {
+		if ( !Number.isInteger( number_of_points ) ) {
 
-			sp = 1;
+			number_of_points = 1;
 
 		} else {
 
-			sp = Math.max( Math.min( sp, 10 ), 1 );
+			number_of_points = Math.max( Math.min( number_of_points, 10 ), 1 );
 
 		}
 
-		this.options.skipPoints = sp;
+		this.options.skipPoints = number_of_points;
 		return this;
 
 	}
@@ -67,6 +69,32 @@ class LASZLoader extends Loader {
 	setSkipClassification( flag ) {
 
 		this.options.skipClassification = flag;
+		return this;
+
+	}
+
+	setIntensityGammaFactor( gamma ) {
+
+		// Convert to number
+
+		gamma = Number( gamma );
+
+		// If invalid, fall back to default 1.0
+
+		if ( !isFinite( gamma ) || gamma <= 0 ) { gamma = 1.0; }
+
+		// Clamp to a reasonable range
+
+		gamma = Math.min( Math.max( gamma, 0.1 ), 2.0);
+
+		this.options.intensityGammaFactor = gamma;
+		return this;
+
+	}
+
+	setApplyIntensityToColor( flag ) {
+
+		this.options.applyIntensityToColor = flag;
 		return this;
 
 	}
@@ -179,45 +207,63 @@ class LASZLoader extends Loader {
 
 			}
 
+			if ( data.attributes.intensity?.value && !this.options.skipIntensity ) {
+
+				let maxI = 0;
+
+				for ( let i = 0; i < data.attributes.intensity.value.length; i++ ) {
+
+					if ( data.attributes.intensity.value[ i ] > maxI ) {
+
+						maxI = data.attributes.intensity.value[ i ];
+
+					}
+
+				}
+
+				if ( maxI === 0 ) maxI = 1.0;
+
+				const invMaxI = 1.0 / maxI;
+
+				const normalizedI = new Float32Array( data.attributes.intensity.value.length );
+
+				for ( let i = 0; i < data.attributes.intensity.value.length; i++ ) {
+
+					normalizedI[ i ] = data.attributes.intensity.value[ i ] * invMaxI;
+
+				}
+
+				if ( this.options.applyIntensityToColor ) {
+
+					const gamma = this.options.intensityGammaFactor;
+
+					for ( let i = 0; i < normalizedI.length; i++ ) {
+
+						const I = Math.pow( normalizedI[ i ], gamma ); // gamma correction
+
+						normalized[ i * 3 + 0 ] *= I;
+						normalized[ i * 3 + 1 ] *= I;
+						normalized[ i * 3 + 2 ] *= I;
+
+					}
+
+				}
+
+				geometry.userData.intensityMax = maxI;
+
+				geometry.setAttribute(
+
+					'intensity',
+					new Float32BufferAttribute( normalizedI, 1 )
+
+				);
+
+			}
+
 			geometry.setAttribute(
 
 				'color',
 				new Float32BufferAttribute( normalized, 3 )
-
-			);
-
-		}
-
-		if ( data.attributes.intensity?.value && !this.options.skipIntensity ) {
-
-			let maxI = 0;
-
-			for ( let i = 0; i < data.attributes.intensity.value.length; i++ ) {
-
-				if ( data.attributes.intensity.value[ i ] > maxI ) {
-
-					maxI = data.attributes.intensity.value[ i ];
-
-				}
-
-			}
-
-			if ( maxI === 0 ) maxI = 1.0;
-
-			const invMaxI = 1.0 / maxI;
-
-			const normalizedI = new Float32Array( data.attributes.intensity.value.length );
-
-			for ( let i = 0; i < data.attributes.intensity.value.length; i++ ) {
-
-				normalizedI[ i ] = data.attributes.intensity.value[ i ] * invMaxI;
-
-			}
-
-			geometry.setAttribute(
-
-				'intensity',
-				new Float32BufferAttribute( normalizedI, 1 )
 
 			);
 
