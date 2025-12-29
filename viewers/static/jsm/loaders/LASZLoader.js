@@ -5,7 +5,7 @@ import {
     Loader
 } from 'three';
 
-// Created with Microsoft Copilot assistance
+// Created with assistance from Microsoft Copilot and Google Gemini
 // Supporting loading of LAS and LAZ points models
 
 // Loaders.gl LAS loader, mapped in the HTML file with following entries:
@@ -16,6 +16,60 @@ import { LASLoader as LoadersGLLASLoader } from 'loaders-las';
 import { load as LASLoad } from 'loaders-core';
 
 class LASZLoader extends Loader {
+
+	constructor( manager ) {
+
+		super( manager );
+
+		this.options = {
+
+			skipPoints: 1,
+			skipColor: false,
+			skipIntensity: false,
+			skipClassification: false
+
+		};
+
+	}
+
+	setSkipPoints( sp ) {
+
+		// Set how many points get processed
+		// by reading one in every "sp" points
+
+		if ( !Number.isInteger( sp ) ) {
+
+			sp = 1;
+
+		} else {
+
+			sp = Math.max( Math.min( sp, 10 ), 1 );
+
+		}
+
+		this.options.skipPoints = sp;
+		return this;
+
+	}
+
+	setSkipColor( flag ) {
+
+		this.options.skipColor = flag;
+		return this;
+	}
+
+	setSkipIntensity( flag ) {
+
+		this.options.skipIntensity = flag;
+		return this;
+	}
+
+	setSkipClassification( flag ) {
+
+		this.options.skipClassification = flag;
+		return this;
+
+	}
 
 	load( url, onLoad, onProgress, onError ) {
 
@@ -55,7 +109,7 @@ class LASZLoader extends Loader {
 
 			}
 
-			this.parse( buffer )
+			scope.parse( buffer )
 			.then( geometry => onLoad( geometry ) )
 			.catch( err => {
 
@@ -70,16 +124,19 @@ class LASZLoader extends Loader {
 
 	async parse( buffer ) {
 
-		// Decode LAS/LAZ using loaders.gl
+		// Decode LAS/LAZ using @loaders.gl
 
-		const data = await LASLoad( buffer, LoadersGLLASLoader, { worker: true } );
+		const options = {
 
-		const positions = data.attributes.POSITION?.value;
-		const colors = data.attributes.COLOR_0?.value || data.attributes.color?.value || null;
-		const intensity = data.attributes.intensity?.value || null;
-		const classification = data.attributes.classification?.value || null;
+			worker: true,
+			CDN: 'https://cdn.jsdelivr.net/npm/@loaders.gl',
+			las: { skip: this.options.skipPoints, colorDepth: 'auto' }
 
-		if ( !positions ) {
+		};
+
+		const data = await LASLoad( buffer, LoadersGLLASLoader, options );
+
+		if ( !data.attributes.POSITION?.value ) {
 
 			throw new Error( 'LAS/LAZ file missing POSITION attribute!' );
 
@@ -90,31 +147,35 @@ class LASZLoader extends Loader {
 		geometry.setAttribute(
 
 			'position',
-			new Float32BufferAttribute( positions, 3 )
+			new Float32BufferAttribute( data.attributes.POSITION.value, 3 )
 
 		);
 
-		if ( colors ) {
+		if ( data.attributes.COLOR_0?.value && !this.options.skipColor ) {
 
-			const normalized = new Float32Array( colors.length );
+			const normalized = new Float32Array( data.attributes.COLOR_0.value.length );
 
 			// Detect bit depth ( 8‑bit vs 16‑bit )
 
 			let max = 0;
 
-			for ( let i = 0; i < colors.length; i++ ) {
+			for ( let i = 0; i < data.attributes.COLOR_0.value.length; i++ ) {
 
-				if ( colors[ i ] > max ) max = colors[ i ];
+				if ( data.attributes.COLOR_0.value[ i ] > max ) {
+
+					max = data.attributes.COLOR_0.value[ i ];
+
+				}
 
 			}
 
-			if ( max === 0 ) max = 1;
+			if ( max === 0 ) max = 1.0;
 
-			// Avoid divide by zero
+			const invMax = 1.0 / max;
 
-			for ( let i = 0; i < colors.length; i++ ) {
+			for ( let i = 0; i < data.attributes.COLOR_0.value.length; i++ ) {
 
-				normalized[ i ] = colors[ i ] / max;
+				normalized[ i ] = data.attributes.COLOR_0.value[ i ] * invMax;
 
 			}
 
@@ -127,23 +188,29 @@ class LASZLoader extends Loader {
 
 		}
 
-		if ( intensity ) {
+		if ( data.attributes.intensity?.value && !this.options.skipIntensity ) {
 
 			let maxI = 0;
 
-			for ( let i = 0; i < intensity.length; i++ ) {
+			for ( let i = 0; i < data.attributes.intensity.value.length; i++ ) {
 
-				if ( intensity[ i ] > maxI ) maxI = intensity[ i ];
+				if ( data.attributes.intensity.value[ i ] > maxI ) {
+
+					maxI = data.attributes.intensity.value[ i ];
+
+				}
 
 			}
 
-			if ( maxI === 0 ) maxI = 1;
+			if ( maxI === 0 ) maxI = 1.0;
 
-			const normalizedI = new Float32Array( intensity.length );
+			const invMaxI = 1.0 / maxI;
 
-			for ( let i = 0; i < intensity.length; i++ ) {
+			const normalizedI = new Float32Array( data.attributes.intensity.value.length );
 
-				normalizedI[ i ] = intensity[ i ] / maxI;
+			for ( let i = 0; i < data.attributes.intensity.value.length; i++ ) {
+
+				normalizedI[ i ] = data.attributes.intensity.value[ i ] * invMaxI;
 
 			}
 
@@ -156,12 +223,12 @@ class LASZLoader extends Loader {
 
 		}
 
-		if ( classification ) {
+		if ( data.attributes.classification?.value && !this.options.skipClassification ) {
 
 			geometry.setAttribute(
 
 				'classification',
-				new Float32BufferAttribute( classification, 1 )
+				new Float32BufferAttribute( data.attributes.classification.value, 1 )
 
 			);
 
@@ -169,6 +236,8 @@ class LASZLoader extends Loader {
 
 		geometry.computeBoundingBox();
 		geometry.computeBoundingSphere();
+
+		for ( const key in data ) { delete data[ key ]; }
 
 		return geometry;
 
