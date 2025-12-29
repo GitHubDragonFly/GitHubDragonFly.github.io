@@ -26,8 +26,9 @@
       var THREE, manager, pcd_loader, xyz_loader, xyz_format, las_loader, las_format;
       var renderer, scene, camera, pcd_obj, controls, isMobile, render_requested;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, count = 0;
-      var ww = window.innerWidth, wh = window.innerHeight, bounding_box;
+      var ww = window.innerWidth, wh = window.innerHeight;
       var selected_pcd_file, selected_url_file = '';
+      var las_displayed = false, bounding_box;
       var url_displayed = false, url_loading = false;
       var vertex_colors_present, vertex_colors_enabled;
       var normal_colors_present, normal_colors_enabled;
@@ -47,7 +48,10 @@
 
       pcd_loader = new PCDLoader( manager );
       xyz_loader = new XYZLoader( manager );
+
       las_loader = new LASZLoader( manager );
+      las_loader.setSkipIntensity( true );
+      las_loader.setSkipClassification( true );
     </script>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
@@ -63,6 +67,8 @@
       <div class="fm">
         <button id="btn_desktop" title="Open Desktop Version" onclick="switch_to_desktop();">D</button>
         <label for="btn_desktop" title="Open Desktop Version"></label>
+        <button title="Set Level of Detail for Displaying LAS/LAZ Models" id="btn_las" onclick="show_las();" style="min-width: 34px;">LOD</button>
+        <label for="btn_las" title="Set Level of Detail for Displaying LAS/LAZ Models"></label>
         <button title="Get remote model via URL" id="btn_url" onclick="show_url()" style="min-width: 38px;">URL</button>
         <label for="btn_url" title="Get remote model via URL"></label>
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
@@ -91,6 +97,16 @@
         <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
         <label for="btn_clear" title="Clear"></label>
       </div>
+      <div class="fm" id="las" style="display: none;">
+        <label>Level of Detail for LAS/LAZ</label>&nbsp;
+        <select id="detail_level" style="min-width: 100px;">
+          <option value="" disabled selected>Percentage</option>
+          <option value="1" onclick="set_las_details( 1 );">100%</option>
+          <option value="2" onclick="set_las_details( 2 );">50%</option>
+          <option value="4" onclick="set_las_details( 4 );">25%</option>
+          <option value="10" onclick="set_las_details( 10 );">10%</option>
+        </select>
+      </div>
     </div>
 
     <div id="div_error" class="error_msg">E R R O R !</div>
@@ -104,6 +120,26 @@
         link.style.display = 'none';
         link.href = "../PCD Viewer.html";
         link.click();
+      }
+
+      function show_las() {
+        if (las_displayed === true) {
+          document.getElementById('las').style.display = 'none';
+          document.getElementById('btn_las').style.backgroundColor = 'transparent';
+          las_displayed = false;
+        } else {
+          document.getElementById('las').style.display = 'block';
+          document.getElementById('btn_las').style.backgroundColor = 'lightgreen';
+          las_displayed = true;
+        }
+
+        resize();
+
+        mouse_wheel = true;
+      }
+
+      function set_las_details( skip_points = 1 )  {
+        las_loader.setSkipPoints( skip_points );
       }
 
       function show_url() {
@@ -201,28 +237,44 @@
         });
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it comes to view
-
+      function center_object() {
         bounding_box.setFromObject( pcd_obj );
+        let center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
+
+        // Move to the center
+
+        if (center.x !== 0) pcd_obj.translateX( center.x );
+        if (center.y !== 0) pcd_obj.translateY( center.y );
+        if (center.z !== 0) pcd_obj.translateZ( center.z );
+
+        mouse_wheel = true;
+      }
+
+      function set_initial_scale() {
+        // Set the initial scale of the object so it hopefully comes to view
+
+        center_object();
+
         let size = bounding_box.getSize( new THREE.Vector3() );
 
-        if ( size.y > 1 ) {
-          pcd_obj.scale.multiplyScalar( 50 / size.y );
-        } else if ( size.y > 0.02 ) {
-          pcd_obj.scale.multiplyScalar( 25 / size.y );
-        } else if ( size.y > 0.01 ) {
-          pcd_obj.scale.multiplyScalar( 10 / size.y );
+        // Scale according to window width / height, whichever is greater
+
+        if (ww > wh) {
+          pcd_obj.scale.multiplyScalar( ( wh / size.y ) * 0.1 );
         } else {
-          pcd_obj.scale.multiplyScalar( 1 / size.y )
+          pcd_obj.scale.multiplyScalar( ( ww / size.x ) * 0.1 );
         }
+
+        // Get center coordinates and move to the center again
+
+        center_object();
 
         pcd_obj.material.size = (isMobile === true) ? 0.8 : 0.1;
 
-        bounding_box.setFromObject( pcd_obj );
-        let center = bounding_box.getCenter( new THREE.Vector3() );
+        // Set camera's z distance
 
-        controls.target.set( center.x, center.y, center.z );
+        camera.position.z = bounding_box.max.z + 250;
+        camera.updateProjectionMatrix();
 
         mouse_wheel = true;
       }
@@ -245,7 +297,9 @@
         xyz_format = false;
         mouse_down = false;
         mouse_wheel = true;
-        count =0;
+        count = 0;
+        elevation = false;
+        elevationColors = null;
         render_requested = false;
         vertex_colors_enabled = false;
         vertex_colors_present = false;
@@ -732,7 +786,7 @@
             renderer.render( scene, camera );
 
             if (mouse_wheel === true) {
-              if (count > 15) {
+              if (count > 25) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -751,6 +805,7 @@
         document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_plus').style.backgroundColor = 'transparent';
         document.getElementById('btn_minus').style.backgroundColor = 'transparent';
+        document.getElementById('btn_elevation_colors').style.backgroundColor = 'transparent';
 
         // Reset the view
         if (reset === true) {
@@ -775,6 +830,7 @@
           document.getElementById('div_error').style.display = 'none';
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
+
           enable_disable( true );
         }
 
@@ -818,12 +874,28 @@
           (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
 
+        if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile === true) {
+          $('#detail_level').change( function() { $(this).children(':selected').click(); });
+        }
+
         mouse_wheel = true;
       }
 
       function disabled_changed() {
         $('button').each( function() {
           if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+
+        $('select').each( function() {
+          if (this.disabled === false) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
