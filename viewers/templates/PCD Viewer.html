@@ -41,10 +41,11 @@
       var ww = window.innerWidth, wh = window.innerHeight;
       var rot_x = 0, rot_y = 0, rot_z = 0, count = 0;
       var initial_transparency, filename, isMobile, isNewiPad;
-      var bounding_box, bgnd_linear_gradient, modelColors, elevationColors, elevation;
-      var selected_pcd_file, selected_url_file = '', zip, equi_enabled, gif_export;
+      var bounding_box, bgnd_linear_gradient, menu_location_bottom = false;
+      var modelColors, elevationColors, elevation, gif_export;
+      var selected_pcd_file, selected_url_file = '', zip, equi_enabled;
       var original_material_opacity, original_material_color, enable_opacity;
-      var url_displayed = false, url_loading = false, menu_location_bottom = false;
+      var url_displayed = false, url_loading = false, las_displayed = false;
       var vertex_colors_enabled, original_vertex_color_array;
       var random_vertex_colors_enabled, random_vertex_color_array;
 
@@ -70,7 +71,10 @@
 
       pcd_loader = new PCDLoader( manager );
       xyz_loader = new XYZLoader( manager );
+
       las_loader = new LASZLoader( manager );
+      las_loader.setSkipIntensity( true );
+      las_loader.setSkipClassification( true );
 
       texture_loader = new THREE.TextureLoader();
 
@@ -369,6 +373,7 @@
         <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
       </div>
       <div class="fm" id="fm2">
+        <button title="Set Level of Detail for Displaying LAS/LAZ Models" id="btn_las" onclick="show_las();" style="background-color: transparent; min-width: 34px;">LOD</button>
         <label title="Free XYZ Rotation" id="lbl_radio_rotate" style="display: none;">Rotate</label>
         <button title="X-Axis" id="btn_dc_x" class="dropdown" style="display: none; text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_x();">X
           <div id="dc_x" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_x();">
@@ -420,6 +425,16 @@
           <option title="PNG - Animated PNG (APNG)" value="apng" onclick="export_animated_png();">PNG</option>
         </select>
         <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; width: 40px;" disabled>RST</button>
+      </div>
+      <div class="fm" id="las" style="display: none;">
+        <label>Level of Detail for LAS/LAZ</label>&nbsp;
+        <select id="detail_level" style="min-width: 100px;">
+          <option value="" disabled selected>Percentage</option>
+          <option value="1" onclick="set_las_details( 1 );">100%</option>
+          <option value="2" onclick="set_las_details( 2 );">50%</option>
+          <option value="4" onclick="set_las_details( 4 );">25%</option>
+          <option value="10" onclick="set_las_details( 10 );">10%</option>
+        </select>
       </div>
       <div class="fm" id="div_message" style="width: 99%; margin: 2px 0 2px 1px; color: maroon;">
         Use inputs above to load 3D model
@@ -566,6 +581,26 @@
         }
 
         mouse_wheel = true;
+      }
+
+      function show_las() {
+        if (las_displayed === true) {
+          document.getElementById('las').style.display = 'none';
+          document.getElementById('btn_las').style.backgroundColor = 'transparent';
+          las_displayed = false;
+        } else {
+          document.getElementById('las').style.display = 'block';
+          document.getElementById('btn_las').style.backgroundColor = 'lightgreen';
+          las_displayed = true;
+        }
+
+        resize();
+
+        mouse_wheel = true;
+      }
+
+      function set_las_details( skip_points = 1 )  {
+        las_loader.setSkipPoints( skip_points );
       }
 
       function show_url() {
@@ -1985,25 +2020,44 @@
         }
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it comes to view
-
+      function center_object() {
         bounding_box.setFromObject( pcd_obj );
-        let size = bounding_box.getSize(new THREE.Vector3());
+        let center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
 
-        if ( size.y > 1 ) {
-          pcd_obj.scale.multiplyScalar( 50 / size.y );
-        } else if ( size.y < 0.02 ) {
-          pcd_obj.scale.multiplyScalar( 1 / size.y );
+        // Move to the center
+
+        if (center.x !== 0) pcd_obj.translateX( center.x );
+        if (center.y !== 0) pcd_obj.translateY( center.y );
+        if (center.z !== 0) pcd_obj.translateZ( center.z );
+
+        mouse_wheel = true;
+      }
+
+      function set_initial_scale() {
+        // Set the initial scale of the object so it hopefully comes to view
+
+        center_object();
+
+        let size = bounding_box.getSize( new THREE.Vector3() );
+
+        // Scale according to window width / height, whichever is greater
+
+        if (ww > wh) {
+          pcd_obj.scale.multiplyScalar( ( wh / size.y ) * 0.1 );
         } else {
-          pcd_obj.scale.multiplyScalar( 10 / size.y )
+          pcd_obj.scale.multiplyScalar( ( ww / size.x ) * 0.1 );
         }
 
-        pcd_obj.material.size *= 10;
+        // Get center coordinates and move to the center again
 
-        bounding_box.setFromObject( pcd_obj );
-        let center = bounding_box.getCenter(new THREE.Vector3());
-        controls.target.set( center.x, center.y, center.z );
+        center_object();
+
+        pcd_obj.material.size = (isMobile === true) ? 0.8 : 0.1;
+
+        // Set camera's z distance
+
+        camera.position.z = bounding_box.max.z + 250;
+        camera.updateProjectionMatrix();
 
         mouse_wheel = true;
       }
@@ -2012,6 +2066,8 @@
         document.getElementById('model_scale').selectedIndex = 0;
 
         pcd_obj.scale.multiplyScalar( parseFloat( scale.slice( 0, -1 ) ) );
+
+        center_object();
 
         set_polar_grid_y();
         set_grid_y();
@@ -2901,7 +2957,7 @@
         if (pcd_obj) {
           if (elevation === true) {
             document.getElementById('btn_elevation_colors').style.backgroundColor = '#d1cefc';
-            if (random_vertex_colors_enabled === true) {
+            if (vertex_colors_enabled === true) {
               document.getElementById('btn_random_vertex_colors').disabled = false;
             }
             document.getElementById('btn_vertex_colors').disabled = false;
@@ -3208,6 +3264,7 @@
         if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile === true) {
           $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
+          $('#detail_level').change( function() { $(this).children(':selected').click(); });
         }
 
         if (isMobile === false) {
