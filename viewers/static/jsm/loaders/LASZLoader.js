@@ -1,7 +1,7 @@
 import {
+    BufferAttribute,
     BufferGeometry,
     FileLoader,
-    Float32BufferAttribute,
     Loader
 } from 'three';
 
@@ -175,7 +175,7 @@ class LASZLoader extends Loader {
 		geometry.setAttribute(
 
 			'position',
-			new Float32BufferAttribute( data.attributes.POSITION.value, 3 )
+			new BufferAttribute( data.attributes.POSITION.value, 3 )
 
 		);
 
@@ -254,7 +254,7 @@ class LASZLoader extends Loader {
 				geometry.setAttribute(
 
 					'intensity',
-					new Float32BufferAttribute( normalizedI, 1 )
+					new BufferAttribute( normalizedI, 1 )
 
 				);
 
@@ -263,7 +263,7 @@ class LASZLoader extends Loader {
 			geometry.setAttribute(
 
 				'color',
-				new Float32BufferAttribute( normalized, 3 )
+				new BufferAttribute( normalized, 3 )
 
 			);
 
@@ -274,7 +274,7 @@ class LASZLoader extends Loader {
 			geometry.setAttribute(
 
 				'classification',
-				new Float32BufferAttribute( data.attributes.classification.value, 1 )
+				new BufferAttribute( data.attributes.classification.value, 1 )
 
 			);
 
