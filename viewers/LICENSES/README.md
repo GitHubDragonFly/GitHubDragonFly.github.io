@@ -78,7 +78,7 @@ Notes about modifications, some of which are only added to work with these viewe
  - TDSLoader.js file includes modification for both local and URL loading of texture files in 3DS viewer
  - FBXLoader.js file includes modification for both local and URL loading of texture files in FBX viewer
  - PLYLoader.js file includes both "vertex_index" and "vertex_indices"
- - LASZLoader.js file was created with Microsoft Copilot assistance and is using loaders.gl library
+ - LASZLoader.js file is using loaders.gl library and was created with assistance from Microsoft Copilot and Google Gemini
  - GCodeLoader.js file is a modified version from: https://github.com/emplast/Threejs-GcodeLoaderNGCfile
  - ColladaLoader.js file includes modification to support THREE.Points
  - ColladaExporter.js file includes modifications for exporting TGA textures as well as supporting THREE.Points
