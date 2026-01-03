@@ -3,7 +3,8 @@
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="PCD (Point Cloud Data), XYZ and LAS/LAZ Viewer">
+    <meta name="description" content="PCD (Point Cloud Data), XYZ and LAS/LAZ/EPT Viewer">
+    <link rel="stylesheet" href="../static/css/desktop-viewers.css">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
@@ -31,22 +32,25 @@
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
     <script>
-      var THREE, manager, pcd_obj, pcd_loader, xyz_loader, xyz_format, las_loader, las_format;
+      var pcd_obj, pcd_loader, xyz_loader, xyz_formatt, ept_loader, ept_format, las_loader, las_format;
       var texture_loader, tiff_loader, exr_loader, rgbe_loader, hdrJPGLoader, ktx2_loader;
-      var renderer, scene, camera, render_requested, scene_bgnd, hdrjpg_texture;
+      var THREE, manager, renderer, scene, camera, render_requested, scene_bgnd, hdrjpg_texture;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var gui, gui_set = false, guiExposure, params, toneMappingOptions;
       var controls, gizmo, link, slider_height = 0, bg_flip;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var ww = window.innerWidth, wh = window.innerHeight;
       var rot_x = 0, rot_y = 0, rot_z = 0, count = 0;
-      var initial_transparency, filename, isMobile, isNewiPad;
+      var initial_transparency, filename, isMobile, isNewiPad, gif_export;
       var bounding_box, bgnd_linear_gradient, menu_location_bottom = false;
-      var modelColors, elevationColors, elevation, gif_export;
+      var modelColors, elevationColors, elevation, warning_displayed = false;
       var selected_pcd_file, selected_url_file = '', zip, equi_enabled;
       var original_material_opacity, original_material_color, enable_opacity;
       var url_displayed = false, url_loading = false, las_displayed = false;
-      var vertex_colors_enabled, original_vertex_color_array;
+      var vertex_colors_present, vertex_colors_enabled;
+      var normal_colors_present, normal_colors_enabled;
+      var classification_present, classification_enabled;
+      var filesMap, local_files, original_vertex_color_array;
       var random_vertex_colors_enabled, random_vertex_color_array;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
@@ -62,6 +66,7 @@
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
       import { PCDLoader } from "three/addons/loaders/PCDLoader.min.js";
       import { XYZLoader } from "../static/jsm/loaders/XYZLoader.min.js";
+      import { EPTLoader } from "../static/jsm/loaders/EPTLoader.min.js";
       import { LASZLoader } from "../static/jsm/loaders/LASZLoader.min.js";
 
       THREE = three_js;
@@ -71,9 +76,8 @@
 
       pcd_loader = new PCDLoader( manager );
       xyz_loader = new XYZLoader( manager );
-
+      ept_loader = new EPTLoader( manager );
       las_loader = new LASZLoader( manager );
-      las_loader.setSkipClassification( true );
 
       texture_loader = new THREE.TextureLoader();
 
@@ -85,228 +89,6 @@
     <script src="../static/js/upng/UPNG.min.js" defer></script>
     <script src="../static/js/omggif/omggif.min.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
-
-    <style>
-      body, html {
-        position: relative;
-        display: block;
-        background-color: black;
-        background-image: url( '../../images/DragonFly.webp' ), url( '../../images/DragonFly.png' );
-        background-image: -webkit-image-set( url( '../../images/DragonFly.webp' ), url( '../../images/DragonFly.png' ) );
-        background-position: calc(50vw - 115px) calc(50vh - 115px);
-        background-repeat: no-repeat;
-        width: 100%;
-        min-height: 100vh;
-        border: none;
-        padding: 0;
-        margin: 0;
-        overflow: hidden;
-      }
-
-      button {
-        background-color: #d1cefc;
-        border: 1px solid blue;
-        -webkit-border-radius: 3px;
-        border-radius: 3px;
-        vertical-align: middle;
-        margin: 2px 2px 2px 0;
-        min-width: 20px;
-        height: 22px;
-        padding: 1px;
-      }
-
-      label {
-        vertical-align: middle;
-        white-space: nowrap;
-        margin: 2px 0 2px 0;
-        text-align: center;
-        font-size: 110%;
-        height: 22px;
-      }
-
-      input[type=color] {
-        border: 1px solid whitesmoke;
-        vertical-align: middle;
-        margin: 0 2px 3px 2px;
-        background: none;
-        height: 18px;
-        width: 16px;
-        padding: 0;
-      }
-
-      input[type=file] {
-        vertical-align: middle;
-        margin: 2px 0 2px 0;
-        max-width: 160px;
-      }
-
-      input[type=range] {
-        vertical-align: middle;
-        margin: 2px 0 2px 0;
-        min-width: 30px;
-      }
-
-      input[type=text] {
-        vertical-align: middle;
-        margin: 2px 2px 2px 0;
-      }
-
-      .dropdown {
-        background-color: transparent;
-        vertical-align: middle;
-        display: inline-block;
-        position: relative;
-        min-width: 40px;
-        font-size: 85%;
-        color: blue;
-        border: none;
-        padding: 1px;
-      }
-
-      .dropdown-content {
-        background-color: #FFFAD5;
-        border: 1px solid #DEAF64;
-        -webkit-border-radius: 3px;
-        border-radius: 3px;
-        position: absolute;
-        margin-top: 2px;
-        z-index: 10;
-      }
-
-      select {
-        vertical-align: middle;
-        border: 1px solid blue;
-        -webkit-border-radius: 3px;
-        border-radius: 3px;
-        background: none;
-        min-width: 72px;
-        height: 22px;
-        color: blue;
-      }
-
-      .gif_rectangle {
-        background-color: transparent;
-        border: 1px solid blue;
-        left: calc(50% - 252px);
-        top: calc(50% - 252px);
-        position: absolute;
-        display: none;
-        height: 500px;
-        width: 500px;
-        z-index: 1;
-      }
-
-      .spinner {
-        background-color: transparent;
-        position: absolute;
-        display: block;
-        width: 240px;
-        height: 240px;
-        padding: 4px;
-        top: calc(50% - 130px);
-        left: calc(50% - 130px);
-        border: 6px solid blue;
-        -webkit-border-radius: 50%;
-        border-radius: 50%;
-        border-top-color: lightblue;
-        border-bottom-color: lightblue;
-        -webkit-animation: spin 8s ease-in-out infinite;
-        animation: spin 8s ease-in-out infinite;
-      }
-
-      @-webkit-keyframes spin { to { -webkit-transform: rotate( 360deg ); } }
-      @keyframes spin { to { transform: rotate( 360deg ); } }
-
-      .error_msg {
-        background-color: transparent;
-        position: absolute;
-        text-align: center;
-        font-size: x-large;
-        display: none;
-        color: red;
-        width: 50vw;
-        height: 50vh;
-        top: 50vh;
-        left: 25vw;
-        padding: 10px;
-        border: none;
-      }
-
-      .loading_msg {
-        background-color: transparent;
-        color: greenyellow;
-        position: absolute;
-        text-align: center;
-        font-size: x-large;
-        display: none;
-        width: 50vw;
-        height: 50vh;
-        top: 50vh;
-        left: 25vw;
-        padding: 10px;
-        border: none;
-      }
-
-      p.full_screen {
-        text-align: center;
-        content: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAA7DAAAOwwHHb6hkAAAAf0lEQVRIie1VQQ6AMAjb/x9M4IRePICoK7GLB5eQbElpCTAY7j6YRiUPAvvxbNMkN76XIDhSRKCdjhmB494hzzwngcoBIa/eASgisMgTBo4ODqCTAiSFrW6Biv8LfL/I1DbtfDRV9VLgjVFhZp59A4g+7JaM6yULh7IyWUYX2AAPDxz26GjX+gAAAABJRU5ErkJggg==);
-        margin: 1px 1px 1px 2px;
-        padding: 0;
-        width: 15px;
-        height: 15px;
-      }
-
-      p.polar {
-        text-align: center;
-        content: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAA7DAAAOwwHHb6hkAAAAv0lEQVRIic2V6wqFIBCEe3PfWhDEjYIDtc7s5VjQDwkvO9/uaLqJyPZmCy0qpQhqywBPKAK6d85uLJCBfhq0Ar0gYxGKnYT0Qs+iqziEZgMQRCfUe5cJcEzUWoUF0k0EidwSRYO6EkvcjbcmtZB1WlgVIYAWZFUhnRDgn7FvAV63aHmTLcgjx5Rl8OiPhjLPXhWttSkGAnTp7MQgK02AlXnkNTOv6zHGWerxRZl4NoUfHMuG7LwLYPZkntQQYKXtSAJKMrYucd0AAAAASUVORK5CYII=);
-        margin: 1px 1px 1px 2px;
-        padding: 0;
-        width: 15px;
-        height: 15px;
-      }
-
-      #gui_position {
-        position: absolute;
-        display: none;
-        min-width: 200px;
-        border: 1px solid navy;
-        -webkit-border-radius: 2px;
-        border-radius: 2px;
-        min-height: 22px;
-        margin-left: 2px;
-      }
-
-      .fm {
-        color: navy;
-        width: 99%;
-        border: 1px solid navy;
-        -webkit-border-radius: 2px;
-        border-radius: 2px;
-        padding: 4px;
-        margin: 1px;
-      }
-
-      .fixed-menu {
-        background-color: whitesmoke;
-        display: inline-block;
-        position: fixed;
-        padding: 1px;
-        width: 100%;
-        margin: 0px;
-        z-index: 1;
-      }
-
-      #progress {
-        width: 99.5%;
-        height: 2px;
-        margin-left: 3px;
-        margin-right: 3px;
-        text-align: center;
-        -webkit-appearance: none;
-        -moz-appearance: none;
-        appearance: none;
-      }
-    </style>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
@@ -335,7 +117,7 @@
       <div class="fm" id="fm1">
         <label for="file_input" title="3D Model Formats: PCD (Point Cloud Data), XYZ and LAS/LAZ" id="lbl_file_input" style="display: none; color: #553801; margin-left: 3px;">3D</label>
         <button title="Get remote model via URL" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" title="Browse Local Files" id="file_input" style="display: none;" onchange="init();" accept=".las, .laz, .pcd, .xyz" />
+        <input type="file" title="Browse Local Files" id="file_input" style="display: none;" onchange="init();" accept=".bin, .json, .las, .laz, .pcd, .xyz" multiple />
         <button title="Browse Local Files" id="btn_file_input" style="background-color: transparent; min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="file_image_input" title="Background Image" id="lbl_file_image_input" style="display: none; color: #553801;">BGND</label>
         <input type="file" title="Background Image" id="file_image_input" style="display: none;" accept=".exr, .hdr, .ktx2, .tif, .tiff, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
@@ -372,7 +154,7 @@
         <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
       </div>
       <div class="fm" id="fm2">
-        <button title="Set Level of Detail for Displaying LAS/LAZ Models" id="btn_las" onclick="show_las();" style="background-color: transparent; min-width: 34px;">LOD</button>
+        <button title="Set Level of Detail for Displaying LAS/LAZ/EPT Models" id="btn_las" onclick="show_las();" style="background-color: transparent; min-width: 34px;">LOD</button>
         <label title="Free XYZ Rotation" id="lbl_radio_rotate" style="display: none;">Rotate</label>
         <button title="X-Axis" id="btn_dc_x" class="dropdown" style="display: none; text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_x();">X
           <div id="dc_x" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_x();">
@@ -393,13 +175,15 @@
           </div>
         </button>
         <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="display: none; background-color: transparent; min-width: 15px;">&#x2191</button>
-        <label for="points_color" title="Points Color">P-color<input type="color" title="Points Color" id="points_color" name="points_color" onchange="set_points_color();" disabled /></label>
-        <label for="points_size" title="Points Size">P-size
-          <button title="Increase Points Size" id="btn_plus" onclick="increase_points_size();" style="background-color: transparent; margin: 0 0 2px 0; color: maroon;" disabled>+</button>
-          <button title="Decrease Points Size" id="btn_minus" onclick="decrease_points_size();" style="background-color: transparent; margin: 0 0 2px 0; color: maroon;" disabled>-</button>
-        </label>
         <label for="back_color" title="Background Color">B<input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled /></label>
+        <label for="points_color" title="Points Color">Pc<input type="color" title="Points Color" id="points_color" name="points_color" onchange="set_points_color();" disabled /></label>
+        <label for="points_size" title="Points Size">Ps
+          <button title="Increase Points Size" id="btn_plus" onclick="increase_points_size();" style="background-color: transparent; color: maroon;" disabled>+</button>
+          <button title="Decrease Points Size" id="btn_minus" onclick="decrease_points_size();" style="background-color: transparent; color: maroon;" disabled>-</button>
+        </label>
         <button title="Toggle Elevation Colors" id="btn_elevation_colors" onclick="set_elevation_colors();" style="min-width: 28px; margin-left: 3px;" disabled>EC</button>
+        <button title="Toggle Classification Colors" id="btn_classification_colors" onclick="set_classification_colors();" style="display: none; min-width: 28px;">CC</button>
+        <button title="Toggle Normal Colors" id="btn_normal_colors" onclick="set_normal_colors();" style="display: none; min-width: 28px;">NC</button>
         <button title="Toggle Vertex Colors" id="btn_vertex_colors" onclick="set_vertex_colors();" style="min-width: 28px;" disabled>VC</button>
         <button title="Toggle Random Vertex Colors" id="btn_random_vertex_colors" onclick="set_random_vertex_colors();" style="min-width: 12px;" disabled>!</button>
         <button title="Toggle Grid - 200 x 200" id="btn_grid" onclick="show_grid();" disabled>#</button>
@@ -426,15 +210,30 @@
         <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; width: 40px;" disabled>RST</button>
       </div>
       <div class="fm" id="las" style="display: none;">
-        <label>LOD for LAS/LAZ</label>&nbsp;
-        <select id="detail_level" style="min-width: 80px;">
-          <option value="" disabled selected>#Points</option>
+        <label>LOD</label>&nbsp;
+        <select id="detail_level" title="Set LAS/LAZ loader points density" style="min-width: 80px;">
+          <option value="" disabled selected>Density</option>
           <option value="1" onclick="set_las_details( 1 );">100%</option>
           <option value="2" onclick="set_las_details( 2 );">50%</option>
+          <option value="3" onclick="set_las_details( 3 );">33%</option>
           <option value="4" onclick="set_las_details( 4 );">25%</option>
           <option value="10" onclick="set_las_details( 10 );">10%</option>
+          <option value="20" onclick="set_las_details( 20 );">5%</option>
+          <option value="100" onclick="set_las_details( 100 );">1%</option>
         </select>
-        <select id="gamma_level" style="min-width: 80px;">
+        <select id="tile_level" title="Set number of visible tiles for EPT datasets" style="min-width: 100px;">
+          <option value="" disabled selected>Depth</option>
+          <option value="0" onclick="set_ept_details( 0 );">0 - root</option>
+          <option value="1" onclick="set_ept_details( 1 );">1 - low</option>
+          <option value="2" onclick="set_ept_details( 2 );">2 - medium</option>
+          <option value="3" onclick="set_ept_details( 3 );">3 - high</option>
+          <option value="4" onclick="set_ept_details( 4 );">4 - xtreme</option>
+          <option value="5" onclick="set_ept_details( 5 );">5 - xtreme</option>
+          <option value="6" onclick="set_ept_details( 6 );">6 - xtreme</option>
+          <option value="7" onclick="set_ept_details( 7 );">7 - xtreme</option>
+          <option value="8" onclick="set_ept_details( 8 );">8 - xtreme</option>
+        </select>
+        <select id="gamma_level" title="Set LAS/LAZ gamma level" style="min-width: 80px;">
           <option value="" disabled selected>Gamma</option>
           <option value="0.1" onclick="set_las_gamma( 0.1 );">0.1</option>
           <option value="0.3" onclick="set_las_gamma( 0.3 );">0.3</option>
@@ -444,6 +243,8 @@
           <option value="1.1" onclick="set_las_gamma( 1.1 );">1.1</option>
           <option value="1.3" onclick="set_las_gamma( 1.3 );">1.3</option>
           <option value="1.5" onclick="set_las_gamma( 1.5 );">1.5</option>
+          <option value="1.7" onclick="set_las_gamma( 1.7 );">1.7</option>
+          <option value="1.9" onclick="set_las_gamma( 1.9 );">1.9</option>
         </select>
       </div>
       <div class="fm" id="div_message" style="width: 99%; margin: 2px 0 2px 1px; color: maroon;">
@@ -602,6 +403,11 @@
           document.getElementById('las').style.display = 'block';
           document.getElementById('btn_las').style.backgroundColor = 'lightgreen';
           las_displayed = true;
+
+          if (!warning_displayed) {
+            alert('EPT datasets use lot of memory as tiles are merged before rendering.\nDepth levels > 0 will increase network traffic and memory usage.\nMake sure to set proper Level Of Detail before loading the model.\nChanging LOD will not be updating already‑loaded point clouds.');
+            warning_displayed = true;
+          }
         }
 
         resize();
@@ -609,12 +415,18 @@
         mouse_wheel = true;
       }
 
-      function set_las_details( skip_points = 1 ) {
+      function set_las_details( skip_points = 1 )  {
         las_loader.setSkipPoints( skip_points );
+        ept_loader.setSkipPoints( skip_points );
       }
 
       function set_las_gamma( gamma = 1.0 ) {
         las_loader.setIntensityGammaFactor( gamma );
+        ept_loader.setIntensityGammaFactor( gamma );
+      }
+
+      function set_ept_details( depth = 0 )  {
+        ept_loader.setTileDepthLimit( depth );
       }
 
       function show_url() {
@@ -2066,11 +1878,11 @@
 
         center_object();
 
-        pcd_obj.material.size = (isMobile === true) ? 0.8 : 0.1;
+        pcd_obj.material.size = (isMobile === true) ? 0.5 : 0.1;
 
         // Set camera's z distance
 
-        camera.position.z = bounding_box.max.z + 250;
+        camera.position.z = bounding_box.max.z + 500;
         camera.updateProjectionMatrix();
 
         mouse_wheel = true;
@@ -2185,6 +1997,8 @@
         selected_pcd_file = null;
         las_format = false;
         xyz_format = false;
+        filesMap = {};
+        local_files = null;
         mouse_down = false;
         mouse_wheel = true;
         guiExposure = null;
@@ -2194,6 +2008,11 @@
         equi_enabled = false;
         original_material_color = null;
         vertex_colors_enabled = false;
+        vertex_colors_present = false;
+        normal_colors_enabled = false;
+        normal_colors_present = false;
+        classification_enabled = false;
+        classification_present = false;
         random_vertex_colors_enabled = false;
         random_vertex_color_array = {};
         original_vertex_color_array = {};
@@ -2217,17 +2036,57 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
-        if (url_loading === false) {
-          // Loaded file
-          let fi = document.getElementById('file_input');
-          let uc_name = fi.files[ 0 ].name.toUpperCase();
+        manager.setURLModifier( function( url ) {
+          const file = filesMap[ url ];
+          if ( file ) return file;
+          return url;
+        });
 
-          if (uc_name.endsWith('.PCD')) selected_pcd_file = fi.files[ 0 ];
-          else if (uc_name.endsWith('.XYZ')) { selected_pcd_file = fi.files[ 0 ]; xyz_format = true; }
-          else if (uc_name.endsWith('.LAS') || uc_name.endsWith('.LAZ')) { selected_pcd_file = fi.files[ 0 ]; las_format = true; }
+        if (url_loading === false) {
+          // Loaded files
+          local_files = document.getElementById('file_input').files;
+
+          let ept_json_present = false;
+
+          // Check if ept.json file was loaded
+
+          for (let i = 0; i < local_files.length; i++) {
+            if (local_files[ i ].name.toLowerCase() === 'ept.json') {
+              ept_json_present = true;
+            }
+          }
+
+          for (let i = 0; i < local_files.length; i++) {
+            let fn_uc = local_files[ i ].name.toUpperCase();
+
+            if (fn_uc.endsWith('.PCD')) {
+              selected_pcd_file = local_files[ i ];
+            }
+            else if (fn_uc.endsWith('.XYZ')) {
+              selected_pcd_file = local_files[ i ];
+              xyz_format = true;
+            }
+            else if (fn_uc === 'EPT.JSON') {
+              selected_pcd_file = local_files[ i ];
+              ept_format = true;
+            }
+            else if (fn_uc.endsWith('.LAS') || fn_uc.endsWith('.LAZ')) {
+              if (!ept_json_present) {
+                selected_pcd_file = local_files[ i ];
+                las_format = true;
+              }
+            }
+
+            let url = URL.createObjectURL( local_files[ i ] );
+            URL.revokeObjectURL( local_files[ i ] );
+
+            filesMap[ local_files[ i ].name ] = url;
+          }
+
+          if (ept_format === true) ept_loader.setLocalBlobMap( filesMap );
 
           if (selected_pcd_file === null) {
-            handle_error( 'No valid PCD or XYZ or LAS/LAZ file selected!' );
+            handle_error( 'No valid PCD or XYZ or LAS/LAZ/EPT file selected!' );
             return;
           }
 
@@ -2306,8 +2165,25 @@
           //controls.maxDistance = 500;
         }
 
-        // Load PCD or XYZ or LAS/LAZ file
+        // Load PCD or XYZ or LAS/LAZ/EPT file
         selected_pcd_file !== null ? loadFile() : loadURLFile();
+      }
+
+      const CLASS_COLORS = {
+        0: [0.6, 0.6, 0.6],   // Created, never classified
+        1: [1.0, 1.0, 1.0],   // Unclassified
+        2: [0.5, 0.3, 0.1],   // Ground
+        3: [0.0, 0.6, 0.0],   // Low vegetation
+        4: [0.0, 0.8, 0.0],   // Medium vegetation
+        5: [0.0, 1.0, 0.0],   // High vegetation
+        6: [0.6, 0.6, 0.6],   // Building
+        7: [0.3, 0.3, 0.3],   // Low point / noise
+        9: [0.0, 0.4, 1.0],   // Water
+        17: [1.0, 0.0, 1.0],  // Bridge deck
+      };
+
+      function getClassColor( c ) {
+        return CLASS_COLORS[ c ] || [ 1.0, 0.0, 0.0 ]; // red for unknown
       }
 
       function colormap( t ) {
@@ -2344,17 +2220,17 @@
         const minZ = pcd ? points_cloud.boundingBox.max.y : points_cloud.boundingBox.min.z;
         const maxZ = pcd ? points_cloud.boundingBox.min.y : points_cloud.boundingBox.max.z;
 
-        const rangeZ = ( maxZ - minZ ) || 1;
+        const rangeZ = (maxZ - minZ) || 1;
 
         elevationColors = new Float32Array( pos.length );
 
         for (let i = 0; i < pos_count; i++) {
-          const z = pos[ i * 3 + ( pcd ? 1 : 2 ) ];
-          const t = ( z - minZ ) / rangeZ; // normalized 0–1
+          const z = pos[i * 3 + (pcd ? 1 : 2)];
+          const t = (z - minZ) / rangeZ; // normalized 0–1
 
           // Gradient: blue → cyan → green → yellow → red
 
-          let tSmooth = t * t * ( 3 - 2 * t );  // smoothstep
+          let tSmooth = t * t * (3 - 2 * t);  // smoothstep
 
           const [ r, g, b ] = colormap( tSmooth );
 
@@ -2371,15 +2247,18 @@
       }
 
       function loadFile() {
-        let loader = (xyz_format === true) ? xyz_loader : (las_format === true) ? las_loader : pcd_loader;
+        let loader = (xyz_format === true) ? xyz_loader : ((las_format === true) ? las_loader : ((ept_format === true) ? ept_loader : pcd_loader));
 
         loader.load( URL.createObjectURL( selected_pcd_file ), function( points ) {
           URL.revokeObjectURL( selected_pcd_file );
 
-          if (las_format === true || xyz_format === true) {
+          if (ept_format === true || las_format === true || xyz_format === true) {
             // points were returned as geometry
-            points.computeBoundingBox();
-            points.computeBoundingSphere();
+
+            if (xyz_format === true) {
+              points.computeBoundingBox();
+              points.computeBoundingSphere();
+            }
 
             get_elevation_colors( points, false );
 
@@ -2429,9 +2308,6 @@
             pcd_obj = points.clone();
           }
 
-          pcd_obj.sizeAttenuation = true;
-          pcd_obj.sortPoints = true;
-
           finish_loading();
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
@@ -2450,6 +2326,8 @@
 
           // No extension checking for URL so it has to point to PCD or XYZ or LAS/LAZ model
 
+          let high_version = false, git_lfs = false;
+
           console.log( 'Trying PCD Loader...' );
 
           pcd_loader.load( selected_url_file, function( points ) {
@@ -2460,112 +2338,104 @@
 
             points.geometry.center();
 
-            original_material_opacity = points.material.opacity;
-            initial_transparency = points.material.transparent;
-
-            if (points.material.vertexColors) {
-              vertex_colors_enabled = true;
-              original_material_color = { r: 1, g: 1, b: 1 };
-              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-              document.getElementById('btn_random_vertex_colors').disabled = false;
-            } else {
-              original_material_color = new THREE.Color( points.material.color );
-            }
-
             points.geometry.rotateX( Math.PI );
 
-            points.name = 'pcd_points';
+            if (points.material.vertexColors) vertex_colors_enabled = true;
 
             pcd_obj = points.clone();
-
-            pcd_obj.sizeAttenuation = true;
-            pcd_obj.sortPoints = true;
 
             finish_loading();
           }, function ( xhr ) { // onProgress
           }, function ( error1 ) { // onError
             console.log( error1 );
-            console.log( 'Trying LAS/LAZ Loader...' );
+            console.log( 'Trying EPT BIN/LAS/LAZ Loader...' );
 
-            las_loader.load( selected_url_file, function( points ) {
-              points.computeBoundingBox();
-              points.computeBoundingSphere();
-
+            ept_loader.load( selected_url_file, function( points ) {
               get_elevation_colors( points, false );
 
               points.center();
 
-              if ( points.hasAttribute( 'color' ) === true ) {
-                vertex_colors_enabled = true;
-                document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                document.getElementById('btn_random_vertex_colors').disabled = false;
-              }
+              points.rotateX( - Math.PI / 2.0 );
 
-              let material = new THREE.PointsMaterial( { size: 0.1, opacity: 1 } );
-              original_material_color = { r: 1, g: 1, b: 1 };
-              original_material_opacity = material.opacity;
-              initial_transparency = false;
+              if ( points.hasAttribute( 'color' ) === true ) vertex_colors_enabled = true;
 
-              points.rotateX( - Math.PI / 2 );
+              let material = new THREE.PointsMaterial( { size: 0.1, transparent: true } );
 
-              let las_points = new THREE.Points( points, material );
+              let ept_points = new THREE.Points( points, material );
+              ept_points.name = 'ept_points';
 
-              las_points.name = 'las_points';
-
-              pcd_obj = las_points;
-
-              pcd_obj.sizeAttenuation = true;
-              pcd_obj.sortPoints = true;
+              pcd_obj = ept_points;
 
               finish_loading();
             }, function ( xhr ) { // onProgress
             }, function ( error2 ) { // onError
               console.log( error2 );
 
-              let high_version = error2.message?.includes('<= 1.3');
-              let git_lfs = (error2.message === 'The selected file is stored in Git LFS!');
+              high_version = error2.message?.includes('<= 1.3');
+              git_lfs = error2.message?.includes('Git LFS');
 
               if (high_version || git_lfs) {
                 handle_error( error2 );
                 return;
               }
 
-              console.log( 'Trying XYZ Loader...' );
+              console.log( 'Trying LAS/LAZ Loader...' );
 
-              xyz_loader.load( selected_url_file, function( points ) {
-                points.computeBoundingBox();
-                points.computeBoundingSphere();
-
+              las_loader.load( selected_url_file, function( points ) {
                 get_elevation_colors( points, false );
 
                 points.center();
 
-                if ( points.hasAttribute( 'color' ) === true ) {
-                  vertex_colors_enabled = true;
-                  document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-                  document.getElementById('btn_random_vertex_colors').disabled = false;
-                }
+                points.rotateX( - Math.PI / 2.0 );
 
-                let material = new THREE.PointsMaterial( { size: 0.1, opacity: 1 } );
-                original_material_color = { r: 1, g: 1, b: 1 };
-                original_material_opacity = material.opacity;
-                initial_transparency = false;
+                if ( points.hasAttribute( 'color' ) === true ) vertex_colors_enabled = true;
 
-                points.rotateX( - Math.PI / 2 );
+                let material = new THREE.PointsMaterial( { size: 0.1, transparent: true } );
 
-                let xyz_points = new THREE.Points( points, material );
+                let las_points = new THREE.Points( points, material );
+                las_points.name = 'las_points';
 
-                xyz_points.name = 'xyz_points';
-
-                pcd_obj = xyz_points;
-
-                pcd_obj.sizeAttenuation = true;
-                pcd_obj.sortPoints = true;
+                pcd_obj = las_points;
 
                 finish_loading();
               }, function ( xhr ) { // onProgress
               }, function ( error3 ) { // onError
-                handle_error( error3 );
+                console.log( error3 );
+
+                high_version = error3.message?.includes('<= 1.3');
+                git_lfs = error3.message?.includes('Git LFS');
+
+                if (high_version || git_lfs) {
+                  handle_error( error3 );
+                  return;
+                }
+
+                console.log( 'Trying XYZ Loader...' );
+
+                xyz_loader.load( selected_url_file, function( points ) {
+                  points.computeBoundingBox();
+                  points.computeBoundingSphere();
+
+                  get_elevation_colors( points, false );
+
+                  points.center();
+
+                  points.rotateX( - Math.PI / 2 );
+
+                  if ( points.hasAttribute( 'color' ) === true ) vertex_colors_enabled = true;
+
+                  let material = new THREE.PointsMaterial( { size: 0.1, transparent: true } );
+
+                  let xyz_points = new THREE.Points( points, material );
+                  xyz_points.name = 'xyz_points';
+
+                  pcd_obj = xyz_points;
+
+                  finish_loading();
+                }, function ( xhr ) { // onProgress
+                }, function ( error4 ) { // onError
+                  handle_error( error4 );
+                });
               });
             });
           });
@@ -2577,8 +2447,17 @@
         random_vertex_color_array[ pcd_obj.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
         original_vertex_color_array[ pcd_obj.name ] = pcd_obj.geometry.getAttribute( 'color' );
 
+        if (!pcd_obj.geometry.getAttribute( 'intensity' )) {
+          const count = pcd_obj.geometry.getAttribute( 'position' ).count;
+          const ones = new Float32Array( count ).fill( 1.0 );
+          pcd_obj.geometry.setAttribute( 'intensity', new THREE.BufferAttribute( ones, 1 ) );
+        }
+
         pcd_obj.material.vertexColors = vertex_colors_enabled;
         pcd_obj.material.needsUpdate = true;
+
+        pcd_obj.sizeAttenuation = true;
+        pcd_obj.sortPoints = true;
 
         // Add pcd_obj to the scene
         scene.add( pcd_obj );
@@ -2589,7 +2468,31 @@
 
         enable_disable( false );
 
-        if (vertex_colors_enabled === true) random_vertex_changed();
+        if (vertex_colors_enabled) {
+          document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+          vertex_colors_present = true;
+          random_vertex_changed();
+        } else {
+          document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
+        }
+
+        if (pcd_obj.geometry.hasAttribute( 'classification' )) {
+          document.getElementById('btn_classification_colors').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_classification_colors').style.display = '';
+          classification_present = true;
+        } else {
+          document.getElementById('btn_classification_colors').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_classification_colors').style.display = 'none';
+        }
+
+        if (pcd_obj.geometry.hasAttribute( 'normal' )) {
+          document.getElementById('btn_normal_colors').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_normal_colors').style.display = '';
+          normal_colors_present = true;
+        } else {
+          document.getElementById('btn_normal_colors').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_normal_colors').style.display = 'none';
+        }
 
         // Skip gizmo creation on mobile devices
         if (isMobile === false && gizmo === undefined) {
@@ -2952,6 +2855,119 @@
         mouse_wheel = true;
       }
 
+      function set_classification_colors() {
+        if (!pcd_obj || !classification_present) return;
+
+        if (classification_enabled) {
+          // Turn OFF classification
+          document.getElementById('btn_classification_colors').style.backgroundColor = '#d1cefc';
+          if (vertex_colors_present) document.getElementById('btn_vertex_colors').disabled = false;
+          if (vertex_colors_enabled === true) {
+            document.getElementById('btn_random_vertex_colors').disabled = false;
+          }
+          if (normal_colors_present) document.getElementById('btn_normal_colors').disabled = false;
+          document.getElementById('btn_elevation_colors').disabled = false;
+
+          if (modelColors) {
+            pcd_obj.geometry.setAttribute( 'color', modelColors );
+            pcd_obj.material.vertexColors = vertex_colors_enabled || random_vertex_colors_enabled;
+          } else {
+            pcd_obj.geometry.deleteAttribute( 'color' );
+            pcd_obj.material.vertexColors = false;
+          }
+
+          modelColors = null;
+
+          classification_enabled = false;
+        } else {
+          // Turn ON classification
+          document.getElementById('btn_classification_colors').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_random_vertex_colors').disabled = true;
+          document.getElementById('btn_vertex_colors').disabled = true;
+          if (normal_colors_present) document.getElementById('btn_normal_colors').disabled = true;
+          document.getElementById('btn_elevation_colors').disabled = true;
+
+          if (!modelColors) modelColors = pcd_obj.geometry.getAttribute( 'color' );
+
+          const cls = pcd_obj.geometry.attributes.classification.array;
+          const class_count = cls.length;
+          const colors = new Float32Array( class_count * 3 );
+
+          for (let i = 0; i < class_count; i++) {
+            const [ r, g, b ] = getClassColor( cls[ i ] );
+            colors[ i * 3 + 0 ] = r;
+            colors[ i * 3 + 1 ] = g;
+            colors[ i * 3 + 2 ] = b;
+          }
+
+          pcd_obj.geometry.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
+          pcd_obj.material.vertexColors = true;
+
+          classification_enabled = true;
+        }
+
+        pcd_obj.material.needsUpdate = true;
+        disabled_changed();
+      }
+
+      function set_normal_colors() {
+        if (pcd_obj) {
+          if (normal_colors_enabled === true) {
+            document.getElementById('btn_normal_colors').style.backgroundColor = '#d1cefc';
+            if (vertex_colors_present) document.getElementById('btn_vertex_colors').disabled = false;
+            if (vertex_colors_enabled === true) {
+              document.getElementById('btn_random_vertex_colors').disabled = false;
+            }
+            if (classification_present) document.getElementById('btn_classification_colors').disabled = false;
+            document.getElementById('btn_elevation_colors').disabled = false;
+
+            if (modelColors) {
+              pcd_obj.geometry.setAttribute( 'color', modelColors );
+              pcd_obj.material.vertexColors = vertex_colors_enabled || random_vertex_colors_enabled;
+            } else {
+              pcd_obj.geometry.deleteAttribute( 'color' );
+              pcd_obj.material.vertexColors = false;
+            }
+
+            modelColors = null;
+
+            normal_colors_enabled = false;
+          } else {
+            document.getElementById('btn_normal_colors').style.backgroundColor = 'lightgreen';
+            document.getElementById('btn_random_vertex_colors').disabled = true;
+            document.getElementById('btn_vertex_colors').disabled = true;
+            if (classification_present) document.getElementById('btn_classification_colors').disabled = true;
+            document.getElementById('btn_elevation_colors').disabled = true;
+
+            if (!modelColors) modelColors = pcd_obj.geometry.getAttribute( 'color' );
+
+            const normals = pcd_obj.geometry.getAttribute( 'normal' ).array;
+            const normals_count = normals.length / 3.0;
+
+            const colors = new Float32Array( normals.length );
+
+            for (let i = 0; i < normals_count; i++) {
+              const nx = normals[ i * 3 + 0 ];
+              const ny = normals[ i * 3 + 1 ];
+              const nz = normals[ i * 3 + 2 ];
+
+              colors[ i * 3 + 0 ] = ( nx + 1 ) * 0.5;
+              colors[ i * 3 + 1 ] = ( ny + 1 ) * 0.5;
+              colors[ i * 3 + 2 ] = ( nz + 1 ) * 0.5;
+            }
+
+            pcd_obj.geometry.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
+            pcd_obj.material.vertexColors = true;
+
+            normal_colors_enabled = true;
+          }
+
+          pcd_obj.material.needsUpdate = true;
+
+          disabled_changed();
+        }
+      }
+
       function set_elevation_colors() {
         if (pcd_obj) {
           if (elevation === true) {
@@ -2960,6 +2976,8 @@
               document.getElementById('btn_random_vertex_colors').disabled = false;
             }
             document.getElementById('btn_vertex_colors').disabled = false;
+            if (classification_present) document.getElementById('btn_classification_colors').disabled = false;
+            if (normal_colors_present) document.getElementById('btn_normal_colors').disabled = false;
 
             if (modelColors) {
               pcd_obj.geometry.setAttribute( 'color', modelColors );
@@ -2976,6 +2994,8 @@
             document.getElementById('btn_elevation_colors').style.backgroundColor = 'lightgreen';
             document.getElementById('btn_random_vertex_colors').disabled = true;
             document.getElementById('btn_vertex_colors').disabled = true;
+            if (classification_present) document.getElementById('btn_classification_colors').disabled = true;
+            if (normal_colors_present) document.getElementById('btn_normal_colors').disabled = true;
 
             if (!modelColors) modelColors = pcd_obj.geometry.getAttribute( 'color' );
 
@@ -3268,6 +3288,7 @@
           $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
           $('#detail_level').change( function() { $(this).children(':selected').click(); });
+          $('#tile_level').change( function() { $(this).children(':selected').click(); });
           $('#gamma_level').change( function() { $(this).children(':selected').click(); });
         }
 
@@ -3286,6 +3307,13 @@
           $('#btn_dc_x')[ 0 ].style.display = '';
           $('#btn_dc_y')[ 0 ].style.display = '';
           $('#btn_dc_z')[ 0 ].style.display = '';
+        } else {
+          const select = document.getElementById("tile_level");
+          select.querySelector( 'option[value="4"]' ).remove();
+          select.querySelector( 'option[value="5"]' ).remove();
+          select.querySelector( 'option[value="6"]' ).remove();
+          select.querySelector( 'option[value="7"]' ).remove();
+          select.querySelector( 'option[value="8"]' ).remove();
         }
       }
 
