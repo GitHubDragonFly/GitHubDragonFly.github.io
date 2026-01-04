@@ -19,8 +19,8 @@ import { LASZLoader } from './LASZLoader.min.js'; // reuse existing LAS/LAZ deco
 //	- ept-hierarchy/2-0-0-0.json
 //	...
 // ept-data/
-//	ept-data/0-0-0-0.laz
-//	ept-data/1-0-0-0.laz
+//	ept-data/0-0-0-0.laz (or .bin)
+//	ept-data/1-0-0-0.laz (or .bin)
 //	...
 
 const GIT_LFS_THRESHOLD_BYTES = 150;
@@ -31,9 +31,11 @@ class EPTLoader extends Loader {
 
 		super( manager );
 
-		this.localBlobs = null;
+		this.skipPoints = 1;
 		this.lodDepthLimit = 0;
-		this.lasLoader = new LASZLoader(manager);
+		this.localBlobs = null;
+
+		this.lasLoader = new LASZLoader( manager );
 
 	}
 
@@ -77,6 +79,7 @@ class EPTLoader extends Loader {
 		}
 
 		this.lasLoader.setSkipPoints( number_of_points );
+		this.skipPoints = number_of_points;
 		return this;
 
 	}
@@ -227,22 +230,121 @@ class EPTLoader extends Loader {
 
 	}
 
+	getValue( view, offset, type, size, littleEndian = true ) {
+
+		switch ( type ) {
+
+			case 'int8':     return view.getInt8( offset );
+			case 'uint8':    return view.getUint8( offset );
+
+			case 'int16':    return view.getInt16( offset, littleEndian );
+			case 'uint16':   return view.getUint16( offset, littleEndian );
+
+			case 'int32':    return view.getInt32( offset, littleEndian );
+			case 'uint32':   return view.getUint32( offset, littleEndian );
+
+			case 'float':
+			case 'float32':  return view.getFloat32( offset, littleEndian );
+
+			case 'int64':    return Number( view.getBigInt64( offset, littleEndian ) );
+			case 'uint64':   return Number( view.getBigUint64( offset, littleEndian ) );
+
+			case 'double':
+			case 'float64':  return view.getFloat64( offset, littleEndian );
+
+			case 'integer':
+			case 'scaledinteger':
+			case 'signed':
+			case 'unsigned':
+				switch ( size ) {
+					case 1: return (type === 'unsigned' ? view.getUint8( offset ) : view.getInt8( offset ));
+					case 2: return (type === 'unsigned' ? view.getUint16( offset, littleEndian ) : view.getInt16( offset, littleEndian ));
+					case 4: return (type === 'unsigned' ? view.getUint32( offset, littleEndian ) : view.getInt32( offset, littleEndian ));
+					case 8: return (type === 'unsigned' ? Number( view.getBigUint64( offset, littleEndian ) ) : Number( view.getBigInt64( offset, littleEndian ) ));
+
+					default:
+						console.warn( 'Unsupported integer size:', a.size );
+						return 0;
+
+				}
+
+			default:
+				console.warn( 'Unknown attribute type:', type );
+				return 0;
+
+		}
+
+	}
+
 	sizeOf( a ) {
 
 		switch ( a.type ) {
 
-			case 'int32': return 4;
-			case 'uint32': return 4;
-			case 'uint16': return 2;
-			case 'uint8': return 1;
-			case 'float': return 4;
+			case 'int8':
+			case 'uint8':
+				return 1;
+
+			case 'int16':
+			case 'uint16':
+				return 2;
+
+			case 'int32':
+			case 'uint32':
+			case 'float':
+			case 'float32':
+				return 4;
+
+			case 'int64':
+			case 'uint64':
+			case 'float64':
+			case 'double':
+				return 8;
+
 			case 'signed':
 			case 'unsigned':
+			case 'integer':
+			case 'scaledinteger':
 				return a.size;
 
-			default: return 0;
+			default:
+				console.warn( 'Unknown EPT attribute type:', a.type );
+				return 0;
 
 		}
+
+	}
+
+	normalizeColor( value, attr ) {
+
+		// If it's 8-bit storage
+
+		if ( attr.size === 1 ) {
+
+			return value / 255.0;
+
+		}
+
+		// If it's 16-bit storage
+
+		if ( attr.size === 2 ) {
+
+			// Heuristic: if value never exceeds 255, it's really 8-bit data
+
+			if ( value <= 255 ) {
+
+				return value / 255.0;
+
+			}
+
+			// Otherwise assume true 16-bit color
+
+			return value / 65535.0;
+
+		}
+
+		// If it's something else, assume it's already normalized
+
+		return value;
 
 	}
 
@@ -253,77 +355,112 @@ class EPTLoader extends Loader {
 			const view = new DataView( buffer );
 
 			const attrs = ept.attributes || ept.schema;
-			const scale = ept.scale;
-			const offset = ept.offset;
+			const scale = ept.scale || [ 1, 1, 1 ];
+			const offset = ept.offset || [ 0, 0, 0 ];
 
-			// Compute stride
+			// ----- 1. Build attribute descriptors and compute stride -----
 
 			let stride = 0;
+			const attrInfos = [];
 
 			for ( const a of attrs ) {
 
-				stride += this.sizeOf( a );
+				const size = this.sizeOf( a );
+				const type = a.type.toLowerCase();
+				const name = a.name.toLowerCase();
+
+				attrInfos.push( {
+
+					name,
+					type,
+					size,
+					byteOffset: stride,
+					raw: a, // keep original attribute for scale/offset/color info
+
+				} );
+
+				stride += size;
 
 			}
 
-			const count = buffer.byteLength / stride;
-			const positions = new Float32Array( count * 3 );
-			const colors = new Float32Array( count * 3 );
-			const intensity = new Float32Array( count );
+			if ( stride === 0 ) return null;
 
-			for ( let i = 0; i < count; i++ ) {
+			const totalPoints = ( buffer.byteLength / stride ) | 0;
 
-				let byteIndex = i * stride;
+			// ----- 2. Apply skipPoints (density reduction) -----
 
-				for ( const a of attrs ) {
+			const skipPoints = ( this.skipPoints && this.skipPoints > 1 ) ? this.skipPoints : 1;
+			const keptPoints = Math.ceil( totalPoints / skipPoints );
 
-					let attrName = a.name.toLowerCase();
+			const positions = new Float32Array( keptPoints * 3 );
+			const colors = new Float32Array( keptPoints * 3 );
+			const intensity = new Float32Array( keptPoints );
 
-					switch ( attrName ) {
+			// ----- 3. Decode loop with precomputed metadata + skipping -----
+
+			let outIndex = 0;
+
+			for ( let i = 0; i < totalPoints; i += skipPoints ) {
+
+				const baseOffset = i * stride;
+
+				for ( const info of attrInfos ) {
+
+					const a = info.raw;
+
+					const value = this.getValue(
+
+						view,
+						baseOffset + info.byteOffset,
+						info.type,
+						info.size,
+						true
+
+					);
+
+					switch ( info.name ) {
 
 						case 'x':
-							positions[ i * 3 + 0 ] = view.getInt32( byteIndex, true ) * ( a.scale || scale[ 0 ] ) + ( a.offset || offset[ 0 ] );
-							byteIndex += 4;
+							positions[ outIndex * 3 + 0 ] = value * ( a.scale || scale[ 0 ] ) + ( a.offset || offset[ 0 ] );
 							break;
 
 						case 'y':
-							positions[ i * 3 + 1 ] = view.getInt32( byteIndex, true ) * ( a.scale || scale[ 1 ] ) + ( a.offset || offset[ 1 ] );
-							byteIndex += 4;
+							positions[ outIndex * 3 + 1 ] = value * ( a.scale || scale[ 1 ] ) + ( a.offset || offset[ 1 ] );
 							break;
 
 						case 'z':
-							positions[ i * 3 + 2 ] = view.getInt32( byteIndex, true ) * ( a.scale || scale[ 2 ] ) + ( a.offset || offset[ 2 ] );
-							byteIndex += 4;
+							positions[ outIndex * 3 + 2 ] = value * ( a.scale || scale[ 2 ] ) + ( a.offset || offset[ 2 ] );
 							break;
 
 						case 'intensity':
-							intensity[ i ] = view.getUint16( byteIndex, true );
-							byteIndex += 2;
+							intensity[ outIndex ] = value;
 							break;
 
 						case 'red':
-							colors[ i * 3 + 0 ] = view.getUint16( byteIndex, true ) / ( a.size === 2 ? 255.0 : 65535.0 );
-							byteIndex += 2;
+							colors[ outIndex * 3 + 0 ] = this.normalizeColor( value, a );
 							break;
 
 						case 'green':
-							colors[ i * 3 + 1 ] = view.getUint16( byteIndex, true ) / ( a.size === 2 ? 255.0 : 65535.0 );
-							byteIndex += 2;
+							colors[ outIndex * 3 + 1 ] = this.normalizeColor( value, a );
 							break;
 
 						case 'blue':
-							colors[ i * 3 + 2 ] = view.getUint16( byteIndex, true ) / ( a.size === 2 ? 255.0 : 65535.0 );
-							byteIndex += 2;
+							colors[ outIndex * 3 + 2 ] = this.normalizeColor( value, a );
 							break;
 
 						default:
-							byteIndex += this.sizeOf( a );
+							// ignore other attributes
+							break;
 
 					}
 
 				}
 
+				outIndex++;
+
 			}
+
+			// ----- 4. Build geometry -----
 
 			const geometry = new BufferGeometry();
 			geometry.setAttribute( 'position', new BufferAttribute( positions, 3 ) );
@@ -332,7 +469,7 @@ class EPTLoader extends Loader {
 
 			return geometry;
 
-		} catch (err) {
+		} catch ( err ) {
 
 			return null;
 
@@ -387,7 +524,10 @@ class EPTLoader extends Loader {
 		const depth = this.getTileDepth( key, eptJson );
 		if (depth > this.lodDepthLimit) return;
 
-		const hUrl = this.localBlobs ? this.localBlobs[ `${ key }.json` ] : `${ base }ept-hierarchy/${ key }.json`;
+		const hUrl = this.localBlobs
+			? this.localBlobs[ `${ key }.json` ]
+			: `${ base }ept-hierarchy/${ key }.json`;
+
 		const h = await this._loadHierarchyForDepth( hUrl );
 
 		if ( h ) {
@@ -493,6 +633,8 @@ class EPTLoader extends Loader {
 
 		}
 
+		if ( eptJson.dataType === 'zstandard' ) throw new Error( 'Unsupported data type: zstandard' );
+
 		// 2. Load hierarchy files up to the selected depth
 
 		let allKeys = {};
@@ -526,90 +668,58 @@ class EPTLoader extends Loader {
 		const tileGeometries = await this._mapWithConcurrency(
 			filteredKeys,
 			CONCURRENCY,
-			async key => {
+			async (key) => {
 
-				console.log( count++ );
+				console.log( 'Tile ', count++ );
 
-				// 1. Try BIN first
+				let buffer;
 
-				if ( eptJson.dataType === 'zstandard' ) {
+				try {
 
-					return null;
+					const extension = eptJson.dataType === 'binary' ? '.bin' : '.laz';
+					const bin_laz_url = `${ base }ept-data/${ key }${ extension }`;
+					const tileUrl = this.localBlobs ? this.localBlobs[ `${ key }${ extension }` ] : bin_laz_url;
 
-				} else if ( eptJson.dataType === 'binary' ) {
+					const resp = await fetch( tileUrl );
+					if ( !resp.ok ) return;
 
-					const bin = base + 'ept-data/' + key + '.bin';
-					const binUrl = this.localBlobs ? this.localBlobs[ `${ key }.bin` ] : bin;
+					buffer = await resp.arrayBuffer();
 
-					try {
+					// Git LFS Check
 
-						const resp = await fetch( binUrl );
-						if ( !resp.ok ) return null;
+					if ( buffer.byteLength <= GIT_LFS_THRESHOLD_BYTES ) {
 
-						const buffer = await resp.arrayBuffer();
+						const text = new TextDecoder().decode( buffer );
 
-						if ( buffer.byteLength <= GIT_LFS_THRESHOLD_BYTES ) {
+						if ( text.includes( 'git-lfs.github.com/spec' ) ) {
 
-							const text = new TextDecoder().decode( buffer );
-
-							if ( text.includes( 'git-lfs.github.com/spec' ) ) {
-
-								console.warn( 'The selected file is stored in Git LFS!' );
-								git_lfs = true;
-								return null;
-
-							}
+							git_lfs = true;
+							return;
 
 						}
+
+					}
+
+					// Parse individual tile
+
+					if ( extension === '.bin' ) {
 
 						const geom = await this.loadBinTile( buffer, eptJson );
 						if ( geom ) return geom;
 
-					} catch ( err ) {
-
-						console.warn( 'BIN load failed:', binUrl, err );
-
-					}
-
-					return null;
-
-				} else {
-
-					const laz = base + 'ept-data/' + key + '.laz';
-					const lazUrl = this.localBlobs ? this.localBlobs[ `${ key }.laz` ] : laz;
-
-					// 2. Try LAZ next
-
-					try {
-
-						const resp = await fetch( lazUrl );
-						if ( !resp.ok ) return null;
-
-						const buffer = await resp.arrayBuffer();
-
-						if ( buffer.byteLength <= GIT_LFS_THRESHOLD_BYTES ) {
-
-							const text = new TextDecoder().decode( buffer );
-
-							if ( text.includes( 'git-lfs.github.com/spec' ) ) {
-
-								console.warn( 'The selected file is stored in Git LFS!' );
-								git_lfs = true;
-								return null;
-
-							}
-
-						}
+					} else {
 
 						return await this.lasLoader.parse( buffer );
 
-					} catch ( err ) {
-
-						console.warn( 'LAZ load failed:', lazUrl, err );
-
 					}
 
+				} catch (err) {
+
+					console.warn( `Tile ${ key } failed to load:`, err );
+
 				}
+
+				return null;
 
 			}
 
