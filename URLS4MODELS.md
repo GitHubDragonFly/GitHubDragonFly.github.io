@@ -46,7 +46,7 @@ Else, most of the passive links below are of the actual models so copy any of th
 - Access to [KhronosGroup](https://github.com/KhronosGroup/glTF-Sample-Models) GLTF v2.0 examples for GLTF / GM Viewer, mind the correct path after `2.0`:
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/Sponza/glTF/Sponza.gltf`
   - `https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Models/master/2.0/GlamVelvetSofa/glTF/GlamVelvetSofa.gltf`
-- for multiple camera GLB example try downloading the fixed `VC-v2.glb.zip` file posted by donmccurdy [here](https://github.com/KhronosGroup/glTF-Sample-Models/issues/275)
+- For multiple camera GLB example try downloading the fixed `VC-v2.glb.zip` file posted by donmccurdy [here](https://github.com/KhronosGroup/glTF-Sample-Models/issues/275)
 
 - Access to some ASSIMP example files at [assimp](https://github.com/assimp/assimp/tree/master/test):
   - `https://raw.githubusercontent.com/assimp/assimp/master/test/models-nonbsd/B3D/dwarf2.b3d`
