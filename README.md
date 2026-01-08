@@ -329,22 +329,32 @@ Number Type Converter
 
 - Special notes about `PCD+XYZ+LAS Viewer`:
   - Specifically designed for Point Cloud Data
-  - Supports loading PCD files with three.js PCD Loader
-  - Supports loading XYZ files with modified XYZ Loader
-  - Supports loading LiDAR LAS/LAZ files with custom LASZ Loader:
+  - Supports loading PCD files with three.js `PCD Loader`
+  - Supports loading XYZ files with modified `XYZ Loader`
+  - Supports loading LiDAR LAS / LAZ files with custom `LASZ Loader`:
     - This loader was created with assistance from Microsoft Copilot and Google Gemini
-    - It is internally using LAS Loader from [loaders.gl](https://github.com/visgl/loaders.gl)
-  - Supports loading EPT datasets with custom EPT Loader:
+    - It is internally using `LAS Loader` from [loaders.gl](https://github.com/visgl/loaders.gl)
+  - Supports loading EPT datasets with custom `EPT Loader`:
     - This loader was created with assistance from Microsoft Copilot and Google Gemini
-    - It supports datsets with either BIN or LAZ data files
-    - It is internally using custom LASZ Loader
-  - The viewer allows setting Level Of Detail (LOD) for LAS/LAZ/EPT model to be loaded:
-    - `Density` is presented as percentage and defines how many points get processed by LASZ Loader:
-      - For EPT, only the number of points per tile changes while the volume remains the same
-    - `Depth` levels are defined as root / low / medium / high / extreme and are increasing by the factor of 8:
+    - It supports datasets with either BIN or LAZ data files
+    - It is internally using custom `LASZ Loader`
+  - The viewer allows setting Level Of Detail (LOD) for EPT datasets with BIN / LAZ tiles to be loaded:
+    - `Density` is presented as percentage and defines how many points get processed:
+      - For EPT Datasets, only the number of points per tile changes while the volume remains the same
+    - `Depth` levels set number of loaded tiles and are defined as root / low / medium / high / extreme, which are increasing by the factor of 8:
       - root alone, root + 8 children, root + 64 children, and so on
-    - `Gamma` levels range from 0.1 to 1.9 and are applicable to LASZ Loader
-    - Consider adjusting LOD settings to improve performance and memory usage
+    - `Gamma` levels range from 0.1 to 1.9:
+      - For LAZ tiles they adjust intensity gamma
+      - For BIN tiles they adjust color contrast
+  - Consider adjusting LOD settings to improve performance and memory usage
+
+- Special notes about `EPT Viewer`:
+  - Specifically designed to stream tiles from EPT Datasets
+  - Supports loading EPT.JSON + BIN or LAZ files:
+    - It is using customized `EPTStreamLoader` (based on custom `EPT Loader`)
+    - This loader was created with assistance from Microsoft Copilot and Google Gemini
+  - The viewer allows setting Level Of Detail (LOD) the same as for the above stated `PCD+XYZ+LAS Viewer`
+  - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `USDZ Viewer`:
   - Currently, it only supports USDZ files with USDA (ascii model packed in)
