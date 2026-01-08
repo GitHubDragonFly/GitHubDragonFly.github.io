@@ -7,7 +7,7 @@ import {
 import { LASZLoader } from './LASZLoader.min.js'; // reuse existing LAS/LAZ decoder
 
 // Created with assistance from Microsoft Copilot and Google Gemini
-// Supporting loading of EPT datasets with BIN/LAS/LAZ tiles
+// Supporting loading of streamed BIN/LAS/LAZ tiles from EPT datasets
 
 // EPT datasets always contain:
 // ept.json
@@ -25,7 +25,7 @@ import { LASZLoader } from './LASZLoader.min.js'; // reuse existing LAS/LAZ deco
 
 const GIT_LFS_THRESHOLD_BYTES = 150;
 
-class EPTLoader extends Loader {
+class EPTStreamLoader extends Loader {
 
 	constructor( manager ) {
 
@@ -133,103 +133,6 @@ class EPTLoader extends Loader {
 
 	}
 
-	concatFloat32( arrays ) {
-
-		// Helper to concatenate Float32Arrays
-
-		let total = 0, offset = 0;
-
-		for ( const a of arrays ) total += a.length;
-
-		const out = new Float32Array( total );
-
-		for ( const a of arrays ) {
-
-			out.set( a, offset );
-			offset += a.length;
-
-		}
-
-		return out;
-
-	}
-
-	mergeGeometries( geoms ) {
-
-		// Merge multiple BufferGeometries into one
-
-		const positions = [];
-		const colors = [];
-		const intensities = [];
-		const classifications = [];
-
-		let hasColor = false;
-		let hasIntensity = false;
-		let hasClass = false;
-
-		for ( const g of geoms ) {
-
-			const pos = g.getAttribute( 'position' );
-
-			if ( pos ) positions.push( pos.array );
-
-			const col = g.getAttribute( 'color' );
-
-			if ( col ) {
-
-				hasColor = true;
-				colors.push( col.array );
-
-			}
-
-			const inten = g.getAttribute( 'intensity' );
-
-			if ( inten ) {
-
-				hasIntensity = true;
-				intensities.push( inten.array );
-
-			}
-
-			const cls = g.getAttribute( 'classification' );
-
-			if ( cls ) {
-
-				hasClass = true;
-				classifications.push( cls.array );
-
-			}
-
-		}
-
-		const merged = new BufferGeometry();
-		merged.setAttribute( 'position', new BufferAttribute( this.concatFloat32( positions ), 3 ) );
-
-		if ( hasColor ) {
-
-			merged.setAttribute( 'color', new BufferAttribute( this.concatFloat32( colors ), 3 ) );
-
-		}
-
-		if ( hasIntensity ) {
-
-			merged.setAttribute( 'intensity', new BufferAttribute( this.concatFloat32( intensities ), 1 ) );
-
-		}
-
-		if ( hasClass ) {
-
-			merged.setAttribute( 'classification', new BufferAttribute( this.concatFloat32( classifications ), 1) );
-
-		}
-
-		merged.computeBoundingBox();
-		merged.computeBoundingSphere();
-
-		return merged;
-
-	}
-
 	getValue( view, offset, type, size, littleEndian = true ) {
 
 		switch ( type.toLowerCase() ) {
@@ -273,7 +176,6 @@ class EPTLoader extends Loader {
 				return 0;
 
 		}
-
 	}
 
 	sizeOf( a ) {
@@ -618,6 +520,7 @@ class EPTLoader extends Loader {
 			while ( true ) {
 
 				const i = index++;
+
 				if ( i >= items.length ) break;
 
 				const item = items[ i ];
@@ -654,20 +557,20 @@ class EPTLoader extends Loader {
 
 	load( url, onLoad, onProgress, onError ) {
 
-		this.parse( url )
-		.then( geometry => onLoad( geometry ) )
-		.catch( err => {
+		try {
+
+			this.parse( url, onLoad );
+
+		} catch( err ) {
 
 			if ( onError ) onError( err );
 			else console.error( err );
 
-		});
+		}
 
 	}
 
-	async parse( url ) {
-
-		// 1. Load ept.json
+	async parse( url, onTileLoaded ) {
 
 		let resp, eptJson, base;
 		let git_lfs = false;
@@ -688,23 +591,18 @@ class EPTLoader extends Loader {
 
 		if ( eptJson.dataType === 'zstandard' ) throw new Error( 'Unsupported data type: zstandard' );
 
-		// 2. Load hierarchy files up to the selected depth
+		// 1. Recursive Hierarchy Discovery, start recursion from the root
 
 		let allKeys = {};
 
-		// Start recursion from the root
-
 		await this.discoverHierarchy( '0-0-0-0', eptJson, base, allKeys );
-
-		// 3. Extract tile keys
 
 		const tileKeys = Object.keys( allKeys );
 		console.log( 'Total Tiles:', tileKeys.length );
 
 		let filteredKeys = tileKeys.filter( key => {
 
-			const depth = this.getTileDepth( key, eptJson );
-			return depth <= this.lodDepthLimit;
+			return this.getTileDepth( key, eptJson ) <= this.lodDepthLimit;
 
 		});
 
@@ -714,18 +612,18 @@ class EPTLoader extends Loader {
 
 		console.log( 'Selected Tiles:', filteredKeys.length );
 
-		// 4. Load and decode each tile with concurrency limit:
-		//	- Tune this number depending on your machine/network
-		//	- 2–4 for older computers, 6–8 for stronger machines
+		// 2. Streamed Loading with Concurrency
 
 		const CONCURRENCY = this.localBlobs ? 9 : 4;
 
-		const tileGeometries = await this._mapWithConcurrency(
+		// We use the concurrency mapper, but instead of returning
+		// geoms to a list, we fire a callback for each successful tile
+
+		await this._mapWithConcurrency(
+
 			filteredKeys,
 			CONCURRENCY,
 			async (key) => {
-
-				console.log( 'Tile ', key );
 
 				let buffer;
 
@@ -735,7 +633,7 @@ class EPTLoader extends Loader {
 					const bin_laz_url = `${ base }ept-data/${ key }${ extension }`;
 					const tileUrl = this.localBlobs ? this.localBlobs[ `${ key }${ extension }` ] : bin_laz_url;
 
-					resp = await fetch( tileUrl );
+					const resp = await fetch( tileUrl );
 					if ( !resp.ok ) return;
 
 					buffer = await resp.arrayBuffer();
@@ -757,14 +655,25 @@ class EPTLoader extends Loader {
 
 					// Parse individual tile
 
+					let geom;
+
 					if ( extension === '.bin' ) {
 
-						const geom = await this.loadBinTile( buffer, eptJson );
-						if ( geom ) return geom;
+						geom = await this.loadBinTile( buffer, eptJson );
 
 					} else {
 
-						return await this.lasLoader.parse( buffer );
+						geom = await this.lasLoader.parse( buffer );
+
+					}
+
+					// 3. IMMEDIATELY pass the geometry back to the viewer
+
+					if ( geom && onTileLoaded ) {
+
+						console.log( 'Tile ', key );
+
+						onTileLoaded( geom, filteredKeys.length, key );
 
 					}
 
@@ -774,28 +683,16 @@ class EPTLoader extends Loader {
 
 				}
 
-				return null;
-
 			}
 
 		);
 
-		// Filter out failed tiles
+		if ( git_lfs ) console.error( 'Some files are Git LFS pointers. Data not loaded.' );
 
-		const validGeometries = tileGeometries.filter( g => g );
-
-		if ( validGeometries.length === 0 ) {
-
-			throw new Error( 'No EPT tiles could be loaded.' + ( git_lfs ? ' Files stored in Git LFS!' : '' ) );
-
-		}
-
-		// 5. Merge all tile geometries
-
-		return this.mergeGeometries( validGeometries );
+		return true; // Signal completion
 
 	}
 
 }
 
-export { EPTLoader };
+export { EPTStreamLoader };
