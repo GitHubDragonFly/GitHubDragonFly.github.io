@@ -314,37 +314,45 @@ class EPTLoader extends Loader {
 
 	}
 
-	normalizeColor( value, attr ) {
+	// Normalize Color or Intensity values
+
+	normalizeCI( value, attr ) {
+
+		let normalized;
 
 		// If it's 8-bit storage
 
 		if ( attr.size === 1 ) {
 
-			return value / 255.0;
+			normalized = value / 255.0;
 
-		}
-
-		// If it's 16-bit storage
-
-		if ( attr.size === 2 ) {
+		} else if ( attr.size === 2 ) {
 
 			// Heuristic: if value never exceeds 255, it's really 8-bit data
 
 			if ( value <= 255 ) {
 
-				return value / 255.0;
+				normalized = value / 255.0;
+
+			} else {
+
+				// Otherwise assume true 16-bit color
+
+				normalized = value / 65535.0;
 
 			}
 
-			// Otherwise assume true 16-bit color
+		} else {
 
-			return value / 65535.0;
+			// If it's something else, assume it's already normalized
+
+			normalized = value;
 
 		}
 
-		// If it's something else, assume it's already normalized
+		// Clamp the value for any odd datasets
 
-		return value;
+		return Math.min( 1.0, normalized );
 
 	}
 
@@ -421,31 +429,31 @@ class EPTLoader extends Loader {
 					switch ( info.name ) {
 
 						case 'x':
-							positions[ outIndex * 3 + 0 ] = value * ( a.scale || scale[ 0 ] ) + ( a.offset || offset[ 0 ] );
+							positions[ outIndex * 3 + 0 ] = value * ( scale[ 0 ] || a.scale ) + ( offset[ 0 ] || a.offset );
 							break;
 
 						case 'y':
-							positions[ outIndex * 3 + 1 ] = value * ( a.scale || scale[ 1 ] ) + ( a.offset || offset[ 1 ] );
+							positions[ outIndex * 3 + 1 ] = value * ( scale[ 1 ] || a.scale ) + ( offset[ 1 ] || a.offset );
 							break;
 
 						case 'z':
-							positions[ outIndex * 3 + 2 ] = value * ( a.scale || scale[ 2 ] ) + ( a.offset || offset[ 2 ] );
+							positions[ outIndex * 3 + 2 ] = value * ( scale[ 2 ] || a.scale ) + ( offset[ 2 ] || a.offset );
 							break;
 
 						case 'intensity':
-							intensity[ outIndex ] = value;
+							intensity[ outIndex ] = this.normalizeCI( value, a );
 							break;
 
 						case 'red':
-							colors[ outIndex * 3 + 0 ] = this.normalizeColor( value, a );
+							colors[ outIndex * 3 + 0 ] = this.normalizeCI( value, a );
 							break;
 
 						case 'green':
-							colors[ outIndex * 3 + 1 ] = this.normalizeColor( value, a );
+							colors[ outIndex * 3 + 1 ] = this.normalizeCI( value, a );
 							break;
 
 						case 'blue':
-							colors[ outIndex * 3 + 2 ] = this.normalizeColor( value, a );
+							colors[ outIndex * 3 + 2 ] = this.normalizeCI( value, a );
 							break;
 
 						default:
