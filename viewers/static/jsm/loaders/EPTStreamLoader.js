@@ -567,7 +567,7 @@ class EPTStreamLoader extends Loader {
 
 		try {
 
-			this.parse( url, onLoad );
+			this.parse( url, onLoad, onError );
 
 		} catch( err ) {
 
@@ -578,7 +578,7 @@ class EPTStreamLoader extends Loader {
 
 	}
 
-	async parse( url, onTileLoaded ) {
+	async parse( url, onTileLoaded, onTileError ) {
 
 		let resp, eptJson, base;
 		let git_lfs = false;
@@ -685,7 +685,7 @@ class EPTStreamLoader extends Loader {
 
 					}
 
-				} catch (err) {
+				} catch ( err ) {
 
 					console.warn( `Tile ${ key } failed to load:`, err );
 
@@ -695,7 +695,12 @@ class EPTStreamLoader extends Loader {
 
 		);
 
-		if ( git_lfs ) console.error( 'Some files are Git LFS pointers. Data not loaded.' );
+		if ( git_lfs ) {
+
+			if ( onTileError ) onTileError( 'Files are Git LFS pointers. Data not loaded.' );
+			else console.error( 'Files are Git LFS pointers. Data not loaded.');
+
+		}
 
 		return true; // Signal completion
 
