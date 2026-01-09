@@ -340,12 +340,13 @@ Number Type Converter
     - It is internally using custom `LASZ Loader`
   - The viewer allows setting Level Of Detail (LOD) for EPT datasets with BIN / LAZ tiles to be loaded:
     - `Density` is presented as percentage and defines how many points get processed:
+      - For LAS / LAZ the density of the model changes
       - For EPT Datasets, only the number of points per tile changes while the volume remains the same
     - `Depth` levels set number of loaded tiles and are defined as root / low / medium / high / extreme, which are increasing by the factor of 8:
-      - root alone, root + 8 children, root + 64 children, and so on
+      - root alone, root + 8 children, root + 64 children, root + 512 children, and so on
     - `Gamma` levels range from 0.1 to 1.9:
-      - For LAZ tiles they adjust intensity gamma
-      - For BIN tiles they adjust color contrast
+      - For LAZ tiles they adjust intensity gamma (0.1 = brighter, 1.9 = darker)
+      - For BIN tiles they adjust color contrast (0.1 = black & white, 1.9 = rich colors)
   - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `EPT Viewer`:
