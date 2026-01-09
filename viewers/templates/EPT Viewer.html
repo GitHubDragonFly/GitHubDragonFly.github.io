@@ -23,7 +23,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var THREE, manager, ept_loader, isMobile, count = 0;
+      var THREE, manager, ept_loader, isMobile, count = 0, needsRender;
       var renderer, scene, camera, controls, render_requested;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var ww = window.innerWidth, wh = window.innerHeight;
@@ -264,21 +264,6 @@
         mouse_wheel = true;
       }
 
-      function set_camera() {
-        bounding_box.setFromObject( ept_obj );
-
-        // Set camera
-        const sphere = new THREE.Sphere();
-        bounding_box.getBoundingSphere( sphere );
-
-        // Move camera back by radius * some factor
-        camera.position.set( 0, 0, sphere.radius * 2.5 );
-        camera.lookAt( 0, 0, 0 );
-        camera.updateProjectionMatrix();
-
-        mouse_wheel = true;
-      }
-
       async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
@@ -295,6 +280,7 @@
         selected_ept_file = null;
         mouse_down = false;
         mouse_wheel = true;
+        needsRender = false;
         local_files = null;
         filesMap = {};
         count = 0;
@@ -371,7 +357,7 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 1e9 );
           camera.position.set( 0, 0, 5000 );
           scene.add( camera );
         }
@@ -484,6 +470,23 @@
         }
       }
 
+      function fadeIn( points, duration = 500 ) {
+        const mat = points.material;
+        const start = performance.now();
+
+        function frame( now ) {
+          const t = Math.min( ( now - start ) / duration, 1 );
+          const k = t * t * (3 - 2 * t); // smoothstep
+          mat.opacity = k;
+
+          needsRender = true; // <--- wake renderer
+
+          if (t < 1) requestAnimationFrame( frame );
+        }
+
+        requestAnimationFrame( frame );
+      }
+
       function loadFile() {
         let tile_count = 0;
 
@@ -493,17 +496,21 @@
           // points were returned as tile geometry
 
           const points_name = 'ept_points_' + current_tile;
+          const tileMap = new Map(); // tile → THREE.Points
 
           get_elevation_colors( points.clone(), points_name );
 
           let material = new THREE.PointsMaterial( {
             size: (isMobile === true ? 0.2 : 0.1),
             transparent: true,
+            opacity: 0.0,
             vertexColors: points.hasAttribute( 'color' )
           } );
 
           const ept_points = new THREE.Points( points, material );
           ept_points.name = points_name;
+          ept_points.sizeAttenuation = true;
+          ept_points.sortPoints = true;
 
           original_vertex_color_array[ points_name ] = ept_points.geometry.getAttribute( 'color' );
 
@@ -515,20 +522,12 @@
 
           if (ept_points.geometry.hasAttribute( 'classification' )) classification_present = true;
 
-          ept_points.sizeAttenuation = true;
-          ept_points.sortPoints = true;
-
           ept_obj.add( ept_points );
 
           if (tile_count === 0) {
-            const box = new THREE.Box3().setFromObject( ept_obj );
-            const center = box.getCenter( new THREE.Vector3() );
-            camera.lookAt( center );
-            const size = box.getSize( new THREE.Vector3() );
-
-            camera.near = 0.1;
-            camera.far = 1e9;
-            camera.updateProjectionMatrix();
+            bounding_box.setFromObject( ept_obj );
+            const center = bounding_box.getCenter( new THREE.Vector3() );
+            const size = bounding_box.getSize( new THREE.Vector3() );
 
             camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
             camera.lookAt( center );
@@ -550,6 +549,9 @@
             count = 0;
             render();
           }
+
+          tileMap.set( current_tile, ept_points );
+          fadeIn( ept_points, 800 );
 
           if (tile_count === total_tiles - 1) {
             finish_loading();
@@ -581,17 +583,21 @@
             // points were returned as tile geometry
 
             const points_name = 'ept_points_' + current_tile;
+            const tileMap = new Map(); // tile → THREE.Points
 
             get_elevation_colors( points.clone(), points_name );
 
             let material = new THREE.PointsMaterial( {
-              size: (isMobile === true) ? 0.2 : 0.1,
+              size: (isMobile === true ? 0.2 : 0.1),
               transparent: true,
+              opacity: 0.0,
               vertexColors: points.hasAttribute( 'color' )
             } );
 
             let ept_points = new THREE.Points( points, material );
             ept_points.name = points_name;
+            ept_points.sizeAttenuation = true;
+            ept_points.sortPoints = true;
 
             original_vertex_color_array[ ept_points.name ] = ept_points.geometry.getAttribute( 'color' );
 
@@ -603,21 +609,14 @@
 
             if (ept_points.geometry.hasAttribute( 'classification' )) classification_present = true;
 
-            ept_points.sizeAttenuation = true;
-            ept_points.sortPoints = true;
-
             ept_obj.add( ept_points );
 
             if (tile_count === 0) {
-              const box = new THREE.Box3().setFromObject( ept_obj );
-              const center = box.getCenter( new THREE.Vector3() ); camera.lookAt( center );
-              const size = box.getSize( new THREE.Vector3() );
+              bounding_box.setFromObject( ept_obj );
+              const center = bounding_box.getCenter( new THREE.Vector3() );
+              const size = bounding_box.getSize( new THREE.Vector3() );
 
-              camera.near = 0.1;
-              camera.far = 1e9;
-              camera.updateProjectionMatrix();
-
-              camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, box.getSize( new THREE.Vector3() ).length())));
+              camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
               camera.lookAt( center );
 
               // Center root
@@ -638,6 +637,9 @@
               render();
             }
 
+            tileMap.set( current_tile, ept_points );
+            fadeIn( ept_points, 800 );
+
             if (tile_count === total_tiles - 1) {
               finish_loading();
             } else {
@@ -654,8 +656,6 @@
       }
 
       async function finish_loading() {
-        set_camera();
-
         //const boxHelper = new THREE.Box3Helper( new THREE.Box3().setFromObject( ept_obj ), 0xff0000 );
         //scene.add( boxHelper );
 
@@ -787,11 +787,14 @@
 
       function render() {
         if (ept_obj) {
-          if (mouse_down || mouse_wheel) {
+          if (mouse_down || mouse_wheel || needsRender) {
             controls.update();
 
             renderer.clear();
             renderer.render( scene, camera );
+
+            // Reset animation flag AFTER rendering
+            needsRender = false;
 
             if (mouse_wheel === true) {
               if (count > 100) {
@@ -882,9 +885,11 @@
           alert('Limited functionality. Check your internet connection!');
         }
 
-        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
-          (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
+        isNewiPad = (/iPad/.test( navigator.platform ) && (/Mac OS X/i.test( navigator.userAgent ))) ||
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        isMobile = (isNewiPad === false) && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
 
         if (isMobile) {
           const select = document.getElementById("tile_level");
@@ -900,6 +905,10 @@
           $('#tile_level').change( function() { $(this).children(':selected').click(); });
           $('#gamma_level').change( function() { $(this).children(':selected').click(); });
         }
+
+        document.getElementById('detail_level').selectedIndex = 0;
+        document.getElementById('tile_level').selectedIndex = 0;
+        document.getElementById('gamma_level').selectedIndex = 0;
 
         mouse_wheel = true;
       }
