@@ -7,6 +7,51 @@
     <link rel="stylesheet" href="../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR:', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE:', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE:', event.reason );
+      });
+    </script>
+
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
@@ -23,8 +68,8 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var THREE, manager, ept_loader, isMobile, count = 0, needsRender;
-      var renderer, scene, camera, controls, render_requested;
+      var THREE, manager, ept_loader, isMobile, count = 0, init_running = false;
+      var renderer, scene, camera, controls, render_requested, needsRender;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var ww = window.innerWidth, wh = window.innerHeight;
       var ept_obj, selected_ept_file, selected_url_file = '';
@@ -77,6 +122,7 @@
         <label for="btn_elevation_colors" title="Toggle Elevation Colors"></label>
         <button title="Toggle Classification Colors" id="btn_classification_colors" onclick="set_classification_colors();" style="display: none; min-width: 28px;">CC</button>
         <label for="btn_classification_colors" title="Toggle Classification Colors"></label>
+        <div id="status_indicator" class="indicator"></div>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
@@ -267,6 +313,8 @@
       async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
+        init_running = true;
+
         if (scene) {
           mouse_wheel = true;
 
@@ -386,6 +434,9 @@
           //controls.minDistance = 2;
           //controls.maxDistance = 500;
         }
+
+        // Start flashing indicator
+        document.getElementById('status_indicator').style.visibility = 'visible';
 
         // Load EPT files
         selected_ept_file !== null ? loadFile() : loadURLFile();
@@ -521,6 +572,25 @@
         requestAnimationFrame( frame );
       }
 
+      function frame_camera() {
+        bounding_box.setFromObject( ept_obj );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
+
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        camera.lookAt( center );
+
+        // Center root
+        ept_obj.position.sub( center );
+
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist * 1.5 );
+        camera.lookAt( 0, 0, 0 );
+      }
+
       function loadFile() {
         let tile_count = 0;
 
@@ -559,22 +629,7 @@
           ept_obj.add( ept_points );
 
           if (tile_count === 0) {
-            bounding_box.setFromObject( ept_obj );
-            const center = bounding_box.getCenter( new THREE.Vector3() );
-            const size = bounding_box.getSize( new THREE.Vector3() );
-
-            camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
-            camera.lookAt( center );
-
-            // Center root
-            ept_obj.position.sub( center );
-
-            // Frame camera to root
-            const maxDim = Math.max( size.x, size.y, size.z );
-            const fov = THREE.MathUtils.degToRad( camera.fov );
-            const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
-            camera.position.set( 0, 0, dist * 1.5 );
-            camera.lookAt( 0, 0, 0 );
+            frame_camera();
 
             // Start rendering
             document.getElementById('div_loading').style.display = 'none';
@@ -646,22 +701,7 @@
             ept_obj.add( ept_points );
 
             if (tile_count === 0) {
-              bounding_box.setFromObject( ept_obj );
-              const center = bounding_box.getCenter( new THREE.Vector3() );
-              const size = bounding_box.getSize( new THREE.Vector3() );
-
-              camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
-              camera.lookAt( center );
-
-              // Center root
-              ept_obj.position.sub( center );
-
-              // Frame camera to root
-              const maxDim = Math.max( size.x, size.y, size.z );
-              const fov = THREE.MathUtils.degToRad( camera.fov );
-              const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
-              camera.position.set( 0, 0, dist * 1.5 );
-              camera.lookAt( 0, 0, 0 );
+              frame_camera();
 
               // Start rendering
               document.getElementById('div_loading').style.display = 'none';
@@ -690,6 +730,9 @@
       }
 
       async function finish_loading() {
+        ept_obj.rotateX( - Math.PI / 2.0 );
+        frame_camera();
+
         //const boxHelper = new THREE.Box3Helper( new THREE.Box3().setFromObject( ept_obj ), 0xff0000 );
         //scene.add( boxHelper );
 
@@ -704,6 +747,11 @@
         }
 
         console.timeEnd( 'Loading Time' );
+
+        // Stop flashing indicator
+        document.getElementById('status_indicator').style.visibility = 'hidden';
+
+        init_running = false;
 
         if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 1000 ) );
       }
@@ -720,6 +768,11 @@
         mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
+
+        // Stop flashing indicator
+        document.getElementById('status_indicator').style.visibility = 'hidden';
+
+        init_running = false;
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
@@ -831,7 +884,7 @@
             needsRender = false;
 
             if (mouse_wheel === true) {
-              if (count > 100) {
+              if (count > 30) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -851,6 +904,8 @@
         document.getElementById('btn_plus').style.backgroundColor = 'transparent';
         document.getElementById('btn_minus').style.backgroundColor = 'transparent';
         document.getElementById('btn_elevation_colors').style.backgroundColor = 'transparent';
+
+        init_running = false;
 
         // Reset the view
         if (reset === true) {
@@ -915,10 +970,6 @@
 
     <script>
       function document_ready() {
-        if (typeof $ === 'undefined') {
-          alert('Limited functionality. Check your internet connection!');
-        }
-
         isNewiPad = (/iPad/.test( navigator.platform ) && (/Mac OS X/i.test( navigator.userAgent ))) ||
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
 
