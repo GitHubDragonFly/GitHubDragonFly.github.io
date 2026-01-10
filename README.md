@@ -180,6 +180,9 @@ Number Type Converter
     - Mobile viewers show it as the `Browse` button
 - Any of the viewers might have bugs and interface / library related limitations
   - Some viewers might be slow to load some models, usually if using `WASM` of some library
+- Google Gemini AI assisted in creating the following within CSS / HTML files, wherever present:
+  - Catching Global and Unhandled and Network errors
+  - Flashing red status indicator, which is visible during loading of a 3D model file(s)
 - Most desktop viewers will also allow you to test multiple image formats by setting either of them as a background and even turning it into an equirectangular environment
 - Currently experimental three.js `WebGPU` support is included in the following experimental viewers, either their standalone or desktop or mobile version:
   - `GLTF`, `OBJ+MTL`, `PDB` and `PLY+STL` WebGPU viewers:
