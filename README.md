@@ -353,8 +353,10 @@ Number Type Converter
   - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `EPT Viewer`:
-  - Specifically designed to stream tiles from EPT Datasets
-  - Supports loading EPT.JSON + BIN or LAZ files:
+  - Specifically designed to stream tiles from Entwine Point Tiles (EPT) Datasets
+  - Supports loading `ept.json` + `BIN or LAZ or ZST` tiles:
+    - Normally loaded via URL (containing `ept.json` file)
+    - Local loading is supported, all required files need to be in a single folder
     - It is using customized `EPTStreamLoader` (based on custom `EPT Loader`)
     - This loader was created with assistance from Microsoft Copilot and Google Gemini
   - The viewer allows setting Level Of Detail (LOD) the same as for the above stated `PCD+XYZ+LAS Viewer`
