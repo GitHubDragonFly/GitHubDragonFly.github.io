@@ -30,7 +30,7 @@
       var ept_obj, selected_ept_file, selected_url_file = '';
       var ept_displayed = false, warning_displayed = false;
       var url_displayed = false, url_loading = false;
-      var filesMap, local_files, bounding_box;
+      var filesMap, local_files, bounding_box, globalElevationRange;
       var classification_present, classification_enabled;
       var elevationColors, elevation, original_vertex_color_array;
     </script>
@@ -287,6 +287,7 @@
         elevation = false;
         elevationColors = {};
         render_requested = false;
+        globalElevationRange = null;
         classification_enabled = false;
         classification_present = false;
         bounding_box = new THREE.Box3();
@@ -399,8 +400,17 @@
         5: [0.0, 1.0, 0.0],   // High vegetation
         6: [0.6, 0.6, 0.6],   // Building
         7: [0.3, 0.3, 0.3],   // Low point / noise
-        9: [0.0, 0.4, 1.0],   // Water
-        17: [1.0, 0.0, 1.0],  // Bridge deck
+        8:  [1.0, 1.0, 0.0],   // Key-point
+        9:  [0.0, 0.4, 1.0],   // Water
+        10: [0.7, 0.7, 0.2],   // Rail
+        11: [0.4, 0.4, 0.4],   // Road surface
+        12: [0.8, 0.8, 0.8],   // Overlap
+        13: [1.0, 0.5, 0.0],   // Wire-guard
+        14: [1.0, 0.7, 0.0],   // Wire-conductor
+        15: [0.8, 0.5, 0.2],   // Transmission tower
+        16: [0.9, 0.6, 0.3],   // Wire-structure connector
+        17: [1.0, 0.0, 1.0],   // Bridge deck
+        18: [0.2, 0.2, 0.2],   // High noise
       };
 
       function getClassColor( c ) {
@@ -433,24 +443,52 @@
         return [ 1, 0.5 - k * 0.5, 0 ];
       }
 
-      function get_elevation_colors( points_cloud, pc_name ) {
-        points_cloud.computeBoundingBox();
-        points_cloud.computeBoundingSphere();
+      function get_robust_range( geometry ) {
+        const pos = geometry.attributes.position.array;
+        const zValues = [];
+    
+        // Sample points (every 5th point is enough for a statistical range)
 
+        for (let i = 0; i < pos.length; i += 3 * 5) {
+          zValues.push( pos[ i + 2 ] );
+        }
+
+        // Sort Z values numerically
+
+        zValues.sort( ( a, b ) => a - b );
+
+        // Pick 1st and 99th percentile to ignore extreme noise
+
+        const p1 = zValues[ Math.floor( zValues.length * 0.01 ) ];
+        const p99 = zValues[ Math.floor( zValues.length * 0.99 ) ];
+
+        return {
+          min: p1,
+          max: p99,
+          range: ( p99 - p1 ) || 1.0
+        };
+      }
+
+      function get_elevation_colors( points_cloud, pc_name ) {
         const intensity = points_cloud.attributes.intensity?.array;
         const pos = points_cloud.attributes.position.array;
         const pos_count = pos.length / 3.0;
 
-        const minZ = points_cloud.boundingBox.min.z;
-        const maxZ = points_cloud.boundingBox.max.z;
+        // Calculate range once using the root tile (0-0-0-0)
 
-        const rangeZ = (maxZ - minZ) || 1;
+        if (!globalElevationRange) {
+          globalElevationRange = get_robust_range( points_cloud );
+        }
+
+        const { min, max, range } = globalElevationRange;
 
         elevationColors[ pc_name ] = new Float32Array( pos.length );
 
         for (let i = 0; i < pos_count; i++) {
           const z = pos[ i * 3 + 2 ];
-          const t = (z - minZ) / rangeZ; // normalized 0–1
+
+          // Clamp t to [0, 1] to prevent white/broken colors for noise points
+          let t = Math.max( 0, Math.min( 1, ( z - min ) / range ) );
 
           // Gradient: blue → cyan → green → yellow → red
 
@@ -458,15 +496,11 @@
 
           const [ r, g, b ] = colormap( tSmooth );
 
-          if (intensity) {
-            elevationColors[ pc_name ][ i * 3 + 0 ] = r * (intensity[ i ] || 1.0);
-            elevationColors[ pc_name ][ i * 3 + 1 ] = g * (intensity[ i ] || 1.0);
-            elevationColors[ pc_name ][ i * 3 + 2 ] = b * (intensity[ i ] || 1.0);
-          } else {
-            elevationColors[ pc_name ][ i * 3 + 0 ] = r;
-            elevationColors[ pc_name ][ i * 3 + 1 ] = g;
-            elevationColors[ pc_name ][ i * 3 + 2 ] = b;
-          }
+          const mult = intensity ? ( intensity[ i ] || 1.0 ) : 1.0;
+
+          elevationColors[ pc_name ][ i * 3 + 0 ] = r * mult;
+          elevationColors[ pc_name ][ i * 3 + 1 ] = g * mult;
+          elevationColors[ pc_name ][ i * 3 + 2 ] = b * mult;
         }
       }
 
