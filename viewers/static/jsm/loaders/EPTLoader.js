@@ -4,6 +4,7 @@ import {
     Loader
 } from 'three';
 
+import * as fzstd from 'https://cdn.skypack.dev/fzstd?min';
 import { LASZLoader } from './LASZLoader.min.js'; // reuse existing LAS/LAZ decoder
 
 // Created with assistance from Microsoft Copilot and Google Gemini
@@ -33,10 +34,21 @@ class EPTLoader extends Loader {
 
 		this.skipPoints = 1;
 		this.lodDepthLimit = 0;
+		this.globalMinZ = null;
+		this.globalMaxZ = null;
 		this.localBlobs = null;
 		this.contrastFactor = 1.0;
 
+		this.zstd = fzstd;
+
 		this.lasLoader = new LASZLoader( manager );
+
+	}
+
+	setZstdDecompressor( zstdInstance ) {
+
+		this.zstd = zstdInstance;
+		return this;
 
 	}
 
@@ -165,7 +177,7 @@ class EPTLoader extends Loader {
 
 		let hasColor = false;
 		let hasIntensity = false;
-		let hasClass = false;
+		let hasClassification = false;
 
 		for ( const g of geoms ) {
 
@@ -195,7 +207,7 @@ class EPTLoader extends Loader {
 
 			if ( cls ) {
 
-				hasClass = true;
+				hasClassification = true;
 				classifications.push( cls.array );
 
 			}
@@ -217,7 +229,7 @@ class EPTLoader extends Loader {
 
 		}
 
-		if ( hasClass ) {
+		if ( hasClassification ) {
 
 			merged.setAttribute( 'classification', new BufferAttribute( this.concatFloat32( classifications ), 1) );
 
@@ -429,15 +441,15 @@ class EPTLoader extends Loader {
 					switch ( info.name ) {
 
 						case 'x':
-							positions[ outIndex * 3 + 0 ] = value * ( scale[ 0 ] || a.scale ) + ( offset[ 0 ] || a.offset );
+							positions[ outIndex * 3 + 0 ] = value * ( scale[ 0 ] ?? a.scale ) + ( offset[ 0 ] ?? a.offset );
 							break;
 
 						case 'y':
-							positions[ outIndex * 3 + 1 ] = value * ( scale[ 1 ] || a.scale ) + ( offset[ 1 ] || a.offset );
+							positions[ outIndex * 3 + 1 ] = value * ( scale[ 1 ] ?? a.scale ) + ( offset[ 1 ] ?? a.offset );
 							break;
 
 						case 'z':
-							positions[ outIndex * 3 + 2 ] = value * ( scale[ 2 ] || a.scale ) + ( offset[ 2 ] || a.offset );
+							positions[ outIndex * 3 + 2 ] = value * ( scale[ 2 ] ?? a.scale ) + ( offset[ 2 ] ?? a.offset );
 							break;
 
 						case 'intensity':
@@ -683,7 +695,12 @@ class EPTLoader extends Loader {
 		try {
 
 			resp = await fetch( url );
-			if ( !resp.ok ) return;
+
+			if ( !resp.ok ) {
+
+				throw new Error( { type: 'network', message: 'Bad response for ept.json' } );
+
+			}
 
 			eptJson = await resp.json();
 			base = url.replace( 'ept.json', '' );
@@ -694,7 +711,14 @@ class EPTLoader extends Loader {
 
 		}
 
-		if ( eptJson.dataType === 'zstandard' ) throw new Error( 'Unsupported data type: zstandard' );
+		if ( eptJson.dataType === 'zstandard' && !this.zstd ) {
+
+			throw new Error( { type: 'unsupported', message: 'Zstandard requires a decompressor' } );
+
+		}
+
+		this.globalMinZ = eptJson.bounds?.[ 2 ];
+		this.globalMaxZ = eptJson.bounds?.[ 5 ];
 
 		// 2. Load hierarchy files up to the selected depth
 
@@ -733,15 +757,20 @@ class EPTLoader extends Loader {
 			CONCURRENCY,
 			async (key) => {
 
-				console.log( 'Tile ', key );
-
 				let buffer;
 
 				try {
 
-					const extension = eptJson.dataType === 'binary' ? '.bin' : '.laz';
+					const extension = eptJson.dataType === 'binary'
+						? '.bin'
+						: eptJson.dataType === 'zstandard'
+							? '.zst'
+							: '.laz';
+
 					const bin_laz_url = `${ base }ept-data/${ key }${ extension }`;
 					const tileUrl = this.localBlobs ? this.localBlobs[ `${ key }${ extension }` ] : bin_laz_url;
+
+					console.log( 'Tile ', key + extension );
 
 					resp = await fetch( tileUrl );
 					if ( !resp.ok ) return;
@@ -768,6 +797,19 @@ class EPTLoader extends Loader {
 					if ( extension === '.bin' ) {
 
 						const geom = await this.loadBinTile( buffer, eptJson );
+						if ( geom ) return geom;
+
+					} else if ( extension === '.zst' ) {
+
+						const compressed = new Uint8Array( buffer );
+						const decompressed = await this.zstd.decompress( compressed );
+
+						const arrayBuffer = decompressed.byteOffset === 0
+							&& decompressed.byteLength === decompressed.buffer.byteLength
+								? decompressed.buffer
+								: decompressed.buffer.slice( decompressed.byteOffset, decompressed.byteOffset + decompressed.byteLength );
+
+						const geom = await this.loadBinTile( arrayBuffer, eptJson );
 						if ( geom ) return geom;
 
 					} else {

@@ -4,6 +4,7 @@ import {
     Loader
 } from 'three';
 
+import * as fzstd from 'https://cdn.skypack.dev/fzstd?min';
 import { LASZLoader } from './LASZLoader.min.js'; // reuse existing LAS/LAZ decoder
 
 // Created with assistance from Microsoft Copilot and Google Gemini
@@ -33,10 +34,21 @@ class EPTStreamLoader extends Loader {
 
 		this.skipPoints = 1;
 		this.lodDepthLimit = 0;
+		this.globalMinZ = null;
+		this.globalMaxZ = null;
 		this.localBlobs = null;
 		this.contrastFactor = 1.0;
 
+		this.zstd = fzstd;
+
 		this.lasLoader = new LASZLoader( manager );
+
+	}
+
+	setZstdDecompressor( zstdInstance ) {
+
+		this.zstd = zstdInstance;
+		return this;
 
 	}
 
@@ -331,15 +343,15 @@ class EPTStreamLoader extends Loader {
 					switch ( info.name ) {
 
 						case 'x':
-							positions[ outIndex * 3 + 0 ] = value * ( scale[ 0 ] || a.scale ) + ( offset[ 0 ] || a.offset );
+							positions[ outIndex * 3 + 0 ] = value * ( scale[ 0 ] ?? a.scale ) + ( offset[ 0 ] ?? a.offset );
 							break;
 
 						case 'y':
-							positions[ outIndex * 3 + 1 ] = value * ( scale[ 1 ] || a.scale ) + ( offset[ 1 ] || a.offset );
+							positions[ outIndex * 3 + 1 ] = value * ( scale[ 1 ] ?? a.scale ) + ( offset[ 1 ] ?? a.offset );
 							break;
 
 						case 'z':
-							positions[ outIndex * 3 + 2 ] = value * ( scale[ 2 ] || a.scale ) + ( offset[ 2 ] || a.offset );
+							positions[ outIndex * 3 + 2 ] = value * ( scale[ 2 ] ?? a.scale ) + ( offset[ 2 ] ?? a.offset );
 							break;
 
 						case 'intensity':
@@ -586,18 +598,56 @@ class EPTStreamLoader extends Loader {
 		try {
 
 			resp = await fetch( url );
-			if ( !resp.ok ) return;
+
+			if ( !resp.ok ) {
+
+				if ( onTileError ) {
+
+					onTileError( { type: 'network', message: 'Bad response for ept.json' } );
+
+				}
+
+				return false;
+
+			}
 
 			eptJson = await resp.json();
 			base = url.replace( 'ept.json', '' );
 
 		} catch ( err ) {
 
-			throw new Error( 'Failed to load url: ' + url + ' ' + err );
+			if ( onTileError ) {
+
+				onTileError( { type: 'exception', message: err.toString() } );
+
+			} else {
+
+				console.error( { type: 'exception', message: err.toString() } );
+
+			}
+
+			return false;
 
 		}
 
-		if ( eptJson.dataType === 'zstandard' ) throw new Error( 'Unsupported data type: zstandard' );
+		if ( eptJson.dataType === 'zstandard' && !this.zstd ) {
+
+			if ( onTileError ) {
+
+				onTileError( { type: 'unsupported', message: 'Zstandard requires a decompressor' } );
+
+			 } else {
+
+				console.error( { type: 'unsupported', message: 'Zstandard requires a decompressor' } );
+
+			}
+
+			return false;
+
+		}
+
+		this.globalMinZ = eptJson.bounds?.[ 2 ];
+		this.globalMaxZ = eptJson.bounds?.[ 5 ];
 
 		// 1. Recursive Hierarchy Discovery, start recursion from the root
 
@@ -637,9 +687,14 @@ class EPTStreamLoader extends Loader {
 
 				try {
 
-					const extension = eptJson.dataType === 'binary' ? '.bin' : '.laz';
-					const bin_laz_url = `${ base }ept-data/${ key }${ extension }`;
-					const tileUrl = this.localBlobs ? this.localBlobs[ `${ key }${ extension }` ] : bin_laz_url;
+					const extension = eptJson.dataType === 'binary'
+						? '.bin'
+						: eptJson.dataType === 'zstandard'
+							? '.zst'
+							: '.laz';
+
+					const data_url = `${ base }ept-data/${ key }${ extension }`;
+					const tileUrl = this.localBlobs ? this.localBlobs[ `${ key }${ extension }` ] : data_url;
 
 					const resp = await fetch( tileUrl );
 					if ( !resp.ok ) return;
@@ -669,6 +724,18 @@ class EPTStreamLoader extends Loader {
 
 						geom = await this.loadBinTile( buffer, eptJson );
 
+					} else if ( extension === '.zst' ) {
+
+						const compressed = new Uint8Array( buffer );
+						const decompressed = await this.zstd.decompress( compressed );
+
+						const arrayBuffer = decompressed.byteOffset === 0
+							&& decompressed.byteLength === decompressed.buffer.byteLength
+								? decompressed.buffer
+								: decompressed.buffer.slice( decompressed.byteOffset, decompressed.byteOffset + decompressed.byteLength );
+
+						geom = await this.loadBinTile( arrayBuffer, eptJson );
+
 					} else {
 
 						geom = await this.lasLoader.parse( buffer );
@@ -679,7 +746,7 @@ class EPTStreamLoader extends Loader {
 
 					if ( geom && onTileLoaded ) {
 
-						console.log( 'Tile ', key );
+						console.log( 'Tile ', key + extension );
 
 						onTileLoaded( geom, filteredKeys.length, key );
 
