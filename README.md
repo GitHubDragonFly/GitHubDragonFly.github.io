@@ -339,8 +339,16 @@ Number Type Converter
     - It is internally using `LAS Loader` from [loaders.gl](https://github.com/visgl/loaders.gl)
   - Supports loading EPT datasets with custom `EPT Loader`:
     - This loader was created with assistance from Microsoft Copilot and Google Gemini
-    - It supports datasets with either BIN or LAZ data files
-    - It is internally using custom `LASZ Loader`
+    - It supports datasets with either BIN or LAZ or ZST data files
+    - It is internally using custom `LASZ Loader` for loading LAS/LAZ files
+    - It is using pure JavaScript [fzstd](https://github.com/101arrowz/fzstd) library for decompressing ZST files:
+      - Its internal `setZstdDecompressor( decompress_function )` allows for setting other libraries decompress function:
+        - Another functional library was [@oneidentity/zstd-js](https://github.com/OneIdentity/zstd-js) with these steps:
+          - add entry to importmap - import - await init - set decompress function
+          - `"@oneidentity/zstd-js": "https://esm.sh/@oneidentity/zstd-js@1.0.3"`
+          - `import { ZstdInit, ZstdStream } from "@oneidentity/zstd-js";`
+          - `await ZstdInit();`
+          - `ept_loader.setZstdDecompressor( ZstdStream.decompress );`
   - The viewer allows setting Level Of Detail (LOD) for EPT datasets with BIN / LAZ tiles to be loaded:
     - `Density` is presented as percentage and defines how many points get processed:
       - For LAS / LAZ the density of the model changes
@@ -357,8 +365,8 @@ Number Type Converter
   - Supports loading `ept.json` + `BIN or LAZ or ZST` tiles:
     - Normally loaded via URL (containing `ept.json` file)
     - Local loading is supported, all required files need to be in a single folder
-    - It is using customized `EPTStreamLoader` (based on custom `EPT Loader`)
-    - This loader was created with assistance from Microsoft Copilot and Google Gemini
+    - It is using customized `EPTStreamLoader` (derived from custom `EPT Loader`)
+    - This loader was also created with assistance from Microsoft Copilot and Google Gemini
   - The viewer allows setting Level Of Detail (LOD) the same as for the above stated `PCD+XYZ+LAS Viewer`
   - Consider adjusting LOD settings to improve performance and memory usage
 
