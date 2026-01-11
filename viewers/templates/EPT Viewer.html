@@ -60,7 +60,8 @@
           "three": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.module.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/",
           "loaders-core": "https://esm.sh/@loaders.gl/core@4.3.4",
-          "loaders-las": "https://esm.sh/@loaders.gl/las@4.3.4"
+          "loaders-las": "https://esm.sh/@loaders.gl/las@4.3.4",
+          "@oneidentity/zstd-js": "https://esm.sh/@oneidentity/zstd-js@1.0.3"
         }
       }
     </script>
@@ -82,7 +83,8 @@
 
     <script type="module">
       import * as three_js from "three";
-      import { EPTStreamLoader } from "../static/jsm/loaders/EPTStreamLoader.min.js";
+      // import { ZstdInit, ZstdStream } from "@oneidentity/zstd-js";
+      import { EPTStreamLoader } from "../static/jsm/loaders/EPTStreamLoader.js";
 
       THREE = three_js;
 
@@ -90,6 +92,9 @@
       manager.onLoad = function() { mouse_wheel = true; }
 
       ept_loader = new EPTStreamLoader( manager );
+
+      // await ZstdInit();
+      // ept_loader.setZstdDecompressor( ZstdStream.decompress );
     </script>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
@@ -399,8 +404,8 @@
         }
 
         if (scene === undefined) scene = new THREE.Scene();
-        if (ept_obj === undefined) ept_obj = new THREE.Object3D();
 
+        ept_obj = new THREE.Object3D();
         scene.add( ept_obj );
 
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
@@ -900,7 +905,6 @@
       async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
         document.getElementById('points_color').value = '#000000';
-        document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_plus').style.backgroundColor = 'transparent';
         document.getElementById('btn_minus').style.backgroundColor = 'transparent';
         document.getElementById('btn_elevation_colors').style.backgroundColor = 'transparent';
@@ -913,6 +917,9 @@
           set_back_color();
         } else {
           // Page (re)loading
+          document.getElementById('btn_url').style.backgroundColor = 'transparent';
+          document.getElementById('btn_lod').style.backgroundColor = 'transparent';
+
           if (scene) {
             if (ept_obj) await scene_cleanup();
 
@@ -923,8 +930,6 @@
             renderer.clear();
             renderer.dispose();
           }
-
-          mouse_wheel = true;
 
           document.getElementById('file_input').value = '';
           document.getElementById('div_error').style.display = 'none';
@@ -938,17 +943,37 @@
       }
 
       async function scene_cleanup() {
-        scene.remove( ept_obj );
+        if (elevation === true) await set_elevation_colors();
+        if (classification_enabled) await set_classification_colors();
 
+        scene.remove( ept_obj );
         renderer.clear();
 
+        const tilesToRemove = [];
+
         ept_obj.traverse( ( child ) => {
-          if (child.isPoints) {
-            if (child.material.map) child.material.map.dispose();
-            child.material.dispose();
-            child.geometry.dispose();
+          if (child.isPoints && child.name.startsWith('ept_points_')) {
+            tilesToRemove.push( child );
           }
         });
+
+        for ( const tile of tilesToRemove ) {
+          mouse_wheel = true;
+
+          if (tile.geometry) tile.geometry.dispose();
+
+          if (tile.material) {
+            if (Array.isArray( tile.material )) {
+              tile.material.forEach( m => {
+                m.map?.dispose();
+                m.dispose()
+              });
+            } else {
+              tile.material.map?.dispose();
+              tile.material.dispose();
+            }
+          }
+        }
 
         if (isMobile === false) {
           renderer.info.reset();
