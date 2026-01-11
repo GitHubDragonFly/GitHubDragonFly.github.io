@@ -4,8 +4,11 @@ import {
     Loader
 } from 'three';
 
+// Default for this loader, direct JS import of fzstd
 import * as fzstd from 'https://cdn.skypack.dev/fzstd?min';
-import { LASZLoader } from './LASZLoader.min.js'; // reuse existing LAS/LAZ decoder
+
+// Reuse existing LAS/LAZ decoder
+import { LASZLoader } from './LASZLoader.min.js';
 
 // Created with assistance from Microsoft Copilot and Google Gemini
 // Supporting loading of streamed BIN/LAS/LAZ tiles from EPT datasets
@@ -39,15 +42,21 @@ class EPTStreamLoader extends Loader {
 		this.localBlobs = null;
 		this.contrastFactor = 1.0;
 
-		this.zstd = fzstd;
+		this.zdecompress = fzstd.decompress;
 
 		this.lasLoader = new LASZLoader( manager );
 
 	}
 
-	setZstdDecompressor( zstdInstance ) {
+	setZstdDecompressor( decompress = null ) {
 
-		this.zstd = zstdInstance;
+		if ( !decompress || typeof decompress !== 'function' ) {
+
+			throw new Error( 'Zstd decompressor must provide a decompress( Uint8Array ) function' );
+
+		}
+
+		this.zdecompress = decompress;
 		return this;
 
 	}
@@ -188,6 +197,7 @@ class EPTStreamLoader extends Loader {
 				return 0;
 
 		}
+
 	}
 
 	sizeOf( a ) {
@@ -630,7 +640,7 @@ class EPTStreamLoader extends Loader {
 
 		}
 
-		if ( eptJson.dataType === 'zstandard' && !this.zstd ) {
+		if ( eptJson.dataType === 'zstandard' && !this.zdecompress ) {
 
 			if ( onTileError ) {
 
@@ -727,7 +737,13 @@ class EPTStreamLoader extends Loader {
 					} else if ( extension === '.zst' ) {
 
 						const compressed = new Uint8Array( buffer );
-						const decompressed = await this.zstd.decompress( compressed );
+						const decompressed = await this.zdecompress( compressed );
+
+						if ( !( decompressed instanceof Uint8Array ) ) {
+
+							throw new Error('Zstd decompressor must return a Uint8Array');
+
+						}
 
 						const arrayBuffer = decompressed.byteOffset === 0
 							&& decompressed.byteLength === decompressed.buffer.byteLength
