@@ -11,9 +11,9 @@ import * as fzstd from 'https://cdn.skypack.dev/fzstd?min';
 import { LASZLoader } from './LASZLoader.min.js';
 
 // Created with assistance from Microsoft Copilot and Google Gemini
-// Supporting loading of EPT datasets with BIN/LAS/LAZ tiles
+// Supporting loading of EPT datasets with BIN/LAS/LAZ/ZST tiles
 
-// EPT datasets always contain:
+// EPT datasets should always contain:
 // ept.json
 // ept-hierarchy/
 //	- ept-hierarchy/0-0-0-0.json
@@ -23,8 +23,8 @@ import { LASZLoader } from './LASZLoader.min.js';
 //	- ept-hierarchy/2-0-0-0.json
 //	...
 // ept-data/
-//	ept-data/0-0-0-0.laz (or .bin)
-//	ept-data/1-0-0-0.laz (or .bin)
+//	ept-data/0-0-0-0.laz (or .bin or .zst)
+//	ept-data/1-0-0-0.laz (or .bin or .zst)
 //	...
 
 const GIT_LFS_THRESHOLD_BYTES = 150;
