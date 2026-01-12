@@ -341,14 +341,8 @@ Number Type Converter
     - This loader was created with assistance from Microsoft Copilot and Google Gemini
     - It supports datasets with either BIN or LAZ or ZST data files
     - It is internally using custom `LASZ Loader` for loading LAS/LAZ files
-    - It is using pure JavaScript [fzstd](https://github.com/101arrowz/fzstd) library for decompressing ZST files:
-      - Its internal `setZstdDecompressor( decompress_function )` allows for setting other libraries decompress function:
-        - Another functional library was [@oneidentity/zstd-js](https://github.com/OneIdentity/zstd-js) with these steps:
-          - add entry to importmap - import - await init - set decompress function
-          - `"@oneidentity/zstd-js": "https://esm.sh/@oneidentity/zstd-js@1.0.3"`
-          - `import { ZstdInit, ZstdStream } from "@oneidentity/zstd-js";`
-          - `await ZstdInit();`
-          - `ept_loader.setZstdDecompressor( ZstdStream.decompress );`
+    - It is internally using pure JavaScript [fzstd](https://github.com/101arrowz/fzstd) library for decompressing ZST files:
+      -  Optional: use the loader's internal `setZstdDecompressor( decompressor )` to set some other ZST decompressor (see top of [EPT Viewer](https://github.com/GitHubDragonFly/GitHubDragonFly.github.io/blob/main/viewers/templates/EPT%20Viewer.html) for instructions to use either [@oneidentity/zstd-js](https://github.com/OneIdentity/zstd-js) or [zstddec/stream](https://github.com/donmccurdy/zstddec-wasm))
   - The viewer allows setting Level Of Detail (LOD) for EPT datasets with BIN / LAZ tiles to be loaded:
     - `Density` is presented as percentage and defines how many points get processed:
       - For LAS / LAZ the density of the model changes
