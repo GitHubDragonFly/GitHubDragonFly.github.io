@@ -42,21 +42,31 @@ class EPTStreamLoader extends Loader {
 		this.localBlobs = null;
 		this.contrastFactor = 1.0;
 
-		this.zdecompress = fzstd.decompress;
+		this.zdecompressor = fzstd;
 
 		this.lasLoader = new LASZLoader( manager );
 
 	}
 
-	setZstdDecompressor( decompress = null ) {
+	setZstdDecompressor( decompressor = null ) {
 
-		if ( !decompress || typeof decompress !== 'function' ) {
+		if (
+			!decompressor ||
+			(
+				typeof decompressor.decode !== 'function' &&
+				typeof decompressor.decompress !== 'function'
+			)
+		) {
 
-			throw new Error( 'Zstd decompressor must provide a decompress( Uint8Array ) function' );
+			throw new Error(
+
+				'Zstd decompressor must have a decode( Uint8Array ) or decompress( Uint8Array ) function.'
+
+			);
 
 		}
 
-		this.zdecompress = decompress;
+		this.zdecompressor = decompressor;
 		return this;
 
 	}
@@ -640,7 +650,7 @@ class EPTStreamLoader extends Loader {
 
 		}
 
-		if ( eptJson.dataType === 'zstandard' && !this.zdecompress ) {
+		if ( eptJson.dataType === 'zstandard' && !this.zdecompressor ) {
 
 			if ( onTileError ) {
 
@@ -736,8 +746,19 @@ class EPTStreamLoader extends Loader {
 
 					} else if ( extension === '.zst' ) {
 
+						let decompressed;
+
 						const compressed = new Uint8Array( buffer );
-						const decompressed = await this.zdecompress( compressed );
+
+						if ( this.zdecompressor.decode ) {
+
+							decompressed = await this.zdecompressor.decode( compressed );
+
+						} else {
+
+							decompressed = await this.zdecompressor.decompress( compressed );
+
+						}
 
 						if ( !( decompressed instanceof Uint8Array ) ) {
 
