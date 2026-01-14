@@ -355,13 +355,23 @@ Number Type Converter
   - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `EPT Viewer`:
-  - Specifically designed to stream tiles from Entwine Point Tiles (EPT) Datasets
+  - Specifically designed to stream tiles from Entwine Point Tiles (EPT) datasets
   - Supports loading `ept.json` + `BIN or LAZ or ZST` tiles:
     - Normally loaded via URL (containing `ept.json` file)
     - Local loading is supported, all required files need to be in a single folder
     - It is using customized `EPTStreamLoader` (derived from custom `EPT Loader`)
     - This loader was also created with assistance from Microsoft Copilot and Google Gemini
-  - The viewer allows setting Level Of Detail (LOD) the same as for the above stated `PCD+XYZ+LAS Viewer`
+  - The viewer allows setting Level Of Detail (LOD) the same as for the above `PCD+XYZ+LAS Viewer`
+  - Consider adjusting LOD settings to improve performance and memory usage
+
+- Special notes about `COPC Viewer`:
+  - Specifically designed to stream selective nodes from Cloud-Optimized Point Clouds (COPC) datasets:
+    - This is a simple viewer that will not keep loading/removing nodes with camera movement
+  - Normally loaded via URL (containing a link to `COPC LAZ` file)
+  - It is using customized `COPCStreamLoader`:
+    - This loader was also created with assistance from Microsoft Copilot and Google Gemini
+  - The viewer allows setting Level Of Detail (LOD) the same as for the above `PCD+XYZ+LAS Viewer`
+    - Node selectivity is based on the LOD set depth (defaults to 0 which is root only)
   - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `USDZ Viewer`:
