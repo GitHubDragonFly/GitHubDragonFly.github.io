@@ -8,7 +8,7 @@ See `viewers/static/js/omggif` folder for licenses and Animated GIF export info,
 
 See `viewers/static/js/model-tag` folder for license related to mrdoob's [model-tag](https://github.com/mrdoob/model-tag) used in `GLTF Legacy` viewer
 
-Google's [Model Viewer](https://github.com/google/model-viewer) element Apache License, Version 2.0 can be seen [here](https://www.apache.org/licenses/LICENSE-2.0)
+Google's [Model Viewer](https://github.com/google/model-viewer) element Apache 2 license can be seen [here](https://www.apache.org/licenses/LICENSE-2.0)
 
 [glTF Transform](https://gltf-transform.dev) MIT license can be seen [here](https://github.com/donmccurdy/glTF-Transform?tab=MIT-1-ov-file#readme)
 
@@ -17,7 +17,7 @@ Google's [Model Viewer](https://github.com/google/model-viewer) element Apache L
 [web-ifc](https://github.com/ThatOpen/engine_web-ifc) library Mozilla Public License Version 2.0 can be seen [here](https://github.com/ThatOpen/engine_web-ifc?tab=MPL-2.0-1-ov-file#readme)
 [web-ifc-three](https://github.com/ThatOpen/web-ifc-three) IFC Loader MIT license can be seen [here](https://github.com/ThatOpen/web-ifc-three?tab=MIT-1-ov-file#readme)
 
-[@jsquash/avif](https://github.com/jamsinclair/jSquash) Apache License, Version 2.0 can be seen [here](https://www.apache.org/licenses/LICENSE-2.0)
+[@jsquash/avif](https://github.com/jamsinclair/jSquash) Apache 2 license can be seen [here](https://www.apache.org/licenses/LICENSE-2.0)
 
 [Polyslice](https://github.com/jgphilpott/polyslice) MIT license can be seen [here](https://github.com/jgphilpott/polyslice?tab=MIT-1-ov-file#readme)
 
@@ -66,6 +66,10 @@ PRWM exports are powered by the [PRWM](https://github.com/kchapelier/PRWM) whose
 
 [loaders.gl](https://github.com/visgl/loaders.gl) MIT license can be seen [here](https://github.com/visgl/loaders.gl?tab=License-1-ov-file#readme)
 
+[COPC](https://github.com/connormanning/copc.js) MIT license can be seen [here](https://github.com/connormanning/copc.js?tab=MIT-1-ov-file#readme)
+
+[Laz-Perf](https://github.com/hobuinc/laz-perf) Apache 2 license can be seen [here](https://github.com/hobuinc/laz-perf?tab=Apache-2.0-1-ov-file#readme)
+
 Some of the above mentioned licenses might also be found in some of the folders within this repository
 
 Notes about modifications, some of which are only added to work with these viewers:
@@ -79,6 +83,9 @@ Notes about modifications, some of which are only added to work with these viewe
  - FBXLoader.js file includes modification for both local and URL loading of texture files in FBX viewer
  - PLYLoader.js file includes both "vertex_index" and "vertex_indices"
  - LASZLoader.js file is using loaders.gl library and was created with assistance from Microsoft Copilot and Google Gemini
+ - EPT and COPC loaders were created with assistance from Microsoft Copilot and Google Gemini:
+   - EPT loader is internally using fzstd library and custom LASZ Loader
+   - COPC loader is internally using copc.js and laz-perf libraries
  - GCodeLoader.js file is a modified version from: https://github.com/emplast/Threejs-GcodeLoaderNGCfile
  - ColladaLoader.js file includes modification to support THREE.Points
  - ColladaExporter.js file includes modifications for exporting TGA textures as well as supporting THREE.Points
