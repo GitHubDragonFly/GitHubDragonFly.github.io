@@ -559,8 +559,10 @@ Number Type Converter
   - `C0` - camera index
     - 0 being default (ASSIMP, GLTF, GLTFS viewers)
     - shows as `Cam + Index` in the GLTF Legacy viewer
+  - `CC` - classification coloring (available in COPC, EPT, PCD+XYZ+LAS viewers only)
   - `CS` - construction step (available in LDRAW viewers only)
   - `DT` - material's depthTest switching (ASSIMP, GLTF, GLTFS viewers)
+  - `EC` - elevation coloring (available in COPC, EPT, PCD+XYZ+LAS viewers only)
   - `Ls` - and / or `labels` button (available in PDB viewers only)
   - `MP` - material switching - Phong (MP), Standard (MS), Lambert (ML)
   - `OL` - outline effect (available in MMD viewers only)
