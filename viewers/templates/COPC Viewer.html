@@ -69,19 +69,21 @@
     <script src="https://mrdoob.github.io/stats.js/build/stats.min.js" defer></script>
 
     <script>
-      var THREE, manager, stats, copc_loader, count = 0, init_running = false;
-      var renderer, scene, camera, controls, render_requested, needsRender;
-      var mouse_down, mouse_wheel, reset_rotation, events_initialized;
+      var THREE, manager, scene, copc_loader, init_running = false, count = 0;
+      var camera, controls, renderer, render_requested, needsRender;
+      var gui, gui_container, gui_set = false, mouse_down, mouse_wheel;
       var ww = window.innerWidth, wh = window.innerHeight, isMobile;
-      var copc_obj, selected_url_file = '';
+      var reset_rotation, stats, stats_enabled, events_initialized;
+      var copc_obj, selected_url_file = '', params;
       var lod_displayed = false, warning_displayed = false;
       var url_displayed = false, url_loading = false;
-      var filesMap, local_files, bounding_box, globalElevationRange;
+      var filesMap, bounding_box, globalElevationRange;
       var classification_present, classification_enabled, elevation;
     </script>
 
     <script type="module">
       import * as three_js from "three";
+      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
       import { COPCStreamLoader } from "../static/jsm/loaders/COPCStreamLoader.min.js";
 
       THREE = three_js;
@@ -90,6 +92,17 @@
       manager.onLoad = function() { mouse_wheel = true; }
 
       copc_loader = new COPCStreamLoader( manager );
+
+      gui_container = document.getElementById('gui_position');
+
+      // Override external CSS so we can have GUI in the top-right corner
+      gui_container.style.left = 'auto';         // Reset any left-side positioning
+      gui_container.style.right = '5px';        // Anchor to the right
+      gui_container.style.top = '2px';          // Anchor to the top
+      gui_container.style.marginLeft = '0px';    // Clear the 2px margin from your CSS
+
+      gui = new GUI( { autoPlace: false, container: gui_container } );
+      set_gui_position();
     </script>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
@@ -115,6 +128,8 @@
         <label for="btn_plus" title="Increase Points Size"></label>
         <button title="Decrease Points Size" id="btn_minus" onclick="decrease_points_size();" style="color: red;" disabled>-</button>
         <label for="btn_minus" title="Decrease Points Size"></label>
+        <button title="Toggle Statistics" id="btn_stats" onclick="set_statistics();" style="min-width: 46px;" disabled>Stats</button>
+        <label for="btn_statistics" title="Toggle Statistics"></label>
         <button title="Toggle Elevation Colors" id="btn_elevation_colors" onclick="set_elevation_colors();" style="min-width: 28px;" disabled>EC</button>
         <label for="btn_elevation_colors" title="Toggle Elevation Colors"></label>
         <button title="Toggle Classification Colors" id="btn_classification_colors" onclick="set_classification_colors();" style="display: none; min-width: 28px;">CC</button>
@@ -154,32 +169,27 @@
           <option value="7" onclick="set_copc_details( 7 );">7 - xtreme</option>
           <option value="8" onclick="set_copc_details( 8 );">8 - xtreme</option>
         </select>
-        <select id="gamma_level" title="Adjust intensity gamma - loaded point cloud will update live" style="min-width: 80px;">
-          <option value="" disabled selected>Gamma</option>
-          <option value="0.1" onclick="set_copc_gamma( 0.1 );">0.1</option>
-          <option value="0.3" onclick="set_copc_gamma( 0.3 );">0.3</option>
-          <option value="0.5" onclick="set_copc_gamma( 0.5 );">0.5</option>
-          <option value="0.7" onclick="set_copc_gamma( 0.7 );">0.7</option>
-          <option value="0.9" onclick="set_copc_gamma( 0.9 );">0.9</option>
-          <option value="1.1" onclick="set_copc_gamma( 1.1 );">1.1</option>
-          <option value="1.3" onclick="set_copc_gamma( 1.3 );">1.3</option>
-          <option value="1.5" onclick="set_copc_gamma( 1.5 );">1.5</option>
-          <option value="1.7" onclick="set_copc_gamma( 1.7 );">1.7</option>
-          <option value="1.9" onclick="set_copc_gamma( 1.9 );">1.9</option>
-        </select>
       </div>
     </div>
-
+    <div id="gui_position"></div>
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">COPC Streaming Viewer</div>
 
-    <div id="stats_overlay" style="position: absolute; visibility: hidden; color: white; bottom: 10px; left: 5px; pointer-events: none;">
+    <div id="stats_overlay" style="position: absolute; visibility: hidden; font-family: Monospace, Arial; color: #d1cefc; bottom: 10px; left: 5px; pointer-events: none;">
       Nodes: <span id="stat_nodes">0</span>&nbsp;&nbsp;
       Points: <span id="stat_points">0</span>
     </div>
 
     <script>
       function return_false() { return false; }
+
+      function set_copc_density( skip_points = 1 )  {
+        copc_loader.setSkipPoints( skip_points );
+      }
+
+      function set_copc_details( depth = 0 )  {
+        copc_loader.setDepthLimit( depth );
+      }
 
       function show_copc() {
         if (lod_displayed === true) {
@@ -192,36 +202,12 @@
           lod_displayed = true;
 
           if (!warning_displayed) {
-            alert('COPC data could eventually use lot of memory.\nDensity adjusts number of points (default = 100%).\nGamma adjusts intensity with live updates (default = 0.1).\nDepth levels boost network traffic and memory usage (default = 0).\nSet proper density & depth before loading the model.\nChanging density & depth does not update already‑loaded model.');
+            alert('COPC data could eventually use lot of memory.\nDensity adjusts number of node points (default = 100%).\nDepth defines how many nodes are loaded (default = 0).\nDepth > 0 will increase network traffic and memory usage.\nFor balance, set proper density & depth before loading the model.\nChanging density & depth does not update already‑loaded model.');
             warning_displayed = true;
           }
         }
 
         resize();
-
-        mouse_wheel = true;
-      }
-
-      function set_copc_density( skip_points = 1 )  {
-        copc_loader.setSkipPoints( skip_points );
-      }
-
-      function set_copc_gamma( gamma = 1.0 ) {
-        if (copc_obj) {
-          copc_obj.traverse( ( child ) => {
-            if (child.isPoints) {
-              child.material.uniforms.uIntensityGamma.value = gamma;
-            }
-          });
-
-          needsRender = true;
-        } else {
-          copc_loader.setIntensityGammaFactor( gamma );
-        }
-      }
-
-      function set_copc_details( depth = 0 )  {
-        copc_loader.setDepthLimit( depth );
       }
 
       function show_url() {
@@ -236,8 +222,6 @@
         }
 
         resize();
-
-        mouse_wheel = true;
       }
 
       function load_url_file() {
@@ -267,12 +251,33 @@
         }, false);
       }
 
-      function set_stats() {
+      function set_fps_stats() {
         if (stats) {
           let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
           stats.dom.style.top = fixed_menu_bottom;
           stats.dom.style.left = '5px';
         }
+      }
+
+      function set_statistics() {
+        stats_enabled = !stats_enabled;
+        document.getElementById('btn_stats').style.backgroundColor = stats_enabled ? 'lightgreen' : 'transparent';
+        document.getElementById('stats_overlay').style.visibility = stats_enabled ? 'visible' : 'hidden';
+        stats.dom.style.visibility = stats_enabled ? 'visible' : 'hidden';
+        set_fps_stats();
+      }
+
+      function gui_reset() {
+        params.gamma = 0.1;
+        params.brightness = 1.25;
+
+        gui.reset();
+        gui_container.style.display = 'none';
+      }
+
+      function set_gui_position() {
+        let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+        gui_container.style.marginTop = fixed_menu_bottom;
       }
 
       function resize() {
@@ -287,7 +292,8 @@
           camera.aspect = ww / wh;
           camera.updateProjectionMatrix();
 
-          if (stats) set_stats();
+          if (stats && stats_enabled) set_fps_stats();
+          if (gui) set_gui_position();
 
           mouse_wheel = true;
         }
@@ -316,7 +322,7 @@
 
                   // 1. Calculate Elevation Color (Blue -> Red)
                   float t = clamp((position.z - uMinZ) / (uMaxZ - uMinZ), 0.0, 1.0);
-                  t = t * t * (3.0 - 2.0 * t); // smoothstep
+                  t = t * t * (3.0 - 2.0 * t);
 
                   vec3 elevCol;
                   if (t < 0.2) elevCol = vec3(0.0, t / 0.2, 1.0);
@@ -327,14 +333,12 @@
 
                   // 2. Select base color attribute
                   vec3 base;
-                  if (uMode == 0.0) base = color;      // RGB Mode
+                  if (uMode == 0.0) base = color;        // RGB Mode
                   else if (uMode == 1.0) base = elevCol; // Elevation Mode
-                  else base = vec3(0.5);               // Placeholder for Class Mode
+                  else base = vec3(0.5);                 // Placeholder for Class Mode
 
                   // 3. Apply Intensity Gamma
-                  // Maps uSize [1 to 25] to a brightness boost [2.0 down to 1.0]
-                  float sizeFactor = 1.0 + clamp((uSize - 1.0) / 24.0, 0.0, 1.0);
-                  vColor = base * pow(clamp(intensity, 0.001, 1.0), uIntensityGamma) * sizeFactor;
+                  vColor = base * pow(clamp(intensity, 0.001, 1.0), uIntensityGamma);
 
                   vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
                   gl_PointSize = uSize * (300.0 / -mvPosition.z);
@@ -343,6 +347,7 @@
           `,
           fragment: `
               uniform float uOpacity;
+              uniform float uBrightness;
               uniform vec3 uClassColors[20];
               varying vec3 vColor;
               varying float vMode;
@@ -357,16 +362,37 @@
                       finalRGB = classCol * length(vColor);
                   }
 
-                  finalRGB *= 1.5; // Global 50% brightness boost
+                  finalRGB *= uBrightness;
 
                   gl_FragColor = vec4(finalRGB, uOpacity);
               }
           `,
           create: function(isMobile, zRange) {
               // Prepare Classification Color Uniform
-              const classUniform = new Float32Array(20 * 3);
-              const colors = {0:[0.6,0.6,0.6],1:[1,1,1],2:[0.5,0.3,0.1],3:[0,0.6,0],4:[0,0.8,0],5:[0,1,0],6:[0.6,0.6,0.6],7:[0.3,0.3,0.3],8:[1,1,0],9:[0,0.4,1],10:[0.7,0.7,0.2],11:[0.4,0.4,0.4],12:[0.8,0.8,0.8],13:[1,0.5,0],14:[1,0.7,0],15:[0.8,0.5,0.2],16:[0.9,0.6,0.3],17:[1,0,1],18:[0.2,0.2,0.2]};
-              for(let i=0; i<20; i++) {
+              const classUniform = new Float32Array(19 * 3);
+              const colors = {
+                0:[0.6,0.6,0.6],
+                1:[1,1,1],
+                2:[0.5,0.3,0.1],
+                3:[0,0.6,0],
+                4:[0,0.8,0],
+                5:[0,1,0],
+                6:[0.6,0.6,0.6],
+                7:[0.3,0.3,0.3],
+                8:[1,1,0],
+                9:[0,0.4,1],
+                10:[0.7,0.7,0.2],
+                11:[0.4,0.4,0.4],
+                12:[0.8,0.8,0.8],
+                13:[1,0.5,0],
+                14:[1,0.7,0],
+                15:[0.8,0.5,0.2],
+                16:[0.9,0.6,0.3],
+                17:[1,0,1],
+                18:[0.2,0.2,0.2]
+              };
+
+              for(let i=0; i<19; i++) {
                   const c = colors[i] || [1,0,0];
                   classUniform[i*3+0] = c[0]; classUniform[i*3+1] = c[1]; classUniform[i*3+2] = c[2];
               }
@@ -379,6 +405,7 @@
                       uMaxZ: { value: zRange?.max || 100 },
                       uOpacity: { value: 0.0 },
                       uIntensityGamma: { value: 0.1 },
+                      uBrightness: { value: 1.25 },
                       uClassColors: { value: classUniform }
                   },
                   vertexShader: this.vertex,
@@ -432,10 +459,10 @@
 
         if (!stats) {
           stats = new Stats();
+          stats.dom.style.visibility = 'hidden';
           document.body.appendChild( stats.dom );
           stats.showPanel( 0 ); // 0: FPS, 1: ms, 2: mb
-          set_stats();
-          document.getElementById('stats_overlay').style.visibility = 'visible';
+          set_fps_stats();
         }
 
         enable_disable( true );
@@ -443,14 +470,16 @@
         mouse_down = false;
         mouse_wheel = true;
         needsRender = false;
-        local_files = null;
         count = 0;
         elevation = false;
+        stats_enabled = false;
         render_requested = false;
         globalElevationRange = null;
         classification_enabled = false;
         classification_present = false;
         bounding_box = new THREE.Box3();
+
+        if (!params) params = { gamma: 0.1, brightness: 1.25 };
 
         console.time( 'Loading Time' );
         document.body.style.backgroundImage = 'none';
@@ -569,7 +598,6 @@
           let node_count = 0;
           let totalPointsInScene = 0;
 
-
           function update_hud() {
             document.getElementById('stat_points').innerText = totalPointsInScene.toLocaleString();
             document.getElementById('stat_nodes').innerText = ( node_count + 1 ).toLocaleString();
@@ -640,6 +668,39 @@
         //const boxHelper = new THREE.Box3Helper( new THREE.Box3().setFromObject( copc_obj ), 0xff0000 );
         //scene.add( boxHelper );
 
+        if (gui_set === false) {
+          // Add Brightness control
+          gui.add( params, 'brightness', 0, 5 ).name( 'Brightness' )
+          .onChange( ( value ) => {
+            copc_obj.traverse( ( child ) => {
+              if (child.isPoints) {
+                child.material.uniforms.uBrightness.value = Math.max( 0, value );
+              }
+            });
+
+            needsRender = true;
+          });
+
+          // Add Gamma control
+          gui.add(params, 'gamma', 0.1, 2.0).name('Gamma')
+          .onChange( ( value ) => {
+            copc_obj.traverse( ( child ) => {
+              if (child.isPoints) {
+                child.material.uniforms.uIntensityGamma.value = value;
+              }
+            });
+
+            needsRender = true;
+          });
+
+          set_gui_position();
+
+          gui.open();
+          gui_set = true;
+        }
+
+        gui_container.style.display = 'block';
+
         enable_disable( false );
 
         if (classification_present) {
@@ -657,7 +718,7 @@
 
         init_running = false;
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 5000 ) );
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 1000 ) );
       }
 
       function log_info() {
@@ -675,8 +736,6 @@
 
         // Stop flashing indicator
         document.getElementById('status_indicator').style.visibility = 'hidden';
-
-        document.getElementById('stats_overlay').style.visibility = 'hidden';
 
         init_running = false;
 
@@ -759,13 +818,20 @@
       }
 
       async function reset_all( reset = false ) {
+        if (stats) stats.dom.style.visibility = 'hidden';
         document.getElementById('back_color').value = '#000000';
         document.getElementById('stats_overlay').style.visibility = 'hidden';
         document.getElementById('btn_plus').style.backgroundColor = 'transparent';
         document.getElementById('btn_minus').style.backgroundColor = 'transparent';
+        document.getElementById('btn_stats').style.backgroundColor = 'transparent';
         document.getElementById('btn_elevation_colors').style.backgroundColor = 'transparent';
 
         init_running = false;
+
+        if (gui_set === true) {
+          gui_reset();
+          gui_container.style.display = 'none';
+        }
 
         // Reset the view
         if (reset === true) {
@@ -775,9 +841,12 @@
           // Page (re)loading
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
           document.getElementById('btn_lod').style.backgroundColor = 'transparent';
+          document.getElementById('btn_stats').style.backgroundColor = 'transparent';
 
           if (scene) {
             if (copc_obj) await scene_cleanup();
+
+            if (gui) gui.dispose();
 
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
@@ -799,6 +868,8 @@
 
       async function scene_cleanup() {
         mouse_wheel = true;
+
+        if (stats_enabled) set_statistics();
 
         if (stats && stats.dom && stats.dom.parentNode) {
           stats.dom.parentNode.removeChild( stats.dom );
@@ -860,6 +931,7 @@
         document.getElementById('back_color').disabled = disable;
         document.getElementById('btn_plus').disabled = disable;
         document.getElementById('btn_minus').disabled = disable;
+        document.getElementById('btn_stats').disabled = disable;
         document.getElementById('btn_quick_x').disabled = disable;
         document.getElementById('btn_elevation_colors').disabled = disable;
         disabled_changed();
@@ -878,7 +950,6 @@
 
         if (isMobile) {
           const select = document.getElementById("tile_level");
-          select.querySelector( 'option[value="4"]' ).remove();
           select.querySelector( 'option[value="5"]' ).remove();
           select.querySelector( 'option[value="6"]' ).remove();
           select.querySelector( 'option[value="7"]' ).remove();
@@ -888,12 +959,10 @@
         if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile) {
           $('#detail_level').change( function() { $(this).children(':selected').click(); });
           $('#tile_level').change( function() { $(this).children(':selected').click(); });
-          $('#gamma_level').change( function() { $(this).children(':selected').click(); });
         }
 
         document.getElementById('detail_level').selectedIndex = 0;
         document.getElementById('tile_level').selectedIndex = 0;
-        document.getElementById('gamma_level').selectedIndex = 0;
 
         mouse_wheel = true;
       }
