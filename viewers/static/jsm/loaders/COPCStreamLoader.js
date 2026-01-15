@@ -191,7 +191,7 @@ class COPCStreamLoader extends Loader {
 
 		// Create a DataView of the decompressed data
 
-		const dv = new DataView(
+		let dv = new DataView(
 			decompressedBuffer.buffer,
 			decompressedBuffer.byteOffset,
 			decompressedBuffer.byteLength
@@ -201,20 +201,29 @@ class COPCStreamLoader extends Loader {
 
 		const skipPoints = ( this.skipPoints && this.skipPoints > 1 ) ? this.skipPoints : 1;
 		const keptPoints = Math.ceil( count / skipPoints );
+		if ( keptPoints < 1 ) return null;
 
 		const positions = new Float32Array( keptPoints * 3 );
 		const colors = !this.skipColor ? new Float32Array( keptPoints * 3 ) : null;
 		const intensities = !this.skipIntensity ? new Float32Array( keptPoints ) : null;
-		const classifications = !this.skipClassification ? new Uint8Array( keptPoints ) : null;
+		const classifications = !this.skipClassification ? new Float32Array( keptPoints ) : null;
 
 		// Check if the file format actually includes colors
 
 		const formatsWithColor = [ 2, 3, 5, 7, 8, 10 ];
-		const hasNativeColor = formatsWithColor.includes( pointDataRecordFormat );
+		const hasNativeColor = formatsWithColor.includes( pointDataRecordFormat ) === true;
 
 		let targetIdx = 0; // The sequential index for output arrays
 
 		for ( let i = 0; i < count; i += skipPoints ) {
+
+			// Take a tiny break every 5000 points, let the browser breath
+
+			if ( i % 5000 === 0 ) {
+
+				await new Promise( resolve => setTimeout( resolve, 0 ) );
+
+			}
 
 			const writeIdx = targetIdx * 3, div = 65535.0;
 
@@ -244,8 +253,7 @@ class COPCStreamLoader extends Loader {
 			if ( !this.skipIntensity ) {
 
 				const rawIntensity = dv.getUint16( pStart + 12, true );
-				const currentIntensity = Math.pow( rawIntensity / div, this.intensityGammaFactor );
-				intensities[ targetIdx ] = currentIntensity;
+				intensities[ targetIdx ] = rawIntensity / div;
 
 			}
 
@@ -308,6 +316,8 @@ class COPCStreamLoader extends Loader {
 
 		geometry.boundingBox = box;
 		geometry.boundingSphere = box.getBoundingSphere( new Sphere() );
+
+		dv = null;
 
 		return geometry;
 
@@ -405,8 +415,6 @@ class COPCStreamLoader extends Loader {
 
 				}
 
-				console.log( 'Node 0-0-0-0' );
-
 				onNodeLoaded( rootGeom, totalSelectedNodes, '0-0-0-0', globalZRange );
 
 			}
@@ -432,8 +440,6 @@ class COPCStreamLoader extends Loader {
 				const geom = await this._loadNodePointsToGeometry( url, copc, nodes[ key ], globalZRange );
 
 				if ( geom && onNodeLoaded ) {
-
-					console.log( 'Node ', key );
 
 					onNodeLoaded( geom, totalSelectedNodes, key, globalZRange );
 
