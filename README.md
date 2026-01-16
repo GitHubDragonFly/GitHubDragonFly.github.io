@@ -361,7 +361,10 @@ Number Type Converter
     - Local loading is supported, all required files need to be in a single folder
     - It is using customized `EPTStreamLoader` (derived from custom `EPT Loader`)
     - This loader was also created with assistance from Microsoft Copilot and Google Gemini
-  - The viewer allows setting Level Of Detail (LOD) the same as for the above `PCD+XYZ+LAS Viewer`
+  - The viewer has live Gamma and Brightness controls as well as some statistics
+  - The viewer allows setting Level Of Detail (LOD):
+    - The same as for the above `PCD+XYZ+LAS Viewer` except for Gamma
+    - Tile selectivity is based on the LOD set depth (defaults to 0 which is root only)
   - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `COPC Viewer`:
@@ -370,7 +373,9 @@ Number Type Converter
   - Normally loaded via URL (containing a link to `COPC LAZ` file)
   - It is using customized `COPCStreamLoader`:
     - This loader was also created with assistance from Microsoft Copilot and Google Gemini
-  - The viewer allows setting Level Of Detail (LOD) the same as for the above `PCD+XYZ+LAS Viewer`
+  - The viewer has live Gamma and Brightness controls as well as some statistics
+  - The viewer allows setting Level Of Detail (LOD):
+    - The same as for the above `PCD+XYZ+LAS Viewer` except for Gamma
     - Node selectivity is based on the LOD set depth (defaults to 0 which is root only)
   - Consider adjusting LOD settings to improve performance and memory usage
 
