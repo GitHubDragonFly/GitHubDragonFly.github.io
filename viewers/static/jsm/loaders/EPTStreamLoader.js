@@ -1,8 +1,4 @@
-import {
-    BufferAttribute,
-    BufferGeometry,
-    Loader
-} from 'three';
+import { BufferAttribute, BufferGeometry, Loader } from 'three';
 
 // Default for this loader, direct JS import of fzstd
 import * as fzstd from 'https://cdn.skypack.dev/fzstd?min';
@@ -164,7 +160,7 @@ class EPTStreamLoader extends Loader {
 
 	}
 
-	getValue( view, offset, type, size, littleEndian = true ) {
+	_getValue( view, offset, type, size, littleEndian = true ) {
 
 		switch ( type.toLowerCase() ) {
 
@@ -210,7 +206,7 @@ class EPTStreamLoader extends Loader {
 
 	}
 
-	sizeOf( a ) {
+	_sizeOf( a ) {
 
 		switch ( a.type.toLowerCase() ) {
 
@@ -250,7 +246,7 @@ class EPTStreamLoader extends Loader {
 
 	// Normalize Color or Intensity values
 
-	normalizeCI( value, attr ) {
+	_normalizeCI( value, attr ) {
 
 		let normalized;
 
@@ -290,7 +286,7 @@ class EPTStreamLoader extends Loader {
 
 	}
 
-	async loadBinTile( buffer, ept ) {
+	async _loadBinTile( buffer, ept ) {
 
 		try {
 
@@ -307,7 +303,7 @@ class EPTStreamLoader extends Loader {
 
 			for ( const a of attrs ) {
 
-				const size = this.sizeOf( a );
+				const size = this._sizeOf( a );
 				const type = a.type.toLowerCase();
 				const name = a.name.toLowerCase();
 
@@ -350,7 +346,7 @@ class EPTStreamLoader extends Loader {
 
 					const a = info.raw;
 
-					const value = this.getValue(
+					const value = this._getValue(
 
 						view,
 						baseOffset + info.byteOffset,
@@ -375,19 +371,19 @@ class EPTStreamLoader extends Loader {
 							break;
 
 						case 'intensity':
-							intensity[ outIndex ] = this.normalizeCI( value, a );
+							intensity[ outIndex ] = this._normalizeCI( value, a );
 							break;
 
 						case 'red':
-							colors[ outIndex * 3 + 0 ] = this.normalizeCI( value, a );
+							colors[ outIndex * 3 + 0 ] = this._normalizeCI( value, a );
 							break;
 
 						case 'green':
-							colors[ outIndex * 3 + 1 ] = this.normalizeCI( value, a );
+							colors[ outIndex * 3 + 1 ] = this._normalizeCI( value, a );
 							break;
 
 						case 'blue':
-							colors[ outIndex * 3 + 2 ] = this.normalizeCI( value, a );
+							colors[ outIndex * 3 + 2 ] = this._normalizeCI( value, a );
 							break;
 
 						default:
@@ -427,7 +423,7 @@ class EPTStreamLoader extends Loader {
 
 	}
 
-	isPDAL( ept ) {
+	_isPDAL( ept ) {
 
 		// Rely on schema vs attributes
 
@@ -435,9 +431,9 @@ class EPTStreamLoader extends Loader {
 
 	}
 
-	getTileDepth( key, ept ) {
+	_getTileDepth( key, ept ) {
 
-		if ( this.isPDAL( ept ) ) {
+		if ( this._isPDAL( ept ) ) {
 
 			// PDAL / USGS span hierarchy: depth is the first part
 
@@ -467,11 +463,11 @@ class EPTStreamLoader extends Loader {
 
 	}
 
-	async discoverHierarchy( key, eptJson, base, allKeys ) {
+	async _discoverHierarchy( key, eptJson, base, allKeys ) {
 
 		// Recursive function to discover all hierarchy nodes up to lodDepthLimit
 
-		const depth = this.getTileDepth( key, eptJson );
+		const depth = this._getTileDepth( key, eptJson );
 		if (depth > this.lodDepthLimit) return;
 
 		const hUrl = this.localBlobs
@@ -491,11 +487,11 @@ class EPTStreamLoader extends Loader {
 
 			for ( const subKey of Object.keys( h ) ) {
 
-				const subDepth = this.getTileDepth( subKey, eptJson );
+				const subDepth = this._getTileDepth( subKey, eptJson );
 
 				if ( h[ subKey ] === -1 && subDepth <= this.lodDepthLimit ) {
 
-					await this.discoverHierarchy( subKey, eptJson, base, allKeys );
+					await this._discoverHierarchy( subKey, eptJson, base, allKeys );
 
 				}
 
@@ -505,7 +501,7 @@ class EPTStreamLoader extends Loader {
 
 	}
 
-	mortonSort( keys ) {
+	_mortonSort( keys ) {
 
 		return keys.sort( ( a, b ) => {
 
@@ -673,20 +669,20 @@ class EPTStreamLoader extends Loader {
 
 		let allKeys = {};
 
-		await this.discoverHierarchy( '0-0-0-0', eptJson, base, allKeys );
+		await this._discoverHierarchy( '0-0-0-0', eptJson, base, allKeys );
 
 		const tileKeys = Object.keys( allKeys );
 		console.log( 'Total Tiles:', tileKeys.length );
 
 		let filteredKeys = tileKeys.filter( key => {
 
-			return this.getTileDepth( key, eptJson ) <= this.lodDepthLimit;
+			return this._getTileDepth( key, eptJson ) <= this.lodDepthLimit;
 
 		});
 
 		// Ensure root tile loads first
 
-		filteredKeys = this.mortonSort( filteredKeys );
+		filteredKeys = this._mortonSort( filteredKeys );
 
 		console.log( 'Selected Tiles:', filteredKeys.length );
 
@@ -742,7 +738,7 @@ class EPTStreamLoader extends Loader {
 
 					if ( extension === '.bin' ) {
 
-						geom = await this.loadBinTile( buffer, eptJson );
+						geom = await this._loadBinTile( buffer, eptJson );
 
 					} else if ( extension === '.zst' ) {
 
@@ -771,7 +767,7 @@ class EPTStreamLoader extends Loader {
 								? decompressed.buffer
 								: decompressed.buffer.slice( decompressed.byteOffset, decompressed.byteOffset + decompressed.byteLength );
 
-						geom = await this.loadBinTile( arrayBuffer, eptJson );
+						geom = await this._loadBinTile( arrayBuffer, eptJson );
 
 					} else {
 

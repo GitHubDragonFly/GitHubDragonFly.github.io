@@ -164,7 +164,7 @@ class EPTLoader extends Loader {
 
 	}
 
-	concatFloat32( arrays ) {
+	_concatFloat32( arrays ) {
 
 		// Helper to concatenate Float32Arrays
 
@@ -185,7 +185,7 @@ class EPTLoader extends Loader {
 
 	}
 
-	mergeGeometries( geoms ) {
+	_mergeGeometries( geoms ) {
 
 		// Merge multiple BufferGeometries into one
 
@@ -234,23 +234,23 @@ class EPTLoader extends Loader {
 		}
 
 		const merged = new BufferGeometry();
-		merged.setAttribute( 'position', new BufferAttribute( this.concatFloat32( positions ), 3 ) );
+		merged.setAttribute( 'position', new BufferAttribute( this._concatFloat32( positions ), 3 ) );
 
 		if ( hasColor ) {
 
-			merged.setAttribute( 'color', new BufferAttribute( this.concatFloat32( colors ), 3 ) );
+			merged.setAttribute( 'color', new BufferAttribute( this._concatFloat32( colors ), 3 ) );
 
 		}
 
 		if ( hasIntensity ) {
 
-			merged.setAttribute( 'intensity', new BufferAttribute( this.concatFloat32( intensities ), 1 ) );
+			merged.setAttribute( 'intensity', new BufferAttribute( this._concatFloat32( intensities ), 1 ) );
 
 		}
 
 		if ( hasClassification ) {
 
-			merged.setAttribute( 'classification', new BufferAttribute( this.concatFloat32( classifications ), 1) );
+			merged.setAttribute( 'classification', new BufferAttribute( this._concatFloat32( classifications ), 1) );
 
 		}
 
@@ -261,7 +261,7 @@ class EPTLoader extends Loader {
 
 	}
 
-	getValue( view, offset, type, size, littleEndian = true ) {
+	_getValue( view, offset, type, size, littleEndian = true ) {
 
 		switch ( type.toLowerCase() ) {
 
@@ -307,7 +307,7 @@ class EPTLoader extends Loader {
 
 	}
 
-	sizeOf( a ) {
+	_sizeOf( a ) {
 
 		switch ( a.type.toLowerCase() ) {
 
@@ -347,7 +347,7 @@ class EPTLoader extends Loader {
 
 	// Normalize Color or Intensity values
 
-	normalizeCI( value, attr ) {
+	_normalizeCI( value, attr ) {
 
 		let normalized;
 
@@ -387,7 +387,7 @@ class EPTLoader extends Loader {
 
 	}
 
-	async loadBinTile( buffer, ept ) {
+	async _loadBinTile( buffer, ept ) {
 
 		try {
 
@@ -404,7 +404,7 @@ class EPTLoader extends Loader {
 
 			for ( const a of attrs ) {
 
-				const size = this.sizeOf( a );
+				const size = this._sizeOf( a );
 				const type = a.type.toLowerCase();
 				const name = a.name.toLowerCase();
 
@@ -447,7 +447,7 @@ class EPTLoader extends Loader {
 
 					const a = info.raw;
 
-					const value = this.getValue(
+					const value = this._getValue(
 
 						view,
 						baseOffset + info.byteOffset,
@@ -472,19 +472,19 @@ class EPTLoader extends Loader {
 							break;
 
 						case 'intensity':
-							intensity[ outIndex ] = this.normalizeCI( value, a );
+							intensity[ outIndex ] = this._normalizeCI( value, a );
 							break;
 
 						case 'red':
-							colors[ outIndex * 3 + 0 ] = this.normalizeCI( value, a );
+							colors[ outIndex * 3 + 0 ] = this._normalizeCI( value, a );
 							break;
 
 						case 'green':
-							colors[ outIndex * 3 + 1 ] = this.normalizeCI( value, a );
+							colors[ outIndex * 3 + 1 ] = this._normalizeCI( value, a );
 							break;
 
 						case 'blue':
-							colors[ outIndex * 3 + 2 ] = this.normalizeCI( value, a );
+							colors[ outIndex * 3 + 2 ] = this._normalizeCI( value, a );
 							break;
 
 						default:
@@ -524,7 +524,7 @@ class EPTLoader extends Loader {
 
 	}
 
-	isPDAL( ept ) {
+	_isPDAL( ept ) {
 
 		// Rely on schema vs attributes
 
@@ -532,9 +532,9 @@ class EPTLoader extends Loader {
 
 	}
 
-	getTileDepth( key, ept ) {
+	_getTileDepth( key, ept ) {
 
-		if ( this.isPDAL( ept ) ) {
+		if ( this._isPDAL( ept ) ) {
 
 			// PDAL / USGS span hierarchy: depth is the first part
 
@@ -564,11 +564,11 @@ class EPTLoader extends Loader {
 
 	}
 
-	async discoverHierarchy( key, eptJson, base, allKeys ) {
+	async _discoverHierarchy( key, eptJson, base, allKeys ) {
 
 		// Recursive function to discover all hierarchy nodes up to lodDepthLimit
 
-		const depth = this.getTileDepth( key, eptJson );
+		const depth = this._getTileDepth( key, eptJson );
 		if (depth > this.lodDepthLimit) return;
 
 		const hUrl = this.localBlobs
@@ -588,11 +588,11 @@ class EPTLoader extends Loader {
 
 			for ( const subKey of Object.keys( h ) ) {
 
-				const subDepth = this.getTileDepth( subKey, eptJson );
+				const subDepth = this._getTileDepth( subKey, eptJson );
 
 				if ( h[ subKey ] === -1 && subDepth <= this.lodDepthLimit ) {
 
-					await this.discoverHierarchy( subKey, eptJson, base, allKeys );
+					await this._discoverHierarchy( subKey, eptJson, base, allKeys );
 
 				}
 
@@ -602,7 +602,7 @@ class EPTLoader extends Loader {
 
 	}
 
-	mortonSort( keys ) {
+	_mortonSort( keys ) {
 
 		return keys.sort( ( a, b ) => {
 
@@ -745,7 +745,7 @@ class EPTLoader extends Loader {
 
 		// Start recursion from the root
 
-		await this.discoverHierarchy( '0-0-0-0', eptJson, base, allKeys );
+		await this._discoverHierarchy( '0-0-0-0', eptJson, base, allKeys );
 
 		// 3. Extract tile keys
 
@@ -754,14 +754,14 @@ class EPTLoader extends Loader {
 
 		let filteredKeys = tileKeys.filter( key => {
 
-			const depth = this.getTileDepth( key, eptJson );
+			const depth = this._getTileDepth( key, eptJson );
 			return depth <= this.lodDepthLimit;
 
 		});
 
 		// Ensure root tile loads first
 
-		filteredKeys = this.mortonSort( filteredKeys );
+		filteredKeys = this._mortonSort( filteredKeys );
 
 		console.log( 'Selected Tiles:', filteredKeys.length );
 
@@ -815,7 +815,7 @@ class EPTLoader extends Loader {
 
 					if ( extension === '.bin' ) {
 
-						const geom = await this.loadBinTile( buffer, eptJson );
+						const geom = await this._loadBinTile( buffer, eptJson );
 						if ( geom ) return geom;
 
 					} else if ( extension === '.zst' ) {
@@ -845,7 +845,7 @@ class EPTLoader extends Loader {
 								? decompressed.buffer
 								: decompressed.buffer.slice( decompressed.byteOffset, decompressed.byteOffset + decompressed.byteLength );
 
-						const geom = await this.loadBinTile( arrayBuffer, eptJson );
+						const geom = await this._loadBinTile( arrayBuffer, eptJson );
 						if ( geom ) return geom;
 
 					} else {
@@ -878,7 +878,7 @@ class EPTLoader extends Loader {
 
 		// 5. Merge all tile geometries
 
-		return this.mergeGeometries( validGeometries );
+		return this._mergeGeometries( validGeometries );
 
 	}
 
