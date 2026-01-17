@@ -77,9 +77,9 @@
       var copc_obj, selected_url_file = '', count = 0;
       var extended_render, extended_count = 0, params;
       var lod_displayed = false, warning_displayed = false;
-      var url_displayed = false, url_loading = false;
-      var filesMap, bounding_box, globalElevationRange;
-      var classification_present, classification_enabled, elevation;
+      var url_displayed = false, url_loading = false, elevation;
+      var filesMap, bounding_box, globalElevationRange, detected_classes;
+      var classification_present, classification_enabled, classification_folder;
     </script>
 
     <script type="module">
@@ -272,6 +272,7 @@
         params.brightness = 1.25;
 
         gui.reset();
+
         gui_container.style.display = 'none';
       }
 
@@ -302,119 +303,228 @@
 
     <script>
       const COPCShaderLogic = {
-          vertex: `
-              uniform float uSize;
-              uniform float uMode;
-              uniform float uMinZ;
-              uniform float uMaxZ;
-              uniform float uIntensityGamma;
+        vertex: `
+          uniform float uSize;
+          uniform float uMode;
+          uniform float uMinZ;
+          uniform float uMaxZ;
+          uniform float uIntensityGamma;
 
-              attribute float intensity;
-              attribute float classification;
+          attribute float intensity;
+          attribute float classification;
 
-              varying vec3 vColor;
-              varying float vMode;
-              varying float vClass;
+          varying vec3 vColor;
+          varying float vMode;
+          varying float vClass;
 
-              void main() {
-                  vMode = uMode;
-                  vClass = classification;
+          void main() {
+            vMode = uMode;
+            vClass = classification;
 
-                  // 1. Calculate Elevation Color (Blue -> Red)
-                  float t = clamp((position.z - uMinZ) / (uMaxZ - uMinZ), 0.0, 1.0);
-                  t = t * t * (3.0 - 2.0 * t);
+            // 1. Calculate Elevation Color
+            float t = clamp((position.z - uMinZ) / (uMaxZ - uMinZ), 0.0, 1.0);
+            t = t * t * (3.0 - 2.0 * t);
+            vec3 elevCol;
+            if (t < 0.2) elevCol = vec3(0.0, t / 0.2, 1.0);
+            else if (t < 0.4) elevCol = vec3(0.0, 1.0, 1.0 - (t - 0.2) / 0.2);
+            else if (t < 0.6) elevCol = vec3((t - 0.4) / 0.2, 1.0, 0.0);
+            else if (t < 0.8) elevCol = vec3(1.0, 1.0 - ((t - 0.6) / 0.2) * 0.5, 0.0);
+            else elevCol = vec3(1.0, 0.5 - ((t - 0.8) / 0.2) * 0.5, 0.0);
 
-                  vec3 elevCol;
-                  if (t < 0.2) elevCol = vec3(0.0, t / 0.2, 1.0);
-                  else if (t < 0.4) elevCol = vec3(0.0, 1.0, 1.0 - (t - 0.2) / 0.2);
-                  else if (t < 0.6) elevCol = vec3((t - 0.4) / 0.2, 1.0, 0.0);
-                  else if (t < 0.8) elevCol = vec3(1.0, 1.0 - ((t - 0.6) / 0.2) * 0.5, 0.0);
-                  else elevCol = vec3(1.0, 0.5 - ((t - 0.8) / 0.2) * 0.5, 0.0);
+            // 2. Select base color attribute
+            vec3 base;
+            if (uMode == 0.0) base = color;        
+            else if (uMode == 1.0) base = elevCol; 
+            else base = vec3(1.0); // Use full white as multiplier for Classification Mode
 
-                  // 2. Select base color attribute
-                  vec3 base;
-                  if (uMode == 0.0) base = color;        // RGB Mode
-                  else if (uMode == 1.0) base = elevCol; // Elevation Mode
-                  else base = vec3(0.5);                 // Placeholder for Class Mode
+            vColor = base * pow(clamp(intensity, 0.001, 1.0), uIntensityGamma);
 
-                  // 3. Apply Intensity Gamma
-                  vColor = base * pow(clamp(intensity, 0.001, 1.0), uIntensityGamma);
-
-                  vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-                  gl_PointSize = uSize * (300.0 / -mvPosition.z);
-                  gl_Position = projectionMatrix * mvPosition;
-              }
-          `,
-          fragment: `
-              uniform float uOpacity;
-              uniform float uBrightness;
-              uniform vec3 uClassColors[19];
-              varying vec3 vColor;
-              varying float vMode;
-              varying float vClass;
-
-              void main() {
-                  vec3 finalRGB = vColor;
-
-                  if (vMode == 2.0) {
-                      int id = int(vClass);
-                      vec3 classCol = (id >= 0 && id < 19) ? uClassColors[id] : vec3(1.0, 0.0, 0.0);
-                      finalRGB = classCol * length(vColor);
-                  }
-
-                  finalRGB *= uBrightness;
-
-                  gl_FragColor = vec4(finalRGB, uOpacity);
-              }
-          `,
-          create: function(isMobile, zRange) {
-              // Prepare Classification Color Uniform
-              const classUniform = new Float32Array(19 * 3);
-              const colors = {
-                0:[0.6,0.6,0.6],
-                1:[1,1,1],
-                2:[0.5,0.3,0.1],
-                3:[0,0.6,0],
-                4:[0,0.8,0],
-                5:[0,1,0],
-                6:[0.6,0.6,0.6],
-                7:[0.3,0.3,0.3],
-                8:[1,1,0],
-                9:[0,0.4,1],
-                10:[0.7,0.7,0.2],
-                11:[0.4,0.4,0.4],
-                12:[0.8,0.8,0.8],
-                13:[1,0.5,0],
-                14:[1,0.7,0],
-                15:[0.8,0.5,0.2],
-                16:[0.9,0.6,0.3],
-                17:[1,0,1],
-                18:[0.2,0.2,0.2]
-              };
-
-              for(let i=0; i<19; i++) {
-                  const c = colors[i] || [1,0,0];
-                  classUniform[i*3+0] = c[0]; classUniform[i*3+1] = c[1]; classUniform[i*3+2] = c[2];
-              }
-
-              return new THREE.ShaderMaterial({
-                  uniforms: {
-                      uSize: { value: isMobile ? 1 : 5 },
-                      uMode: { value: 0.0 },
-                      uMinZ: { value: zRange?.min || 0 },
-                      uMaxZ: { value: zRange?.max || 100 },
-                      uOpacity: { value: 0.0 },
-                      uIntensityGamma: { value: 0.1 },
-                      uBrightness: { value: 1.25 },
-                      uClassColors: { value: classUniform }
-                  },
-                  vertexShader: this.vertex,
-                  fragmentShader: this.fragment,
-                  transparent: true,
-                  vertexColors: true
-              });
+            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+            gl_PointSize = uSize * (300.0 / -mvPosition.z);
+            gl_Position = projectionMatrix * mvPosition;
           }
+        `,
+        fragment: `
+          uniform float uOpacity;
+          uniform float uBrightness;
+          uniform sampler2D uClassLUT; // Full 256 color texture
+
+          varying vec3 vColor;
+          varying float vMode;
+          varying float vClass;
+
+          void main() {
+            vec3 finalRGB = vColor;
+
+            if (vMode == 2.0) {
+              // Map classification (0-255) to texture coordinate (0.0-1.0)
+              // We add 0.5 to hit the center of the pixel
+              float u = (vClass + 0.5) / 256.0;
+              vec4 classData = texture2D(uClassLUT, vec2(u, 0.5));
+
+              // This line actually removes the points from the screen
+              if (classData.a < 0.1) discard; 
+
+              // Multiply by intensity (vColor) to keep the lighting/shading
+              finalRGB = classData.rgb * length(vColor);
+            }
+
+            finalRGB *= uBrightness;
+
+            gl_FragColor = vec4(finalRGB, uOpacity);
+          }
+        `,
+        create: function(isMobile, zRange) {
+          // 1. Generate the 256-color data using RGBA (4 values per pixel)
+          // We must use 256 * 4 because RGBFormat is no longer supported.
+          const data = new Uint8Array(256 * 4);
+          const colors = {
+            0:[153,153,153],
+            1:[255,255,255],
+            2:[128,77,26],
+            3:[0,153,0],
+            4:[0,204,0],
+            5:[0,255,0],
+            6:[153,153,153],
+            7:[77,77,77],
+            8:[255,255,0],
+            9:[0,102,255],
+            10:[179,179,51],
+            11:[102,102,102],
+            12:[204,204,204],
+            13:[255,128,0],
+            14:[255,179,0],
+            15:[204,128,51],
+            16:[230,153,77],
+            17:[255,0,255],
+            18:[51,51,51],
+            19:[180,210,210], // Overhead Machinery
+            20:[150,150,100], // Ignored Ground
+            21:[240,250,255], // Snow
+            22:[255,100,100]  // Temporal Exclusion (Moving objects)
+          };
+
+          for (let i = 0; i < 256; i++) {
+            let rgb = colors[i];
+            if (!rgb) {
+              // Procedural colors for 23-255 so they are distinct
+              rgb = i < 64 ? [60, 60, 60] : [(i * 55) % 255, (i * 123) % 255, 150 + (i % 100)];
+            }
+
+            const idx = i * 4;
+            data[idx + 0] = rgb[0];
+            data[idx + 1] = rgb[1];
+            data[idx + 2] = rgb[2];
+            data[idx + 3] = 255;    // A (Fully opaque by default)
+          }
+
+          // 2. Create the Texture with RGBAFormat
+          const lutTexture = new THREE.DataTexture(data, 256, 1, THREE.RGBAFormat, THREE.UnsignedByteType);
+          lutTexture.minFilter = THREE.NearestFilter;
+          lutTexture.magFilter = THREE.NearestFilter;
+          lutTexture.generateMipmaps = false;
+          lutTexture.needsUpdate = true;
+
+          return new THREE.ShaderMaterial({
+            uniforms: {
+              uSize: { value: isMobile ? 1 : 5 },
+              uMode: { value: 0.0 },
+              uMinZ: { value: zRange?.min || 0 },
+              uMaxZ: { value: zRange?.max || 100 },
+              uOpacity: { value: 0.0 },
+              uIntensityGamma: { value: 0.1 },
+              uBrightness: { value: 1.25 },
+              uClassLUT: { value: lutTexture } // Passing the texture instead of array
+            },
+            vertexShader: this.vertex,
+            fragmentShader: this.fragment,
+            transparent: true,
+            vertexColors: true
+          });
+        }
       };
+
+      // Standard ASPRS LAS Class Names
+
+      const LAS_NAMES = {
+        0: "Never Classified",
+        1: "Unassigned",
+        2: "Ground",
+        3: "Low Vegetation",
+        4: "Med Vegetation",
+        5: "High Vegetation",
+        6: "Building",
+        7: "Low Noise (Cloud)",
+        8: "Model Key",
+        9: "Water",
+        10: "Rail",
+        11: "Road",
+        12: "Overlap",
+        13: "Wire-Guard", 
+        14: "Wire-Conductor",
+        15: "Transmission Tower",
+        16: "Wire-Insulator",
+        17: "Bridge",
+        18: "High Noise",
+        19: "Overhead Machinery",    // e.g., Cranes, Conveyors
+        20: "Ignored Ground",        // Typically points near breaklines
+        21: "Snow",
+        22: "Temporal Exclusion"     // Moving objects (cars, people) or tidal changes
+      };
+
+      /**
+       * @param {number} classId - The LAS class (7 for Noise, 18 for High Noise)
+       * @param {boolean} visible - Whether to show or hide the points
+      */
+
+      function setClassVisibility( classId, visible ) {
+        copc_obj.traverse( ( child ) => {
+          if (child.isPoints) {
+            const texture = child.material.uniforms.uClassLUT.value;
+            const data = texture.image.data;
+
+            // The alpha channel is at (index * 4) + 3
+
+            data[ classId * 4 + 3 ] = visible ? 255 : 0;
+
+            // Notify the GPU that the texture data has changed
+
+            texture.needsUpdate = true;
+          }
+        });
+
+        needsRender = true;
+      }
+
+      /**
+       * @param {GUI} gui - lil-gui instance
+       * @param {Array<number>} foundIds - Array of class IDs found in the model (e.g. [2, 7, 18])
+       */
+
+      function populateClassificationUI( gui, foundIds ) {
+        const folder = gui.addFolder( 'Point Classifications' );
+
+        // Sort IDs so the UI is numerical
+
+        foundIds.sort( ( a, b ) => a - b ).forEach( id => {
+          const name = LAS_NAMES[ id ] || `Class ${ id }`;
+          const label = `${ id }: ${ name }`;
+
+          // Initial state for the checkbox
+
+          const settings = { visible: true };
+
+          folder.add( settings, 'visible' )
+          .name( label )
+          .onChange( ( value ) => {
+            setClassVisibility( id, value );
+          });
+        });
+
+        gui.open();
+
+        classification_folder = folder;
+      }
 
       function set_back_color() {
         scene.background = null;
@@ -476,6 +586,8 @@
         extended_render = false;
         render_requested = false;
         globalElevationRange = null;
+        detected_classes = null;
+        classification_folder = null;
         classification_enabled = false;
         classification_present = false;
         bounding_box = new THREE.Box3();
@@ -623,7 +735,7 @@
 
             if (!globalElevationRange) globalElevationRange = globalZrange;
 
-            let material = COPCShaderLogic.create(isMobile, globalElevationRange);
+            let material = COPCShaderLogic.create( isMobile, globalElevationRange );
 
             let copc_points = new THREE.Points( points, material );
             copc_points.name = points_name;
@@ -704,13 +816,29 @@
           gui_set = true;
         }
 
-        gui_container.style.display = 'block';
-
-        enable_disable( false );
-
         if (classification_present) {
           document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
           document.getElementById('btn_classification_colors').style.display = '';
+
+          // Avoid cluttering gui with classification classes on mobile devices
+
+          if (!isMobile) {
+            // Iterate through all objects to find classification classes
+
+            detected_classes = new Set();
+
+            copc_obj.traverse( ( node ) => {
+              if (node.isPoints && node.geometry.attributes.classification) {
+                const attr = node.geometry.attributes.classification.array;
+
+                // Get classification classes for gui
+
+                for (let i = 0; i < attr.length; i++) {
+                  detected_classes.add( attr[ i ] );
+                }
+              }
+            });
+          }
         } else {
           document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
           document.getElementById('btn_classification_colors').style.display = 'none';
@@ -718,11 +846,18 @@
 
         console.timeEnd( 'Loading Time' );
 
+        // Wait 2 seconds to let last node get rendered
+        await new Promise( resolve => setTimeout( resolve, 2000 ) );
+
         // Stop flashing indicator
         document.getElementById('status_indicator').style.visibility = 'hidden';
 
         // Hide stats counts
         document.getElementById('stats_overlay').style.visibility = 'hidden';
+
+        gui_container.style.display = 'block';
+
+        enable_disable( false );
 
         init_running = false;
 
@@ -765,12 +900,20 @@
       function set_elevation_colors() {
           if (!copc_obj) return;
           elevation = !elevation;
-          classification_enabled = false; // Reset other mode
+
+          if (classification_enabled) {
+            if (classification_folder) {
+              classification_folder.show( false );
+            }
+
+            classification_enabled = false; // Reset other mode
+          }
 
           const mode = elevation ? 1.0 : 0.0;
-          updateMaterialUniforms(mode);
+          updateMaterialUniforms( mode );
 
-          document.getElementById('btn_elevation_colors').style.backgroundColor = elevation ? 'lightgreen' : 'transparent';
+          const el_color = elevation ? 'lightgreen' : 'transparent';
+          document.getElementById('btn_elevation_colors').style.backgroundColor = el_color;
           document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
           needsRender = true;
       }
@@ -780,10 +923,22 @@
           classification_enabled = !classification_enabled;
           elevation = false; // Reset other mode
 
-          const mode = classification_enabled ? 2.0 : 0.0;
-          updateMaterialUniforms(mode);
+          if (classification_enabled && !isMobile) {
+            if (classification_folder) {
+              classification_folder.show();
+            } else {
+              const foundIds = Array.from( detected_classes );
+              populateClassificationUI( gui, foundIds );
+            }
+          } else {
+            if (classification_folder) classification_folder.show( false );
+          }
 
-          document.getElementById('btn_classification_colors').style.backgroundColor = classification_enabled ? 'lightgreen' : 'transparent';
+          const mode = classification_enabled ? 2.0 : 0.0;
+          updateMaterialUniforms( mode );
+
+          const cl_color = classification_enabled ? 'lightgreen' : 'transparent';
+          document.getElementById('btn_classification_colors').style.backgroundColor = cl_color;
           document.getElementById('btn_elevation_colors').style.backgroundColor = 'transparent';
           needsRender = true;
       }
@@ -816,7 +971,7 @@
             needsRender = false;
 
             if (extended_render) {
-              if (extended_count > 30) {
+              if (extended_count > 20) {
                 extended_render = false;
                 extended_count = 0;
                 log_info();
@@ -848,10 +1003,7 @@
 
         init_running = false;
 
-        if (gui_set === true) {
-          gui_reset();
-          gui_container.style.display = 'none';
-        }
+        if (gui_set) gui_reset();
 
         // Reset the view
         if (reset === true) {
@@ -893,6 +1045,11 @@
         if (stats && stats.dom && stats.dom.parentNode) {
           stats.dom.parentNode.removeChild( stats.dom );
           stats = null;
+        }
+
+        if (classification_folder) {
+          classification_folder.show( false );
+          classification_folder.destroy();
         }
 
         elevation = false;
