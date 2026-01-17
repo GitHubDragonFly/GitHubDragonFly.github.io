@@ -340,14 +340,14 @@ Number Type Converter
   - Supports loading EPT datasets with custom `EPT Loader`:
     - This loader was created with assistance from Microsoft Copilot and Google Gemini
     - It supports datasets with either BIN or LAZ or ZST data files
-    - It is internally using custom `LASZ Loader` for loading LAS/LAZ files
+    - It is internally using custom `LASZ Loader` for loading LAS / LAZ files
     - It is internally using pure JavaScript [fzstd](https://github.com/101arrowz/fzstd) library for decompressing ZST files:
-      -  Optional: use the loader's internal `setZstdDecompressor( decompressor )` to set some other ZST decompressor (see top of [EPT Viewer](https://github.com/GitHubDragonFly/GitHubDragonFly.github.io/blob/main/viewers/templates/EPT%20Viewer.html) for instructions to use either [@oneidentity/zstd-js](https://github.com/OneIdentity/zstd-js) or [zstddec/stream](https://github.com/donmccurdy/zstddec-wasm))
-  - The viewer allows setting Level Of Detail (LOD) for EPT datasets with BIN / LAZ tiles to be loaded:
+      -  Optional: use the loader's internal `setZstdDecompressor( decompressor )` to set some other ZST decompressor (see top of [EPT Viewer](https://github.com/GitHubDragonFly/GitHubDragonFly.github.io/blob/main/viewers/templates/EPT%20Viewer.html) for instructions on how to use either [@oneidentity/zstd-js](https://github.com/OneIdentity/zstd-js) or [zstddec/stream](https://github.com/donmccurdy/zstddec-wasm))
+  - The viewer allows setting Level Of Detail (LOD) for EPT datasets with BIN / LAZ / ZST tiles to be loaded:
     - `Density` is presented as percentage and defines how many points get processed:
-      - For LAS / LAZ the density of the model changes
+      - For LAS / LAZ / ZST the density of the model changes
       - For EPT Datasets, only the number of points per tile changes while the volume remains the same
-    - `Depth` levels set number of loaded tiles and are defined as root / low / medium / high / extreme, which are increasing by the factor of 8:
+    - `Depth` levels set number of loaded tiles and are defined as root (0) / low (1) / medium (2) / high (3) / extreme (4, 5, 6, 7, 8), which are increasing by the factor of 8:
       - root alone, root + 8 children, root + 64 children, root + 512 children, and so on
     - `Gamma` levels range from 0.1 to 1.9:
       - For LAZ tiles they adjust intensity gamma (0.1 = brighter, 1.9 = darker)
@@ -356,24 +356,33 @@ Number Type Converter
 
 - Special notes about `EPT Viewer`:
   - Specifically designed to stream tiles from Entwine Point Tiles (EPT) datasets
-  - Supports loading `ept.json` + `BIN or LAZ or ZST` tiles:
+  - Supports loading `ept.json` + `BIN / LAZ / ZST` tiles:
     - Normally loaded via URL (containing `ept.json` file)
-    - Local loading is supported, all required files need to be in a single folder
+    - Local loading is also supported but requires all files to be in a single folder
     - It is using customized `EPTStreamLoader` (derived from custom `EPT Loader`)
-    - This loader was also created with assistance from Microsoft Copilot and Google Gemini
-  - The viewer has live Gamma and Brightness controls as well as some statistics
-  - The viewer allows setting Level Of Detail (LOD):
+      - Also created with assistance from Microsoft Copilot and Google Gemini
+  - It has live Gamma and Brightness controls presented within [lil-gui](https://lil-gui.georgealways.com/)
+  - It also has some switchable statistics:
+    - FPS / MS / MB stats are using [stats.js](https://github.com/mrdoob/stats.js/) library
+    - Additional static overlay shows number of nodes (geometries) and total points loaded
+  - If Classification Classes are present then `lil-gui` will show them as checkboxes
+  - It allows setting Level Of Detail (LOD):
     - The same as for the above `PCD+XYZ+LAS Viewer` except for Gamma
     - Tile selectivity is based on the LOD set depth (defaults to 0 which is root only)
   - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `COPC Viewer`:
   - Specifically designed to stream selective nodes from Cloud-Optimized Point Clouds (COPC) datasets:
-    - This is a simple viewer that will not keep loading/removing nodes with camera movement
+    - This is a simple viewer that will not keep loading or removing nodes with camera movement
   - Normally loaded via URL (containing a link to `COPC LAZ` file)
-  - It is using customized `COPCStreamLoader`:
-    - This loader was also created with assistance from Microsoft Copilot and Google Gemini
-  - The viewer has live Gamma and Brightness controls as well as some statistics
+  - Local loading is not supported unless files are served by some local range HTTP server (like python's RangeHTTPServer)
+  - This viewer is using customized `COPCStreamLoader`:
+    - Also created with assistance from Microsoft Copilot and Google Gemini
+  - It has live Gamma and Brightness controls presented within [lil-gui](https://lil-gui.georgealways.com/)
+  - It also has some switchable statistics:
+    - FPS / MS / MB stats are using [stats.js](https://github.com/mrdoob/stats.js/) library
+    - Additional static overlay shows number of nodes (geometries) and total points loaded
+  - If Classification Classes are present then `lil-gui` will show them as checkboxes
   - The viewer allows setting Level Of Detail (LOD):
     - The same as for the above `PCD+XYZ+LAS Viewer` except for Gamma
     - Node selectivity is based on the LOD set depth (defaults to 0 which is root only)
