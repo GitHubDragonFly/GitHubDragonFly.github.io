@@ -12,8 +12,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
         }
       }
     </script>
@@ -21,11 +21,11 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var THREE, manager, ply_loader, stl_loader, renderer, scene, camera, render_requested;
-      var controls, mouse_down, mouse_wheel, events_initialized, isMobile;
-      var mesh, bounding_box, material, flat_shading_enabled, object_is_points;
-      var merge_vertices, ambientLight, directionalLight, wireframe_enabled;
-      var ww = window.innerWidth, wh = window.innerHeight, vertex_colors_enabled;
+      var THREE, ply_loader, stl_loader, renderer, scene, camera, render_requested;
+      var manager, controls, mouse_down, mouse_wheel, events_initialized, isMobile;
+      var mesh, bounding_box, flat_shading_enabled, object_is_points;
+      var merge_vertices, wireframe_enabled, vertex_colors_enabled;
+      var ww = window.innerWidth, wh = window.innerHeight;
       var url_displayed = false, url_loading = false, url_ply, count = 0;
       var selected_ply_file, selected_stl_file, selected_url_file = '';
     </script>
@@ -49,7 +49,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>PLY+STL Viewer (r178)</title>
+    <title>PLY+STL Viewer (r182)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -65,8 +65,8 @@
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
-            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="20" step="0.05" value="3" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
-            <span id="dli_val">3</span>
+            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="5" step="0.1" value="1" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
+            <span id="dli_val">1</span>
           </div>
         </button>
         <label for="btn_dc_dli" title="Directional Light Intensity"></label>
@@ -182,62 +182,36 @@
       function set_directional_light_intensity() {
         let dli_value = document.getElementById('directional_light_intensity').value;
         document.getElementById('dli_val').innerText = dli_value;
-        directionalLight.intensity = parseFloat( dli_value );
+
+        const val = parseFloat( dli_value );
+
+        // Shader lighting
+
+        if (mesh && mesh.material.uniforms) {
+          mesh.material.uniforms.uIntensity.value = val;
+        }
 
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it hopefully comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( mesh );
-        let size = bounding_box.getSize( new THREE.Vector3() );
-        let center = bounding_box.getCenter( new THREE.Vector3() );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        // Move to the center
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        camera.lookAt( center );
 
-        if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
+        // Center root
+        mesh.position.sub( center );
 
-        // Scale according to window width / height, whichever is greater
-
-        if (ww > wh) {
-          mesh.scale.multiplyScalar( ( wh / size.y ) * 0.15 );
-        } else {
-          mesh.scale.multiplyScalar( ( ww / size.x ) * 0.15 );
-        }
-
-        // Get center coordinates and move to the center again
-
-        bounding_box.setFromObject( mesh );
-        size = bounding_box.getSize( new THREE.Vector3() );
-        center = bounding_box.getCenter( new THREE.Vector3() );
-
-        if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
-
-        // Scale again and re-center if the model's width / height is greater than the screen's width / height
-
-        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
-          mesh.scale.multiplyScalar( ( ww / (ww > wh ? size.x : size.y) ) );
-
-          bounding_box.setFromObject( mesh );
-          size = bounding_box.getSize( new THREE.Vector3() );
-          center = bounding_box.getCenter( new THREE.Vector3() );
-
-          if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
-          if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
-          if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
-        }
-
-        // Set the camera's z distance
-
-        camera.position.z = bounding_box.max.z + 250;
-        camera.updateProjectionMatrix();
-
-        mouse_wheel = true;
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist * 1.5 );
+        camera.lookAt( 0, 0, 0 );
+        resize();
       }
 
       async function init() {
@@ -265,7 +239,7 @@
         mouse_down = false;
         mouse_wheel = true;
         vertex_colors_enabled = false;
-        flat_shading_enabled = true;
+        flat_shading_enabled = false;
         render_requested = false;
         bounding_box = new THREE.Box3();
 
@@ -324,21 +298,6 @@
           scene.add( camera );
         }
 
-        // Add AmbientLight to the scene
-        if (ambientLight === undefined) {
-          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.25 );
-          ambientLight.position.set( 0, 0, - 250 );
-          camera.add( ambientLight );
-        }
-
-        // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
-        if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 3 );
-          directionalLight.position.set( 0, 100, 250 );
-          directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
-          camera.add( directionalLight );
-        }
-
         if (controls === undefined) {
           const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
 
@@ -358,41 +317,283 @@
           //controls.maxDistance = 500;
         }
 
-        if (material === undefined) {
-          material = new THREE.MeshStandardMaterial( {
-            side: THREE.DoubleSide,
-            vertexColors: false,
-            flatShading: true,
-            transparent: true,
-            metalness: 0.5,
-            roughness: 0.5,
-            opacity: 1,
-            fog: true
-          });
-        }
-
-        if (scene.environment === null) {
-          let url = 'https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/textures/water.avif';
-
-          new THREE.TextureLoader().load( url, async function( texture ) {
-            texture.mapping = THREE.EquirectangularReflectionMapping;
-            texture.needsUpdate = true;
-
-            scene.environment = texture.clone();
-            scene.environmentIntensity = 0.15;
-
-            mouse_wheel = true;
-
-            texture.dispose();
-          }, function ( xhr ) {
-          }, function ( error ) {
-            console.log( 'Error Loading Scene Environment Image File!' );
-            console.log( error );
-          });
-        }
-
         // Load the model
         loadFile();
+      }
+
+      function allVertexColorsAreBlack( geometry ) {
+        if (!geometry.hasAttribute( 'color' ) ) return false;
+
+        const colors = geometry.getAttribute( 'color' );
+        const col_count = colors.count;
+
+        for ( let i = 0; i < col_count; i++ ) {
+          if (
+            colors.getX( i ) !== 0 ||
+            colors.getY( i ) !== 0 ||
+            colors.getZ( i ) !== 0
+          ) {
+            return false;  // found a non-black vertex
+          }
+        }
+
+        return true; // all black
+      }
+
+      function add_face_normals( geometry ) {
+        if (geometry.index) geometry = geometry.toNonIndexed();
+
+        const pos = geometry.attributes.position;
+        const pos_count = pos.count;
+        const normals = [];
+
+        for ( let i = 0; i < pos_count; i += 3 ) {
+          const a = new THREE.Vector3().fromBufferAttribute( pos, i );
+          const b = new THREE.Vector3().fromBufferAttribute( pos, i + 1 );
+          const c = new THREE.Vector3().fromBufferAttribute( pos, i + 2 );
+
+          // Compute face normal
+          const cb = new THREE.Vector3().subVectors( c, b );
+          const ab = new THREE.Vector3().subVectors( a, b );
+          cb.cross( ab ).normalize();
+
+          // Assign same normal to all 3 vertices of the face
+          normals.push(cb.x, cb.y, cb.z);
+          normals.push(cb.x, cb.y, cb.z);
+          normals.push(cb.x, cb.y, cb.z);
+        }
+
+        geometry.setAttribute( 'faceNormal', new THREE.Float32BufferAttribute( normals , 3 ) );
+
+        return geometry;
+      }
+
+      function add_barycentric( geometry ) {
+        if (geometry.index) geometry = geometry.toNonIndexed();
+
+        const pos_count = geometry.attributes.position.count;
+        const bary = new Float32Array( pos_count * 3 );
+
+        for ( let i = 0; i < pos_count; i += 3 ) {
+          bary.set( [ 1, 0, 0 ], ( i + 0 ) * 3 );
+          bary.set( [ 0, 1, 0 ], ( i + 1 ) * 3 );
+          bary.set( [ 0, 0, 1 ], ( i + 2 ) * 3 );
+        }
+
+        geometry.setAttribute( 'baryCentric', new THREE.BufferAttribute( bary , 3 ) );
+
+        return geometry;
+      }
+
+      function normalsAreValid( geometry ) {
+        if (!geometry.hasAttribute('normal')) return false;
+
+        const normals = geometry.getAttribute('normal');
+        let validCount = 0;
+        const sampleSize = Math.min(normals.count, 1000); // Check a sample for speed
+
+        for (let i = 0; i < sampleSize; i++) {
+          // Check if the normal has any length at all
+          if (Math.abs( normals.getX( i ) ) > 0.05 || 
+            Math.abs( normals.getY( i ) ) > 0.05 || 
+            Math.abs( normals.getZ( i ) ) > 0.05) {
+            validCount++;
+          }
+        }
+
+        // If less than 50% of sampled points have data, ignore normals
+        return (validCount / sampleSize) > 0.5;
+      }
+
+      function createMeshShaderMaterial() {
+        return new THREE.ShaderMaterial({
+          transparent: true,
+          depthWrite: true,
+          depthTest: true,
+          side: THREE.DoubleSide,
+          blending: THREE.NormalBlending,
+          vertexColors: true,
+
+          uniforms: {
+            uOpacity: { value: 1.0 },
+            uIntensity: { value: 1.0 },
+            uWireframe: { value: false },
+            uUseFlatShading: { value: false },
+            uUseVertexColors: { value: true },
+            uBaseColor: { value: new THREE.Color( 1.0, 1.0, 1.0 ) },
+            uCameraPos: { value: new THREE.Vector3() }
+          },
+
+          vertexShader: `
+            uniform vec3 uBaseColor;
+            uniform bool uUseFlatShading;
+            uniform bool uUseVertexColors;
+            attribute vec3 baryCentric;
+            attribute vec3 faceNormal;
+            varying vec3 vNormal;
+            varying vec3 vColor;
+            varying vec3 vBary;
+            varying vec3 vWorldPos;
+
+            void main() {
+              vBary = baryCentric;
+              vNormal = uUseFlatShading ? faceNormal : normal;
+              vColor = uUseVertexColors ? color : uBaseColor;
+
+              // Project light from camera position
+              vec4 worldPos = modelMatrix * vec4(position, 1.0);
+              vWorldPos = worldPos.xyz;
+              gl_Position = projectionMatrix * viewMatrix * worldPos;
+
+              // Example 1: Use intensity to slightly bloat the mesh
+              // What it does: It takes the original vertex position and pushes it outward along the normal vector.
+              // The Result: The mesh physically expands or "inflates."
+              // If we increase uIntensity, the object gets bigger; if uIntensity is 0, it stays its original size.
+              // Math: It calculates the final screen position in one single line
+              // by multiplying the matrices against the altered position.
+              //vec3 newPosition = position + (normal * (uIntensity * 0.1));
+              //gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
+
+              // Example 2:
+              // What it does: It takes the original position attribute and
+              // converts it to screen coordinates without any modification.
+              // The Result: This is the standard way Three.js renders a mesh by using the raw position.
+              //vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              //gl_Position = projectionMatrix * mvPosition * worldPos;
+            }
+          `,
+
+          fragmentShader: `
+            uniform bool uUseVertexColors;
+            uniform vec3 uBaseColor;
+            uniform float uIntensity;
+            uniform bool uWireframe;
+            uniform float uOpacity;
+            varying vec3 vNormal;
+            varying vec3 vColor;
+            varying vec3 vBary;
+            uniform vec3 uCameraPos;
+            varying vec3 vWorldPos;
+
+            float edgeFactor() {
+              vec3 d = fwidth(vBary);
+              vec3 a3 = smoothstep(vec3(0.0), d * 1.5, vBary);
+              return min(min(a3.x, a3.y), a3.z);
+            }
+
+            void main() {
+              float e = edgeFactor();
+              vec3 base;
+              float diff;
+
+              if (uWireframe) {
+                // If we are far from the edge, discard the pixel (render nothing)
+                if (e > 0.1) { discard; }
+
+                // Only pixels that survive the discard get colored gold-ish
+                gl_FragColor = vec4(1.0, 0.75, 0.1, uOpacity);
+              } else {
+                base = uUseVertexColors ? vColor : uBaseColor;
+
+                // Normal rendering when wireframe is OFF
+
+                // Example 1:
+                // Simple directional light effect (light coming from top-right):
+                //vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
+                //diff = dot(normalize(vNormal), lightDir) * 0.5 + 0.5;
+
+                // Example 2:
+                // Simple directional light effect (light coming from camera position):
+                vec3 lightDir = normalize(uCameraPos - vWorldPos);
+                diff = dot(normalize(vNormal), lightDir) * 0.5 + 0.5;
+
+                gl_FragColor = vec4(base * diff * uIntensity, uOpacity);
+              }
+            }
+          `
+        });
+      }
+
+      function createPointShaderMaterial( size ) {
+        return new THREE.ShaderMaterial({
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          vertexColors: true,
+
+          uniforms: {
+            uSize: { value: size },
+            uOpacity: { value: 1.0 },
+            uIntensity: { value: 1.0 },
+            uUseLighting: { value: false },
+            uUseVertexColors: { value: true },
+            uUseRandomColors: { value: false },
+            uBaseColor: { value: new THREE.Color( 1.0, 1.0, 1.0 ) }
+          },
+
+          vertexShader: `
+            uniform float uSize;
+            uniform float uIntensity;
+            uniform bool uUseLighting;
+            uniform vec3 uBaseColor;
+            uniform bool uUseVertexColors;
+            uniform bool uUseRandomColors;
+            attribute float intensity;
+            varying float vLight;
+            varying vec3 vColor;
+            varying float vDepth;
+
+            float hash(vec3 p) {
+              return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
+            }
+
+            vec3 hueToRgb(float h) {
+              return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+            }
+
+            vec3 randomColor(vec3 p) {
+              float h = hash(p);
+              return hueToRgb(h);
+            }
+
+            void main() {
+              vec3 base = uUseRandomColors ? randomColor(position) : (uUseVertexColors ? color : uBaseColor);
+              vColor = base * pow(clamp(intensity, 0.001, 1.0), 0.45);
+
+              // Conditional Lighting for points models with normals
+              if (uUseLighting) {
+                vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
+                // normal is a built-in attribute in Three.js ShaderMaterial
+                float d = dot(normalize(normal), lightDir) * 0.5 + 0.5;
+                vLight = d * uIntensity;
+              } else {
+                vLight = uIntensity; // Just apply the slider brightness
+              }
+
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+
+              // Pass the view-space Z position to the fragment shader
+              // In Three.js, the camera looks down -Z, so mvPosition.z is negative.
+              vDepth = mvPosition.z;
+
+              gl_PointSize = uSize * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+
+          fragmentShader: `
+            uniform float uOpacity;
+            varying vec3 vColor;
+            varying float vLight;
+            varying float vDepth;
+
+            void main() {
+              float d = length(gl_PointCoord - vec2(0.5));
+              if (d > 0.5) discard;   // circular points
+              gl_FragColor = vec4(vColor * vLight, (1.0 - d) * uOpacity);
+            }
+          `
+        });
       }
 
       function loadFile() {
@@ -419,63 +620,164 @@
 
         // object is geometry
 
-        let smooth = object.clone();
+        let smooth = object;
 
         smooth.computeBoundingBox();
         smooth.computeBoundingSphere();
 
         if ( smooth.index !== null ) {
-          smooth.deleteAttribute('normal');
-          smooth = merge_vertices( smooth, 1e-6 );
-          smooth.computeVertexNormals();
+          // Compute smooth normals first (while we have the original vertex data)
+          if (!smooth.hasAttribute( 'normal' )) smooth.computeVertexNormals();
+
+          // Set attributes for flatShading and wireframe functionality
+
+          smooth = add_face_normals( smooth );
+          smooth = add_barycentric( smooth );
+
+          if (!smooth.hasAttribute( 'normal' )) smooth.computeVertexNormals();
           smooth.normalizeNormals();
           smooth.center();
 
-          if (smooth.hasAttribute( 'color' )) vertex_colors_enabled = true;
+          smooth.computeBoundingBox();
+          smooth.computeBoundingSphere();
 
-          mesh = new THREE.Mesh( smooth, material );
+          if (smooth.hasAttribute( 'color' )) {
+            if (allVertexColorsAreBlack( smooth )) {
+              const col_count = smooth.getAttribute( 'color' ).count;
+              const white = new Float32Array( col_count * 3 ).fill( 1.0 );
+              smooth.setAttribute( 'color', new THREE.BufferAttribute( white, 3 ) );
+            }
+
+            vertex_colors_enabled = true;
+          }
+
+          let mesh_material = createMeshShaderMaterial();
+
+          mesh = new THREE.Mesh( smooth, mesh_material );
 
           document.getElementById('btn_flat').disabled = false;
-          document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
-          document.getElementById('btn_wireframe').disabled = false;
         } else {
           if (selected_ply_file || url_ply) {
+            // PLY points model loaded
+
             flat_shading_enabled = false;
             document.getElementById('btn_flat').disabled = true;
             document.getElementById('btn_flat').style.backgroundColor = 'transparent';
             document.getElementById('btn_wireframe').disabled = true;
 
-            if (smooth.hasAttribute( 'color' )) vertex_colors_enabled = true;
+            let points_material = createPointShaderMaterial( isMobile === true ? 0.25 : 0.5 );
 
-            let points_material = new THREE.PointsMaterial( { size: 0.6, transparent: true, blending: THREE.AdditiveBlending } );
+            // The Condition: check if normals exist in the PLY
+
+            if (smooth.hasAttribute( 'normal' )) {
+              smooth.normalizeNormals();
+
+              const normals_are_valid = normalsAreValid( smooth );
+
+              if (normals_are_valid) {
+                points_material.uniforms.uUseLighting.value = true;
+              } else {
+                document.getElementById('btn_dc_dli').disabled = true;
+              }
+            } else {
+              document.getElementById('btn_dc_dli').disabled = true;
+            }
+
+            // Shader material expects color attribute
+            // Fill with white color if no color is present
+
+            if (!smooth.hasAttribute( 'color' )) {
+              const pos_count = smooth.attributes.position.count;
+              const colors = new Float32Array( pos_count * 3 ).fill( 0.9 );
+              smooth.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
+            }
+
+            vertex_colors_enabled = true;
+
+            // Add intensity to geometry - START
+
+            // Some PLY point clouds might have intensity baked-in
+
+            if (!smooth.hasAttribute( 'intensity' )) {
+              const pos = smooth.getAttribute( 'position' );
+              const points_count = pos.count;
+              const intensity = new Float32Array( points_count );
+
+              // Spherical falloff
+
+              for (let i = 0; i < points_count; i++) {
+                const x = pos.getX( i );
+                const y = pos.getY( i );
+                const z = pos.getZ( i );
+
+                const d = Math.sqrt( x*x + y*y + z*z );
+
+                intensity[ i ] = d;
+              }
+
+              // Normalize
+
+              let min = Infinity;
+              let max = -Infinity;
+
+              for (let i = 0; i < intensity.length; i++) {
+                const v = intensity[ i ];
+
+                if (v < min) min = v;
+                if (v > max) max = v;
+              }
+
+              const range = ( max - min );
+
+              for (let i = 0; i < points_count; i++) {
+                intensity[ i ] = ( intensity[ i ] - min ) / range;
+              }
+
+              smooth.setAttribute( 'intensity', new THREE.BufferAttribute( intensity, 1 ) );
+            }
+
+            // Add intensity to geometry - END
 
             mesh = new THREE.Points( smooth, points_material );
             mesh.sizeAttenuation = true;
             mesh.sortPoints = true;
             object_is_points = true;
           } else {
+            // STL model loaded
+
             smooth.deleteAttribute('normal');
             smooth = merge_vertices( smooth, 1e-6 );
             smooth.computeVertexNormals();
+
+            // Set attributes for flatShading and wireframe functionality
+
+            smooth = add_face_normals( smooth );
+            smooth = add_barycentric( smooth );
+
+            if (!smooth.hasAttribute( 'normal' )) smooth.computeVertexNormals();
             smooth.normalizeNormals();
             smooth.center();
 
-            if (object.hasColors) vertex_colors_enabled = true;
+            smooth.computeBoundingBox();
+            smooth.computeBoundingSphere();
 
-            mesh = new THREE.Mesh( smooth, material );
+            if (smooth.hasAttribute( 'color' )) {
+              if (allVertexColorsAreBlack( smooth )) {
+                const col_count = smooth.getAttribute( 'color' ).count;
+                const white = new Float32Array( col_count * 3 ).fill( 1.0 );
+                smooth.setAttribute( 'color', new THREE.BufferAttribute( white, 3 ) );
+              }
+
+              vertex_colors_enabled = true;
+            }
+
+            let mesh_material = createMeshShaderMaterial();
+
+            mesh = new THREE.Mesh( smooth, mesh_material );
 
             document.getElementById('btn_flat').disabled = false;
-            document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
-            document.getElementById('btn_wireframe').disabled = false;
           }
         }
-
-        mesh.traverse( ( child ) => {
-          if (child.isMesh || child.isPoints) {
-            if (child.isPoints === true ) child.material.size = isMobile === true ? 0.6 : 0.7;
-            child.material.vertexColors = vertex_colors_enabled;
-          }
-        });
 
         // Add mesh to the scene
         scene.add( mesh );
@@ -508,8 +810,7 @@
       }
 
       async function finish_loading() {
-        set_initial_scale();
-        resize();
+        frame_camera();
 
         if (object_is_points === true) {
           document.getElementById('btn_flat').disabled = true;
@@ -553,7 +854,7 @@
 
       function set_flat() {
         if (mesh) {
-          if (flat_shading_enabled === true) {
+          if (flat_shading_enabled) {
             document.getElementById('btn_flat').style.backgroundColor = 'transparent';
             flat_shading_enabled = false;
           } else {
@@ -563,8 +864,7 @@
 
           mesh.traverse( ( child ) => {
             if (child.isMesh) {
-              child.material.flatShading = flat_shading_enabled;
-              child.material.needsUpdate = true;
+              child.material.uniforms.uUseFlatShading.value = flat_shading_enabled;
             }
 
             mouse_wheel = true;
@@ -574,7 +874,7 @@
 
       function show_wireframe() {
         if (mesh) {
-          if (wireframe_enabled === true) {
+          if (wireframe_enabled) {
             wireframe_enabled = false;
             document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
           } else {
@@ -582,9 +882,13 @@
             document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
           }
 
-          material.wireframe = wireframe_enabled;
+          mesh.traverse( ( child ) => {
+            if (child.isMesh) {
+              child.material.uniforms.uWireframe.value = wireframe_enabled;
+            }
 
-          mouse_wheel = true;
+            mouse_wheel = true;
+          });
         }
       }
 
@@ -592,6 +896,9 @@
         if (mesh) {
           if (mouse_down === true || mouse_wheel === true) {
             controls.update();
+
+            if (mesh && mesh.isMesh && mesh.material.uniforms)
+              mesh.material.uniforms.uCameraPos.value.copy( camera.position );
 
             renderer.clear();
             renderer.render( scene, camera );
@@ -612,17 +919,11 @@
 
       async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
-        document.getElementById('dli_val').innerText = 3;
-        document.getElementById('directional_light_intensity').value = 3;
+        document.getElementById('dli_val').innerText = 1;
+        document.getElementById('directional_light_intensity').value = 1;
         document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_flat').style.backgroundColor = 'transparent';
         document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
-
-        if (scene) {
-          if (directionalLight) {
-            set_directional_light_intensity();
-          }
-        }
 
         // Reset the view
         if (reset === true) {
@@ -659,24 +960,36 @@
       }
 
       async function scene_cleanup() {
+        if (wireframe_enabled === true) await show_wireframe();
+
         scene.remove( mesh );
 
         renderer.clear();
 
-        if (wireframe_enabled === true) show_wireframe();
-
         mesh.traverse( ( child ) => {
           if (child.isMesh || child.isPoints) {
-            if (child.material && child.material.map) child.material.map.dispose();
-            if (child.material) child.material.dispose();
-            if (child.geometry) child.geometry.dispose();
+            if (child.geometry) {
+              child.geometry.dispose();
+              child.geometry = null;
+            }
+
+            if (child.material) {
+              if (child.material.uniforms) {
+                Object.keys( child.material.uniforms ).forEach( key => {
+                  const uniform = child.material.uniforms[ key ].value;
+                  if (uniform && uniform.isTexture) uniform.dispose();
+                });
+              } else {
+                if (child.material.map) child.material.map.dispose();
+              }
+
+              child.material.dispose();
+              child.material = null;
+            }
           }
         });
 
         mesh = undefined;
-
-        material.dispose();
-        material = undefined;
 
         if (isMobile === false) {
           renderer.info.reset();
