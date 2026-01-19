@@ -308,7 +308,6 @@
         <label for="ambient_light_color" title="Ambient Light Color">AL<input type="color" title="Ambient Light Color" id="ambient_light_color" onchange="set_ambient_light_color();" disabled /></label>
         <label for="directional_light_color" title="Directional Light Color">DL<input type="color" title="Directional Light Color" id="directional_light_color" onchange="set_directional_light_color();" disabled /></label>
         <label for="back_color" title="Background Color">B<input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled /></label>
-        <label for="object_color" title="Object Color">C<input type="color" title="Object Color" id="object_color" onchange="set_object_color();" disabled /></label>
         <label for="edge_color" title="Edge Color">EC<input type="color" title="Edge Color" id="edge_color" onchange="set_edge_color();" disabled /></label>
         <button title="Toggle Edges" id="btn_edges" onclick="show_edges();" disabled>E</button>
         <button title="Toggle Flat Shading" id="btn_flat" onclick="set_flat();" disabled>F</button>
@@ -1590,29 +1589,6 @@
         mouse_wheel = true;
       }
 
-      function set_object_color() {
-        if (mesh) {
-          let obj_colors = document.getElementById('object_color').value; // hex format '#rrggbb'
-
-          if (obj_colors === '#000000') obj_colors = '#FFFFFF';
-
-          mesh.traverse( ( child ) => {
-            if (child.isMesh || child.isPoints) {
-              child.material.color.setRGB(
-                parseInt( obj_colors.substring( 1, 3 ), 16 ) / 255.0,
-                parseInt( obj_colors.substring( 3, 5 ), 16 ) / 255.0,
-                parseInt( obj_colors.substring( 5 ), 16 ) / 255.0
-              );
-
-              child.material.opacity = document.getElementById('model_opacity').value;
-              child.material.needsUpdate = true;
-            }
-
-            mouse_wheel = true;
-          });
-        }
-      }
-
       function set_model_opacity() {
         if (mesh) {
           let opacity_value = document.getElementById('model_opacity').value;
@@ -1620,8 +1596,12 @@
 
           mesh.traverse( ( child ) => {
             if (child.isMesh || child.isPoints) {
-              child.material.opacity = opacity_value;
-              child.material.needsUpdate = true;
+              if (child.material.uniforms && child.material.uniforms.uOpacity) {
+                child.material.uniforms.uOpacity.value = opacity_value;
+              } else {
+                child.material.opacity = opacity_value;
+                child.material.needsUpdate = true;
+              }
             }
 
             mouse_wheel = true;
@@ -2326,7 +2306,22 @@
       function set_directional_light_intensity() {
         let dli_value = document.getElementById('directional_light_intensity').value;
         document.getElementById('dli_val').innerText = dli_value;
-        directionalLight.intensity = parseFloat( dli_value );
+
+        const val = parseFloat( dli_value );
+
+        directionalLight.intensity = val;
+
+        // Shader lighting for loaded points model
+
+        if (mesh) {
+          mesh.traverse( ( child ) => {
+            if (child.isPoints) {
+              if (child.material.uniforms) {
+                child.material.uniforms.uIntensity.value = val;
+              }
+            }
+          });
+        }
 
         mouse_wheel = true;
       }
@@ -2339,57 +2334,24 @@
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it hopefully comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( mesh );
-        let size = bounding_box.getSize( new THREE.Vector3() );
-        let center = bounding_box.getCenter( new THREE.Vector3() );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        // Move to the center
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        camera.lookAt( center );
 
-        if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
+        // Center root
+        mesh.position.sub( center );
 
-        // Scale according to window width / height, whichever is greater
-
-        if (ww > wh) {
-          mesh.scale.multiplyScalar( ( wh / size.y ) * 0.15 );
-        } else {
-          mesh.scale.multiplyScalar( ( ww / size.x ) * 0.15 );
-        }
-
-        // Get center coordinates and move to the center again
-
-        bounding_box.setFromObject( mesh );
-        size = bounding_box.getSize( new THREE.Vector3() );
-        center = bounding_box.getCenter( new THREE.Vector3() );
-
-        if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
-
-        // Scale again and re-center if the model's width / height is greater than the screen's width / height
-
-        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
-          mesh.scale.multiplyScalar( ( ww / (ww > wh ? size.x : size.y) ) );
-
-          bounding_box.setFromObject( mesh );
-          size = bounding_box.getSize( new THREE.Vector3() );
-          center = bounding_box.getCenter( new THREE.Vector3() );
-
-          if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
-          if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
-          if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
-        }
-
-        // Set the camera's z distance
-
-        camera.position.z = bounding_box.max.z + 250;
-        camera.updateProjectionMatrix();
-
-        mouse_wheel = true;
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist * 1.5 );
+        camera.lookAt( 0, 0, 0 );
+        resize();
       }
 
       function set_model_scale( scale ) {
@@ -2739,6 +2701,108 @@
         loadFile();
       }
 
+      function normalsAreValid( geometry ) {
+        if (!geometry.hasAttribute('normal')) return false;
+
+        const normals = geometry.getAttribute('normal');
+        let validCount = 0;
+        const sampleSize = Math.min(normals.count, 1000); // Check a sample for speed
+
+        for (let i = 0; i < sampleSize; i++) {
+          // Check if the normal has any length at all
+          if (Math.abs( normals.getX( i ) ) > 0.05 || 
+            Math.abs( normals.getY( i ) ) > 0.05 || 
+            Math.abs( normals.getZ( i ) ) > 0.05) {
+            validCount++;
+          }
+        }
+
+        // If less than 50% of sampled points have data, ignore normals
+        return (validCount / sampleSize) > 0.5;
+      }
+
+      function createPointShaderMaterial( size ) {
+        return new THREE.ShaderMaterial({
+          transparent: true,
+          depthWrite: false,
+          blending: THREE.AdditiveBlending,
+          vertexColors: true,
+
+          uniforms: {
+            uSize: { value: size },
+            uOpacity: { value: 1.0 },
+            uIntensity: { value: 1.0 },
+            uUseLighting: { value: false },
+            uUseVertexColors: { value: true },
+            uUseRandomColors: { value: false },
+            uBaseColor: { value: new THREE.Color( 1.0, 1.0, 1.0 ) }
+          },
+
+          vertexShader: `
+            uniform float uSize;
+            uniform float uIntensity;
+            uniform bool uUseLighting;
+            uniform vec3 uBaseColor;
+            uniform bool uUseVertexColors;
+            uniform bool uUseRandomColors;
+            attribute float intensity;
+            varying float vLight;
+            varying vec3 vColor;
+            varying float vDepth;
+
+            float hash(vec3 p) {
+              return fract(sin(dot(p, vec3(12.9898, 78.233, 45.164))) * 43758.5453);
+            }
+
+            vec3 hueToRgb(float h) {
+              return clamp(abs(mod(h * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+            }
+
+            vec3 randomColor(vec3 p) {
+              float h = hash(p);
+              return hueToRgb(h);
+            }
+
+            void main() {
+              vec3 base = uUseRandomColors ? randomColor(position) : (uUseVertexColors ? color : uBaseColor);
+              vColor = base * pow(clamp(intensity, 0.001, 1.0), 0.45);
+
+              // Conditional Lighting for points models with normals
+              if (uUseLighting) {
+                vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
+                // normal is a built-in attribute in Three.js ShaderMaterial
+                float d = dot(normalize(normal), lightDir) * 0.5 + 0.5;
+                vLight = d * uIntensity;
+              } else {
+                vLight = uIntensity; // Just apply the slider brightness
+              }
+
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+
+              // Pass the view-space Z position to the fragment shader
+              // In Three.js, the camera looks down -Z, so mvPosition.z is negative.
+              vDepth = mvPosition.z;
+
+              gl_PointSize = uSize * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+
+          fragmentShader: `
+            uniform float uOpacity;
+            varying vec3 vColor;
+            varying float vLight;
+            varying float vDepth;
+
+            void main() {
+              float d = length(gl_PointCoord - vec2(0.5));
+              if (d > 0.5) discard;   // circular points
+              gl_FragColor = vec4(vColor * vLight, (1.0 - d) * uOpacity);
+            }
+          `
+        });
+      }
+
       function loadFile() {
         // Launch loading of the selected file, addFileInScene is the callback when it's ready
         if (selected_ply_file !== null) {
@@ -2769,7 +2833,7 @@
 
         // object is geometry
 
-        point_size = isMobile === true ? 0.15 : 0.35;
+        point_size = isMobile === true ? 0.25 : 0.5;
 
         let smooth = object.clone();
 
@@ -2841,15 +2905,84 @@
           document.getElementById('btn_points_model').disabled = false;
         } else {
           if (selected_ply_file !== null || url_ply === true) {
+            // PLY points model loaded
+
             mesh_present = false;
             object_is_points = true;
 
-            let points_material = new THREE.PointsMaterial( { size: point_size, blending: THREE.AdditiveBlending } );
+            let points_material = createPointShaderMaterial( point_size );
 
-            if (smooth.hasAttribute( 'color' )) {
-              vertex_colors_enabled = true;
-              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+            // The Condition: check if normals exist in the PLY
+
+            if (smooth.hasAttribute( 'normal' )) {
+              smooth.normalizeNormals();
+
+              const normals_are_valid = normalsAreValid( smooth );
+
+              if (normals_are_valid) {
+                points_material.uniforms.uUseLighting.value = true;
+              } else {
+                document.getElementById('btn_dc_dli').disabled = true;
+              }
+            } else {
+              document.getElementById('btn_dc_dli').disabled = true;
             }
+
+            // Shader material expects color attribute
+            // Fill with white color if no color is present
+
+            if (!smooth.hasAttribute( 'color' )) {
+              const pos_count = smooth.attributes.position.count;
+              const colors = new Float32Array( pos_count * 3 ).fill( 0.9 );
+              smooth.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
+            }
+
+            vertex_colors_enabled = true;
+            document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
+
+            // Add intensity to geometry - START
+
+            // Some PLY point clouds might have intensity baked-in
+
+            if (!smooth.hasAttribute( 'intensity' )) {
+              const pos = smooth.getAttribute( 'position' );
+              const points_count = pos.count;
+              const intensity = new Float32Array( points_count );
+
+              // Spherical falloff
+
+              for (let i = 0; i < points_count; i++) {
+                const x = pos.getX( i );
+                const y = pos.getY( i );
+                const z = pos.getZ( i );
+
+                const d = Math.sqrt( x*x + y*y + z*z );
+
+                intensity[ i ] = d;
+              }
+
+              // Normalize
+
+              let min = Infinity;
+              let max = -Infinity;
+
+              for (let i = 0; i < intensity.length; i++) {
+                const v = intensity[ i ];
+
+                if (v < min) min = v;
+                if (v > max) max = v;
+              }
+
+              const range = ( max - min );
+
+              for (let i = 0; i < points_count; i++) {
+                intensity[ i ] = ( intensity[ i ] - min ) / range;
+              }
+
+              smooth.setAttribute( 'intensity', new THREE.BufferAttribute( intensity, 1 ) );
+            }
+
+            // Add intensity to geometry - END
 
             original_model = new THREE.Points( smooth, points_material );
             original_model.name = 'original_model';
@@ -2857,7 +2990,7 @@
             original_model.sortPoints = true;
 
             mesh.add( original_model );
-           } else {
+          } else {
             smooth.deleteAttribute('normal');
             smooth = merge_vertices( smooth, 1e-6 );
             smooth.computeVertexNormals();
@@ -2932,7 +3065,9 @@
 
         mesh.traverse( ( child ) => {
           if (child.isMesh || child.isPoints) {
-            child.material.vertexColors = vertex_colors_enabled;
+            if (child.material && !child.material.uniforms) {
+              child.material.vertexColors = vertex_colors_enabled;
+            }
           }
         });
 
@@ -2970,23 +3105,40 @@
 
       async function finish_loading() {
         if (textures.length > 0) document.getElementById('btn_textures').disabled = false;
+        if (vertex_colors_enabled) document.getElementById('btn_random_vertex_colors').disabled = false;
 
         enable_disable( false );
 
         if (object_is_points === true) {
+          document.getElementById('dlight').disabled = true;
           document.getElementById('btn_points_model').disabled = true;
           document.getElementById('btn_points_model').style.backgroundColor = '#d1cefc';
           document.getElementById('btn_wireframe').disabled = true;
+          document.getElementById('btn_wireframe').style.backgroundColor = '#d1cefc';
           document.getElementById('btn_flat').disabled = true;
+          document.getElementById('btn_flat').style.backgroundColor = '#d1cefc';
           document.getElementById('btn_edges').disabled = true;
+          document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
+          document.getElementById('btn_dc_ali').disabled = true;
           document.getElementById('edge_color').disabled = true;
           document.getElementById('btn_material').disabled = true;
+          document.getElementById('ambient_light_color').disabled = true;
+          document.getElementById('directional_light_color').disabled = true;
           points_model_enabled();
           disabled_changed();
+        } else {
+          mesh.traverse( ( child ) => {
+            if ((child.isMesh || child.isPoints) && !child.material.uniforms) {
+              if (!random_vertex_color_array[ child.name ]) {
+                let length = child.geometry.attributes.position.array.length;
+                random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
+                original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+              }
+            }
+          });
         }
 
-        set_initial_scale();
-        resize();
+        frame_camera();
 
         // Skip gizmo creation on mobile devices
         if (isMobile === false && gizmo === undefined) {
@@ -3653,7 +3805,6 @@
             }
           });
 
-          set_object_color();
           set_model_opacity();
 
           mouse_wheel = true;
@@ -3822,9 +3973,9 @@
 
       async function set_vertex_colors() {
         if (mesh) {
-          if (vertex_colors_enabled === true) {
+          if (vertex_colors_enabled) {
             document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
-            if (random_vertex_colors_enabled === true) await set_random_vertex_colors();
+            if (random_vertex_colors_enabled) await set_random_vertex_colors();
             document.getElementById('btn_random_vertex_colors').disabled = true;
             vertex_colors_enabled = false;
           } else {
@@ -3838,14 +3989,12 @@
 
           mesh.traverse( ( child ) => {
             if (child.isMesh || child.isPoints) {
-              if (random_vertex_color_array[ child.name ] === undefined) {
-                let length = child.geometry.attributes.position.array.length;
-                random_vertex_color_array[ child.name ] = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
-                original_vertex_color_array[ child.name ] = child.geometry.getAttribute( 'color' );
+              if (child.material.uniforms) {
+                child.material.uniforms.uUseVertexColors.value = vertex_colors_enabled;
+              } else {
+                child.material.vertexColors = vertex_colors_enabled;
+                child.material.needsUpdate = true;
               }
-
-              child.material.vertexColors = vertex_colors_enabled;
-              child.material.needsUpdate = true;
             }
 
             mouse_wheel = true;
@@ -3854,35 +4003,36 @@
       }
 
       function set_random_vertex_colors() {
-        if (random_vertex_colors_enabled === true) {
+        if (mesh) {
+          if (random_vertex_colors_enabled) {
+            document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
+            random_vertex_colors_enabled = false;
+          } else {
+            document.getElementById('btn_random_vertex_colors').style.backgroundColor = 'lightgreen';
+            random_vertex_colors_enabled = true;
+          }
+
           mesh.traverse( ( child ) => {
             if (child.isMesh || child.isPoints) {
-              if (original_vertex_color_array[ child.name ]) {
-                child.geometry.setAttribute( 'color', original_vertex_color_array[ child.name ] );
+              if (child.material.uniforms) {
+                child.material.uniforms.uUseRandomColors.value = random_vertex_colors_enabled;
               } else {
-                child.geometry.deleteAttribute( 'color' );
+                if (!random_vertex_colors_enabled) {
+                  if (original_vertex_color_array[ child.name ]) {
+                    child.geometry.setAttribute( 'color', original_vertex_color_array[ child.name ] );
+                  } else {
+                    child.geometry.deleteAttribute( 'color' );
+                  }
+                } else {
+                  child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3 ) );
+                }
+
+                child.material.needsUpdate = true;
               }
-
-              child.material.needsUpdate = true;
             }
 
             mouse_wheel = true;
           });
-
-          document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
-          random_vertex_colors_enabled = false;
-        } else {
-          mesh.traverse( ( child ) => {
-            if (child.isMesh || child.isPoints) {
-              child.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array[ child.name ], 3 ) );
-              child.material.needsUpdate = true;
-            }
-
-            mouse_wheel = true;
-          });
-
-          document.getElementById('btn_random_vertex_colors').style.backgroundColor = 'lightgreen';
-          random_vertex_colors_enabled = true;
         }
       }
 
@@ -3969,7 +4119,6 @@
         document.getElementById('file_image_input').disabled = false;
         document.getElementById('back_color').value = '#000000';
         document.getElementById('back_color').disabled = false;
-        document.getElementById('object_color').value = '#000000';
         document.getElementById('edge_color').value = '#FF0000';
         document.getElementById('ambient_light_color').value = '#FFFFFF';
         document.getElementById('directional_light_color').value = '#FFFFFF';
@@ -4041,7 +4190,6 @@
           directionalLight.position.set( 0, 250, 250 );
           set_scene_image( reset );
           set_back_color();
-          set_object_color();
           set_ambient_light_color();
           set_directional_light_color();
           set_directional_light_intensity();
@@ -4097,6 +4245,7 @@
         if (mesh.children[ 1 ] && mesh.children[ 1 ].visible === true) await show_points_model();
         if (flat_shading_enabled === true) await set_flat();
         if (wireframe_enabled === true) await show_wireframe();
+
         if (textures.length > 0 && current_texture !== - 1) {
           current_texture = textures.length - 1;
           await set_texture();
@@ -4107,8 +4256,10 @@
 
           edges.traverse( child => {
             if (child.isLine || child.type === 'LineSegments') {
-              child.material.dispose();
               child.geometry.dispose();
+              child.geometry = null;
+              child.material.dispose();
+              child.material = null;
             }
           });
         }
@@ -4117,11 +4268,28 @@
 
         mesh.traverse( ( child ) => {
           if (child.isMesh || child.isPoints) {
-            if (child.material && child.material.map) child.material.map.dispose();
-            if (child.material) child.material.dispose();
-            if (child.geometry) child.geometry.dispose();
+            if (child.geometry) {
+              child.geometry.dispose();
+              child.geometry = null;
+            }
+
+            if (child.material) {
+              if (child.material.uniforms) {
+                Object.keys( child.material.uniforms ).forEach( key => {
+                  const uniform = child.material.uniforms[ key ].value;
+                  if (uniform && uniform.isTexture) uniform.dispose();
+                });
+              } else {
+                if (child.material.map) child.material.map.dispose();
+              }
+
+              child.material.dispose();
+              child.material = null;
+            }
           }
         });
+
+        mesh.clear();
 
         while (mesh.children.length > 0) {
           mesh.remove( mesh.children[ 0 ] );
@@ -4141,21 +4309,38 @@
           points_model.remove( points_model.children[ 0 ] );
         }
 
-        if (original_model.material.map) original_model.material.map.dispose();
-        original_model.material.dispose();
-        original_model.geometry.dispose();
-        original_model = undefined;
+        if (original_model) {
+          if (original_model.material) {
+            if (original_model.material.uniforms) {
+              Object.keys( original_model.material.uniforms ).forEach( key => {
+                const uniform = original_model.material.uniforms[ key ].value;
+                if (uniform && uniform.isTexture) uniform.dispose();
+              });
+            } else {
+              if (original_model.material.map) original_model.material.map.dispose();
+              original_model.material.dispose();
+              original_model.geometry.dispose();
+              original_model = undefined;
+            }
+          }
+        }
 
-        if (points_model.material.map) points_model.material.map.dispose();
-        points_model.material.dispose();
-        points_model.geometry.dispose();
-        points_model = undefined;
+        if (points_model) {
+          if (points_model.material) {
+            if (points_model.material.map) points_model.material.map.dispose();
+            points_model.material.dispose();
+            points_model.geometry.dispose();
+            points_model = undefined;
+          }
+        }
 
         if (sampled_points) {
-          if (sampled_points.material.map) sampled_points.material.map.dispose();
-          sampled_points.material.dispose();
-          sampled_points.geometry.dispose();
-          sampled_points = undefined;
+          if (sampled_points.material) {
+            if (sampled_points.material.map) sampled_points.material.map.dispose();
+            sampled_points.material.dispose();
+            sampled_points.geometry.dispose();
+            sampled_points = undefined;
+          }
         }
 
         if (scene_bgnd) {
@@ -4183,7 +4368,6 @@
         document.getElementById('directional_light_intensity').disabled = disable;
         document.getElementById('ambient_light_intensity').disabled = disable;
         document.getElementById('back_color').disabled = disable;
-        document.getElementById('object_color').disabled = disable;
         document.getElementById('btn_edges').disabled = disable;
         document.getElementById('btn_flat').disabled = disable;
         document.getElementById('btn_dc_x').disabled = disable;
