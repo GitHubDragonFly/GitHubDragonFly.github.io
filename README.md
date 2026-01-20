@@ -180,6 +180,7 @@ Number Type Converter
     - Mobile viewers show it as the `Browse` button
 - Any of the viewers might have bugs and interface / library related limitations
   - Some viewers might be slow to load some models, usually if using `WASM` of some library
+- Both Microsoft Copilot and Google Gemini assisted in creating multiple shaders
 - Google Gemini AI assisted in creating the following within CSS / HTML files, wherever present:
   - Catching Global and Unhandled and Network errors
   - Flashing red status indicator, which is visible during loading of a 3D model file(s)
