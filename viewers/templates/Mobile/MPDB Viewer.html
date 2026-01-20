@@ -7,13 +7,58 @@
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR:', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE:', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
         }
       }
     </script>
@@ -21,15 +66,15 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var THREE, manager, pdb_loader, pdb_obj, font_loader, label_font;
+      var THREE, manager, pdb_loader, pdb_obj, json;
       var scene, camera, controls, renderer, render_requested;
-      var gui, mouse_down, mouse_wheel, reset_rotation;
-      var directionalLight, bounding_box, events_initialized;
+      var gui, mouse_down, mouse_wheel, reset_rotation, scale;
+      var bounding_box, events_initialized, init_running = false;
       var ww = window.innerWidth, wh = window.innerHeight;
       var root, position, color, offset, start, end;
       var boxGeometry, boxMaterial, sphereGeometry, sphereMaterial;
-      var labelGeometry, labelMaterial, geometryAtoms, geometryBonds;
-      var atoms, labels, bonds, positions, colors, atom_colors, json;
+      var labelMaterial, geometryAtoms, geometryBonds;
+      var atoms, labels, bonds, positions, colors, atom_colors;
       var atoms_visible, labels_visible, bonds_visible;
       var url_displayed = false, url_loading = false, isMobile;
       var selected_pdb_file, selected_url_file = '', count = 0;
@@ -39,8 +84,6 @@
       import * as three_js from "three";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
       import { PDBLoader } from "three/addons/loaders/PDBLoader.min.js";
-      import { FontLoader } from "three/addons/loaders/FontLoader.min.js";
-      import { TextGeometry } from "three/addons/geometries/TextGeometry.min.js";
 
       THREE = three_js;
 
@@ -48,14 +91,6 @@
       manager.onLoad = function() { mouse_wheel = true; }
 
       pdb_loader = new PDBLoader( manager );
-
-      font_loader = new FontLoader( manager );
-
-      labelGeometry = TextGeometry;
-
-      await font_loader.load( "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/fonts/optimer_bold.typeface.json", function( font ) {
-        label_font = font;
-      });
 
       gui = new GUI( { title: 'Atoms Legend', autoPlace: false, container: document.getElementById("gui_position") } );
       set_gui_position();
@@ -74,7 +109,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>PDB Viewer (r178)</title>
+    <title>PDB Viewer (r182)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -90,8 +125,8 @@
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
-            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="20" step="0.05" value="3.5" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
-            <span id="dli_val">3.5</span>
+            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="5" step="0.05" value="1.25" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
+            <span id="dli_val">1.25</span>
           </div>
         </button>
         <label for="btn_dc_dli" title="Directional Light Intensity"></label>
@@ -101,6 +136,8 @@
         <label for="btn_labels" title="Toggle Labels"></label>
         <button title="Toggle Bonds" id="btn_bonds" onclick="show_bonds();" style="min-width: 24px;" disabled>Bs</button>
         <label for="btn_bonds" title="Toggle Bonds"></label>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
+        <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
@@ -219,37 +256,48 @@
       function set_directional_light_intensity() {
         let dli_value = document.getElementById('directional_light_intensity').value;
         document.getElementById('dli_val').innerText = dli_value;
-        directionalLight.intensity = parseFloat( dli_value );
+
+        const val = parseFloat( dli_value );
+
+        // Shader lighting
+
+        if (pdb_obj) {
+          sphereMaterial.uniforms.uLightIntensity.value = val;
+        }
 
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( pdb_obj );
-        let size = bounding_box.getSize( new THREE.Vector3() );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        if ( size.y > 1 ) {
-          pdb_obj.scale.multiplyScalar( 50 / size.y );
-        } else if ( size.y > 0.02 ) {
-          pdb_obj.scale.multiplyScalar( 25 / size.y );
-        } else if ( size.y > 0.01 ) {
-          pdb_obj.scale.multiplyScalar( 10 / size.y );
-        } else {
-          pdb_obj.scale.multiplyScalar( 1 / size.y )
-        }
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        camera.lookAt( center );
 
-        bounding_box.setFromObject( pdb_obj );
-        let center = bounding_box.getCenter( new THREE.Vector3() );
+        // Center root
+        pdb_obj.position.sub( center );
 
-        controls.target.set( center.x, center.y, center.z );
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist * 1.5 );
+        camera.lookAt( 0, 0, 0 );
+        resize();
+      }
+
+      function quick_x_rotation( angle ) {
+        pdb_obj.rotateX( - Math.PI / 2.0 );
 
         mouse_wheel = true;
       }
 
       async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+
+        init_running = true;
 
         if (scene !== undefined) {
           mouse_wheel = true;
@@ -279,14 +327,6 @@
         end = new THREE.Vector3();
         color = new THREE.Color();
         root = new THREE.Group();
-
-        boxGeometry = new THREE.BoxGeometry( 0.5, 0.5, 0.5 );
-        boxMaterial = new THREE.MeshBasicMaterial( { color: 0xdfdfdf } );
-
-        sphereGeometry = new THREE.IcosahedronGeometry( 1, 2 );
-        sphereMaterial = new THREE.MeshStandardMaterial( { metalness: 0.5, roughness: 0.5 } );
-
-        labelMaterial = new THREE.MeshBasicMaterial();
 
         console.time( 'Loading Time' );
         document.getElementById('div_error').style.display = 'none';
@@ -332,16 +372,8 @@
 
         if (camera === undefined) {
           camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
-          camera.position.set( 0, 0, 250 );
+          camera.position.set( 0, 0, 150 );
           scene.add( camera );
-        }
-
-        // Add DirectionalLight to the camera (add it to the scene instead if not using Orbit Controls)
-        if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 3.5 );
-          directionalLight.position.set( 0, 250, 250 );
-          directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
-          camera.add( directionalLight );
         }
 
         if (controls === undefined) {
@@ -387,7 +419,151 @@
         selected_pdb_file !== null ? loadFile() : loadURLFile();
       }
 
-      function loadFile(){
+      function createAtomShaderMaterial() {
+        return new THREE.ShaderMaterial({
+          transparent: false, // Set to false for Compaq speed
+          depthWrite: true,
+          depthTest: true,
+          vertexColors: true,
+
+          uniforms: {
+            uLightIntensity: { value: 1.25 },
+            uCameraPos: { value: new THREE.Vector3() }
+          },
+
+          vertexShader: `
+            uniform vec3 uCameraPos;
+            varying vec3 vColor;
+            varying float vLightWeight;
+
+            void main() {
+              #ifdef USE_INSTANCING
+                mat4 instanceMat = instanceMatrix;
+                vColor = instanceColor;
+              #else
+                mat4 instanceMat = mat4(1.0);
+                vColor = color;
+              #endif
+
+              vec4 worldPos = modelMatrix * instanceMat * vec4(position, 1.0);
+
+              // Calculate lighting here (once per vertex)
+              vec3 worldNormal = normalize((modelMatrix * instanceMat * vec4(normal, 0.0)).xyz);
+              vec3 viewDir = normalize(uCameraPos - worldPos.xyz);
+
+              // Simple Diffuse
+              vLightWeight = max(dot(worldNormal, viewDir), 0.2); // 0.2 is ambient floor
+
+              gl_Position = projectionMatrix * viewMatrix * worldPos;
+            }
+          `,
+
+          fragmentShader: `
+            varying vec3 vColor;
+            varying float vLightWeight;
+            uniform float uLightIntensity;
+
+            void main() {
+              gl_FragColor = vec4(vColor * vLightWeight * uLightIntensity, 1.0);
+            }
+          `
+        });
+      }
+
+      function createBondShaderMaterial() {
+        return new THREE.ShaderMaterial({
+          transparent: false,
+          depthWrite: true,
+          vertexColors: true,
+          side: THREE.DoubleSide,
+
+          vertexShader: `
+            varying vec3 vColor;
+
+            void main() {
+              #ifdef USE_INSTANCING
+                mat4 instanceMat = instanceMatrix;
+              #else
+                mat4 instanceMat = mat4(1.0);
+              #endif
+
+              vColor = color;
+              gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMat * vec4(position, 1.0);
+            }
+          `,
+
+          fragmentShader: `
+            varying vec3 vColor;
+
+            void main() {
+              gl_FragColor = vec4(vColor, 1.0);
+            }
+          `
+        });
+      }
+
+      function createLabelShaderMaterial() {
+        return new THREE.ShaderMaterial({
+          transparent: false,
+          depthWrite: true,
+          vertexColors: true,
+          side: THREE.DoubleSide,
+
+          vertexShader: `
+            varying vec3 vColor;
+
+            void main() {
+              #ifdef USE_INSTANCING
+                mat4 instanceMat = instanceMatrix;
+                vColor = instanceColor;
+              #else
+                mat4 instanceMat = mat4(1.0);
+                vColor = color;
+              #endif
+
+              gl_Position = projectionMatrix * viewMatrix * modelMatrix * instanceMat * vec4(position, 1.0);
+            }
+          `,
+
+          fragmentShader: `
+            varying vec3 vColor;
+
+            void main() {
+              gl_FragColor = vec4(vColor, 1.0);
+            }
+          `
+        });
+      }
+
+      function createLabelTexture( text, color ) {
+        const canvas = document.createElement( 'canvas' );
+        canvas.width = 128; // Keep it power-of-two for old GPUs
+        canvas.height = 128;
+        const ctx = canvas.getContext( '2d' );
+
+        ctx.roundRect( 0, 0, 128, 128, 20 ); 
+
+        ctx.font = 'bold 90px Arial';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = color.getStyle(); // Use the atom's color
+        ctx.fillText( text, 64, 64 );
+
+        // Draw a stroke behind the text to pop against dark backgrounds
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = color.getStyle() * 0.6; //'#ffffff';
+        ctx.strokeText( text, 64, 64 );
+
+        const texture = new THREE.CanvasTexture( canvas );
+
+        texture.colorspace = THREE.SRGBColorSpace;
+        texture.magFilter = THREE.LinearFilter;
+        texture.minFilter = THREE.LinearMipmapLinearFilter;
+
+        return texture;
+      }
+
+      function loadFile() {
         pdb_loader.load( URL.createObjectURL( selected_pdb_file ), async function( pdb ) {
           URL.revokeObjectURL( selected_pdb_file );
 
@@ -433,8 +609,7 @@
         scene.add( pdb_obj );
         camera.lookAt( pdb_obj.position );
 
-        set_initial_scale();
-        resize();
+        frame_camera();
 
         enable_disable( false );
 
@@ -455,6 +630,8 @@
         gui.open();
         set_gui_position();
 
+        init_running = false;
+
         if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
       }
 
@@ -470,6 +647,8 @@
         mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
+
+        init_running = false;
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
@@ -617,13 +796,46 @@
         colors = geometryAtoms.getAttribute( 'color' );
 
         let instanced_atoms = {};
-        let instanced_labels = {};
+        let sprite_labels = {};
         let positions_count = positions.count;
 
-        // Try to unclutter atoms depending on their number
-        let scale = positions_count < 200 ? 25 : (positions_count < 750 ? 20 : (positions_count < 1500 ? 17 : (positions_count < 15000 ? 14 : 12)));
+        const dummy = new THREE.Object3D();
 
-        for ( var i = 0; i < positions.count; i ++ ) {
+        // High-performance LOD logic
+        let detail;
+
+        if (positions_count > 30000) {
+          detail = 0; // 20 faces - fast for massive molecules
+        } else if (positions_count > 15000) {
+          detail = 1; // 80 faces - the "sweet spot"
+        } else {
+          detail = 2; // 320 faces - smooth for small molecules
+        }
+
+        sphereGeometry = new THREE.IcosahedronGeometry( 1, detail );
+        sphereMaterial = createAtomShaderMaterial();
+
+        boxGeometry = new THREE.BoxGeometry( 0.5, 0.5, 0.5 );
+        boxMaterial = createBondShaderMaterial();
+
+        labelMaterial = createLabelShaderMaterial();
+
+        // Try to unclutter atoms depending on their number count
+        const threshold_values = [
+          { limit: 250,   val: 28 },
+          { limit: 500,   val: 27 },
+          { limit: 750,   val: 26 },
+          { limit: 1500,  val: 25 },
+          { limit: 5000,  val: 24 },
+          { limit: 10000, val: 22 },
+          { limit: 15000, val: 20 },
+          { limit: 25000, val: 18 },
+          { limit: 50000, val: 16 }
+        ];
+
+        scale = threshold_values.find( t => positions_count < t.limit )?.val || 14;
+
+        for ( var i = 0; i < positions_count; i ++ ) {
           position.x = positions.getX( i );
           position.y = positions.getY( i );
           position.z = positions.getZ( i );
@@ -634,11 +846,11 @@
 
           let atom = json.atoms[ i ];
 
+          let atom_string = atom[ 4 ];
+
           let m4 = new THREE.Matrix4();
           m4.makeScale( scale, scale, scale );
           m4.setPosition( position.multiplyScalar( 75 ) );
-
-          let atom_string = atom[ 4 ];
 
           if (!instanced_atoms[ atom_string ]) {
             let atom_color = new THREE.Color( color.r, color.g, color.b );
@@ -665,9 +877,13 @@
               matrix_array: []
             };
 
-            let label_color = 'rgb( ' + `${atom[ 3 ][ 0 ]}` + ', ' + `${atom[ 3 ][ 1 ]}` + ', ' + `${atom[ 3 ][ 2 ]}` + ' )';
+            const r = atom[ 3 ][ 0 ];
+            const g = atom[ 3 ][ 1 ];
+            const b = atom[ 3 ][ 2 ];
 
-            instanced_labels[ atom_string ] = {
+            let label_color = 'rgb( ' + `${r}` + ', ' + `${g}` + ', ' + `${b}` + ' )';
+
+            sprite_labels[ atom_string ] = {
               count: 0,
               color: new THREE.Color( label_color ),
               matrix_array: []
@@ -677,8 +893,8 @@
           instanced_atoms[ atom_string ].count ++;
           instanced_atoms[ atom_string ].matrix_array.push( m4 );
 
-          instanced_labels[ atom_string ].count ++;
-          instanced_labels[ atom_string ].matrix_array.push( m4 );
+          sprite_labels[ atom_string ].count ++;
+          sprite_labels[ atom_string ].matrix_array.push( m4 );
         }
 
         for ( const key of Object.keys( instanced_atoms ) ) {
@@ -702,55 +918,47 @@
           root.add( object );
         }
 
-        for ( const key of Object.keys( instanced_labels ) ) {
-          let textGeo = new labelGeometry( key, {
-            font: label_font,
-            size: 1,
-            depth: 0.025,
-            curveSegments: 3,
-            bevelEnabled: false
-          } );
+        for ( const key of Object.keys( sprite_labels ) ) {
+          const labelTexture = createLabelTexture( key, sprite_labels[ key ].color );
 
-          textGeo = mergeVertices( textGeo.clone(), 1e-6 );
-          textGeo.computeVertexNormals();
-          textGeo.normalizeNormals();
-          textGeo.computeBoundingBox();
+          const spriteMaterial = new THREE.SpriteMaterial({ 
+            map: labelTexture,
+            transparent: true,
+            depthTest: true,
+            depthWrite: true // Set to false for help with overlapping artifacts
+          });
 
-          let centerOffset_x = - 0.2 * ( textGeo.boundingBox.max.x - textGeo.boundingBox.min.x ) * 75;
-          let centerOffset_y = 0.125 * ( textGeo.boundingBox.max.y - textGeo.boundingBox.min.y ) * 75;
+          // We use a Group for sprites instead of InstancedMesh 
+          // because Sprites are inherently very fast on old hardware
 
-          let object = new THREE.InstancedMesh( textGeo, labelMaterial, instanced_labels[ key ].count );
+          const labelGroup = new THREE.Group();
 
-          let i = 0;
+          for ( const matrix of sprite_labels[ key ].matrix_array ) {
+            const sprite = new THREE.Sprite( spriteMaterial );
+            const v3 = new THREE.Vector3().setFromMatrixPosition( matrix );
+            v3.y -= 5;
+            v3.z += scale + 5;
 
-          for ( const matrix of instanced_labels[ key ].matrix_array ) {
-            // Adjust the matrix so labels show in front of atoms
-            let v3 = new THREE.Vector3().setFromMatrixPosition( matrix );
-            matrix.setPosition( v3.x + centerOffset_x, v3.y - centerOffset_y, v3.z + 3 * centerOffset_y );
+            sprite.position.copy( v3 );
+            sprite.userData.originalPos = v3.clone(); // Store for the render loop
+            sprite.scale.set( scale + 15, scale + 15, 1 ); // Adjust size as needed
 
-            object.setMatrixAt( i, matrix );
-            object.instanceMatrix.needsUpdate = true;
-
-            object.setColorAt( i, instanced_labels[ key ].color );
-            object.instanceColor.needsUpdate = true;
-
-            i ++;
+            labelGroup.add( sprite );
           }
 
-          object.renderOrder = 0;
-          object.visible = false;
-
-          labels.push( object );
-          root.add( object );
+          labelGroup.visible = false;
+          labels.push( labelGroup );
+          root.add( labelGroup );
         }
 
         // Add bonds between atoms to the model group
         positions = geometryBonds.getAttribute( 'position' );
+        positions_count = positions.count;
 
-        if (positions.count > 0) {
-          const instanced_bonds = new THREE.InstancedMesh( boxGeometry, boxMaterial, parseInt( positions.count / 2.0 ) );
+        if (positions_count > 0) {
+          const instanced_bonds = new THREE.InstancedMesh( boxGeometry, boxMaterial, parseInt( positions_count / 2.0 ) );
 
-          for ( var i = 0; i < positions.count; i += 2 ) {
+          for ( var i = 0; i < positions_count; i += 2 ) {
             start.x = positions.getX( i );
             start.y = positions.getY( i );
             start.z = positions.getZ( i );
@@ -762,19 +970,13 @@
             start.multiplyScalar( 75 );
             end.multiplyScalar( 75 );
 
-            let mesh = new THREE.Mesh( boxGeometry, boxMaterial );
+            dummy.position.copy( start ).lerp( end, 0.5 );
+            dummy.scale.set( 5, 5, start.distanceTo( end ) * 2 );
+            dummy.lookAt( end );
+            dummy.updateMatrix();
 
-            mesh.position.copy( start );
-            mesh.position.lerp( end, 0.5 );
-            mesh.scale.set( 5, 5, start.distanceTo( end ) * 2 );
-            mesh.lookAt( end );
-            mesh.updateMatrix();
-
-            instanced_bonds.setMatrixAt( parseInt( i / 2.0 ), mesh.matrix );
+            instanced_bonds.setMatrixAt( i / 2.0, dummy.matrix );
             instanced_bonds.instanceMatrix.needsUpdate = true;
-
-            mesh.material.dispose();
-            mesh.geometry.dispose();
           }
 
           instanced_bonds.visible = false;
@@ -864,11 +1066,31 @@
           if (mouse_down === true || mouse_wheel === true) {
             controls.update();
 
+            if (labels_visible) {
+              const viewDir = new THREE.Vector3();
+              viewDir.subVectors( camera.position, root.position ).normalize();
+
+              // Move each label group toward the camera
+              labels.forEach( group => {
+                if ( group.visible ) {
+                  group.children.forEach( sprite => {
+                    // Get the original atom position (stored in the sprite's userData or initial state)
+                    const atomPos = sprite.userData.originalPos; 
+
+                    // Offset by a fixed amount toward the camera, we will use scale variable
+                    sprite.position.copy( atomPos ).addScaledVector( viewDir, scale );
+                  });
+                }
+              });
+            }
+
+            if (atoms_visible) sphereMaterial.uniforms.uCameraPos.value.copy(camera.position);
+
             renderer.clear();
             renderer.render( scene, camera );
 
             if (mouse_wheel === true) {
-              if (count > 15) {
+              if (count > 30) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -883,18 +1105,14 @@
 
       async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
-        document.getElementById('dli_val').innerText = 3.5;
-        document.getElementById('directional_light_intensity').value = 3.5;
+        document.getElementById('dli_val').innerText = 1.25;
+        document.getElementById('directional_light_intensity').value = 1.25;
         document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_atoms').style.backgroundColor = 'transparent';
         document.getElementById('btn_bonds').style.backgroundColor = 'transparent';
         document.getElementById('btn_labels').style.backgroundColor = 'transparent';
 
-        if (scene !== undefined) {
-          if (directionalLight) {
-            set_directional_light_intensity();
-          }
-        }
+        init_running = false;
 
         // Reset the view
         if (reset === true) {
@@ -926,6 +1144,8 @@
       }
 
       async function scene_cleanup() {
+        mouse_wheel = true;
+
         scene.remove( pdb_obj );
 
         renderer.clear();
@@ -936,42 +1156,44 @@
 
         pdb_obj.traverse( ( child ) => {
           if (child.isMesh) {
-            if (child.material) child.material.dispose();
-            if (child.geometry) child.geometry.dispose();
+            child.geometry.dispose();
+            child.geometry = null;
+            child.material.dispose();
+            child.material = null;
+            child.dispose();
           }
         });
 
         root.traverse( ( child ) => {
-          if (child.isMesh) {
-            if (child.material) child.material.dispose();
-            if (child.geometry) child.geometry.dispose();
-          }
+          if (child.isMesh) child.dispose();
         });
 
         if (atoms.length > 0) {
           for ( const atom of atoms ) {
-            if (atom.isMesh) {
-              if (atom.material) atom.material.dispose();
-              if (atom.geometry) atom.geometry.dispose();
-            }
+            if (atom.isMesh) atom.dispose();
           }
         }
 
         if (bonds.length > 0) {
           for ( const bond of bonds ) {
-            if (bond.isMesh) {
-              if (bond.material) bond.material.dispose();
-              if (bond.geometry) bond.geometry.dispose();
-            }
+            if (bond.isMesh) bond.dispose();
           }
         }
 
         if (labels.length > 0) {
           for ( const label of labels ) {
-            if (label.isMesh) {
-              if (label.material) label.material.dispose();
-              if (label.geometry) label.geometry.dispose();
-            }
+            label.traverse( ( child ) => {
+              if (child.isSprite) {
+                child.geometry.dispose();
+                child.geometry = null;
+                if (child.material.map) {
+                  child.material.map.dispose();
+                  child.material.map = null;
+                }
+                child.material.dispose();
+                child.material = null;
+              }
+            });
           }
         }
 
@@ -990,6 +1212,7 @@
         document.getElementById('btn_atoms').disabled = disable;
         document.getElementById('btn_labels').disabled = disable;
         document.getElementById('btn_bonds').disabled = disable;
+        document.getElementById('btn_quick_x').disabled = disable;
         disabled_changed();
 
         mouse_wheel = true;
