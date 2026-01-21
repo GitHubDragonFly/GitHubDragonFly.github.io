@@ -366,7 +366,8 @@ Number Type Converter
   - It also has some switchable statistics:
     - FPS / MS / MB stats are using [stats.js](https://github.com/mrdoob/stats.js/) library
     - Additional static overlay shows number of nodes (geometries) and total points loaded
-  - If Classification Classes are present then `lil-gui` will show them as checkboxes
+  - If Classification Classes are present then `lil-gui` will show them as checkboxes:
+    - These will allow to show / hide classes simultaneously on all RGB / Elevation / Classification coloring
   - It allows setting Level Of Detail (LOD):
     - The same as for the above `PCD+XYZ+LAS Viewer` except for Gamma
     - Tile selectivity is based on the LOD set depth (defaults to 0 which is root only)
@@ -383,7 +384,8 @@ Number Type Converter
   - It also has some switchable statistics:
     - FPS / MS / MB stats are using [stats.js](https://github.com/mrdoob/stats.js/) library
     - Additional static overlay shows number of nodes (geometries) and total points loaded
-  - If Classification Classes are present then `lil-gui` will show them as checkboxes
+  - If Classification Classes are present then `lil-gui` will show them as checkboxes:
+    - These will allow to show / hide classes simultaneously on all RGB / Elevation / Classification coloring
   - The viewer allows setting Level Of Detail (LOD):
     - The same as for the above `PCD+XYZ+LAS Viewer` except for Gamma
     - Node selectivity is based on the LOD set depth (defaults to 0 which is root only)
