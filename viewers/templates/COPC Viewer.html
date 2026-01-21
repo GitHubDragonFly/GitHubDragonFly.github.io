@@ -48,7 +48,7 @@
         // event.promise is the promise that failed
         // event.reason is usually the error object or message
 
-        if (init_running === true) handle_error( 'UNHANDLED PROMISE:', event.reason );
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE' );
       });
     </script>
 
@@ -74,7 +74,7 @@
       var gui, gui_container, gui_set = false, mouse_down, mouse_wheel;
       var ww = window.innerWidth, wh = window.innerHeight, isMobile;
       var reset_rotation, stats, stats_enabled, events_initialized;
-      var copc_obj, selected_url_file = '', count = 0;
+      var copc_obj, selected_url_file = '', count = 0, halt_on_error;
       var extended_render, extended_count = 0, params;
       var lod_displayed = false, warning_displayed = false;
       var url_displayed = false, url_loading = false, elevation;
@@ -119,7 +119,7 @@
       <div class="fm">
         <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
         <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
-        <button title="Set Level of Detail for Displaying COPC Models" id="btn_lod" onclick="show_copc();" style="min-width: 34px;">LOD</button>
+        <button title="Set Level of Detail for Displaying COPC Models" id="btn_lod" onclick="show_lod();" style="min-width: 34px;">LOD</button>
         <label for="btn_lod" title="Set Level of Detail for Displaying COPC Models"></label>
         <button title="Get remote model via URL" id="btn_url" onclick="show_url()" style="min-width: 38px;">URL</button>
         <label for="btn_url" title="Get remote model via URL"></label>
@@ -145,7 +145,7 @@
         <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
         <label for="btn_clear" title="Clear"></label>
       </div>
-      <div class="fm" id="copc" title="Set Level Of Details" style="display: none;">LOD&nbsp;
+      <div class="fm" id="lod" title="Set Level Of Details" style="display: none;">LOD&nbsp;
         <select id="detail_level" title="Set COPC points density per node" style="min-width: 80px;">
           <option value="" disabled selected>Density</option>
           <option value="1" onclick="set_copc_density( 1 );">100%</option>
@@ -175,7 +175,7 @@
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">COPC Streaming Viewer</div>
 
-    <div id="stats_overlay" style="position: absolute; visibility: hidden; font-family: Monospace, Arial; color: #d1cefc; bottom: 15px; left: 5px; pointer-events: none;">
+    <div id="stats_overlay" style="position: absolute; visibility: hidden; font-family: Monospace, Arial; color: #d1cefc; bottom: max(5px, env(safe-area-inset-bottom)); left: 5px; pointer-events: none;">
       Nodes: <span id="stat_nodes">0</span>&nbsp;&nbsp;
       Points: <span id="stat_points">0</span>
     </div>
@@ -191,13 +191,13 @@
         copc_loader.setDepthLimit( depth );
       }
 
-      function show_copc() {
+      function show_lod() {
         if (lod_displayed === true) {
-          document.getElementById('copc').style.display = 'none';
+          document.getElementById('lod').style.display = 'none';
           document.getElementById('btn_lod').style.backgroundColor = 'transparent';
           lod_displayed = false;
         } else {
-          document.getElementById('copc').style.display = 'block';
+          document.getElementById('lod').style.display = 'block';
           document.getElementById('btn_lod').style.backgroundColor = 'lightgreen';
           lod_displayed = true;
 
@@ -344,37 +344,44 @@
             gl_Position = projectionMatrix * mvPosition;
           }
         `,
+
         fragment: `
           uniform float uOpacity;
           uniform float uBrightness;
-          uniform sampler2D uClassLUT; // Full 256 color texture
+          uniform sampler2D uClassLUT; 
 
           varying vec3 vColor;
           varying float vMode;
           varying float vClass;
 
           void main() {
-            vec3 finalRGB = vColor;
+            // 1. THE MASTER GATEKEEPER
+            // Map classification to LUT coordinate
+            float u = (vClass + 0.5) / 256.0;
+            vec4 classData = texture2D(uClassLUT, vec2(u, 0.5));
+
+            // If the UI turned this layer off (Alpha = 0), kill the pixel immediately.
+            // This works for RGB, Elevation, and Classification modes.
+            if (classData.a < 0.1) discard; 
+
+            vec3 finalRGB;
 
             if (vMode == 2.0) {
-              // Map classification (0-255) to texture coordinate (0.0-1.0)
-              // We add 0.5 to hit the center of the pixel
-              float u = (vClass + 0.5) / 256.0;
-              vec4 classData = texture2D(uClassLUT, vec2(u, 0.5));
-
-              // This line actually removes the points from the screen
-              if (classData.a < 0.1) discard; 
-
-              // Multiply by intensity (vColor) to keep the lighting/shading
+              // Classification Mode: Use the color from the LUT
+              // We multiply by the 'length' of the original color to keep intensity/shading
               finalRGB = classData.rgb * length(vColor);
+            } else {
+              // RGB Mode (0.0) or Elevation Mode (1.0)
+              // vColor was already calculated in the Vertex Shader
+              finalRGB = vColor;
             }
 
             finalRGB *= uBrightness;
-
             gl_FragColor = vec4(finalRGB, uOpacity);
           }
         `,
-        create: function(isMobile, zRange) {
+
+        create: function( isMobile, zRange ) {
           // 1. Generate the 256-color data using RGBA (4 values per pixel)
           // We must use 256 * 4 because RGBFormat is no longer supported.
           const data = new Uint8Array(256 * 4);
@@ -473,7 +480,7 @@
       };
 
       /**
-       * @param {number} classId - The LAS class (7 for Noise, 18 for High Noise)
+       * @param {number} classId - The LAS class
        * @param {boolean} visible - Whether to show or hide the points
       */
 
@@ -583,6 +590,7 @@
         count = 0;
         elevation = false;
         stats_enabled = false;
+        halt_on_error = false;
         extended_render = false;
         render_requested = false;
         globalElevationRange = null;
@@ -612,6 +620,17 @@
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
           renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
           renderer.autoClear = false;
+
+          // Consider removing this for a production build
+          renderer.debug.onShaderError = ( gl, program, glVertexShader, glFragmentShader ) => {
+            const errorLog = gl.getProgramInfoLog( program );
+            const vertexSource = gl.getShaderSource( glVertexShader );
+            const fragmentSource = gl.getShaderSource( glFragmentShader );
+
+            halt_on_error = true;
+
+            handle_error( 'CRITICAL SHADER ERROR: ' + errorLog );
+          };
 
           document.body.appendChild( renderer.domElement );
         }
@@ -728,6 +747,8 @@
           copc_loader.load( selected_url_file, function( points, total_nodes, node_key, globalZrange ) {
             // points were returned as COPC node geometry
 
+            if (halt_on_error) return;
+
             track_new_node( points );
 
             const points_name = 'copc_points_' + node_key;
@@ -782,6 +803,8 @@
       }
 
       async function finish_loading() {
+        if (halt_on_error) return;
+
         //const boxHelper = new THREE.Box3Helper( new THREE.Box3().setFromObject( copc_obj ), 0xff0000 );
         //scene.add( boxHelper );
 
@@ -833,11 +856,19 @@
 
                 // Get classification classes for gui
 
-                for (let i = 0; i < attr.length; i++) {
+                for ( let i = 0; i < attr.length; i ++ ) {
+                  // Take a tiny break every 10000 points, let the browser
+                  // take a breath and avoid "unresponsive" page popup
+                  if ( i % 10000 === 0 ) await new Promise( r => setTimeout( r, 0 ) );
                   detected_classes.add( attr[ i ] );
                 }
               }
             });
+
+            if (!classification_folder) {
+              const foundIds = Array.from( detected_classes );
+              populateClassificationUI( gui, foundIds );
+            }
           }
         } else {
           document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
@@ -881,8 +912,13 @@
         render_requested = false;
         enable_disable( true );
 
+        if (gui_set) gui_reset();
+
         // Stop flashing indicator
         document.getElementById('status_indicator').style.visibility = 'hidden';
+
+        // Hide stats counts
+        document.getElementById('stats_overlay').style.visibility = 'hidden';
 
         init_running = false;
 
@@ -890,7 +926,7 @@
         document.getElementById('div_error').style.display = 'block';
       }
 
-      function quick_x_rotation( angle ) {
+      function quick_x_rotation() {
         copc_obj.rotateX( - Math.PI / 2.0 );
         frame_camera();
 
@@ -901,13 +937,7 @@
           if (!copc_obj) return;
           elevation = !elevation;
 
-          if (classification_enabled) {
-            if (classification_folder) {
-              classification_folder.show( false );
-            }
-
-            classification_enabled = false; // Reset other mode
-          }
+          if (classification_enabled) classification_enabled = false; // Reset other mode
 
           const mode = elevation ? 1.0 : 0.0;
           updateMaterialUniforms( mode );
@@ -923,17 +953,6 @@
           classification_enabled = !classification_enabled;
           elevation = false; // Reset other mode
 
-          if (classification_enabled && !isMobile) {
-            if (classification_folder) {
-              classification_folder.show();
-            } else {
-              const foundIds = Array.from( detected_classes );
-              populateClassificationUI( gui, foundIds );
-            }
-          } else {
-            if (classification_folder) classification_folder.show( false );
-          }
-
           const mode = classification_enabled ? 2.0 : 0.0;
           updateMaterialUniforms( mode );
 
@@ -944,15 +963,18 @@
       }
 
       function updateMaterialUniforms( mode ) {
-          copc_obj.traverse( ( child ) => {
-              if (child.isPoints && child.material.uniforms) {
-                  child.material.uniforms.uMode.value = mode;
-                  if (globalElevationRange) {
-                      child.material.uniforms.uMinZ.value = globalElevationRange.min;
-                      child.material.uniforms.uMaxZ.value = globalElevationRange.max;
-                  }
-              }
-          });
+        copc_obj.traverse( ( child ) => {
+          if (child.isPoints && child.material.uniforms) {
+            child.material.uniforms.uMode.value = mode;
+
+            if (globalElevationRange) {
+              child.material.uniforms.uMinZ.value = globalElevationRange.min;
+              child.material.uniforms.uMaxZ.value = globalElevationRange.max;
+            }
+          }
+        });
+
+        needsRender = true;
       }
 
       function render() {
@@ -999,7 +1021,6 @@
         document.getElementById('btn_plus').style.backgroundColor = 'transparent';
         document.getElementById('btn_minus').style.backgroundColor = 'transparent';
         document.getElementById('btn_stats').style.backgroundColor = 'transparent';
-        document.getElementById('btn_elevation_colors').style.backgroundColor = 'transparent';
 
         init_running = false;
 
@@ -1048,8 +1069,8 @@
         }
 
         if (classification_folder) {
-          classification_folder.show( false );
           classification_folder.destroy();
+          classification_folder = null;
         }
 
         elevation = false;
@@ -1118,6 +1139,7 @@
         document.getElementById('btn_stats').disabled = disable;
         document.getElementById('btn_quick_x').disabled = disable;
         document.getElementById('btn_elevation_colors').disabled = disable;
+        document.getElementById('btn_classification_colors').disabled = disable;
         disabled_changed();
 
         mouse_wheel = true;
