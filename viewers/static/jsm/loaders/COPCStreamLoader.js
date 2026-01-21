@@ -218,6 +218,7 @@ class COPCStreamLoader extends Loader {
 		for ( let i = 0; i < count; i += skipPoints ) {
 
 			// Take a tiny break every 5000 points, let the browser breath
+			// and avoid "unresponsive" page popup
 
 			if ( i % 5000 === 0 ) {
 
@@ -362,7 +363,7 @@ class COPCStreamLoader extends Loader {
 
 		// Hard code total number of nodes since root will be removed once loaded
 
-		const totalSelectedNodes = filteredNodes.length;
+		let totalSelectedNodes = filteredNodes.length;
 
 		// 1. Get the Root Node ('0-0-0-0') to establish a robust elevation range
 
@@ -449,6 +450,7 @@ class COPCStreamLoader extends Loader {
 
 				if ( onNodeError ) onNodeError( err );
 				else console.error( `Node ${ key } failed:`, err );
+				totalSelectedNodes -= 1;
 
 			}
 

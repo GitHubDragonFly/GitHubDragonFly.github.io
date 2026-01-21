@@ -680,11 +680,13 @@ class EPTStreamLoader extends Loader {
 
 		});
 
+		let totalSelectedTiles = filteredKeys.length;
+
 		// Ensure root tile loads first
 
 		filteredKeys = this._mortonSort( filteredKeys );
 
-		console.log( 'Selected Tiles:', filteredKeys.length );
+		console.log( 'Selected Tiles:', totalSelectedTiles );
 
 		// 2. Streamed Loading with Concurrency
 
@@ -781,13 +783,14 @@ class EPTStreamLoader extends Loader {
 
 						console.log( 'Tile ', key + extension );
 
-						onTileLoaded( geom, filteredKeys.length, key );
+						onTileLoaded( geom, totalSelectedTiles, key );
 
 					}
 
 				} catch ( err ) {
 
 					console.warn( `Tile ${ key } failed to load:`, err );
+					totalSelectedTiles -= 1;
 
 				}
 
