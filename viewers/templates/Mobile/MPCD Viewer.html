@@ -3,7 +3,7 @@
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="PCD (Point Cloud Data), XYZ and LAS/LAZ Viewer">
+    <meta name="description" content="Viewer for PCD (Point Cloud Data), XYZ, LAS/LAZ and EPT with BIN/LAZ/ZST tiles">
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
@@ -48,7 +48,7 @@
         // event.promise is the promise that failed
         // event.reason is usually the error object or message
 
-        if (init_running === true) handle_error( 'UNHANDLED PROMISE:', event.reason );
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE' );
       });
     </script>
 
@@ -57,8 +57,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/",
           "loaders-core": "https://esm.sh/@loaders.gl/core@4.3.4",
           "loaders-las": "https://esm.sh/@loaders.gl/las@4.3.4"
         }
@@ -69,21 +69,23 @@
 
     <script>
       var pcd_loader, xyz_loader, xyz_format, ept_loader, ept_format, las_loader, las_format;
-      var THREE, manager, renderer, scene, camera, controls, isMobile, render_requested;
-      var mouse_down, mouse_wheel, reset_rotation, events_initialized, init_running = false;
-      var ww = window.innerWidth, wh = window.innerHeight, count = 0;
+      var THREE, manager, renderer, scene, camera, controls, render_requested, needsRender;
+      var gui, gui_container, gui_set = false, mouse_down, mouse_wheel;
+      var reset_rotation, events_initialized, init_running = false;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var min_allowed_point_size, max_allowed_point_size;
       var pcd_obj, selected_pcd_file, selected_url_file = '';
       var lod_displayed = false, warning_displayed = false;
-      var url_displayed = false, url_loading = false;
-      var filesMap, local_files, bounding_box;
-      var vertex_colors_present, vertex_colors_enabled;
-      var normal_colors_present, normal_colors_enabled;
-      var classification_present, classification_enabled;
-      var elevationColors, elevation, original_vertex_color_array;
+      var url_displayed = false, url_loading = false, count = 0;
+      var filesMap, local_files, bounding_box, params, lutTexture;
+      var elevation, elevationRange, isPCD, isMobile, halt_on_error;
+      var normal_colors_present, normal_colors_enabled, detected_classes;
+      var classification_present, classification_enabled, classification_folder;
     </script>
 
     <script type="module">
       import * as three_js from "three";
+      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
       import { PCDLoader } from "three/addons/loaders/PCDLoader.min.js";
       import { XYZLoader } from "../../static/jsm/loaders/XYZLoader.min.js";
       import { EPTLoader } from "../../static/jsm/loaders/EPTLoader.min.js";
@@ -98,6 +100,17 @@
       xyz_loader = new XYZLoader( manager );
       ept_loader = new EPTLoader( manager );
       las_loader = new LASZLoader( manager );
+
+      gui_container = document.getElementById('gui_position');
+
+      // Override external CSS so we can have GUI in the top-right corner
+      gui_container.style.left = 'auto';         // Reset any left-side positioning
+      gui_container.style.right = '3px';         // Anchor to the right
+      gui_container.style.top = '2px';           // Anchor to the top
+      gui_container.style.marginLeft = '0px';    // Clear the 2px margin from your CSS
+
+      gui = new GUI( { autoPlace: false, container: gui_container } );
+      set_gui_position();
     </script>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
@@ -106,7 +119,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>PCD+XYZ+LAS Viewer (r178)</title>
+    <title>PCD+XYZ+LAS Viewer (r182)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -122,12 +135,12 @@
         <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".bin, .json, .las, .laz, .pcd, .zst, .xyz" multiple />
         <label for="back_color" title="Background Color">B</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
-        <label for="points_color" title="Points Color">C</label>
-        <input type="color" title="Points Color" id="points_color" name="points_color" onchange="set_points_color();" disabled />
         <button title="Increase Points Size" id="btn_plus" onclick="increase_points_size();" style="color: red;" disabled>+</button>
         <label for="btn_plus" title="Increase Points Size"></label>
         <button title="Decrease Points Size" id="btn_minus" onclick="decrease_points_size();" style="color: red;" disabled>-</button>
         <label for="btn_minus" title="Decrease Points Size"></label>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
+        <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
         <button title="Toggle Elevation Colors" id="btn_elevation_colors" onclick="set_elevation_colors();" style="min-width: 28px;" disabled>EC</button>
         <label for="btn_elevation_colors" title="Toggle Elevation Colors"></label>
         <button title="Toggle Vertex Colors" id="btn_vertex_colors" onclick="set_vertex_colors();" style="display: none; min-width: 28px;">VC</button>
@@ -153,6 +166,7 @@
           <option value="2" onclick="set_las_details( 2 );">50%</option>
           <option value="3" onclick="set_las_details( 3 );">33%</option>
           <option value="4" onclick="set_las_details( 4 );">25%</option>
+          <option value="5" onclick="set_las_details( 5 );">20%</option>
           <option value="10" onclick="set_las_details( 10 );">10%</option>
           <option value="20" onclick="set_las_details( 20 );">5%</option>
           <option value="100" onclick="set_las_details( 100 );">1%</option>
@@ -169,22 +183,9 @@
           <option value="7" onclick="set_ept_details( 7 );">7 - xtreme</option>
           <option value="8" onclick="set_ept_details( 8 );">8 - xtreme</option>
         </select>
-        <select id="gamma_level" title="Adjust color contrast (BIN) or intensity gamma (LAS/LAZ)" style="min-width: 80px;">
-          <option value="" disabled selected>Gamma</option>
-          <option value="0.1" onclick="set_las_gamma( 0.1 );">0.1</option>
-          <option value="0.3" onclick="set_las_gamma( 0.3 );">0.3</option>
-          <option value="0.5" onclick="set_las_gamma( 0.5 );">0.5</option>
-          <option value="0.7" onclick="set_las_gamma( 0.7 );">0.7</option>
-          <option value="0.9" onclick="set_las_gamma( 0.9 );">0.9</option>
-          <option value="1.1" onclick="set_las_gamma( 1.1 );">1.1</option>
-          <option value="1.3" onclick="set_las_gamma( 1.3 );">1.3</option>
-          <option value="1.5" onclick="set_las_gamma( 1.5 );">1.5</option>
-          <option value="1.7" onclick="set_las_gamma( 1.7 );">1.7</option>
-          <option value="1.9" onclick="set_las_gamma( 1.9 );">1.9</option>
-        </select>
       </div>
     </div>
-
+    <div id="gui_position"></div>
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">PCD+XYZ+LAS Viewer</div>
 
@@ -198,6 +199,15 @@
         link.click();
       }
 
+      function set_las_details( skip_points = 1 )  {
+        las_loader.setSkipPoints( skip_points );
+        ept_loader.setSkipPoints( skip_points );
+      }
+
+      function set_ept_details( depth = 0 )  {
+        ept_loader.setTileDepthLimit( depth );
+      }
+
       function show_lod() {
         if (lod_displayed === true) {
           document.getElementById('lod').style.display = 'none';
@@ -209,28 +219,12 @@
           lod_displayed = true;
 
           if (!warning_displayed) {
-            alert('EPT datasets use lot of memory as tiles are merged before rendering.\nGamma adjusts intensity gamma (LAS/LAZ) or color contrast (BIN).\nDepth levels > 0 will increase network traffic and memory usage.\nMake sure to set proper Level Of Detail before loading the model.\nChanging LOD will not be updating already‑loaded point clouds.');
+            alert('EPT datasets use lot of memory as tiles are merged before rendering.\nDensity adjusts number of points for LAZ or EPT tiles (default = 100%).\nDepth > 0 will increase network traffic and memory usage.\nFor balance, set proper density & depth before loading the model.\nChanging density & depth does not update already‑loaded model.');
             warning_displayed = true;
           }
         }
 
         resize();
-
-        mouse_wheel = true;
-      }
-
-      function set_las_details( skip_points = 1 )  {
-        las_loader.setSkipPoints( skip_points );
-        ept_loader.setSkipPoints( skip_points );
-      }
-
-      function set_las_gamma( gamma = 1.0 ) {
-        las_loader.setIntensityGammaFactor( gamma );
-        ept_loader.setIntensityGammaFactor( gamma );
-      }
-
-      function set_ept_details( depth = 0 )  {
-        ept_loader.setTileDepthLimit( depth );
       }
 
       function show_url() {
@@ -243,6 +237,8 @@
           document.getElementById('url').style.display = 'block';
           url_displayed = true;
         }
+
+        resize();
       }
 
       function load_url_file() {
@@ -272,6 +268,20 @@
         }, false);
       }
 
+      function gui_reset() {
+        params.gamma = 0.1;
+        params.brightness = 1.0;
+
+        gui.reset();
+
+        gui_container.style.display = 'none';
+      }
+
+      function set_gui_position() {
+        let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+        gui_container.style.marginTop = fixed_menu_bottom;
+      }
+
       function resize() {
         if (scene !== undefined) {
           mouse_wheel = true;
@@ -283,6 +293,8 @@
 
           camera.aspect = ww / wh;
           camera.updateProjectionMatrix();
+
+          if (gui) set_gui_position();
 
           mouse_wheel = true;
         }
@@ -296,38 +308,60 @@
         mouse_wheel = true;
       }
 
-      function set_points_color() {
-        let pts_color = document.getElementById('points_color').value; // hex format '#rrggbb'
+      function estimate_spacing() {
+        if (!pcd_obj) return;
+        if (!pcd_obj.geometry.boundingBox) pcd_obj.geometry.computeBoundingBox();
 
-        pcd_obj.traverse( ( child ) => {
-          if (child.isPoints) {
-            if (pts_color === '#000000') child.material.color.setRGB( 1, 1, 1 );
-            else child.material.color.setRGB( parseInt( pts_color.substring( 1, 3 ), 16 ) / 255.0, parseInt( pts_color.substring( 3, 5 ), 16 ) / 255.0, parseInt( pts_color.substring( 5 ), 16 ) / 255.0);
+        const box = pcd_obj.geometry.boundingBox;
+        const size = new THREE.Vector3();
+        box.getSize( size );
 
-            child.material.needsUpdate = true;
-            mouse_wheel = true;
-          }
-        });
+        // Calculate Volume, adjust for thin models
+        const volume = size.x * (size.y > 0.001 ? size.y : 0.001) * (size.z > 0.001 ? size.z : 0.001);
+        const pointCount = pcd_obj.geometry.attributes.position.count;
+
+        // Estimate average spacing between points
+        const avgSpacing = Math.pow( volume / pointCount, 1.0 / 3.0 );
+
+        return avgSpacing;
       }
 
       function increase_points_size() {
-        pcd_obj.traverse( ( child ) => {
-          if (child.isPoints) {
-            child.material.size *= 1.05;
-            mouse_wheel = true;
-          }
-        });
-
-        mouse_wheel = true;
+        if (!pcd_obj) return;
+        let newSize = pcd_obj.material.uniforms.uSize.value * 1.1;
+        pcd_obj.material.uniforms.uSize.value = Math.min( newSize, max_allowed_point_size );
+        needsRender = true;
       }
 
       function decrease_points_size() {
-        pcd_obj.traverse( ( child ) => {
-          if (child.isPoints) {
-            child.material.size /= 1.05;
-            mouse_wheel = true;
-          }
-        });
+        if (!pcd_obj) return;
+        let newSize = pcd_obj.material.uniforms.uSize.value / 1.1;
+        pcd_obj.material.uniforms.uSize.value = Math.max( newSize, min_allowed_point_size );
+        needsRender = true;
+      }
+
+      function frame_camera() {
+        bounding_box.setFromObject( pcd_obj );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
+
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        camera.lookAt( center );
+
+        // Center root
+        pcd_obj.position.sub( center );
+
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist * 1.5 );
+        camera.lookAt( 0, 0, 0 );
+        resize();
+      }
+
+      function quick_x_rotation() {
+        pcd_obj.rotateX( - Math.PI / 2.0 );
 
         mouse_wheel = true;
       }
@@ -348,25 +382,32 @@
         enable_disable( true );
 
         selected_pcd_file = null;
+        halt_on_error = false;
         ept_format = false;
         las_format = false;
         xyz_format = false;
         mouse_down = false;
         mouse_wheel = true;
         local_files = null;
+        lutTexture = null;
         filesMap = {};
         count = 0;
+        isPCD = false;
         elevation = false;
-        elevationColors = null;
+        elevationRange = null;
+        needsRender = false;
         render_requested = false;
-        vertex_colors_enabled = false;
-        vertex_colors_present = false;
-        normal_colors_enabled = false;
-        normal_colors_present = false;
+        detected_classes = null;
+        classification_folder = null;
         classification_enabled = false;
         classification_present = false;
+        normal_colors_enabled = false;
+        normal_colors_present = false;
         bounding_box = new THREE.Box3();
-        original_vertex_color_array = {};
+        min_allowed_point_size = 0.1;
+        max_allowed_point_size = 1.0;
+
+        if (!params) params = { gamma: 0.1, brightness: 1.0 };
 
         console.time( 'Loading Time' );
         document.body.style.backgroundImage = 'none';
@@ -424,7 +465,7 @@
           if (ept_format === true) ept_loader.setLocalBlobMap( filesMap );
 
           if (selected_pcd_file === null) {
-            handle_error( 'No valid PCD or XYZ or LAS/LAZ/EPT file selected!' );
+            handle_error( 'No valid PCD, XYZ, LAS/LAZ or EPT file selected!' );
             return;
           }
 
@@ -436,7 +477,7 @@
         }
 
         if (renderer === undefined) {
-          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+          renderer = new THREE.WebGLRenderer( { antialias: false, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
           renderer.toneMapping = THREE.NeutralToneMapping;
           renderer.toneMappingExposure = 1.5;
@@ -445,6 +486,17 @@
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
           renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
           renderer.autoClear = false;
+
+          // Consider removing this for a production build
+          renderer.debug.onShaderError = ( gl, program, glVertexShader, glFragmentShader ) => {
+            const errorLog = gl.getProgramInfoLog( program );
+            const vertexSource = gl.getShaderSource( glVertexShader );
+            const fragmentSource = gl.getShaderSource( glFragmentShader );
+
+            halt_on_error = true;
+
+            handle_error( 'CRITICAL SHADER ERROR: ' + errorLog );
+          };
 
           document.body.appendChild( renderer.domElement );
         }
@@ -486,135 +538,337 @@
         selected_pcd_file !== null ? loadFile() : loadURLFile();
       }
 
-      const CLASS_COLORS = {
-        0: [0.6, 0.6, 0.6],   // Created, never classified
-        1: [1.0, 1.0, 1.0],   // Unclassified
-        2: [0.5, 0.3, 0.1],   // Ground
-        3: [0.0, 0.6, 0.0],   // Low vegetation
-        4: [0.0, 0.8, 0.0],   // Medium vegetation
-        5: [0.0, 1.0, 0.0],   // High vegetation
-        6: [0.6, 0.6, 0.6],   // Building
-        7: [0.3, 0.3, 0.3],   // Low point / noise
-        8:  [1.0, 1.0, 0.0],   // Key-point
-        9:  [0.0, 0.4, 1.0],   // Water
-        10: [0.7, 0.7, 0.2],   // Rail
-        11: [0.4, 0.4, 0.4],   // Road surface
-        12: [0.8, 0.8, 0.8],   // Overlap
-        13: [1.0, 0.5, 0.0],   // Wire-guard
-        14: [1.0, 0.7, 0.0],   // Wire-conductor
-        15: [0.8, 0.5, 0.2],   // Transmission tower
-        16: [0.9, 0.6, 0.3],   // Wire-structure connector
-        17: [1.0, 0.0, 1.0],   // Bridge deck
-        18: [0.2, 0.2, 0.2],   // High noise
+      function get_range( geometry ) {
+        const positions = geometry.attributes.position.array;
+        const stride = 3;
+        const values = [];
+
+        // ADJUSTABLE: Increase step to process fewer points (e.g., 10 = 10% of data)
+        // This prevents UI freezing without needing complex async breaks.
+        const step = positions.length > 300000 ? 10 : 1; 
+
+        for ( let i = 0; i < positions.length; i += ( stride * step ) ) {
+          const val = isPCD ? positions[ i + 1 ] : positions[ i + 2 ];
+          values.push( val );
+        }
+
+        // Sorting 100k points is ~10ms, while 1M points can be >100ms.
+        values.sort( ( a, b ) => a - b );
+
+        const minIndex = Math.floor( values.length * 0.01 );
+        const maxIndex = Math.floor( values.length * 0.99 );
+
+        const minZ = values[ isPCD ? maxIndex : minIndex ];
+        const maxZ = values[ isPCD ? minIndex : maxIndex ];
+
+        return {
+          min: minZ,
+          max: maxZ,
+          range: ( maxZ - minZ ) || 1.0
+        }
+      }
+
+      function createPointShaderMaterial( zRange, pcd = false ) {
+        // 1. Generate the 256-color data using RGBA (4 values per pixel)
+        // We must use 256 * 4 because RGBFormat is no longer supported.
+        const data = new Uint8Array(256 * 4);
+        const colors = {
+          0:[153,153,153],  // Created, never classified
+          1:[255,255,255],  // Unclassified
+          2:[128,77,26],    // Ground
+          3:[0,153,0],      // Low vegetation
+          4:[0,204,0],      // Medium vegetation
+          5:[0,255,0],      // High vegetation
+          6:[153,153,153],  // Building
+          7:[77,77,77],     // Low point / noise
+          8:[255,255,0],    // Key-point
+          9:[0,102,255],    // Water
+          10:[179,179,51],  // Rail
+          11:[102,102,102], // Road surface
+          12:[204,204,204], // Overlap
+          13:[255,128,0],   // Wire-guard
+          14:[255,179,0],   // Wire-conductor
+          15:[204,128,51],  // Transmission tower
+          16:[230,153,77],  // Wire-structure connector
+          17:[255,0,255],   // Bridge deck
+          18:[51,51,51],    // High noise
+          19:[180,210,210], // Overhead Machinery
+          20:[150,150,100], // Ignored Ground
+          21:[240,250,255], // Snow
+          22:[255,100,100]  // Temporal Exclusion (Moving objects)
+        };
+
+        for (let i = 0; i < 256; i++) {
+          let rgb = colors[i];
+          if (!rgb) {
+            // Procedural colors for 23-255 so they are distinct
+            rgb = i < 64 ? [60, 60, 60] : [(i * 55) % 255, (i * 123) % 255, 150 + (i % 100)];
+          }
+
+          const idx = i * 4;
+          data[idx + 0] = rgb[0];
+          data[idx + 1] = rgb[1];
+          data[idx + 2] = rgb[2];
+          data[idx + 3] = 255;    // A (Fully opaque by default)
+        }
+
+        lutTexture = new THREE.DataTexture( data, 256, 1, THREE.RGBAFormat, THREE.UnsignedByteType );
+        lutTexture.minFilter = THREE.NearestFilter;
+        lutTexture.magFilter = THREE.NearestFilter;
+        lutTexture.generateMipmaps = false;
+        lutTexture.needsUpdate = true;
+
+        return new THREE.ShaderMaterial({
+          transparent: true,
+          vertexColors: true,
+
+          uniforms: {
+            uMode: { value: 0.0 },
+            uIsPCD: { value: pcd },
+            uMinZ: { value: zRange?.min || 0.0 },
+            uMaxZ: { value: zRange?.max || 100.0 },
+            uSize: { value: 1.0 },
+            uOpacity: { value: 1.0 },
+            uBrightness: { value: 1.0 },
+            uIntensityGamma: { value: 0.1 },
+            uClassLUT: { value: lutTexture } // Passing the texture instead of array
+          },
+
+          vertexShader: `
+            uniform bool uIsPCD;
+            uniform float uMode;
+            uniform float uMinZ;
+            uniform float uMaxZ;
+            uniform float uSize;
+            uniform float uBrightness;
+            uniform float uIntensityGamma;
+
+            attribute float intensity;
+            attribute float classification;
+
+            varying float vClass;
+            varying vec3 vColor;
+            varying vec3 vNormal;
+
+            vec3 colormap(float t) {
+              if (t < 0.2) return vec4(0.0, t / 0.2, 1.0, 1.0).rgb;
+              if (t < 0.4) return vec4(0.0, 1.0, 1.0 - (t - 0.2) / 0.2, 1.0).rgb;
+              if (t < 0.6) return vec4((t - 0.4) / 0.2, 1.0, 0.0, 1.0).rgb;
+              if (t < 0.8) return vec4(1.0, 1.0 - ((t - 0.6) / 0.2) * 0.5, 0.0, 1.0).rgb;
+              return vec4(1.0, 0.5 - ((t - 0.8) / 0.2) * 0.5, 0.0, 1.0).rgb;
+            }
+
+            void main() {
+              vClass = classification;
+              vNormal = normalize(normalMatrix * normal);
+
+              // Determine elevation value based on file type
+              float z = uIsPCD ? position.y : position.z;
+
+              // Normalize and apply smoothstep (built-in GLSL version)
+              float t = clamp((z - uMinZ) / (uMaxZ - uMinZ), 0.0, 1.0);
+              float tSmooth = smoothstep(0.0, 1.0, t); 
+
+              // Get base color from colormap
+              vec3 elevCol = colormap(tSmooth);
+
+              // Select base color attribute
+              vec3 base;
+              if (uMode == 0.0) base = color;        
+              else if (uMode == 1.0) base = elevCol; 
+              else base = vec3(1.0); // Use full white as multiplier for Classification Mode
+
+              if (uMode != 3.0) {
+                vColor = base * pow(clamp(intensity, 0.001, 1.0), uIntensityGamma);
+              }
+
+              vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+              gl_PointSize = uSize * (300.0 / -mvPosition.z);
+              gl_Position = projectionMatrix * mvPosition;
+            }
+          `,
+
+          fragmentShader: `
+            uniform float uMode;
+            uniform float uOpacity;
+            uniform float uBrightness;
+            uniform sampler2D uClassLUT; 
+
+            varying float vClass;
+            varying vec3 vNormal;
+            varying vec3 vColor;
+
+            void main() {
+              // Map classification to LUT coordinate
+              float u = (vClass + 0.5) / 256.0;
+              vec4 classData = texture2D(uClassLUT, vec2(u, 0.5));
+
+              // If the UI turned this layer off (Alpha = 0), kill the pixel immediately.
+              // This works for RGB, Elevation, and Classification modes.
+              if (classData.a < 0.1) discard; 
+
+              vec3 finalRGB;
+
+              if (uMode == 3.0) {
+                // NORMAL MODE: Map [-1, 1] range to [0, 1] range
+                vec3 n = normalize(vNormal);
+                finalRGB = n * 0.5 + 0.5;
+              } else if (uMode == 2.0) {
+                // Classification Mode: Use the color from the LUT
+                // We multiply by the 'length' of the original color to keep intensity/shading
+                finalRGB = classData.rgb * length(vColor);
+              } else {
+                // RGB Mode (0.0) or Elevation Mode (1.0)
+                // vColor was already calculated in the Vertex Shader
+                finalRGB = vColor;
+              }
+
+              finalRGB *= uBrightness;
+
+              gl_FragColor = vec4(finalRGB, uOpacity);
+            }
+          `
+        });
+      }
+
+      // Standard ASPRS LAS Class Names
+
+      const LAS_NAMES = {
+        0: "Never Classified",
+        1: "Unassigned",
+        2: "Ground",
+        3: "Low Vegetation",
+        4: "Med Vegetation",
+        5: "High Vegetation",
+        6: "Building",
+        7: "Low Noise (Cloud)",
+        8: "Model Key",
+        9: "Water",
+        10: "Rail",
+        11: "Road",
+        12: "Overlap",
+        13: "Wire-Guard", 
+        14: "Wire-Conductor",
+        15: "Transmission Tower",
+        16: "Wire-Insulator",
+        17: "Bridge",
+        18: "High Noise",
+        19: "Overhead Machinery",    // e.g., Cranes, Conveyors
+        20: "Ignored Ground",        // Typically points near breaklines
+        21: "Snow",
+        22: "Temporal Exclusion"     // Moving objects (cars, people) or tidal changes
       };
 
-      function getClassColor( c ) {
-        return CLASS_COLORS[ c ] || [ 1.0, 0.0, 0.0 ]; // red for unknown
+      /**
+       * @param {number} classId - The LAS class
+       * @param {boolean} visible - Whether to show or hide the points
+      */
+
+      function setClassVisibility( classId, visible ) {
+        pcd_obj.traverse( ( child ) => {
+          if (child.isPoints) {
+            const texture = child.material.uniforms.uClassLUT.value;
+            const data = texture.image.data;
+
+            // The alpha channel is at (index * 4) + 3
+
+            data[ classId * 4 + 3 ] = visible ? 255 : 0;
+
+            // Notify the GPU that the texture data has changed
+
+            texture.needsUpdate = true;
+          }
+        });
+
+        needsRender = true;
       }
 
-      function colormap( t ) {
-        if (t < 0.2) { // blue → cyan
-          const k = t / 0.2;
-          return [ 0, k, 1 ];
-        }
+      /**
+       * @param {GUI} gui - lil-gui instance
+       * @param {Array<number>} foundIds - Array of class IDs found in the model (e.g. [2, 7, 18])
+       */
 
-        if (t < 0.4) { // cyan → green
-          const k = (t - 0.2) / 0.2;
-          return [ 0, 1, 1 - k ];
-        }
+      function populateClassificationUI( gui, foundIds ) {
+        const folder = gui.addFolder( 'Point Classifications' );
 
-        if (t < 0.6) { // green → yellow
-          const k = (t - 0.4) / 0.2;
-          return [ k, 1, 0 ];
-        }
+        // Sort IDs so the UI is numerical
 
-        if (t < 0.8) { // yellow → orange
-          const k = (t - 0.6) / 0.2;
-          return [ 1, 1 - k * 0.5, 0 ];
-        }
+        foundIds.sort( ( a, b ) => a - b ).forEach( id => {
+          const name = LAS_NAMES[ id ] || `Class ${ id }`;
+          const label = `${ id }: ${ name }`;
 
-        // orange → red
-        const k = (t - 0.8) / 0.2;
-        return [ 1, 0.5 - k * 0.5, 0 ];
-      }
+          // Initial state for the checkbox
 
-      function get_elevation_colors( points_cloud, pcd = false ) {
-        const intensity = points_cloud.attributes.intensity?.array;
-        const pos = points_cloud.attributes.position.array;
-        const pos_count = pos.length / 3.0;
+          const settings = { visible: true };
 
-        const minZ = pcd ? points_cloud.boundingBox.max.y : points_cloud.boundingBox.min.z;
-        const maxZ = pcd ? points_cloud.boundingBox.min.y : points_cloud.boundingBox.max.z;
+          folder.add( settings, 'visible' )
+          .name( label )
+          .onChange( ( value ) => {
+            setClassVisibility( id, value );
+          });
+        });
 
-        const rangeZ = ( maxZ - minZ ) || 1;
+        gui.open();
 
-        elevationColors = new Float32Array( pos.length );
-
-        for (let i = 0; i < pos_count; i++) {
-          const z = pos[ i * 3 + ( pcd ? 1 : 2 ) ];
-
-          // Clamp t to [0, 1] to prevent white/broken colors for noise points
-          const t = Math.max( 0, Math.min( 1, ( z - minZ ) / rangeZ ) );
-
-          // Gradient: blue → cyan → green → yellow → red
-
-          let tSmooth = t * t * ( 3 - 2 * t );  // smoothstep
-
-          const [ r, g, b ] = colormap( tSmooth );
-
-          const mult = intensity ? ( intensity[ i ] || 1.0 ) : 1.0;
-
-          elevationColors[ i * 3 + 0 ] = r * mult;
-          elevationColors[ i * 3 + 1 ] = g * mult;
-          elevationColors[ i * 3 + 2 ] = b * mult;
-        }
+        classification_folder = folder;
       }
 
       function loadFile() {
-        let loader = (xyz_format === true) ? xyz_loader : ((las_format === true) ? las_loader : ((ept_format === true) ? ept_loader : pcd_loader));
+        let loader =
+          xyz_format ? xyz_loader
+          : las_format ? las_loader
+          : ept_format ? ept_loader
+          : pcd_loader;
 
         loader.load( URL.createObjectURL( selected_pcd_file ), function( points ) {
           URL.revokeObjectURL( selected_pcd_file );
 
-          if (ept_format === true || las_format === true || xyz_format === true) {
+          if (halt_on_error) return;
+
+          if (ept_format || las_format || xyz_format) {
             // points were returned as geometry
 
-            if (xyz_format === true) {
+            if (xyz_format) {
               points.computeBoundingBox();
               points.computeBoundingSphere();
             }
 
-            get_elevation_colors( points, false );
-
             points.center();
 
-            if ( points.hasAttribute( 'color' ) === true ) vertex_colors_enabled = true;
+            if (!elevationRange) elevationRange = get_range( points );
 
-            let material = new THREE.PointsMaterial( { size: 0.1, transparent: true } );
+            let material = createPointShaderMaterial( elevationRange, isPCD );
 
-            points.rotateX( - Math.PI / 2 );
+            let ept_las_xyz_points = new THREE.Points( points, material );
+            ept_las_xyz_points.name =
+              las_format ? 'las_points'
+              : ept_format ? 'ept_points'
+              : 'xyz_points';
 
-            let las_xyz_points = new THREE.Points( points, material );
-            las_xyz_points.name = (las_format === true) ? 'las_points' : (ept_format === true) ? 'ept_points' : 'xyz_points';
-
-            pcd_obj = las_xyz_points;
+            pcd_obj = ept_las_xyz_points;
           } else {
             points.geometry.computeBoundingBox();
             points.geometry.computeBoundingSphere();
 
-            get_elevation_colors( points.geometry, true );
-
             points.geometry.center();
 
-            points.geometry.rotateX( Math.PI );
+            isPCD = true;
 
-            if (points.material.vertexColors) vertex_colors_enabled = true;
+            if (!elevationRange) elevationRange = get_range( points.geometry );
+            let material = createPointShaderMaterial( elevationRange, isPCD );
 
-            pcd_obj = points.clone();
+            // Use shader material instead of built-in material
+
+            let pcd_points = new THREE.Points( points.geometry, material );
+            pcd_points.name = 'pcd_points';
+
+            points.geometry.dispose();
+            points.geometry = null;
+            points.material.dispose();
+            points.material = null;
+
+            pcd_obj = pcd_points;
           }
-
-          pcd_obj.sizeAttenuation = true;
-          pcd_obj.sortPoints = true;
 
           finish_loading();
         }, function ( xhr ) { // onProgress
@@ -641,18 +895,29 @@
           console.log( 'Trying PCD Loader...' );
 
           pcd_loader.load( selected_url_file, function( points ) {
+            if (halt_on_error) return;
+
             points.geometry.computeBoundingBox();
             points.geometry.computeBoundingSphere();
 
-            get_elevation_colors( points.geometry, true );
-
             points.geometry.center();
 
-            points.geometry.rotateX( Math.PI );
+            isPCD = true;
 
-            if (points.material.vertexColors) vertex_colors_enabled = true;
+            if (!elevationRange) elevationRange = get_range( points.geometry );
+            let material = createPointShaderMaterial( elevationRange, isPCD );
 
-            pcd_obj = points.clone();
+            // Use shader material instead of built-in material
+
+            let pcd_points = new THREE.Points( points.geometry, material );
+            pcd_points.name = 'pcd_points';
+
+            points.geometry.dispose();
+            points.geometry = null;
+            points.material.dispose();
+            points.material = null;
+
+            pcd_obj = pcd_points;
 
             finish_loading();
           }, function ( xhr ) { // onProgress
@@ -661,15 +926,12 @@
             console.log( 'Trying EPT BIN/LAS/LAZ Loader...' );
 
             ept_loader.load( selected_url_file, function( points ) {
-              get_elevation_colors( points, false );
+              if (halt_on_error) return;
 
               points.center();
 
-              points.rotateX( - Math.PI / 2.0 );
-
-              if ( points.hasAttribute( 'color' ) === true ) vertex_colors_enabled = true;
-
-              let material = new THREE.PointsMaterial( { size: 0.1, transparent: true } );
+              if (!elevationRange) elevationRange = get_range( points );
+              let material = createPointShaderMaterial( elevationRange, isPCD );
 
               let ept_points = new THREE.Points( points, material );
               ept_points.name = 'ept_points';
@@ -692,15 +954,12 @@
               console.log( 'Trying LAS/LAZ Loader...' );
 
               las_loader.load( selected_url_file, function( points ) {
-                get_elevation_colors( points, false );
+                if (halt_on_error) return;
 
                 points.center();
 
-                points.rotateX( - Math.PI / 2.0 );
-
-                if ( points.hasAttribute( 'color' ) === true ) vertex_colors_enabled = true;
-
-                let material = new THREE.PointsMaterial( { size: 0.1, transparent: true } );
+                if (!elevationRange) elevationRange = get_range( points );
+                let material = createPointShaderMaterial( elevationRange, isPCD );
 
                 let las_points = new THREE.Points( points, material );
                 las_points.name = 'las_points';
@@ -723,18 +982,15 @@
                 console.log( 'Trying XYZ Loader...' );
 
                 xyz_loader.load( selected_url_file, function( points ) {
+                  if (halt_on_error) return;
+
                   points.computeBoundingBox();
                   points.computeBoundingSphere();
 
-                  get_elevation_colors( points, false );
-
                   points.center();
 
-                  points.rotateX( - Math.PI / 2 );
-
-                  if ( points.hasAttribute( 'color' ) === true ) vertex_colors_enabled = true;
-
-                  let material = new THREE.PointsMaterial( { size: 0.1, transparent: true } );
+                  if (!elevationRange) elevationRange = get_range( points );
+                  let material = createPointShaderMaterial( elevationRange, isPCD );
 
                   let xyz_points = new THREE.Points( points, material );
                   xyz_points.name = 'xyz_points';
@@ -756,6 +1012,8 @@
       }
 
       async function finish_loading() {
+        if (halt_on_error) return;
+
         if (!pcd_obj.geometry.getAttribute( 'intensity' )) {
           const points_count = pcd_obj.geometry.getAttribute( 'position' ).count;
           const ones = new Float32Array( points_count ).fill( 1.0 );
@@ -765,49 +1023,86 @@
         pcd_obj.sizeAttenuation = true;
         pcd_obj.sortPoints = true;
 
-        original_vertex_color_array[ pcd_obj.name ] = pcd_obj.geometry.getAttribute( 'color' );
+        const spacing = estimate_spacing();
 
-        pcd_obj.material.vertexColors = vertex_colors_enabled;
-        pcd_obj.material.needsUpdate = true;
+        // Let max size be 3x the average spacing to allow for "thick" viewing
+        min_allowed_point_size = spacing / 20.0;
+        max_allowed_point_size = spacing * 3.0;
+
+        pcd_obj.material.uniforms.uSize.value = ( spacing / 4.0 ) * ( window.devicePixelRatio || 1.0 );
 
         // Add pcd_obj to the scene
         scene.add( pcd_obj );
-        resize();
+        frame_camera();
 
-        const box = new THREE.Box3().setFromObject( pcd_obj );
-        const center = box.getCenter( new THREE.Vector3() );
-        const size = box.getSize( new THREE.Vector3() );
+        pcd_obj.rotateX( isPCD ? Math.PI : - Math.PI / 2.0 );
 
-        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
-        camera.lookAt( center );
+        if (gui_set === false) {
+          // Add Brightness control
+          gui.add( params, 'brightness', 0, 4 ).name( 'Brightness' )
+          .onChange( ( value ) => {
+            if (pcd_obj.material && pcd_obj.material.uniforms) {
+              pcd_obj.material.uniforms.uBrightness.value = value;
+            }
+
+            needsRender = true;
+          });
+
+          // Add Gamma control
+          gui.add(params, 'gamma', 0.1, 2.0).name('Gamma')
+          .onChange( ( value ) => {
+            if (pcd_obj.material && pcd_obj.material.uniforms) {
+              pcd_obj.material.uniforms.uIntensityGamma.value = value;
+            }
+
+            needsRender = true;
+          });
+
+          set_gui_position();
+
+          gui.open();
+          gui_set = true;
+        }
 
         enable_disable( false );
-
-        if (vertex_colors_enabled) {
-          document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-          document.getElementById('btn_vertex_colors').style.display = '';
-          vertex_colors_present = true;
-        } else {
-          document.getElementById('btn_vertex_colors').style.backgroundColor = 'transparent';
-          document.getElementById('btn_vertex_colors').style.display = 'none';
-        }
 
         if (pcd_obj.geometry.hasAttribute( 'classification' )) {
           document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
           document.getElementById('btn_classification_colors').style.display = '';
+          document.getElementById('btn_classification_colors').disabled = false;
           classification_present = true;
-        } else {
-          document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
-          document.getElementById('btn_classification_colors').style.display = 'none';
+
+          // Avoid cluttering gui with classification classes on mobile devices
+
+          if (!isMobile) {
+            // Iterate through all objects to find classification classes
+
+            detected_classes = new Set();
+
+            const attr = pcd_obj.geometry.attributes.classification.array;
+
+            // Get classification classes for gui
+
+            for ( let i = 0; i < attr.length; i ++ ) {
+              // Take a tiny break every 10000 points, let the browser
+              // take a breath and avoid "unresponsive" page popup
+              if ( i % 10000 === 0 ) await new Promise( r => setTimeout( r, 0 ) );
+
+              detected_classes.add( attr[ i ] );
+            }
+
+            if (!classification_folder) {
+              const foundIds = Array.from( detected_classes );
+              populateClassificationUI( gui, foundIds );
+            }
+          }
         }
 
         if (pcd_obj.geometry.hasAttribute( 'normal' )) {
           document.getElementById('btn_normal_colors').style.backgroundColor = 'transparent';
           document.getElementById('btn_normal_colors').style.display = '';
+          document.getElementById('btn_normal_colors').disabled = false;
           normal_colors_present = true;
-        } else {
-          document.getElementById('btn_normal_colors').style.backgroundColor = 'transparent';
-          document.getElementById('btn_normal_colors').style.display = 'none';
         }
 
         console.timeEnd( 'Loading Time' );
@@ -817,11 +1112,13 @@
 
         document.getElementById('div_loading').style.display = 'none';
 
+        gui_container.style.display = 'block';
+
         init_running = false;
 
         render_requested = true;
         mouse_wheel = true;
-        count =0;
+        count = 0;
         render();
 
         if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
@@ -840,6 +1137,8 @@
         render_requested = false;
         enable_disable( true );
 
+        if (gui_set) gui_reset();
+
         // Stop flashing indicator
         document.getElementById('status_indicator').style.visibility = 'hidden';
 
@@ -849,166 +1148,88 @@
         document.getElementById('div_error').style.display = 'block';
       }
 
+      function set_elevation_colors() {
+        if (!pcd_obj) return;
+        elevation = !elevation;
+
+        // Reset other modes
+        normal_colors_enabled = false;
+        classification_enabled = false;
+
+        const mode = elevation ? 1.0 : 0.0;
+        updateMaterialUniforms( mode );
+
+        const el_color = elevation ? 'lightgreen' : 'transparent';
+        document.getElementById('btn_elevation_colors').style.backgroundColor = el_color;
+        document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
+        document.getElementById('btn_normal_colors').style.backgroundColor = 'transparent';
+
+        needsRender = true;
+      }
+
       function set_classification_colors() {
-        if (!pcd_obj || !classification_present) return;
+        if (!pcd_obj) return;
+        classification_enabled = !classification_enabled;
 
-        if (classification_enabled) {
-          // Turn OFF classification
-          document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
-          if (vertex_colors_present) document.getElementById('btn_vertex_colors').disabled = false;
-          if (normal_colors_present) document.getElementById('btn_normal_colors').disabled = false;
-          document.getElementById('btn_elevation_colors').disabled = false;
+        // Reset other modes
+        elevation = false;
+        normal_colors_enabled = false;
 
-          // Restore original colors
-          if (original_vertex_color_array[ pcd_obj.name ]) {
-            pcd_obj.geometry.setAttribute( 'color', original_vertex_color_array[ pcd_obj.name ] );
-            pcd_obj.material.vertexColors = vertex_colors_enabled;
-          } else {
-            pcd_obj.geometry.deleteAttribute( 'color' );
-            pcd_obj.material.vertexColors = false;
-          }
+        const mode = classification_enabled ? 2.0 : 0.0;
+        updateMaterialUniforms( mode );
 
-          classification_enabled = false;
-        } else {
-          // Turn ON classification
-          document.getElementById('btn_classification_colors').style.backgroundColor = 'lightgreen';
-          if (vertex_colors_present) document.getElementById('btn_vertex_colors').disabled = true;
-          if (normal_colors_present) document.getElementById('btn_normal_colors').disabled = true;
-          document.getElementById('btn_elevation_colors').disabled = true;
+        const cl_color = classification_enabled ? 'lightgreen' : 'transparent';
+        document.getElementById('btn_classification_colors').style.backgroundColor = cl_color;
+        document.getElementById('btn_elevation_colors').style.backgroundColor = 'transparent';
+        document.getElementById('btn_normal_colors').style.backgroundColor = 'transparent';
 
-          const cls = pcd_obj.geometry.attributes.classification.array;
-          const class_count = cls.length;
-          const colors = new Float32Array( class_count * 3 );
-
-          for (let i = 0; i < class_count; i++) {
-            const [ r, g, b ] = getClassColor( cls[ i ] );
-            colors[ i * 3 + 0 ] = r;
-            colors[ i * 3 + 1 ] = g;
-            colors[ i * 3 + 2 ] = b;
-          }
-
-          pcd_obj.geometry.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
-          pcd_obj.material.vertexColors = true;
-
-          classification_enabled = true;
-        }
-
-        pcd_obj.material.needsUpdate = true;
-        disabled_changed();
+        needsRender = true;
       }
 
       function set_normal_colors() {
-        if (pcd_obj) {
-          if (normal_colors_enabled) {
-            document.getElementById('btn_normal_colors').style.backgroundColor = 'transparent';
-            if (vertex_colors_present) document.getElementById('btn_vertex_colors').disabled = false;
-            if (classification_present) document.getElementById('btn_classification_colors').disabled = false;
-            document.getElementById('btn_elevation_colors').disabled = false;
+        if (!pcd_obj) return;
+        normal_colors_enabled = !normal_colors_enabled;
 
-            if (original_vertex_color_array[ pcd_obj.name ]) {
-              pcd_obj.geometry.setAttribute( 'color', original_vertex_color_array[ pcd_obj.name ] );
-              pcd_obj.material.vertexColors = vertex_colors_enabled;
-            } else {
-              pcd_obj.geometry.deleteAttribute( 'color' );
-              pcd_obj.material.vertexColors = false;
-            }
+        // Reset other modes
+        elevation = false;
+        classification_enabled = false;
 
-            normal_colors_enabled = false;
-          } else {
-            document.getElementById('btn_normal_colors').style.backgroundColor = 'lightgreen';
-            if (vertex_colors_present) document.getElementById('btn_vertex_colors').disabled = true;
-            if (classification_present) document.getElementById('btn_classification_colors').disabled = true;
-            document.getElementById('btn_elevation_colors').disabled = true;
+        const mode = normal_colors_enabled ? 3.0 : 0.0;
+        updateMaterialUniforms( mode );
 
-            const normals = pcd_obj.geometry.getAttribute( 'normal' ).array;
-            const normals_count = normals.length / 3.0;
+        const n_color = normal_colors_enabled ? 'lightgreen' : 'transparent';
+        document.getElementById('btn_normal_colors').style.backgroundColor = n_color;
+        document.getElementById('btn_elevation_colors').style.backgroundColor = 'transparent';
+        document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
 
-            const colors = new Float32Array( normals.length );
-
-            for (let i = 0; i < normals_count; i++) {
-              const nx = normals[ i * 3 + 0 ];
-              const ny = normals[ i * 3 + 1 ];
-              const nz = normals[ i * 3 + 2 ];
-
-              colors[ i * 3 + 0 ] = ( nx + 1 ) * 0.5;
-              colors[ i * 3 + 1 ] = ( ny + 1 ) * 0.5;
-              colors[ i * 3 + 2 ] = ( nz + 1 ) * 0.5;
-            }
-
-            pcd_obj.geometry.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
-            pcd_obj.material.vertexColors = true;
-
-            normal_colors_enabled = true;
-          }
-
-          pcd_obj.material.needsUpdate = true;
-
-          disabled_changed();
-        }
+        needsRender = true;
       }
 
-      function set_elevation_colors() {
-        if (pcd_obj) {
-          if (elevation) {
-            document.getElementById('btn_elevation_colors').style.backgroundColor = 'transparent';
-            if (vertex_colors_present) document.getElementById('btn_vertex_colors').disabled = false;
-            if (normal_colors_present) document.getElementById('btn_normal_colors').disabled = false;
-            if (classification_present) document.getElementById('btn_classification_colors').disabled = false;
+      function updateMaterialUniforms( mode ) {
+        if (!pcd_obj) return;
+        pcd_obj.material.uniforms.uMode.value = mode;
 
-            if (original_vertex_color_array[ pcd_obj.name ]) {
-              pcd_obj.geometry.setAttribute( 'color', original_vertex_color_array[ pcd_obj.name ] );
-              pcd_obj.material.vertexColors = vertex_colors_enabled;
-            } else {
-              pcd_obj.geometry.deleteAttribute( 'color' );
-              pcd_obj.material.vertexColors = false;
-            }
-
-            elevation = false;
-          } else {
-            document.getElementById('btn_elevation_colors').style.backgroundColor = 'lightgreen';
-            if (vertex_colors_present) document.getElementById('btn_vertex_colors').disabled = true;
-            if (normal_colors_present) document.getElementById('btn_normal_colors').disabled = true;
-            if (classification_present) document.getElementById('btn_classification_colors').disabled = true;
-
-            pcd_obj.geometry.setAttribute( 'color', new THREE.BufferAttribute( elevationColors, 3 ) );
-            pcd_obj.material.vertexColors = true;
-
-            elevation = true;
-          }
-
-          pcd_obj.material.needsUpdate = true;
-
-          disabled_changed();
+        if (elevationRange) {
+          pcd_obj.material.uniforms.uMinZ.value = elevationRange.min;
+          pcd_obj.material.uniforms.uMaxZ.value = elevationRange.max;
         }
-      }
 
-      function set_vertex_colors() {
-        if (pcd_obj) {
-          if (vertex_colors_enabled) {
-            document.getElementById('btn_vertex_colors').style.backgroundColor = 'transparent';
-            vertex_colors_enabled = false;
-          } else {
-            document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-            vertex_colors_enabled = true;
-          }
-
-          pcd_obj.material.vertexColors = vertex_colors_enabled ? original_vertex_color_array[ pcd_obj.name ] !== undefined : false;
-          pcd_obj.material.needsUpdate = true;
-
-          mouse_wheel = true;
-        }
+        needsRender = true;
       }
 
       async function render() {
         if (pcd_obj) {
-          if (mouse_down === true || mouse_wheel === true) {
+          if (mouse_down || mouse_wheel || needsRender) {
             controls.update();
 
             renderer.clear();
             renderer.render( scene, camera );
 
+            // Reset animation flag AFTER rendering
+            needsRender = false;
+
             if (mouse_wheel === true) {
-              if (count > 25) {
+              if (count > 10) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -1023,13 +1244,12 @@
 
       async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
-        document.getElementById('points_color').value = '#000000';
-        document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_plus').style.backgroundColor = 'transparent';
         document.getElementById('btn_minus').style.backgroundColor = 'transparent';
-        document.getElementById('btn_elevation_colors').style.backgroundColor = 'transparent';
 
         init_running = false;
+
+        if (gui_set) gui_reset();
 
         // Reset the view
         if (reset === true) {
@@ -1039,6 +1259,9 @@
           // Page (re)loading
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
           document.getElementById('btn_lod').style.backgroundColor = 'transparent';
+          document.getElementById('btn_normal_colors').style.backgroundColor = 'transparent';
+          document.getElementById('btn_elevation_colors').style.backgroundColor = 'transparent';
+          document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
           document.getElementById('div_error').style.display = 'none';
           document.getElementById('file_input').value = '';
           document.getElementById('url_entry').value = '';
@@ -1046,6 +1269,8 @@
 
           if (scene) {
             if (pcd_obj) await scene_cleanup();
+
+            if (gui) gui.dispose();
 
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
@@ -1064,21 +1289,62 @@
       async function scene_cleanup() {
         mouse_wheel = true;
 
-        if (elevation) await set_elevation_colors();
-        if (vertex_colors_enabled) await set_vertex_colors();
-        if (normal_colors_enabled) await set_normal_colors();
-        if (classification_enabled) await set_classification_colors();
+        if (classification_folder) {
+          classification_folder.destroy();
+          classification_folder = null;
+        }
+
+        if (lutTexture) {
+          lutTexture.dispose();
+          lutTexture = null;
+        }
+
+        elevation = false;
+        normal_colors_enabled = false;
+        classification_enabled = false;
+
+        document.getElementById('btn_elevation_colors').style.backgroundColor = 'transparent';
+
+        document.getElementById('btn_normal_colors').style.backgroundColor = 'transparent';
+        document.getElementById('btn_normal_colors').style.display = 'none';
+        document.getElementById('btn_normal_colors').disabled = true;
+
+        document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
+        document.getElementById('btn_classification_colors').style.display = 'none';
+        document.getElementById('btn_classification_colors').disabled = true;
 
         scene.remove( pcd_obj );
         renderer.clear();
 
-        pcd_obj.traverse( ( child ) => {
-          if (child.isPoints) {
-            if (child.material.map) child.material.map.dispose();
-            child.material.dispose();
-            child.geometry.dispose();
+        pcd_obj.geometry.dispose();
+        pcd_obj.geometry = null;
+
+        if (pcd_obj.material) {
+          if (Array.isArray( pcd_obj.material )) {
+            pcd_obj.material.forEach( m => {
+              if (m.uniforms) {
+                Object.keys( m.uniforms ).forEach( key => {
+                  const uniform = m.uniforms[ key ].value;
+                  if (uniform && uniform.isTexture) uniform.dispose();
+                });
+              }
+
+              m.dispose();
+            });
+
+            pcd_obj.material = null;
+          } else {
+            if (pcd_obj.material.uniforms) {
+              Object.keys( pcd_obj.material.uniforms ).forEach( key => {
+                const uniform = pcd_obj.material.uniforms[ key ].value;
+                if (uniform && uniform.isTexture) uniform.dispose();
+              });
+            }
+
+            pcd_obj.material.dispose();
+            pcd_obj.material = null;
           }
-        });
+        }
 
         if (isMobile === false) {
           renderer.info.reset();
@@ -1088,9 +1354,9 @@
 
       function enable_disable( disable = false ) {
         document.getElementById('back_color').disabled = disable;
-        document.getElementById('points_color').disabled = disable;
         document.getElementById('btn_plus').disabled = disable;
         document.getElementById('btn_minus').disabled = disable;
+        document.getElementById('btn_quick_x').disabled = disable;
         document.getElementById('btn_elevation_colors').disabled = disable;
         disabled_changed();
 
@@ -1110,7 +1376,6 @@
 
         if (isMobile) {
           const select = document.getElementById("tile_level");
-          select.querySelector( 'option[value="4"]' ).remove();
           select.querySelector( 'option[value="5"]' ).remove();
           select.querySelector( 'option[value="6"]' ).remove();
           select.querySelector( 'option[value="7"]' ).remove();
@@ -1120,14 +1385,10 @@
         if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile) {
           $('#detail_level').change( function() { $(this).children(':selected').click(); });
           $('#tile_level').change( function() { $(this).children(':selected').click(); });
-          $('#gamma_level').change( function() { $(this).children(':selected').click(); });
         }
 
         document.getElementById('detail_level').selectedIndex = 0;
         document.getElementById('tile_level').selectedIndex = 0;
-        document.getElementById('gamma_level').selectedIndex = 0;
-
-        mouse_wheel = true;
       }
 
       function disabled_changed() {
