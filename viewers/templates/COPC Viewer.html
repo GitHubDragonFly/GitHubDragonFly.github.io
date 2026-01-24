@@ -117,8 +117,6 @@
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
-        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
-        <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
         <button title="Set Level of Detail for Displaying COPC Models" id="btn_lod" onclick="show_lod();" style="min-width: 34px;">LOD</button>
         <label for="btn_lod" title="Set Level of Detail for Displaying COPC Models"></label>
         <button title="Get remote model via URL" id="btn_url" onclick="show_url()" style="min-width: 38px;">URL</button>
@@ -129,6 +127,8 @@
         <label for="btn_plus" title="Increase Points Size"></label>
         <button title="Decrease Points Size" id="btn_minus" onclick="decrease_points_size();" style="color: red;" disabled>-</button>
         <label for="btn_minus" title="Decrease Points Size"></label>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
+        <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
         <button title="Toggle Statistics" id="btn_stats" onclick="set_statistics();" style="min-width: 46px;" disabled>Stats</button>
         <label for="btn_stats" title="Toggle Statistics"></label>
         <button title="Toggle Elevation Colors" id="btn_elevation_colors" onclick="set_elevation_colors();" style="min-width: 28px;" disabled>EC</button>
@@ -314,22 +314,23 @@
           attribute float classification;
 
           varying vec3 vColor;
-          varying float vMode;
           varying float vClass;
 
+          vec3 colormap(float t) {
+            if (t < 0.2) return vec4(0.0, t / 0.2, 1.0, 1.0).rgb;
+            if (t < 0.4) return vec4(0.0, 1.0, 1.0 - (t - 0.2) / 0.2, 1.0).rgb;
+            if (t < 0.6) return vec4((t - 0.4) / 0.2, 1.0, 0.0, 1.0).rgb;
+            if (t < 0.8) return vec4(1.0, 1.0 - ((t - 0.6) / 0.2) * 0.5, 0.0, 1.0).rgb;
+            return vec4(1.0, 0.5 - ((t - 0.8) / 0.2) * 0.5, 0.0, 1.0).rgb;
+          }
+
           void main() {
-            vMode = uMode;
             vClass = classification;
 
             // 1. Calculate Elevation Color
             float t = clamp((position.z - uMinZ) / (uMaxZ - uMinZ), 0.0, 1.0);
-            t = t * t * (3.0 - 2.0 * t);
-            vec3 elevCol;
-            if (t < 0.2) elevCol = vec3(0.0, t / 0.2, 1.0);
-            else if (t < 0.4) elevCol = vec3(0.0, 1.0, 1.0 - (t - 0.2) / 0.2);
-            else if (t < 0.6) elevCol = vec3((t - 0.4) / 0.2, 1.0, 0.0);
-            else if (t < 0.8) elevCol = vec3(1.0, 1.0 - ((t - 0.6) / 0.2) * 0.5, 0.0);
-            else elevCol = vec3(1.0, 0.5 - ((t - 0.8) / 0.2) * 0.5, 0.0);
+            float tSmooth = smoothstep(0.0, 1.0, t); 
+            vec3 elevCol = colormap(tSmooth);
 
             // 2. Select base color attribute
             vec3 base;
@@ -346,12 +347,12 @@
         `,
 
         fragment: `
+          uniform float uMode;
           uniform float uOpacity;
           uniform float uBrightness;
           uniform sampler2D uClassLUT; 
 
           varying vec3 vColor;
-          varying float vMode;
           varying float vClass;
 
           void main() {
@@ -366,7 +367,7 @@
 
             vec3 finalRGB;
 
-            if (vMode == 2.0) {
+            if (uMode == 2.0) {
               // Classification Mode: Use the color from the LUT
               // We multiply by the 'length' of the original color to keep intensity/shading
               finalRGB = classData.rgb * length(vColor);
@@ -412,17 +413,17 @@
           };
 
           for (let i = 0; i < 256; i++) {
-            let rgb = colors[i];
+            let rgb = colors[ i ];
             if (!rgb) {
               // Procedural colors for 23-255 so they are distinct
-              rgb = i < 64 ? [60, 60, 60] : [(i * 55) % 255, (i * 123) % 255, 150 + (i % 100)];
+              rgb = i < 64 ? [ 60, 60, 60 ] : [ ( i * 55 ) % 255, ( i * 123 ) % 255, 150 + ( i % 100 ) ];
             }
 
             const idx = i * 4;
-            data[idx + 0] = rgb[0];
-            data[idx + 1] = rgb[1];
-            data[idx + 2] = rgb[2];
-            data[idx + 3] = 255;    // A (Fully opaque by default)
+            data[ idx + 0 ] = rgb[ 0 ];
+            data[ idx + 1 ] = rgb[ 1 ];
+            data[ idx + 2 ] = rgb[ 2 ];
+            data[ idx + 3 ] = 255;    // A (Fully opaque by default)
           }
 
           // 2. Create the Texture with RGBAFormat
@@ -734,14 +735,10 @@
           let node_count = 0;
           let totalPointsInScene = 0;
 
-          function update_hud() {
+          function track_new_node( pts_count, total ) {
+            totalPointsInScene += pts_count;
+            document.getElementById('stat_nodes').innerText = ( node_count + 1 ).toLocaleString() + ' / ' + total;
             document.getElementById('stat_points').innerText = totalPointsInScene.toLocaleString();
-            document.getElementById('stat_nodes').innerText = ( node_count + 1 ).toLocaleString();
-          }
-
-          function track_new_node( geometry ) {
-            totalPointsInScene += geometry.attributes.position.count;
-            update_hud();
           }
 
           copc_loader.load( selected_url_file, function( points, total_nodes, node_key, globalZrange ) {
@@ -749,7 +746,7 @@
 
             if (halt_on_error) return;
 
-            track_new_node( points );
+            track_new_node( points.attributes.position.count, total_nodes );
 
             const points_name = 'copc_points_' + node_key;
             const nodeMap = new Map();
@@ -808,6 +805,17 @@
         //const boxHelper = new THREE.Box3Helper( new THREE.Box3().setFromObject( copc_obj ), 0xff0000 );
         //scene.add( boxHelper );
 
+        // Wait 2 seconds to let last node get rendered
+        await new Promise( resolve => setTimeout( resolve, 2000 ) );
+
+        // Stop flashing indicator
+        document.getElementById('status_indicator').style.visibility = 'hidden';
+
+        // Hide stats counts
+        document.getElementById('stats_overlay').style.visibility = 'hidden';
+
+        enable_disable( false );
+
         if (gui_set === false) {
           // Add Brightness control
           gui.add( params, 'brightness', 0, 5 ).name( 'Brightness' )
@@ -842,6 +850,7 @@
         if (classification_present) {
           document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
           document.getElementById('btn_classification_colors').style.display = '';
+          document.getElementById('btn_classification_colors').disabled = false;
 
           // Avoid cluttering gui with classification classes on mobile devices
 
@@ -860,6 +869,7 @@
                   // Take a tiny break every 10000 points, let the browser
                   // take a breath and avoid "unresponsive" page popup
                   if ( i % 10000 === 0 ) async () => { await new Promise( r => setTimeout( r, 0 ) ); }
+
                   detected_classes.add( attr[ i ] );
                 }
               }
@@ -870,27 +880,13 @@
               populateClassificationUI( gui, foundIds );
             }
           }
-        } else {
-          document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
-          document.getElementById('btn_classification_colors').style.display = 'none';
         }
-
-        console.timeEnd( 'Loading Time' );
-
-        // Wait 2 seconds to let last node get rendered
-        await new Promise( resolve => setTimeout( resolve, 2000 ) );
-
-        // Stop flashing indicator
-        document.getElementById('status_indicator').style.visibility = 'hidden';
-
-        // Hide stats counts
-        document.getElementById('stats_overlay').style.visibility = 'hidden';
 
         gui_container.style.display = 'block';
 
-        enable_disable( false );
-
         init_running = false;
+
+        console.timeEnd( 'Loading Time' );
 
         if (isMobile === false) {
           // Extend rendering before logging renderer stats
@@ -993,7 +989,7 @@
             needsRender = false;
 
             if (extended_render) {
-              if (extended_count > 20) {
+              if (extended_count > 10) {
                 extended_render = false;
                 extended_count = 0;
                 log_info();
@@ -1001,7 +997,7 @@
                 extended_count ++;
               }
             } else if (mouse_wheel) {
-              if (count > 30) {
+              if (count > 10) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -1061,6 +1057,9 @@
       async function scene_cleanup() {
         mouse_wheel = true;
 
+        document.getElementById('stat_nodes').innerText = '0';
+        document.getElementById('stat_points').innerText = '0';
+
         if (stats_enabled) set_statistics();
 
         if (stats && stats.dom && stats.dom.parentNode) {
@@ -1077,7 +1076,10 @@
         classification_enabled = false;
 
         document.getElementById('btn_elevation_colors').style.backgroundColor = 'transparent';
+
         document.getElementById('btn_classification_colors').style.backgroundColor = 'transparent';
+        document.getElementById('btn_classification_colors').style.display = 'none';
+        document.getElementById('btn_classification_colors').disabled = true;
 
         scene.remove( copc_obj );
         renderer.clear();
