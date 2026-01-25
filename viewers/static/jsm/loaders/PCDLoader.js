@@ -5,6 +5,7 @@ import {
 	Float32BufferAttribute,
 	Int32BufferAttribute,
 	Loader,
+	Matrix3,
 	Matrix4,
 	Points,
 	PointsMaterial,
@@ -769,7 +770,7 @@ class PCDLoader extends Loader {
 
 		geometry.computeBoundingSphere();
 
-		// --- POSSIBLE VIEWPOINT PATCH (if present) ---
+		// --- POSSIBLE VIEWPOINT PATCH (if present) - Best Guess Orientation Normalizer ---
 
 		if ( PCDheader.viewpoint ) {
 
@@ -784,8 +785,25 @@ class PCDLoader extends Loader {
 				const size = new Vector3( 1, 1, 1 );
 
 				const m = new Matrix4();
-				m.compose( translation, quat, size );
 
+				// Detect if identity quaternion
+
+				const isIdentityQuat =
+
+					Math.abs( quat.x ) < 1e-6 &&
+					Math.abs( quat.y ) < 1e-6 &&
+					Math.abs( quat.z ) < 1e-6 &&
+					Math.abs( quat.w - 1 ) < 1e-6;
+
+				if ( isIdentityQuat ) {
+
+					// Apply Z-up → Y-up correction
+
+					geometry.rotateX( - Math.PI / 2.0 );
+
+				}
+
+				m.compose( translation, quat, size );
 				geometry.applyMatrix4( m );
 
 				// Optional: Update normals if they exist, as they also need rotation
