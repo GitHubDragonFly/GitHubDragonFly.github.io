@@ -86,7 +86,7 @@
     <script type="module">
       import * as three_js from "three";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { PCDLoader } from "../../static/jsm/loaders/PCDLoader.min.js";
+      import { PCDLoader } from "../../static/jsm/loaders/PCDLoader.js";
       import { XYZLoader } from "../../static/jsm/loaders/XYZLoader.min.js";
       import { EPTLoader } from "../../static/jsm/loaders/EPTLoader.min.js";
       import { LASZLoader } from "../../static/jsm/loaders/LASZLoader.min.js";
@@ -546,7 +546,7 @@
         const step = positions.length > 300000 ? 10 : 1; 
 
         for ( let i = 0; i < positions.length; i += ( stride * step ) ) {
-          const val = positions[ i + 2 ];
+          const val = isPCD ? positions[ i + 1 ] : positions[ i + 2 ];
           values.push( val );
         }
 
@@ -566,48 +566,48 @@
         }
       }
 
-      function createPointShaderMaterial( zRange ) {
+      function createPointShaderMaterial( zRange, pcd = false ) {
         // 1. Generate the 256-color data using RGBA (4 values per pixel)
         // We must use 256 * 4 because RGBFormat is no longer supported.
         const data = new Uint8Array(256 * 4);
         const colors = {
-          0:[153,153,153],  // Created, never classified
-          1:[255,255,255],  // Unclassified
-          2:[128,77,26],    // Ground
-          3:[0,153,0],      // Low vegetation
-          4:[0,204,0],      // Medium vegetation
-          5:[0,255,0],      // High vegetation
-          6:[153,153,153],  // Building
-          7:[77,77,77],     // Low point / noise
-          8:[255,255,0],    // Key-point
-          9:[0,102,255],    // Water
-          10:[179,179,51],  // Rail
-          11:[102,102,102], // Road surface
-          12:[204,204,204], // Overlap
-          13:[255,128,0],   // Wire-guard
-          14:[255,179,0],   // Wire-conductor
-          15:[204,128,51],  // Transmission tower
-          16:[230,153,77],  // Wire-structure connector
-          17:[255,0,255],   // Bridge deck
-          18:[51,51,51],    // High noise
-          19:[180,210,210], // Overhead Machinery
-          20:[150,150,100], // Ignored Ground
-          21:[240,250,255], // Snow
-          22:[255,100,100]  // Temporal Exclusion (Moving objects)
+          0:[153,153,153],   // Created, never classified
+          1:[255,255,255],   // Unclassified
+          2:[128,77,26],     // Ground
+          3:[0,153,0, 180],  // Low vegetation → 70% opaque
+          4:[0,204,0],       // Medium vegetation
+          5:[0,255,0],       // High vegetation
+          6:[153,153,153],   // Building
+          7:[77,77,77, 80],  // Low point / noise → 30% opaque
+          8:[255,255,0],     // Key-point
+          9:[0,102,255],     // Water
+          10:[179,179,51],   // Rail
+          11:[102,102,102],  // Road surface
+          12:[204,204,204],  // Overlap
+          13:[255,128,0],    // Wire-guard
+          14:[255,179,0],    // Wire-conductor
+          15:[204,128,51],   // Transmission tower
+          16:[230,153,77],   // Wire-structure connector
+          17:[255,0,255],    // Bridge deck
+          18:[51,51,51, 30], // High noise → 10% opaque
+          19:[180,210,210],  // Overhead Machinery
+          20:[150,150,100],  // Ignored Ground
+          21:[240,250,255],  // Snow
+          22:[255,100,100]   // Temporal Exclusion (Moving objects)
         };
 
         for (let i = 0; i < 256; i++) {
-          let rgb = colors[i];
+          let rgb = colors[ i ];
           if (!rgb) {
             // Procedural colors for 23-255 so they are distinct
-            rgb = i < 64 ? [60, 60, 60] : [(i * 55) % 255, (i * 123) % 255, 150 + (i % 100)];
+            rgb = i < 64 ? [ 60, 60, 60 ] : [ ( i * 55 ) % 255, ( i * 123 ) % 255, 150 + ( i % 100 ) ];
           }
 
           const idx = i * 4;
-          data[idx + 0] = rgb[0];
-          data[idx + 1] = rgb[1];
-          data[idx + 2] = rgb[2];
-          data[idx + 3] = 255;    // A (Fully opaque by default)
+          data[ idx + 0 ] = rgb[ 0 ];
+          data[ idx + 1 ] = rgb[ 1 ];
+          data[ idx + 2 ] = rgb[ 2 ];
+          data[ idx + 3 ] = rgb[ 3 ] ? rgb[ 3 ] : 255; // Alpha (fully opaque if not defined)
         }
 
         if (!lutTexture) {
@@ -627,6 +627,7 @@
             uMinZ: { value: zRange?.min || 0.0 },
             uMaxZ: { value: zRange?.max || 100.0 },
             uSize: { value: 1.0 },
+            uIsPCD: { value: pcd },
             uOpacity: { value: 1.0 },
             uBrightness: { value: 1.0 },
             uIntensityGamma: { value: 0.1 },
@@ -634,6 +635,7 @@
           },
 
           vertexShader: `
+            uniform bool uIsPCD;
             uniform float uMode;
             uniform float uMinZ;
             uniform float uMaxZ;
@@ -641,12 +643,16 @@
             uniform float uBrightness;
             uniform float uIntensityGamma;
 
+            attribute float alpha;
             attribute float intensity;
             attribute float classification;
 
-            varying float vClass;
             varying vec3 vColor;
             varying vec3 vNormal;
+            varying float vClass;
+            varying float vPointSize;
+            varying float vAlpha;
+            varying float vIntensityAlpha;
 
             vec3 colormap(float t) {
               if (t < 0.2) return vec4(0.0, t / 0.2, 1.0, 1.0).rgb;
@@ -657,11 +663,12 @@
             }
 
             void main() {
+              vAlpha = alpha;
               vClass = classification;
               vNormal = normalize(normalMatrix * normal);
 
               // Normalize and apply smoothstep (built-in GLSL version)
-              float t = clamp((position.z - uMinZ) / (uMaxZ - uMinZ), 0.0, 1.0);
+              float t = clamp(((uIsPCD ? position.y : position.z) - uMinZ) / (uMaxZ - uMinZ), 0.0, 1.0);
               float tSmooth = smoothstep(0.0, 1.0, t); 
 
               // Get base color from colormap
@@ -674,11 +681,16 @@
               else base = vec3(1.0); // Use full white as multiplier for Classification Mode
 
               if (uMode != 3.0) {
-                vColor = base * pow(clamp(intensity, 0.001, 1.0), uIntensityGamma);
+                float i = clamp(intensity, 0.001, 1.0);
+                vIntensityAlpha = pow(i, uIntensityGamma);
+                vColor = base * vIntensityAlpha;
               }
 
               vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+
               gl_PointSize = uSize * (300.0 / -mvPosition.z);
+              vPointSize = gl_PointSize;
+
               gl_Position = projectionMatrix * mvPosition;
             }
           `,
@@ -692,8 +704,19 @@
             varying float vClass;
             varying vec3 vNormal;
             varying vec3 vColor;
+            varying float vPointSize;
+            varying float vAlpha;
+            varying float vIntensityAlpha;
 
             void main() {
+              float a = 1.0;
+
+              if (vPointSize > 3.0) {
+                float d = max(abs(gl_PointCoord.x - 0.5), abs(gl_PointCoord.y - 0.5));
+                float edge = clamp((d - 0.45) * 20.0, 0.0, 1.0); // = smoothstep(0.45, 0.5, d);
+                a = vAlpha * (1.0 - edge);
+              }
+
               // Map classification to LUT coordinate
               float u = (vClass + 0.5) / 256.0;
               vec4 classData = texture2D(uClassLUT, vec2(u, 0.5));
@@ -720,7 +743,10 @@
 
               finalRGB *= uBrightness;
 
-              gl_FragColor = vec4(finalRGB, uOpacity);
+              float outAlpha = uOpacity * a * vIntensityAlpha * classData.a;
+              if (outAlpha < 0.01) discard;
+
+              gl_FragColor = vec4(finalRGB, outAlpha);
             }
           `
         });
@@ -850,7 +876,7 @@
             isPCD = true;
 
             if (!elevationRange) elevationRange = get_range( points.geometry );
-            let material = createPointShaderMaterial( elevationRange );
+            let material = createPointShaderMaterial( elevationRange, isPCD );
 
             // Use shader material instead of built-in material
 
@@ -900,7 +926,7 @@
             isPCD = true;
 
             if (!elevationRange) elevationRange = get_range( points.geometry );
-            let material = createPointShaderMaterial( elevationRange );
+            let material = createPointShaderMaterial( elevationRange, isPCD );
 
             // Use shader material instead of built-in material
 
@@ -1010,9 +1036,15 @@
         if (halt_on_error) return;
 
         if (!pcd_obj.geometry.getAttribute( 'intensity' )) {
-          const points_count = pcd_obj.geometry.getAttribute( 'position' ).count;
-          const ones = new Float32Array( points_count ).fill( 1.0 );
-          pcd_obj.geometry.setAttribute( 'intensity', new THREE.BufferAttribute( ones, 1 ) );
+          const points_count_i = pcd_obj.geometry.getAttribute( 'position' ).count;
+          const fallbackIntensity = new Float32Array( points_count_i ).fill( 1.0 );
+          pcd_obj.geometry.setAttribute( 'intensity', new THREE.BufferAttribute( fallbackIntensity, 1 ) );
+        }
+
+        if (!pcd_obj.geometry.hasAttribute( 'alpha' )) {
+          const points_count_a = pcd_obj.geometry.getAttribute( 'position' ).count;
+          const fallbackAlpha = new Float32Array( points_count_a ).fill( 1.0 );
+          pcd_obj.geometry.setAttribute( 'alpha', new THREE.BufferAttribute( fallbackAlpha, 1 ) );
         }
 
         pcd_obj.sizeAttenuation = true;
@@ -1030,7 +1062,7 @@
         scene.add( pcd_obj );
         frame_camera();
 
-        pcd_obj.rotateX( isPCD ? Math.PI : ( - Math.PI / 2.0 ) );
+        if (!isPCD) pcd_obj.rotateX( - Math.PI / 2.0 );
 
         if (gui_set === false) {
           // Add Brightness control
