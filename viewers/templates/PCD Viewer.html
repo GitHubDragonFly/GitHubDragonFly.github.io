@@ -81,7 +81,7 @@
       var texture_loader, tiff_loader, exr_loader, rgbe_loader, hdrJPGLoader, ktx2_loader;
       var THREE, manager, renderer, scene, camera, render_requested, scene_bgnd, hdrjpg_texture;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, init_running = false;
-      var gui, gui_set = false, guiExposure, params, toneMappingOptions;
+      var gui, gui_set = false, guiExposure, params, toneMappingOptions, isPCD;
       var controls, gizmo, link, slider_height = 0, bg_flip;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var ww = window.innerWidth, wh = window.innerHeight;
@@ -1889,23 +1889,6 @@
         }
       }
 
-      function frame_camera() {
-        bounding_box.setFromObject( pcd_obj );
-        const center = bounding_box.getCenter( new THREE.Vector3() );
-        const size = bounding_box.getSize( new THREE.Vector3() );
-
-        // Center root
-        pcd_obj.position.sub( center );
-
-        // Frame camera to root
-        const maxDim = Math.max( size.x, size.y, size.z );
-        const fov = THREE.MathUtils.degToRad( camera.fov );
-        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
-        camera.position.set( 0, 0, dist * 1.5 );
-        camera.lookAt( 0, 0, 0 );
-        resize();
-      }
-
       function set_model_scale( scale ) {
         document.getElementById('model_scale').selectedIndex = 0;
 
@@ -1948,13 +1931,30 @@
       }
 
       function quick_x_rotation() {
-        pcd_obj.rotateX( Math.PI / 2.0 );
+        pcd_obj.rotateX( - Math.PI / 2.0 );
         frame_camera();
 
         set_grid_y();
         set_polar_grid_y();
 
         mouse_wheel = true;
+      }
+
+      function frame_camera() {
+        bounding_box.setFromObject( pcd_obj );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
+
+        // Center root
+        pcd_obj.position.sub( center );
+
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist * 1.5 );
+        camera.lookAt( 0, 0, 0 );
+        resize();
       }
 
       async function init() {
@@ -2016,6 +2016,7 @@
         selected_pcd_file = null;
         las_format = false;
         xyz_format = false;
+        isPCD = false;
         filesMap = {};
         local_files = null;
         mouse_down = false;
@@ -2191,6 +2192,36 @@
         selected_pcd_file !== null ? loadFile() : loadURLFile();
       }
 
+      function get_range( geometry ) {
+        const positions = geometry.attributes.position.array;
+        const stride = 3;
+        const values = [];
+
+        // ADJUSTABLE: Increase step to process fewer points (e.g., 10 = 10% of data)
+        // This prevents UI freezing without needing complex async breaks.
+        const step = positions.length > 300000 ? 10 : 1; 
+
+        for ( let i = 0; i < positions.length; i += ( stride * step ) ) {
+          const val = isPCD ? positions[ i + 1 ] : positions[ i + 2 ];
+          values.push( val );
+        }
+
+        // Sorting 100k points is ~10ms, while 1M points can be >100ms.
+        values.sort( ( a, b ) => a - b );
+
+        const minIndex = Math.floor( values.length * 0.01 );
+        const maxIndex = Math.floor( values.length * 0.99 );
+
+        const min = values[ minIndex ];
+        const max = values[ maxIndex ];
+
+        return {
+          minZ: min,
+          maxZ: max,
+          rangeZ: ( max - min ) || 1.0
+        }
+      }
+
       const CLASS_COLORS = {
         0: [0.6, 0.6, 0.6],    // Created, never classified
         1: [1.0, 1.0, 1.0],    // Unclassified
@@ -2253,20 +2284,22 @@
         return [ 1, 0.5 - k * 0.5, 0 ];
       }
 
-      function get_elevation_colors( points_cloud, pcd = false ) {
+      function get_elevation_colors( points_cloud ) {
         const intensity = points_cloud.attributes.intensity?.array;
         const pos = points_cloud.attributes.position.array;
         const pos_count = pos.length / 3.0;
 
-        const minZ = pcd ? points_cloud.boundingBox.max.y : points_cloud.boundingBox.min.z;
-        const maxZ = pcd ? points_cloud.boundingBox.min.y : points_cloud.boundingBox.max.z;
+        const { minZ, maxZ, rangeZ } = get_range( points_cloud );
 
-        const rangeZ = ( maxZ - minZ ) || 1;
+        //const minZ = isPCD ? points_cloud.boundingBox.min.y : points_cloud.boundingBox.min.z;
+        //const maxZ = isPCD ? points_cloud.boundingBox.max.y : points_cloud.boundingBox.max.z;
+
+        //const rangeZ = ( maxZ - minZ ) || 1;
 
         elevationColors = new Float32Array( pos.length );
 
         for (let i = 0; i < pos_count; i++) {
-          const z = pos[ i * 3 + ( pcd ? 1 : 2 ) ];
+          const z = pos[ i * 3 + ( isPCD ? 1 : 2 ) ];
 
           // Clamp t to [0, 1] to prevent white/broken colors for noise points
           const t = Math.max( 0, Math.min( 1, ( z - minZ ) / rangeZ ) );
@@ -2303,16 +2336,15 @@
               points.computeBoundingSphere();
             }
 
-            get_elevation_colors( points, false );
+            points.center();
+            get_elevation_colors( points );
+            points.rotateX( - Math.PI / 2.0 );
 
             if (points.hasAttribute( 'color' )) {
               vertex_colors_enabled = true;
               document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
               document.getElementById('btn_random_vertex_colors').disabled = false;
             }
-
-            points.center();
-            points.rotateX( - Math.PI / 2.0 );
 
             let material = new THREE.PointsMaterial( { size: 0.1, opacity: 1 } );
             original_material_color = { r: 1, g: 1, b: 1 };
@@ -2327,13 +2359,13 @@
 
             pcd_obj = ept_las_xyz_points;
           } else {
+            isPCD = true;
+
             points.geometry.computeBoundingBox();
             points.geometry.computeBoundingSphere();
 
-            get_elevation_colors( points.geometry, true );
-
             points.geometry.center();
-            points.geometry.rotateX( Math.PI );
+            get_elevation_colors( points.geometry );
 
             original_material_opacity = points.material.opacity;
             initial_transparency = points.material.transparent;
@@ -2375,13 +2407,13 @@
           console.log( 'Trying PCD Loader...' );
 
           pcd_loader.load( selected_url_file, function( points ) {
+            isPCD = true;
+
             points.geometry.computeBoundingBox();
             points.geometry.computeBoundingSphere();
 
-            get_elevation_colors( points.geometry, true );
-
             points.geometry.center();
-            points.geometry.rotateX( Math.PI );
+            get_elevation_colors( points.geometry );
 
             if (points.material.vertexColors) vertex_colors_enabled = true;
 
@@ -2394,9 +2426,8 @@
             console.log( 'Trying EPT BIN/LAS/LAZ Loader...' );
 
             ept_loader.load( selected_url_file, function( points ) {
-              get_elevation_colors( points, false );
-
               points.center();
+              get_elevation_colors( points );
               points.rotateX( - Math.PI / 2.0 );
 
               if ( points.hasAttribute( 'color' ) === true ) vertex_colors_enabled = true;
@@ -2424,9 +2455,8 @@
               console.log( 'Trying LAS/LAZ Loader...' );
 
               las_loader.load( selected_url_file, function( points ) {
-                get_elevation_colors( points, false );
-
                 points.center();
+                get_elevation_colors( points );
                 points.rotateX( - Math.PI / 2.0 );
 
                 if ( points.hasAttribute( 'color' ) === true ) vertex_colors_enabled = true;
@@ -2457,9 +2487,8 @@
                   points.computeBoundingBox();
                   points.computeBoundingSphere();
 
-                  get_elevation_colors( points, false );
-
                   points.center();
+                  get_elevation_colors( points );
                   points.rotateX( - Math.PI / 2.0 );
 
                   if ( points.hasAttribute( 'color' ) === true ) vertex_colors_enabled = true;
@@ -2492,6 +2521,41 @@
           const points_count = pcd_obj.geometry.getAttribute( 'position' ).count;
           const ones = new Float32Array( points_count ).fill( 1.0 );
           pcd_obj.geometry.setAttribute( 'intensity', new THREE.BufferAttribute( ones, 1 ) );
+        } else {
+          // If there is no color attribute then coloring is intensity based
+
+          if (!pcd_obj.geometry.hasAttribute( 'color' )) {
+            const positions = pcd_obj.geometry.getAttribute( 'position' );
+            const colors = new Float32Array( positions.count * 3 );
+
+            const intensities = pcd_obj.geometry.getAttribute( 'intensity' );
+            const icount = intensities.count;
+
+            // Find min/max intensity to normalize values
+
+            let minI = Infinity;
+            let maxI = -Infinity;
+
+            for ( let i = 0; i < icount; i++ ) {
+              const Icurrent = intensities.getX( i );
+              if (Icurrent < minI) minI = Icurrent;
+              if (Icurrent > maxI) maxI = Icurrent;
+            }
+
+            const rangeI = ( maxI - minI ) || 1.0;
+
+            for ( let i = 0; i < positions.count; i++ ) {
+              const raw = intensities.getX( i );
+              const I = ( raw - minI ) / rangeI;
+
+              colors[ i * 3 + 0 ] = I; // R
+              colors[ i * 3 + 1 ] = I; // G
+              colors[ i * 3 + 2 ] = I; // B
+            }
+
+            pcd_obj.geometry.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
+            vertex_colors_enabled = true;
+          }
         }
 
         pcd_obj.material.vertexColors = vertex_colors_enabled;
