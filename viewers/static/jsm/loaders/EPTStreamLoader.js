@@ -715,7 +715,22 @@ class EPTStreamLoader extends Loader {
 					const tileUrl = this.localBlobs ? this.localBlobs[ `${ key }${ extension }` ] : data_url;
 
 					const resp = await fetch( tileUrl );
-					if ( !resp.ok ) return;
+
+					if ( !resp.ok ) {
+
+						if ( onTileError ) {
+
+							onTileError( { type: 'network', message: 'Fetching URL failed with status: ' + resp.status } );
+
+						 } else {
+
+							console.error( { type: 'network', message: 'Fetching URL failed with status: ' + resp.status } );
+
+						}
+
+						return;
+
+					}
 
 					buffer = await resp.arrayBuffer();
 
