@@ -75,7 +75,8 @@
       var ww = window.innerWidth, wh = window.innerHeight, isMobile;
       var reset_rotation, stats, stats_enabled, events_initialized;
       var copc_obj, selected_url_file = '', count = 0, halt_on_error;
-      var extended_render, extended_count = 0, params;
+      var min_allowed_point_size, max_allowed_point_size, pts_size;
+      var extended_render, extended_count = 0, params, selectedDepth;
       var lod_displayed = false, warning_displayed = false;
       var url_displayed = false, url_loading = false, elevation, lutTexture;
       var filesMap, bounding_box, globalElevationRange, detected_classes;
@@ -189,6 +190,7 @@
 
       function set_copc_details( depth = 0 )  {
         copc_loader.setDepthLimit( depth );
+        selectedDepth = depth;
       }
 
       function show_lod() {
@@ -334,13 +336,16 @@
 
             // 2. Select base color attribute
             vec3 base;
+
             if (uMode == 0.0) base = color;        
             else if (uMode == 1.0) base = elevCol; 
             else base = vec3(1.0); // Use full white as multiplier for Classification Mode
 
-            vColor = base * pow(clamp(intensity, 0.001, 1.0), uIntensityGamma);
+            float i = clamp(intensity, 0.001, 1.0);
+            vColor = base * pow(i, uIntensityGamma);
 
             vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+
             gl_PointSize = uSize * (300.0 / -mvPosition.z);
             gl_Position = projectionMatrix * mvPosition;
           }
@@ -356,7 +361,14 @@
           varying float vClass;
 
           void main() {
-            // 1. THE MASTER GATEKEEPER
+             // ROUND POINTS
+             // Compute distance from center of the point
+             vec2 c = gl_PointCoord * 2.0 - 1.0;
+             float dist = dot(c, c);
+             // Kill fragments outside the circle
+             if (dist > 1.0) discard;
+
+            // THE MASTER GATEKEEPER
             // Map classification to LUT coordinate
             float u = (vClass + 0.5) / 256.0;
             vec4 classData = texture2D(uClassLUT, vec2(u, 0.5));
@@ -378,11 +390,12 @@
             }
 
             finalRGB *= uBrightness;
+
             gl_FragColor = vec4(finalRGB, uOpacity);
           }
         `,
 
-        create: function( isMobile, zRange ) {
+        create: function( size, isMobile, zRange ) {
           // 1. Generate the 256-color data using RGBA (4 values per pixel)
           // We must use 256 * 4 because RGBFormat is no longer supported.
           const data = new Uint8Array(256 * 4);
@@ -390,11 +403,11 @@
             0:[153,153,153],
             1:[255,255,255],
             2:[128,77,26],
-            3:[0,153,0],
+            3:[0,153,0,180],  // Low vegetation → 70% opaque
             4:[0,204,0],
             5:[0,255,0],
             6:[153,153,153],
-            7:[77,77,77],
+            7:[77,77,77,80],  // Low point / noise → 30% opaque
             8:[255,255,0],
             9:[0,102,255],
             10:[179,179,51],
@@ -405,7 +418,7 @@
             15:[204,128,51],
             16:[230,153,77],
             17:[255,0,255],
-            18:[51,51,51],
+            18:[51,51,51,30], // High noise → 10% opaque
             19:[180,210,210], // Overhead Machinery
             20:[150,150,100], // Ignored Ground
             21:[240,250,255], // Snow
@@ -423,7 +436,7 @@
             data[ idx + 0 ] = rgb[ 0 ];
             data[ idx + 1 ] = rgb[ 1 ];
             data[ idx + 2 ] = rgb[ 2 ];
-            data[ idx + 3 ] = 255;    // A (Fully opaque by default)
+            data[ idx + 3 ] = rgb[ 3 ] ? rgb[ 3 ] : 255; // Alpha (fully opaque if not defined)
           }
 
           // 2. Create the Texture with RGBAFormat
@@ -437,11 +450,11 @@
 
           return new THREE.ShaderMaterial({
             uniforms: {
-              uSize: { value: isMobile ? 1 : 5 },
+              uSize: { value: size },
               uMode: { value: 0.0 },
               uMinZ: { value: zRange?.min || 0 },
               uMaxZ: { value: zRange?.max || 100 },
-              uOpacity: { value: 0.0 },
+              uOpacity: { value: 0.0 }, // we are fading in each tile, otherwise it should be 1.0
               uIntensityGamma: { value: 0.1 },
               uBrightness: { value: 1.25 },
               uClassLUT: { value: lutTexture } // Passing the texture instead of array
@@ -542,11 +555,28 @@
         mouse_wheel = true;
       }
 
+      function estimate_spacing( geometry ) {
+        if (!geometry.boundingBox) geometry.computeBoundingBox();
+
+        const box = geometry.boundingBox;
+        const size = new THREE.Vector3();
+        box.getSize( size );
+
+        // Calculate Volume, adjust for thin models
+        const volume = size.x * (size.y > 0.001 ? size.y : 0.001) * (size.z > 0.001 ? size.z : 0.001);
+        const pointCount = geometry.attributes.position.count;
+
+        // Estimate average spacing between points
+        const avgSpacing = Math.pow( volume / pointCount, 1.0 / 3.0 );
+
+        return avgSpacing;
+      }
+
       function increase_points_size() {
         copc_obj.traverse( ( child ) => {
           if (child.isPoints) {
-            let newSize = child.material.uniforms.uSize.value * 1.2;
-            child.material.uniforms.uSize.value = Math.min( newSize, 25.0 );
+            let newSize = child.material.uniforms.uSize.value * 1.1;
+            child.material.uniforms.uSize.value = Math.min( newSize, max_allowed_point_size );
           }
         });
 
@@ -556,8 +586,8 @@
       function decrease_points_size() {
         copc_obj.traverse( ( child ) => {
           if (child.isPoints) {
-            let newSize = child.material.uniforms.uSize.value / 1.2;
-            child.material.uniforms.uSize.value = Math.max( newSize, 1.0 );
+            let newSize = child.material.uniforms.uSize.value / 1.1;
+            child.material.uniforms.uSize.value = Math.max( newSize, min_allowed_point_size );
           }
         });
 
@@ -590,7 +620,9 @@
         mouse_down = false;
         mouse_wheel = true;
         needsRender = false;
+        selectedDepth = 0;
         lutTexture = null;
+        pts_size = null;
         count = 0;
         elevation = false;
         stats_enabled = false;
@@ -603,6 +635,8 @@
         classification_enabled = false;
         classification_present = false;
         bounding_box = new THREE.Box3();
+        min_allowed_point_size = 0.1;
+        max_allowed_point_size = 1.0;
 
         if (!params) params = { gamma: 0.1, brightness: 1.25 };
 
@@ -741,7 +775,7 @@
             document.getElementById('stat_points').innerText = totalPointsInScene.toLocaleString();
           }
 
-          copc_loader.load( selected_url_file, function( points, total_nodes, node_key, globalZrange ) {
+          copc_loader.load( selected_url_file, function( points, total_nodes, node_key, globalZrange, spacing ) {
             // points were returned as COPC node geometry
 
             if (halt_on_error) return;
@@ -751,19 +785,27 @@
             const points_name = 'copc_points_' + node_key;
             const nodeMap = new Map();
 
+            if (!pts_size) {
+              const avgSpacing = spacing || estimate_spacing( points );
+              pts_size = ( avgSpacing / ( 3 + Math.pow( 2, selectedDepth ) ) ) * ( window.devicePixelRatio || 1.0 );
+
+              min_allowed_point_size = pts_size / 2.0;
+              max_allowed_point_size = pts_size * 2.0;
+            }
+
             if (!globalElevationRange) globalElevationRange = globalZrange;
 
-            let material = COPCShaderLogic.create( isMobile, globalElevationRange );
+            let material = COPCShaderLogic.create( pts_size, isMobile, globalElevationRange );
 
             let copc_points = new THREE.Points( points, material );
             copc_points.name = points_name;
             copc_points.sizeAttenuation = true;
             copc_points.sortPoints = true;
 
-            if (!copc_points.geometry.getAttribute( 'intensity' )) {
+            if (!copc_points.geometry.hasAttribute( 'intensity' )) {
               const points_count = copc_points.geometry.getAttribute( 'position' ).count;
-              const ones = new Float32Array( points_count ).fill( 1.0 );
-              copc_points.geometry.setAttribute( 'intensity', new THREE.BufferAttribute( ones, 1 ) );
+              const fallbackIntensity = new Float32Array( points_count ).fill( 1.0 );
+              copc_points.geometry.setAttribute( 'intensity', new THREE.BufferAttribute( fallbackIntensity, 1 ) );
             }
 
             if (copc_points.geometry.hasAttribute( 'classification' )) classification_present = true;

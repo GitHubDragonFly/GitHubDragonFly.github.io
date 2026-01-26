@@ -75,7 +75,8 @@
       var ww = window.innerWidth, wh = window.innerHeight, isMobile;
       var reset_rotation, stats, stats_enabled, events_initialized;
       var ept_obj, selected_ept_file, selected_url_file = '';
-      var lod_displayed = false, warning_displayed = false;
+      var min_allowed_point_size, max_allowed_point_size, pts_size;
+      var lod_displayed = false, warning_displayed = false, selectedDepth;
       var url_displayed = false, url_loading = false, elevation, lutTexture;
       var extended_render, extended_count = 0, count = 0, params, halt_on_error;
       var filesMap, local_files, bounding_box, globalElevationRange, detected_classes;
@@ -209,6 +210,7 @@
 
       function set_ept_details( depth = 0 )  {
         ept_loader.setTileDepthLimit( depth );
+        selectedDepth = depth;
       }
 
       function show_lod() {
@@ -354,13 +356,16 @@
 
             // 2. Select base color attribute
             vec3 base;
+
             if (uMode == 0.0) base = color;        
             else if (uMode == 1.0) base = elevCol; 
             else base = vec3(1.0); // Use full white as multiplier for Classification Mode
 
-            vColor = base * pow(clamp(intensity, 0.001, 1.0), uIntensityGamma);
+            float i = clamp(intensity, 0.001, 1.0);
+            vColor = base * pow(i, uIntensityGamma);
 
             vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
+
             gl_PointSize = uSize * (300.0 / -mvPosition.z);
             gl_Position = projectionMatrix * mvPosition;
           }
@@ -376,6 +381,14 @@
           varying float vClass;
 
           void main() {
+             // ROUND POINTS
+             // Compute distance from center of the point
+             vec2 c = gl_PointCoord * 2.0 - 1.0;
+             float dist = dot(c, c);
+
+             // Kill fragments outside the circle
+             if (dist > 1.0) discard;
+
             // 1. THE MASTER GATEKEEPER
             // Map classification to LUT coordinate
             float u = (vClass + 0.5) / 256.0;
@@ -398,11 +411,12 @@
             }
 
             finalRGB *= uBrightness;
+
             gl_FragColor = vec4(finalRGB, uOpacity);
           }
         `,
 
-        create: function( isMobile, zRange ) {
+        create: function( size, isMobile, zRange ) {
           // 1. Generate the 256-color data using RGBA (4 values per pixel)
           // We must use 256 * 4 because RGBFormat is no longer supported.
           const data = new Uint8Array(256 * 4);
@@ -410,11 +424,11 @@
             0:[153,153,153],
             1:[255,255,255],
             2:[128,77,26],
-            3:[0,153,0],
+            3:[0,153,0,180],  // Low vegetation → 70% opaque
             4:[0,204,0],
             5:[0,255,0],
             6:[153,153,153],
-            7:[77,77,77],
+            7:[77,77,77,80],  // Low point / noise → 30% opaque
             8:[255,255,0],
             9:[0,102,255],
             10:[179,179,51],
@@ -425,7 +439,7 @@
             15:[204,128,51],
             16:[230,153,77],
             17:[255,0,255],
-            18:[51,51,51],
+            18:[51,51,51,30], // High noise → 10% opaque
             19:[180,210,210], // Overhead Machinery
             20:[150,150,100], // Ignored Ground
             21:[240,250,255], // Snow
@@ -440,10 +454,10 @@
             }
 
             const idx = i * 4;
-            data[idx + 0] = rgb[0];
-            data[idx + 1] = rgb[1];
-            data[idx + 2] = rgb[2];
-            data[idx + 3] = 255;    // A (Fully opaque by default)
+            data[ idx + 0 ] = rgb[ 0 ];
+            data[ idx + 1 ] = rgb[ 1 ];
+            data[ idx + 2 ] = rgb[ 2 ];
+            data[ idx + 3 ] = rgb[ 3 ] ? rgb[ 3 ] : 255; // Alpha (fully opaque if not defined)
           }
 
           // 2. Create the Texture with RGBAFormat
@@ -457,7 +471,7 @@
 
           return new THREE.ShaderMaterial({
             uniforms: {
-              uSize: { value: isMobile ? 1 : 5 },
+              uSize: { value: size },
               uMode: { value: 0.0 },
               uMinZ: { value: zRange?.min || 0 },
               uMaxZ: { value: zRange?.max || 100 },
@@ -562,11 +576,28 @@
         mouse_wheel = true;
       }
 
+      function estimate_spacing( geometry ) {
+        if (!geometry.boundingBox) geometry.computeBoundingBox();
+
+        const box = geometry.boundingBox;
+        const size = new THREE.Vector3();
+        box.getSize( size );
+
+        // Calculate Volume, adjust for thin models
+        const volume = size.x * (size.y > 0.001 ? size.y : 0.001) * (size.z > 0.001 ? size.z : 0.001);
+        const pointCount = geometry.attributes.position.count;
+
+        // Estimate average spacing between points
+        const avgSpacing = Math.pow( volume / pointCount, 1.0 / 3.0 );
+
+        return avgSpacing;
+      }
+
       function increase_points_size() {
         ept_obj.traverse( ( child ) => {
           if (child.isPoints) {
-            let newSize = child.material.uniforms.uSize.value * 1.2;
-            child.material.uniforms.uSize.value = Math.min( newSize, 25.0 );
+            let newSize = child.material.uniforms.uSize.value * 1.1;
+            child.material.uniforms.uSize.value = Math.min( newSize, max_allowed_point_size );
           }
         });
 
@@ -576,8 +607,8 @@
       function decrease_points_size() {
         ept_obj.traverse( ( child ) => {
           if (child.isPoints) {
-            let newSize = child.material.uniforms.uSize.value / 1.2;
-            child.material.uniforms.uSize.value = Math.max( newSize, 1.0 );
+            let newSize = child.material.uniforms.uSize.value / 1.1;
+            child.material.uniforms.uSize.value = Math.max( newSize, min_allowed_point_size );
           }
         });
 
@@ -612,7 +643,9 @@
         mouse_wheel = true;
         needsRender = false;
         local_files = null;
+        selectedDepth = 0;
         lutTexture = null;
+        pts_size = null;
         filesMap = {};
         count = 0;
         elevation = false;
@@ -626,6 +659,8 @@
         classification_enabled = false;
         classification_present = false;
         bounding_box = new THREE.Box3();
+        min_allowed_point_size = 0.1;
+        max_allowed_point_size = 1.0;
 
         if (!params) params = { gamma: 0.1, brightness: 1.25 };
 
@@ -828,9 +863,17 @@
           const points_name = 'ept_points_' + current_tile;
           const tileMap = new Map(); // tile → THREE.Points
 
+          if (!pts_size) {
+            const avgSpacing = estimate_spacing( points );
+            pts_size = ( avgSpacing / ( 3 + Math.pow( 2, selectedDepth ) ) ) * ( window.devicePixelRatio || 1.0 );
+
+            min_allowed_point_size = pts_size / 2.0;
+            max_allowed_point_size = pts_size * 2.0;
+          }
+
           if (!globalElevationRange) globalElevationRange = get_robust_range( points );
 
-          let material = EPTShaderLogic.create( isMobile, globalElevationRange );
+          let material = EPTShaderLogic.create( pts_size, isMobile, globalElevationRange );
 
           const ept_points = new THREE.Points( points, material );
           ept_points.name = points_name;
@@ -904,9 +947,17 @@
             const points_name = 'ept_points_' + current_tile;
             const tileMap = new Map(); // tile → THREE.Points
 
+            if (!pts_size) {
+              const avgSpacing = estimate_spacing( points );
+              pts_size = ( avgSpacing / ( 3 + Math.pow( 2, selectedDepth ) ) ) * ( window.devicePixelRatio || 1.0 );
+
+              min_allowed_point_size = pts_size / 2.0;
+              max_allowed_point_size = pts_size * 2.0;
+            }
+
             if (!globalElevationRange) globalElevationRange = get_robust_range( points );
 
-            let material = EPTShaderLogic.create( isMobile, globalElevationRange );
+            let material = EPTShaderLogic.create( pts_size, isMobile, globalElevationRange );
 
             let ept_points = new THREE.Points( points, material );
             ept_points.name = points_name;
@@ -958,7 +1009,7 @@
         //const boxHelper = new THREE.Box3Helper( new THREE.Box3().setFromObject( ept_obj ), 0xff0000 );
         //scene.add( boxHelper );
 
-        // Wait 2 seconds to let last node get rendered
+        // Wait 2 seconds to let last tile get rendered
         await new Promise( resolve => setTimeout( resolve, 2000 ) );
 
         // Stop flashing indicator
@@ -1211,7 +1262,7 @@
       async function scene_cleanup() {
         mouse_wheel = true;
 
-        document.getElementById('stat_nodes').innerText = '0';
+        document.getElementById('stat_tiles').innerText = '0';
         document.getElementById('stat_points').innerText = '0';
 
         if (stats_enabled) set_statistics();
