@@ -45,6 +45,7 @@ class COPCStreamLoader extends Loader {
 
 		super( manager );
 
+		this.spacing = 1;
 		this.skipPoints = 1;
 		this.skipColor = false;
 		this.skipIntensity = false;
@@ -343,6 +344,8 @@ class COPCStreamLoader extends Loader {
 
 		const copc = await Copc.create( url );
 
+		this.spacing = copc.info?.spacing;
+
 		const { nodes, pages } = await Copc.loadHierarchyPage(
 			url,
 			copc.info.rootHierarchyPage
@@ -416,7 +419,7 @@ class COPCStreamLoader extends Loader {
 
 				}
 
-				onNodeLoaded( rootGeom, totalSelectedNodes, '0-0-0-0', globalZRange );
+				onNodeLoaded( rootGeom, totalSelectedNodes, '0-0-0-0', globalZRange, this.spacing );
 
 			}
 
@@ -442,7 +445,7 @@ class COPCStreamLoader extends Loader {
 
 				if ( geom && onNodeLoaded ) {
 
-					onNodeLoaded( geom, totalSelectedNodes, key, globalZRange );
+					onNodeLoaded( geom, totalSelectedNodes, key, globalZRange, this.spacing );
 
 				}
 
