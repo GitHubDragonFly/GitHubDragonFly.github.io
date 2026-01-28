@@ -4,7 +4,6 @@ import {
 	DefaultLoadingManager,
 	Matrix3,
 	Points,
-	PointsMaterial,
 	Vector3
 } from 'three';
 
