@@ -400,6 +400,7 @@ class PCDLoader extends Loader {
 		const color = [];
 		const alpha = [];
 		const intensity = [];
+		const classification = [];
 		const label = [];
 
 		const c = new Color();
@@ -491,6 +492,12 @@ class PCDLoader extends Loader {
 
 				}
 
+				if ( offset.classification !== undefined ) {
+
+					classification.push( parseInt( line[ offset.classification ] ) );
+
+				}
+
 				if ( offset.label !== undefined ) {
 
 					label.push( parseInt( line[ offset.label ] ) );
@@ -510,8 +517,11 @@ class PCDLoader extends Loader {
 		if ( PCDheader.data === 'binary_compressed' ) {
 
 			const sizes = new Uint32Array( data.slice( PCDheader.headerLen, PCDheader.headerLen + 8 ) );
+
 			const compressedSize = sizes[ 0 ];
+
 			const decompressedSize = sizes[ 1 ];
+
 			const decompressed = decompressLZF( new Uint8Array( data, PCDheader.headerLen + 8, compressedSize ), decompressedSize );
 
 			const dataview = new DataView( decompressed.buffer, decompressed.byteOffset, decompressed.byteLength );
@@ -671,6 +681,18 @@ class PCDLoader extends Loader {
 
 				}
 
+				// --- CLASSIFICATION ---
+
+				if ( fieldOffsets.classification !== undefined ) {
+
+					const classificationIndex = PCDheader.fields.indexOf( 'classification' );
+					const classificationSize = PCDheader.size[ classificationIndex ];
+					const classificationType = PCDheader.type[ classificationIndex ];
+
+					classification.push( this._getDataView( dataview, fieldOffsets.classification + classificationSize * i, classificationType, classificationSize ) );
+
+				}
+
 				// --- LABEL ---
 
 				if ( fieldOffsets.label !== undefined ) {
@@ -747,6 +769,13 @@ class PCDLoader extends Loader {
 
 				}
 
+				if ( offset.classification !== undefined ) {
+
+					const classificationIndex = PCDheader.fields.indexOf( 'classification' );
+					classification.push( this._getDataView( dataview, row + offset.classification, PCDheader.type[ classificationIndex ], PCDheader.size[ classificationIndex ] ) );
+
+				}
+
 				if ( offset.label !== undefined ) {
 
 					label.push( dataview.getInt32( row + offset.label, this.littleEndian ) );
@@ -766,6 +795,7 @@ class PCDLoader extends Loader {
 		if ( color.length > 0 ) geometry.setAttribute( 'color', new Float32BufferAttribute( color, 3 ) );
 		if ( alpha.length > 0 ) geometry.setAttribute( 'alpha', new Float32BufferAttribute( alpha, 1 ) );
 		if ( intensity.length > 0 ) geometry.setAttribute( 'intensity', new Float32BufferAttribute( intensity, 1 ) );
+		if ( classification.length > 0 ) geometry.setAttribute( 'classification', new Int32BufferAttribute( classification, 1 ) );
 		if ( label.length > 0 ) geometry.setAttribute( 'label', new Int32BufferAttribute( label, 1 ) );
 
 		geometry.computeBoundingSphere();
