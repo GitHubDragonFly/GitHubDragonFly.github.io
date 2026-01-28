@@ -445,9 +445,14 @@ Number Type Converter
         - Custom three.js compatible BIM Loader is also available
       - Alternative [three-iges-loader](https://github.com/Konsept-Design/three-iges-loader) when the main loader errors out
 - Export formats, where applicable:
-  - 3DM, 3MF, AMF, BIM, DAE, APNG, FBX, STEP, X3D, X, ASSJSON, GCODE, GIF, GLB, GLTF, JSON, OBJ + MTL, OFF, PLY, STL, PRWM, USDZ
+  - 3DM, 3MF, AMF, BIM, DAE, APNG, FBX, STEP, X3D, X, ASSJSON, GCODE, GIF, GLB, GLTF, JSON, OBJ + MTL, OFF, PCD, PLY, STL, PRWM, USDZ
     - OFF exports are only available in the Quick Viewer, as stated further above
     - BIM exports are available in the Quick Viewer as well as some other viewers with custom BIM Exporter
+    - PCD exporter was created with assistance from Microsoft Copilot and Google Gemini:
+      - This is a custom exporter not officially available in the three.js library
+      - Supported export formats: ascii, binary, binary_compressed:
+        - It is internally using [lzfjs](https://github.com/McSimp/lzfjs) compressor
+      - Currently available in the desktop version of PCD+XYZ+LAS Viewer
     - 3MF exporter was created with assistance from Microsoft Copilot:
       - This is a custom exporter not officially available in the three.js library
       - It supports basic features: vertex colors, material arrays and the mesh `material.map` texture exporting
