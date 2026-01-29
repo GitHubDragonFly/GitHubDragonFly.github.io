@@ -494,7 +494,7 @@ class PCDLoader extends Loader {
 
 				if ( offset.classification !== undefined ) {
 
-					classification.push( parseInt( line[ offset.classification ] ) );
+					classification.push( parseFloat( line[ offset.classification ] ) );
 
 				}
 
@@ -795,7 +795,7 @@ class PCDLoader extends Loader {
 		if ( color.length > 0 ) geometry.setAttribute( 'color', new Float32BufferAttribute( color, 3 ) );
 		if ( alpha.length > 0 ) geometry.setAttribute( 'alpha', new Float32BufferAttribute( alpha, 1 ) );
 		if ( intensity.length > 0 ) geometry.setAttribute( 'intensity', new Float32BufferAttribute( intensity, 1 ) );
-		if ( classification.length > 0 ) geometry.setAttribute( 'classification', new Int32BufferAttribute( classification, 1 ) );
+		if ( classification.length > 0 ) geometry.setAttribute( 'classification', new Float32BufferAttribute( classification, 1 ) );
 		if ( label.length > 0 ) geometry.setAttribute( 'label', new Int32BufferAttribute( label, 1 ) );
 
 		geometry.computeBoundingSphere();
