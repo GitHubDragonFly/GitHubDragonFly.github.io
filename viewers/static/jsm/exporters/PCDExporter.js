@@ -10,8 +10,6 @@ import {
 // https://github.com/McSimp/lzfjs
 import * as compressor from 'https://esm.sh/lzfjs@1.0.1';
 
-const _tempVec = new Vector3();
-
 /**
 *
 *	Custom PCD Exporter created with assistance from Microsoft Copilot and Google Gemini
@@ -50,6 +48,7 @@ class PCDExporter {
 	constructor( manager ) {
 
 		this.manager = manager || DefaultLoadingManager;
+		this._tempVec = new Vector3(); // Unique to this instance
 
 	}
 
@@ -63,6 +62,8 @@ class PCDExporter {
 
 		const scope = this;
 
+		const missingSourceWarnings = new Set();
+
 		const defaultOptions = {
 
 			binary: false,
@@ -72,11 +73,67 @@ class PCDExporter {
 			includeClassification: true,
 			includeAlpha: false,
 			includeColors: true,
-			colorUnsigned: false
+			colorUnsigned: false,
+			intensityType: 'U2',         // F4 or U4 or 'U2' or 'U1'
+			classificationType: 'U1',    // U4 or 'U2' or 'U1'
+			customFields: []
+			// For example, add the following custom fields where
+                        // count, scale and offset are optional
+			// [
+			//   { name: 'timestamp', type: 'F', size: 8, count: 1, source: 'attributeName', scale: 1, offset: 0 },
+			//   { name: 'semantic_id', type: 'U', size: 2, count: 1, source: 'semantic', scale: 1, offset: 0 },
+			//   { name: 'gps', type: 'F', size: 8, count: 3, source: 'gps', scale: 1, offset: 0 }
+			// ]
 
 		};
 
 		options = Object.assign( defaultOptions, options );
+
+		if ( ![ 'U1', 'U2', 'U4', 'F4' ].includes( options.intensityType ) ) {
+
+			throw new Error( 'Invalid intensityType - valid values: U1, U2, U4, F4' );
+
+		}
+
+		if ( ![ 'U1', 'U2', 'U4' ].includes( options.classificationType ) ) {
+
+			throw new Error( 'Invalid classificationType - valid values: U1, U2, U4' );
+
+		}
+
+		if ( options.customFields.length > 0 ) {
+
+			for ( const field of options.customFields ) {
+
+				if ( !/^[A-Za-z_][A-Za-z0-9_]*$/.test( field.name ) ) {
+
+					throw new Error( `Invalid custom field name: ${ field.name }` );
+
+				} else if ( ![ 'U', 'F' ].includes( field.type ) ) {
+
+					throw new Error( 'Invalid custom field type - valid values: U, F' );
+
+				} else if ( ![ 1, 2, 4, 8 ].includes( field.size ) ) {
+
+					throw new Error( 'Invalid custom field size - valid values: 1, 2, 4, 8' );
+
+				} else if ( field.count != null && field.count < 1 ) {
+
+					throw new Error( 'Invalid custom field count - valid values: >= 1' );
+
+				} else if ( typeof field.source !== 'string' ) {
+
+					throw new Error( 'Invalid custom field source - requires string value' );
+
+				} else if ( field.scale != null && field.scale <= 0 ) {
+
+					throw new Error( 'Invalid custom field scale - valid values: >= 0' );
+
+				}
+
+			}
+
+		}
 
 		scene.updateMatrixWorld( true, true );
 
@@ -84,6 +141,12 @@ class PCDExporter {
 		let points_count = 0;
 		const layout = [];
 		let pcd;
+
+		function _linearToSRGB( x ) {
+
+			return x <= 0.0031308 ? x * 12.92 : 1.055 * Math.pow( x, 1.0 / 2.4 ) - 0.055;
+
+		}
 
 		// Unified color packing helper
 		// Handles RGB and RGBA, float and unsigned
@@ -125,6 +188,8 @@ class PCDExporter {
 
 			} );
 
+			if ( points_count === 0 ) return;
+
 			if ( pointClouds.length > 1 ) {
 
 				const geoms = pointClouds.map( pc => {
@@ -140,110 +205,145 @@ class PCDExporter {
 
 			}
 
-			// Detect fields
+			// --- 1) Detect fields ---
 
 			const hasColor = options.includeColors && pointClouds.some( pc => pc.geometry.attributes.color );
 			const hasNormal = options.includeNormals && pointClouds.some( pc => pc.geometry.attributes.normal );
 			const hasIntensity = options.includeIntensity && pointClouds.some( pc => pc.geometry.attributes.intensity );
 			const hasClassification = options.includeClassification && pointClouds.some( pc => pc.geometry.attributes.classification );
 
-			// Build header
+			const fieldNames = [];
+			const fieldSizes = [];
+			const fieldTypes = [];
+			const fieldCounts = [];
 
-			const fields = [ 'x', 'y', 'z' ];
-			const size = [ 4, 4, 4 ];
-			const type = [ 'F', 'F', 'F' ];
-			const count = [ 1, 1, 1 ];
+			function addField( name, t, s, c = 1, src, scl = 1, off = 0 ) {
 
-			layout.push({ name: 'x', type: 'F', size: 4 });
-			layout.push({ name: 'y', type: 'F', size: 4 });
-			layout.push({ name: 'z', type: 'F', size: 4 });
+				layout.push( { name, type: t, size: s, count: c, source: src, scale: scl, offset: off } );
+
+				fieldNames.push( name );
+				fieldTypes.push( t );
+				fieldSizes.push( s );
+				fieldCounts.push( c );
+
+			}
+
+			// XYZ
+
+			addField( 'x', 'F', 4, 1, 'position' );
+			addField( 'y', 'F', 4, 1, 'position' );
+			addField( 'z', 'F', 4, 1, 'position' );
 
 			if ( hasNormal ) {
 
-				layout.push( { name: 'normal_x', type: 'F', size: 4 } );
-				layout.push( { name: 'normal_y', type: 'F', size: 4 } );
-				layout.push( { name: 'normal_z', type: 'F', size: 4 } );
-
-				fields.push( 'normal_x', 'normal_y', 'normal_z' );
-				size.push( 4, 4, 4 );
-				type.push( 'F', 'F', 'F' );
-				count.push( 1, 1, 1 );
+				addField( 'normal_x', 'F', 4, 1, 'normal' );
+				addField( 'normal_y', 'F', 4, 1, 'normal' );
+				addField( 'normal_z', 'F', 4, 1, 'normal' );
 
 			}
 
 			if ( hasIntensity ) {
 
-				layout.push( { name: 'intensity', type: 'F', size: 4 } );
+				const t = options.intensityType[ 0 ]; // 'U' or 'F'
+				const s = parseInt( options.intensityType.slice( 1 ) ); // 1, 2, 4
 
-				fields.push( 'intensity' );
-				size.push( 4 );
-				type.push( 'F' );
-				count.push( 1 );
+				addField( 'intensity', t, s, 1, 'intensity' );
 
 			}
 
 			if ( hasClassification ) {
 
-				layout.push( { name: 'classification', type: 'U', size: 4 } );
+				const s = parseInt( options.classificationType.slice( 1 ) ); // 1, 2, 4
 
-				fields.push( 'classification' );
-				size.push( 4 );
-				type.push( 'U' );
-				count.push( 1 );
+				addField( 'classification', 'U', s, 1, 'classification' );
 
 			}
 
 			if ( hasColor ) {
 
-				layout.push({
-					name: options.includeAlpha ? 'rgba' : 'rgb',
-					type: options.colorUnsigned ? 'U' : 'F',
-					size: 4
-				});
+				const name = options.includeAlpha ? 'rgba' : 'rgb';
+				const t = options.colorUnsigned ? 'U' : 'F';
 
-				fields.push( options.includeAlpha ? 'rgba' : 'rgb' );
-				size.push( 4 );
-				type.push( options.colorUnsigned ? 'U' : 'F' );
-				count.push( 1 );
+				addField( name, t, 4, 1, 'color' );
 
 			}
+
+			if ( options.customFields.length > 0 ) {
+
+				// Use the first point cloud (merged or single)
+
+				const pc = pointClouds[ 0 ];
+
+				for ( const cf of options.customFields ) {
+
+					// Auto-detect count if not provided
+
+					const attr = pc.geometry.getAttribute( cf.source );
+
+					let detectedCount = cf.count;
+
+					if ( detectedCount === null ) {
+
+						if ( attr ) {
+
+							detectedCount = attr.itemSize; // auto-detect from attribute
+
+						} else {
+
+							detectedCount = 1; // fallback to scalar
+
+						}
+
+					} else if ( attr && attr.itemSize !== cf.count) {
+
+						console.warn( `PCD Exporter: Custom field "${ cf.name }" expects count ${ cf.count }, ` + `but attribute "${ cf.source }" has itemSize ${ attr.itemSize }.` );
+
+					}
+
+					addField( cf.name, cf.type, cf.size, detectedCount, cf.source, cf.scale ?? 1, cf.offset ?? 0, );
+
+				}
+
+			}
+
+			const mode = options.binaryCompressed
+				? 'binary_compressed'
+				: options.binary
+					? 'binary'
+					: 'ascii';
+
+			// A tiny 0.1 degree rotation on the X axis to mark this file 
+			// as "Handled" so the loader doesn't apply automatic Z-up fixes.
+
+			const qw = 0.9999996192;
+			const qx = 0.0008726646;
 
 			let header =
 				`# Created by the custom PCD Exporter\n` +
 				`# .PCD v0.7 - Point Cloud Data file format\n` +
 				`VERSION 0.7\n` +
-				`FIELDS ${ fields.join( ' ' ) }\n` +
-				`SIZE ${ size.join( ' ' ) }\n` +
-				`TYPE ${ type.join( ' ' ) }\n` +
-				`COUNT ${ count.join( ' ' ) }\n` +
+				`FIELDS ${ fieldNames.join( ' ' ) }\n` +
+				`SIZE ${ fieldSizes.join( ' ' ) }\n` +
+				`TYPE ${ fieldTypes.join( ' ' ) }\n` +
+				`COUNT ${ fieldCounts.join( ' ' ) }\n` +
 				`WIDTH ${ points_count }\n` +
 				`HEIGHT 1\n` +
-				`VIEWPOINT 0 0 0 0.9999996192 0.0008726646 0 0\n` +
+				`VIEWPOINT 0 0 0 ${ qw.toFixed( 10 ) } ${ qx.toFixed( 10 ) } 0 0\n` +
 				`POINTS ${ points_count }\n` +
-				`DATA ${
-					options.binaryCompressed
-						? 'binary_compressed'
-						: options.binary
-							? 'binary'
-							: 'ascii'
-				}\n`;
+				`DATA ${ mode }\n`;
 
-			// Serialize data
+			const stride = layout.reduce( ( sum, f ) => sum + f.size * f.count, 0 );
 
+			let buffer = null;
+			let view   = null;
+			let offset = 0;
 			const lines = [];
-			let body = '', bytesPerPoint, buffer, view, offset;
 
 			if ( options.binary || options.binaryCompressed ) {
 
-				// XYZ float32 + normals float32 + intensity float32 + rgb uint32
-				bytesPerPoint = 3 * 4 +
-					( hasNormal ? 3 * 4 : 0 ) +
-					( hasIntensity ? 4 : 0 ) +
-					( hasClassification ? 4 : 0 ) +
-					( hasColor ? 4 : 0 );
-
+				const bytesPerPoint = stride;
 				buffer = new ArrayBuffer( bytesPerPoint * points_count );
-				view = new DataView( buffer );
+				view   = new DataView( buffer );
 				offset = 0;
 
 			}
@@ -260,194 +360,70 @@ class PCDExporter {
 				const worldMatrix = pc.matrixWorld;
 				const normalMatrix = new Matrix3().getNormalMatrix( worldMatrix );
 
+				const ctx = {
+					pos,
+					normalAttr,
+					intensityAttr,
+					classificationAttr,
+					colorAttr,
+					alphaAttr,
+					worldMatrix,
+					normalMatrix,
+					options,
+					packColor: ( i ) => {
+
+						const r = colorAttr ? _linearToSRGB( colorAttr.getX( i ) ) * 255 : 255;
+						const g = colorAttr ? _linearToSRGB( colorAttr.getY( i ) ) * 255 : 255;
+						const b = colorAttr ? _linearToSRGB( colorAttr.getZ( i ) ) * 255 : 255;
+
+						if ( options.includeAlpha ) {
+
+							const a = Math.min( 255, Math.max( 0, alphaAttr
+								? alphaAttr.getX( i ) * 255
+								: pc.material.opacity * 255 ) );
+
+							return _packColor( r, g, b, a, options.colorUnsigned, true );
+
+						} else {
+
+							return _packColor( r, g, b, 255, options.colorUnsigned, false );
+
+						}
+
+					}
+
+				};
+
 				for ( let i = 0; i < pos.count; i++ ) {
-
-					// --- WORLD-SPACE POSITION ---
-
-					_tempVec.fromBufferAttribute( pos, i );
-					_tempVec.applyMatrix4( worldMatrix );
-
-					const x = _tempVec.x;
-					const y = _tempVec.y;
-					const z = _tempVec.z;
 
 					if ( !options.binary && !options.binaryCompressed ) {
 
-						body += `${ x } ${ y } ${ z }`;
+						let line = '';
 
-						if ( hasNormal ) {
+						for ( const field of layout ) {
 
-							_tempVec.fromBufferAttribute( normalAttr, i );
-							_tempVec.applyMatrix3( normalMatrix ).normalize();
+							const value = scope._readFieldValue( field, i, pc, ctx );
 
-							const nx = _tempVec.x;
-							const ny = _tempVec.y;
-							const nz = _tempVec.z;
+							if ( Array.isArray( value ) ) {
 
-							body += ` ${ nx } ${ ny } ${ nz }`;
-
-						}
-
-						if ( hasIntensity ) {
-
-							const intensity = intensityAttr ? intensityAttr.getX( i ) : 1.0;
-
-							body += ` ${ intensity }`;
-
-						}
-
-						if ( hasClassification ) {
-
-							const cls = classificationAttr ? classificationAttr.getX( i ) : 0;
-
-							body += ` ${ cls }`;
-
-						}
-
-
-						if ( hasColor ) {
-
-							const r = colorAttr ? colorAttr.getX( i ) * 255 : 255;
-							const g = colorAttr ? colorAttr.getY( i ) * 255 : 255;
-							const b = colorAttr ? colorAttr.getZ( i ) * 255 : 255;
-
-							if ( options.includeAlpha ) {
-
-								const a = Math.min( 255, Math.max( 0, alphaAttr
-									? alphaAttr.getX( i ) * 255
-									: pc.material.opacity * 255));
-
-								const rgba = _packColor(
-									r, g, b, a,
-									options.colorUnsigned,
-									true
-								);
-
-								body += ` ${ rgba }`;
+								for ( const v of value ) line += v + ' ';
 
 							} else {
 
-								const rgb = _packColor(
-									r, g, b,
-									255,                   // ignored when hasAlpha = false
-									options.colorUnsigned,
-									false                  // no alpha
-								);
-
-								body += ` ${ rgb }`;
+								line += value + ' ';
 
 							}
 
 						}
 
-						body += '\n';
-						lines.push( body );
-						body = '';
+						lines.push( line.trim() + '\n' );
 
 					} else {
 
-						// BINARY MODE
+						for ( const field of layout ) {
 
-						// XYZ
-
-						view.setFloat32( offset, x, true );
-						offset += 4;
-						view.setFloat32( offset, y, true );
-						offset += 4;
-						view.setFloat32( offset, z, true );
-						offset += 4;
-
-						// Normals
-
-						if ( hasNormal ) {
-
-							_tempVec.fromBufferAttribute( normalAttr, i );
-							_tempVec.applyMatrix3( normalMatrix ).normalize();
-
-							const nx = _tempVec.x;
-							const ny = _tempVec.y;
-							const nz = _tempVec.z;
-
-							view.setFloat32( offset, nx, true );
-							offset += 4;
-							view.setFloat32( offset, ny, true );
-							offset += 4;
-							view.setFloat32( offset, nz, true );
-							offset += 4;
-
-						}
-
-						if ( hasIntensity ) {
-
-							const intensity = intensityAttr ? intensityAttr.getX( i ) : 1.0;
-
-							view.setFloat32( offset, intensity, true );
-							offset += 4;
-
-						}
-
-						if ( hasClassification ) {
-
-							const cls = classificationAttr ? classificationAttr.getX( i ) : 0;
-
-							view.setUint32( offset, cls, true );
-							offset += 4;
-
-						}
-
-						// RGB
-
-						if ( hasColor ) {
-
-							const r = colorAttr ? colorAttr.getX( i ) * 255 : 255;
-							const g = colorAttr ? colorAttr.getY( i ) * 255 : 255;
-							const b = colorAttr ? colorAttr.getZ( i ) * 255 : 255;
-
-							if ( options.includeAlpha ) {
-
-								const a = Math.min( 255, Math.max( 0, alphaAttr
-									? alphaAttr.getX( i ) * 255
-									: pc.material.opacity * 255));
-
-								const rgba = _packColor(
-									r, g, b, a,
-									options.colorUnsigned,
-									true
-								);
-
-								if ( options.colorUnsigned ) {
-
-									view.setUint32( offset, rgba, true );
-
-								} else {
-
-									view.setFloat32( offset, rgba, true );
-
-								}
-
-							} else {
-
-								const rgb = _packColor(
-									r, g, b,
-									255,                   // ignored when hasAlpha = false
-									options.colorUnsigned,
-									false                  // no alpha
-								);
-
-								if ( options.colorUnsigned ) {
-
-									view.setUint32( offset, rgb, true );
-
-								} else {
-
-									view.setFloat32( offset, rgb, true );
-
-								}
-
-							}
-
-
-							offset += 4;
+							const value = scope._readFieldValue( field, i, pc, ctx );
+							offset = scope._writeFieldBinary( field, value, view, offset );
 
 						}
 
@@ -473,17 +449,17 @@ class PCDExporter {
 
 				if ( options.binaryCompressed ) {
 
-					// fields = ['x','y','z','intensity','rgb'] or whatever
+					// fieldNames = ['x','y','z','intensity','rgb'] or whatever
 
-					const fieldCount = fields.length;
+					const fieldCount = fieldNames.length;
 
 					// Convert AoS float buffer into SoA
 
-					const soaBuffer = scope._buildSoA( buffer, points_count, layout );
+					let soaBuffer = scope._buildSoA( buffer, points_count, layout );
 
 					// Now compress the SoA buffer
 
-					const compressed = compressor.compress( soaBuffer ); //( new Uint8Array( soaBuffer ) );
+					const compressed = compressor.compress( soaBuffer );
 					const compressedSize = compressed.length;
 					const uncompressedSize = soaBuffer.byteLength;
 
@@ -496,6 +472,8 @@ class PCDExporter {
 					pcd.set( sizeBytes, headerBytes.length );
 					pcd.set( compressed, headerBytes.length + sizeBytes.length );
 
+					soaBuffer = null;
+
 				} else {
 
 					pcd = new Uint8Array( headerBytes.length + buffer.byteLength );
@@ -503,6 +481,8 @@ class PCDExporter {
 					pcd.set( new Uint8Array( buffer ), headerBytes.length );
 
 				}
+
+				buffer = null;
 
 			}
 
@@ -517,11 +497,9 @@ class PCDExporter {
 				onError( 'THREE.PCDExporter: No qualifying objects found!' );
 				return null;
 
-			} else {
-
-				throw new Error( 'THREE.PCDExporter: No qualifying objects found!' );
-
 			}
+
+			throw new Error( 'THREE.PCDExporter: No qualifying objects found!' );
 
 		} else {
 
@@ -529,13 +507,171 @@ class PCDExporter {
 
 				onDone( pcd );
 
-			} else {
+			}
 
-				return pcd;
+			return pcd;
+
+		}
+
+	}
+
+	_readFieldValue( field, i, pc, ctx ) {
+
+		const {
+
+			pos, normalAttr, intensityAttr, classificationAttr,
+			colorAttr, alphaAttr, worldMatrix, normalMatrix,
+			options, packColor
+
+		} = ctx;
+
+		switch ( field.name ) {
+
+			case 'x':
+			case 'y':
+			case 'z': {
+
+				this._tempVec.fromBufferAttribute( pos, i );
+				this._tempVec.applyMatrix4( worldMatrix );
+
+				if ( field.name === 'x' ) return this._tempVec.x;
+				if ( field.name === 'y' ) return this._tempVec.y;
+				return this._tempVec.z;
+
+			}
+
+			case 'normal_x':
+			case 'normal_y':
+			case 'normal_z': {
+
+				if ( !normalAttr ) return 0;
+
+				this._tempVec.fromBufferAttribute( normalAttr, i );
+				this._tempVec.applyMatrix3( normalMatrix ).normalize();
+
+				if ( field.name === 'normal_x' ) return this._tempVec.x;
+				if ( field.name === 'normal_y' ) return this._tempVec.y;
+				return this._tempVec.z;
+
+			}
+
+			case 'intensity':
+
+				return intensityAttr ? intensityAttr.getX( i ) : 1.0;
+
+			case 'classification':
+
+				return classificationAttr ? classificationAttr.getX( i ) : 0;
+
+			case 'rgb':
+			case 'rgba':
+
+				return packColor( i );
+
+			default: {
+
+				const attr = pc.geometry.getAttribute( field.source );
+
+				if ( !attr ) {
+
+					// Warn once per missing source
+
+					if ( !missingSourceWarnings.has( field.source ) ) {
+
+						console.warn( `PCD Exporter: Missing attribute "${ field.source }" for field "${ field.name }". ` + `Falling back to default value 0.` );
+
+						missingSourceWarnings.add( field.source );
+
+					}
+
+					return field.count === 1
+						? field.offset
+						: Array( field.count ).fill( field.offset );
+
+				}
+
+				if ( attr.itemSize < field.count ) {
+
+					console.warn( `PCD Exporter: Attribute "${ field.source }" has itemSize ${ attr.itemSize }, but field "${ field.name }" expects count ${ field.count }.`);
+
+				}
+
+				if ( field.count === 1 ) {
+
+					let v = attr.getX( i );
+					v = v * field.scale + field.offset;
+					return v;
+
+				}
+
+				// Multi-component
+
+				const values = [];
+
+				for ( let c = 0; c < field.count; c++ ) {
+
+					let v = attr.getComponent( i, c );
+					v = v * field.scale + field.offset;
+					values.push( v );
+
+				}
+
+				return values;
 
 			}
 
 		}
+
+	}
+
+	_writeFieldBinary( field, value, view, offset ) {
+
+		if ( field.count === 1 ) {
+
+			return this._writeOne( field, value, view, offset );
+
+		}
+
+		for ( let c = 0; c < field.count; c++ ) {
+
+			offset = this._writeOne( field, value[ c ], view, offset );
+
+		}
+
+		return offset;
+
+	}
+
+	_writeOne( field, v, view, offset ) {
+
+		switch ( field.type ) {
+
+			case 'F':
+
+				if ( field.size === 4 ) view.setFloat32( offset, v, true );
+				else view.setFloat64( offset, v, true );
+
+				break;
+
+			case 'U':
+
+				if ( field.size === 1 ) view.setUint8( offset, v );
+				else if ( field.size === 2 ) view.setUint16( offset, v, true );
+				else view.setUint32( offset, v, true );
+
+				break;
+
+			case 'I':
+
+				if ( field.size === 1 ) view.setInt8( offset, v );
+				else if ( field.size === 2 ) view.setInt16( offset, v, true );
+				else view.setInt32( offset, v, true );
+
+				break;
+
+		}
+
+		return offset + field.size;
 
 	}
 
@@ -548,6 +684,10 @@ class PCDExporter {
 		// Defensive checks for malformed attributes
 
 		if ( attrib.count === 0 || attrib.itemSize === 0 ) return null;
+
+		// If already normalized (float32), return as-is
+
+		if ( attrib.array instanceof Float32Array ) { return attrib; }
 
 		const count = attrib.count;
 		const itemCount = attrib.itemSize;
@@ -735,31 +875,26 @@ class PCDExporter {
 
 	_buildSoA( aosBuffer, pointCount, layout ) {
 
-		const stride = layout.reduce( ( sum, f ) => sum + f.size, 0 );
-
+		const stride = layout.reduce( ( sum, f ) => sum + f.size * f.count, 0 );
 		const out = new Uint8Array( pointCount * stride );
-		const inView = new DataView( aosBuffer );
+		const fullAoS = new Uint8Array( aosBuffer );
 
 		let outOffset = 0;
 		let fieldOffsetInStride = 0;
 
 		for ( let f = 0; f < layout.length; f++ ) {
 
-			const size = layout[ f ].size;
+			const fieldSize = layout[ f ].size * layout[ f ].count;
 
 			for ( let i = 0; i < pointCount; i++ ) {
 
 				const inOffset = ( i * stride ) + fieldOffsetInStride;
-
-				for ( let b = 0; b < size; b++ ) {
-
-					out[ outOffset++ ] = inView.getUint8( inOffset + b );
-
-				}
+				out.set( fullAoS.subarray( inOffset, inOffset + fieldSize ), outOffset );
+				outOffset += fieldSize;
 
 			}
 
-			fieldOffsetInStride += size;
+			fieldOffsetInStride += fieldSize;
 
 		}
 
