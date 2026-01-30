@@ -21,7 +21,10 @@ import {
  * - x y z
  * - rgb
  * - rgba (thanks to assistance from Microsoft Copilot)
+ * - r g b (separate instances - thanks to assistance from Microsoft Copilot)
+ * - r g b a (separate instances - thanks to assistance from Microsoft Copilot)
  * - normal_x normal_y normal_z
+ * - classification
  * - intensity
  * - label
  *
@@ -428,7 +431,39 @@ class PCDLoader extends Loader {
 
 				}
 
-				if ( offset.rgb !== undefined ) {
+				// Separate R/G/B(/A) support
+
+				if ( offset.r !== undefined && offset.g !== undefined && offset.b !== undefined ) {
+
+					const rIndex = PCDheader.fields.indexOf( 'r' );
+					const gIndex = PCDheader.fields.indexOf( 'g' );
+					const bIndex = PCDheader.fields.indexOf( 'b' );
+
+					const rType = PCDheader.type[ rIndex ];
+					const gType = PCDheader.type[ gIndex ];
+					const bType = PCDheader.type[ bIndex ];
+
+					let r = parseInt( line[ offset.r ] ) / 255.0;
+					let g = parseInt( line[ offset.g ] ) / 255.0;
+					let b = parseInt( line[ offset.b ] ) / 255.0;
+
+					c.setRGB( r, g, b );
+					color.push( c.r, c.g, c.b );
+
+					// Optional alpha channel
+
+					if ( offset.a !== undefined ) {
+
+						const aIndex = PCDheader.fields.indexOf( 'a' );
+						const aType = PCDheader.type[ aIndex ];
+
+						let a = parseFloat( line[ offset.a ] );
+						if ( aType === 'U' ) a /= 255.0;
+						alpha.push( a );
+
+					}
+
+				} else if ( offset.rgb !== undefined ) {
 
 					const rgb_field_index = PCDheader.fields.findIndex( ( field ) => field === 'rgb' );
 					const rgb_type = PCDheader.type[ rgb_field_index ];
@@ -453,9 +488,7 @@ class PCDLoader extends Loader {
 					c.setRGB( r, g, b, SRGBColorSpace );
 					color.push( c.r, c.g, c.b );
 
-				}
-
-				if ( offset.rgba !== undefined ) {
+				} else if ( offset.rgba !== undefined ) {
 
 					const rgba_field_index = PCDheader.fields.indexOf( 'rgba' );
 					const rgba_type = PCDheader.type[ rgba_field_index ];
@@ -582,9 +615,55 @@ class PCDLoader extends Loader {
 
 				}
 
-				// --- RGB ---
+				if ( fieldOffsets.r !== undefined &&
+					fieldOffsets.g !== undefined &&
+						fieldOffsets.b !== undefined) {
 
-				if ( fieldOffsets.rgb !== undefined ) {
+					// --- SEPARATE R/G/B(/A) ---
+
+					const rIndex = PCDheader.fields.indexOf( 'r' );
+					const gIndex = PCDheader.fields.indexOf( 'g' );
+					const bIndex = PCDheader.fields.indexOf( 'b' );
+
+					const rSize = PCDheader.size[ rIndex ];
+					const gSize = PCDheader.size[ gIndex ];
+					const bSize = PCDheader.size[ bIndex ];
+
+					const rType = PCDheader.type[ rIndex ];
+					const gType = PCDheader.type[ gIndex ];
+					const bType = PCDheader.type[ bIndex ];
+
+					// Read raw values
+
+					const rRaw = this._getDataView( dataview, fieldOffsets.r + rSize * i, rType, rSize );
+					const gRaw = this._getDataView( dataview, fieldOffsets.g + gSize * i, gType, gSize );
+					const bRaw = this._getDataView( dataview, fieldOffsets.b + bSize * i, bType, bSize );
+
+					// Normalize U1 → float
+
+					const r = rRaw / 255.0;
+					const g = gRaw / 255.0;
+					const b = bRaw / 255.0;
+
+					c.setRGB( r, g, b );
+					color.push( c.r, c.g, c.b );
+
+					// Optional alpha
+
+					if ( fieldOffsets.a !== undefined ) {
+
+						const aIndex = PCDheader.fields.indexOf( 'a' );
+						const aSize = PCDheader.size[ aIndex ];
+						const aType = PCDheader.type[ aIndex ];
+
+						const aRaw = this._getDataView( dataview, fieldOffsets.a + aSize * i, aType, aSize );
+						alpha.push( aRaw / 255.0 );
+
+					}
+
+				} else if ( fieldOffsets.rgb !== undefined ) {
+
+					// --- RGB ---
 
 					const rgbIndex = PCDheader.fields.indexOf( 'rgb' );
 					const rgbSize = PCDheader.size[ rgbIndex ];
@@ -614,11 +693,9 @@ class PCDLoader extends Loader {
 					c.setRGB( r / 255.0, g / 255.0, b / 255.0, SRGBColorSpace );
 					color.push( c.r, c.g, c.b );
 
-				}
+				} else if ( fieldOffsets.rgba !== undefined ) {
 
-				// --- RGBA ---
-
-				if ( fieldOffsets.rgba !== undefined ) {
+					// --- RGBA ---
 
 					const rgbaIndex = PCDheader.fields.indexOf( 'rgba' );
 					const rgbaSize = PCDheader.size[ rgbaIndex ];
@@ -728,7 +805,53 @@ class PCDLoader extends Loader {
 
 				}
 
-				if ( offset.rgb !== undefined ) {
+				if ( offset.r !== undefined &&
+					offset.g !== undefined &&
+						offset.b !== undefined ) {
+
+					// --- SEPARATE R/G/B(/A) ---
+
+					const rIndex = PCDheader.fields.indexOf( 'r' );
+					const gIndex = PCDheader.fields.indexOf( 'g' );
+					const bIndex = PCDheader.fields.indexOf( 'b' );
+
+					const rSize = PCDheader.size[ rIndex ];
+					const gSize = PCDheader.size[ gIndex ];
+					const bSize = PCDheader.size[ bIndex ];
+
+					const rType = PCDheader.type[ rIndex ];
+					const gType = PCDheader.type[ gIndex ];
+					const bType = PCDheader.type[ bIndex ];
+
+					// Read raw U1 values
+
+					const rRaw = this._getDataView( dataview, row + offset.r, rType, rSize );
+					const gRaw = this._getDataView( dataview, row + offset.g, gType, gSize );
+					const bRaw = this._getDataView( dataview, row + offset.b, bType, bSize );
+
+					const r = rRaw / 255.0;
+					const g = gRaw / 255.0;
+					const b = bRaw / 255.0;
+
+					c.setRGB( r, g, b );
+					color.push( c.r, c.g, c.b );
+
+					// Optional alpha
+
+					if ( offset.a !== undefined ) {
+
+						const aIndex = PCDheader.fields.indexOf( 'a' );
+						const aSize = PCDheader.size[ aIndex ];
+						const aType = PCDheader.type[ aIndex ];
+
+						const aRaw = this._getDataView( dataview, row + offset.a, aType, aSize );
+						alpha.push( aRaw / 255.0 );
+
+					}
+
+				} else if ( offset.rgb !== undefined ) {
+
+					// --- RGB ---
 
 					const r = dataview.getUint8( row + offset.rgb + 2 ) / 255.0;
 					const g = dataview.getUint8( row + offset.rgb + 1 ) / 255.0;
@@ -737,9 +860,9 @@ class PCDLoader extends Loader {
 					c.setRGB( r, g, b, SRGBColorSpace );
 					color.push( c.r, c.g, c.b );
 
-				}
+				} else if ( offset.rgba !== undefined ) {
 
-				if ( offset.rgba !== undefined ) {
+					// --- RGBA ---
 
 					const raw = dataview.getUint32( row + offset.rgba, this.littleEndian );
 
@@ -750,6 +873,8 @@ class PCDLoader extends Loader {
 					alpha.push( a / 255.0 );
 
 				}
+
+				// --- NORMALS ---
 
 				if ( offset.normal_x !== undefined ) {
 
@@ -762,6 +887,8 @@ class PCDLoader extends Loader {
 
 				}
 
+				// --- INTENSITY ---
+
 				if ( offset.intensity !== undefined ) {
 
 					const intensityIndex = PCDheader.fields.indexOf( 'intensity' );
@@ -769,12 +896,16 @@ class PCDLoader extends Loader {
 
 				}
 
+				// --- CLASSIFICATION ---
+
 				if ( offset.classification !== undefined ) {
 
 					const classificationIndex = PCDheader.fields.indexOf( 'classification' );
 					classification.push( this._getDataView( dataview, row + offset.classification, PCDheader.type[ classificationIndex ], PCDheader.size[ classificationIndex ] ) );
 
 				}
+
+				// --- LABEL ---
 
 				if ( offset.label !== undefined ) {
 
