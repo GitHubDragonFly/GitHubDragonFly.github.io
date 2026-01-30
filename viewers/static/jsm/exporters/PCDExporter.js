@@ -20,7 +20,7 @@ import * as compressor from 'https://esm.sh/lzfjs@1.0.1';
 *
 *		const exporter = new PCDExporter( manager );
 *
-*		const options = ( binary: false, binaryCompressed: true );
+*		const options = ( binary: false, binaryCompressed: true, separateRGB: true );
 *
 *		exporter.parse( scene, function( object ) {
 *			let blob;
@@ -68,17 +68,18 @@ class PCDExporter {
 
 			binary: false,
 			binaryCompressed: false,
+			includeAlpha: false,
+			includeColors: true,         // Required for either packed or separate color
+			colorUnsigned: false,        // Only applies to packed rgb or rgba, requires includeColors
+			separateRGB: true,           // U1 only, when true requires includeColors, disregards colorUnsigned
 			includeNormals: true,
 			includeIntensity: true,
 			includeClassification: true,
-			includeAlpha: false,
-			includeColors: true,
-			colorUnsigned: false,
 			intensityType: 'U2',         // F4 or U4 or 'U2' or 'U1'
 			classificationType: 'U1',    // U4 or 'U2' or 'U1'
 			customFields: []
-			// For example, add the following custom fields where
-                        // count, scale and offset are optional
+			// For example, add the following custom fields
+			// where count, scale and offset are optional:
 			// [
 			//   { name: 'timestamp', type: 'F', size: 8, count: 1, source: 'attributeName', scale: 1, offset: 0 },
 			//   { name: 'semantic_id', type: 'U', size: 2, count: 1, source: 'semantic', scale: 1, offset: 0 },
@@ -217,9 +218,9 @@ class PCDExporter {
 			const fieldTypes = [];
 			const fieldCounts = [];
 
-			function addField( name, t, s, c = 1, src, scl = 1, off = 0 ) {
+			function addField( name, t, s, c = 1, src, comp, scl = 1, off = 0 ) {
 
-				layout.push( { name, type: t, size: s, count: c, source: src, scale: scl, offset: off } );
+				layout.push( { name, type: t, size: s, count: c, source: src, component: comp, scale: scl, offset: off } );
 
 				fieldNames.push( name );
 				fieldTypes.push( t );
@@ -261,10 +262,23 @@ class PCDExporter {
 
 			if ( hasColor ) {
 
-				const name = options.includeAlpha ? 'rgba' : 'rgb';
-				const t = options.colorUnsigned ? 'U' : 'F';
+				if ( options.separateRGB ) {
 
-				addField( name, t, 4, 1, 'color' );
+					addField( 'r', 'U', 1, 1, 'color', 0 );
+					addField( 'g', 'U', 1, 1, 'color', 1 );
+					addField( 'b', 'U', 1, 1, 'color', 2 );
+
+					if ( options.includeAlpha )
+						addField( 'a', 'U', 1, 1, 'color', 3 );
+
+				} else {
+
+					const t = options.colorUnsigned ? 'U' : 'F';
+
+					const name = options.includeAlpha ? 'rgba' : 'rgb';
+					addField( name, t, 4, 1, 'color' );
+
+				}
 
 			}
 
@@ -300,7 +314,7 @@ class PCDExporter {
 
 					}
 
-					addField( cf.name, cf.type, cf.size, detectedCount, cf.source, cf.scale ?? 1, cf.offset ?? 0, );
+					addField( cf.name, cf.type, cf.size, detectedCount, cf.source, null, cf.scale ?? 1, cf.offset ?? 0, );
 
 				}
 
@@ -335,7 +349,7 @@ class PCDExporter {
 			const stride = layout.reduce( ( sum, f ) => sum + f.size * f.count, 0 );
 
 			let buffer = null;
-			let view   = null;
+			let view = null;
 			let offset = 0;
 			const lines = [];
 
@@ -569,6 +583,32 @@ class PCDExporter {
 				return packColor( i );
 
 			default: {
+
+				// Separate RGB(A) support using field.component
+
+				if ( field.source === 'color' && field.component != null ) {
+
+					if ( !colorAttr ) return 0;
+
+					const base = i * 3;
+					const v = colorAttr.array[ base + field.component ];
+
+					// Convert normalized float → 0–255 integer
+
+					return Math.round( v * 255 );
+
+				}
+
+				// Separate Alpha support (if user enabled it)
+
+				if ( field.name === 'a' && field.source === 'color' && alphaAttr ) {
+
+					const a = alphaAttr.getX( i );
+					return Math.round( a * 255 );
+
+				}
+
+				// Generic attribute handling
 
 				const attr = pc.geometry.getAttribute( field.source );
 
