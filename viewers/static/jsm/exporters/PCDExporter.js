@@ -71,12 +71,12 @@ class PCDExporter {
 			includeAlpha: false,
 			includeColors: true,         // Required for either packed or separate color
 			colorUnsigned: false,        // Only applies to packed rgb or rgba, requires includeColors
-			separateRGB: true,           // U1 only, when true requires includeColors, disregards colorUnsigned
+			separateRGB: false,           // U1 only, when true requires includeColors, disregards colorUnsigned
 			includeNormals: true,
 			includeIntensity: true,
 			includeClassification: true,
-			intensityType: 'U2',         // F4 or U4 or 'U2' or 'U1'
-			classificationType: 'U1',    // U4 or 'U2' or 'U1'
+			intensityType: 'U2',         // 'F4' or 'U4' or 'U2' or 'U1'
+			classificationType: 'U1',    // 'U4' or 'U2' or 'U1'
 			customFields: []
 			// For example, add the following custom fields
 			// where count, scale and offset are optional:
