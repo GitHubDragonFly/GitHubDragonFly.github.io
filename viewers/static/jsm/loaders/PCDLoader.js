@@ -123,7 +123,6 @@ class PCDLoader extends Loader {
 
 	}
 
-
 	/**
 	 * Get dataview value by field type and size.
 	 *
@@ -447,18 +446,16 @@ class PCDLoader extends Loader {
 					let g = parseInt( line[ offset.g ] ) / 255.0;
 					let b = parseInt( line[ offset.b ] ) / 255.0;
 
-					c.setRGB( r, g, b );
+					c.setRGB( r, g, b, SRGBColorSpace );
 					color.push( c.r, c.g, c.b );
 
 					// Optional alpha channel
 
 					if ( offset.a !== undefined ) {
 
-						const aIndex = PCDheader.fields.indexOf( 'a' );
-						const aType = PCDheader.type[ aIndex ];
+						let a = parseInt( line[ offset.a ] );
+						a /= 255.0;
 
-						let a = parseFloat( line[ offset.a ] );
-						if ( aType === 'U' ) a /= 255.0;
 						alpha.push( a );
 
 					}
@@ -645,7 +642,7 @@ class PCDLoader extends Loader {
 					const g = gRaw / 255.0;
 					const b = bRaw / 255.0;
 
-					c.setRGB( r, g, b );
+					c.setRGB( r, g, b, SRGBColorSpace );
 					color.push( c.r, c.g, c.b );
 
 					// Optional alpha
@@ -833,7 +830,7 @@ class PCDLoader extends Loader {
 					const g = gRaw / 255.0;
 					const b = bRaw / 255.0;
 
-					c.setRGB( r, g, b );
+					c.setRGB( r, g, b, SRGBColorSpace );
 					color.push( c.r, c.g, c.b );
 
 					// Optional alpha
