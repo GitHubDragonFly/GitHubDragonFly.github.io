@@ -68,10 +68,11 @@ class PCDExporter {
 
 			binary: false,
 			binaryCompressed: false,
+			littleEndian: true,         // for binary modes: false = AARRGGBB, true = BBGGRRAA
 			includeAlpha: false,
 			includeColors: true,         // Required for either packed or separate color
 			colorUnsigned: false,        // Only applies to packed rgb or rgba, requires includeColors
-			separateRGB: false,           // U1 only, when true requires includeColors, disregards colorUnsigned
+			separateRGB: false,          // U1 only, when true requires includeColors, disregards colorUnsigned
 			includeNormals: true,
 			includeIntensity: true,
 			includeClassification: true,
@@ -156,17 +157,43 @@ class PCDExporter {
 		const floatView = new Float32Array( 1 );
 		const uintView  = new Uint32Array( floatView.buffer );
 
-		function _packColor( r, g, b, a, isUnsigned, hasAlpha ) {
+		function _packColor( r, g, b, a, fieldType, isUnsigned, hasAlpha, littleEndian ) {
+
+			let packed;
 
 			// Pack into a 32‑bit integer
 
-			const packed = hasAlpha
-				? ( ( ( a & 0xFF ) << 24 ) | ( ( r & 0xFF ) << 16 ) | ( ( g & 0xFF ) << 8 ) | ( b & 0xFF ) )
-				: ( ( ( r & 0xFF ) << 16 ) | ( ( g & 0xFF ) << 8 ) | ( b & 0xFF ) );
+			if ( littleEndian ) {
+
+				packed = hasAlpha
+					?
+						( ( b & 0xFF ) << 0 ) |
+						( ( g & 0xFF ) << 8 ) |
+						( ( r & 0xFF ) << 16 ) |
+						( ( a & 0xFF ) << 24 )
+					:
+						( ( b & 0xFF ) << 0 ) |
+						( ( g & 0xFF ) << 8 ) |
+						( ( r & 0xFF ) << 16 );
+
+			} else {
+
+				packed = hasAlpha
+					?
+						( ( a & 0xFF ) << 24 ) |
+						( ( r & 0xFF ) << 16 ) |
+						( ( g & 0xFF ) << 8 ) |
+						( ( b & 0xFF ) << 0 )
+					:
+						( ( r & 0xFF ) << 16 ) |
+						( ( g & 0xFF ) << 8 ) |
+						( ( b & 0xFF ) << 0 );
+
+			}
 
 			// Unsigned path → return raw uint32
 
-			if ( isUnsigned ) return packed;
+			if ( fieldType === 'U' ) return (isUnsigned ? packed >>> 0 : packed);
 
 			// Float path → reinterpret bits as float32, but mask to avoid NaN/Inf patterns
 
@@ -269,7 +296,7 @@ class PCDExporter {
 					addField( 'b', 'U', 1, 1, 'color', 2 );
 
 					if ( options.includeAlpha )
-						addField( 'a', 'U', 1, 1, 'color', 3 );
+						addField( 'a', 'U', 1, 1, 'alpha', 3 );
 
 				} else {
 
@@ -326,6 +353,10 @@ class PCDExporter {
 					? 'binary'
 					: 'ascii';
 
+			const endianness = options.littleEndian
+				? 'BBGGRRAA (little-endian)'
+				: 'AARRGGBB (big-endian)';
+
 			// A tiny 0.1 degree rotation on the X axis to mark this file 
 			// as "Handled" so the loader doesn't apply automatic Z-up fixes.
 
@@ -334,6 +365,7 @@ class PCDExporter {
 
 			let header =
 				`# Created by the custom PCD Exporter\n` +
+				`# COLOR_ENDIANNESS ${ endianness }\n` +
 				`# .PCD v0.7 - Point Cloud Data file format\n` +
 				`VERSION 0.7\n` +
 				`FIELDS ${ fieldNames.join( ' ' ) }\n` +
@@ -384,7 +416,7 @@ class PCDExporter {
 					worldMatrix,
 					normalMatrix,
 					options,
-					packColor: ( i ) => {
+					packColor: ( i, fieldType ) => {
 
 						const r = colorAttr ? _linearToSRGB( colorAttr.getX( i ) ) * 255 : 255;
 						const g = colorAttr ? _linearToSRGB( colorAttr.getY( i ) ) * 255 : 255;
@@ -396,11 +428,11 @@ class PCDExporter {
 								? alphaAttr.getX( i ) * 255
 								: pc.material.opacity * 255 ) );
 
-							return _packColor( r, g, b, a, options.colorUnsigned, true );
+							return _packColor( r, g, b, a, fieldType, options.colorUnsigned, true, options.littleEndian );
 
 						} else {
 
-							return _packColor( r, g, b, 255, options.colorUnsigned, false );
+							return _packColor( r, g, b, 255, fieldType, options.colorUnsigned, false, options.littleEndian );
 
 						}
 
@@ -437,7 +469,7 @@ class PCDExporter {
 						for ( const field of layout ) {
 
 							const value = scope._readFieldValue( field, i, pc, ctx );
-							offset = scope._writeFieldBinary( field, value, view, offset );
+							offset = scope._writeFieldBinary( field, value, view, offset, options.littleEndian );
 
 						}
 
@@ -580,11 +612,11 @@ class PCDExporter {
 			case 'rgb':
 			case 'rgba':
 
-				return packColor( i );
+				return packColor( i, field.type );
 
 			default: {
 
-				// Separate RGB(A) support using field.component
+				// Separate R/G/B/(/A) support using field.component
 
 				if ( field.source === 'color' && field.component != null ) {
 
@@ -601,10 +633,16 @@ class PCDExporter {
 
 				// Separate Alpha support (if user enabled it)
 
-				if ( field.name === 'a' && field.source === 'color' && alphaAttr ) {
+				if ( field.name === 'a' && field.source === 'alpha' ) {
 
-					const a = alphaAttr.getX( i );
-					return Math.round( a * 255 );
+					if ( alphaAttr ) {
+
+						const a = alphaAttr.getX( i );
+						return Math.round( a * 255 );
+
+					}
+
+					return 255;
 
 				}
 
@@ -664,17 +702,17 @@ class PCDExporter {
 
 	}
 
-	_writeFieldBinary( field, value, view, offset ) {
+	_writeFieldBinary( field, value, view, offset, littleEndian ) {
 
 		if ( field.count === 1 ) {
 
-			return this._writeOne( field, value, view, offset );
+			return this._writeOne( field, value, view, offset, littleEndian );
 
 		}
 
 		for ( let c = 0; c < field.count; c++ ) {
 
-			offset = this._writeOne( field, value[ c ], view, offset );
+			offset = this._writeOne( field, value[ c ], view, offset, littleEndian );
 
 		}
 
@@ -682,30 +720,34 @@ class PCDExporter {
 
 	}
 
-	_writeOne( field, v, view, offset ) {
+	_writeOne( field, v, view, offset, littleEndian ) {
+
+		// Only apply passed endianness to packed color fields
+
+		const requiredEndian = ( field.source === 'color' ) ? littleEndian : true;
 
 		switch ( field.type ) {
 
 			case 'F':
 
-				if ( field.size === 4 ) view.setFloat32( offset, v, true );
-				else view.setFloat64( offset, v, true );
+				if ( field.size === 4 ) view.setFloat32( offset, v, requiredEndian );
+				else view.setFloat64( offset, v, requiredEndian );
 
 				break;
 
 			case 'U':
 
 				if ( field.size === 1 ) view.setUint8( offset, v );
-				else if ( field.size === 2 ) view.setUint16( offset, v, true );
-				else view.setUint32( offset, v, true );
+				else if ( field.size === 2 ) view.setUint16( offset, v, requiredEndian );
+				else view.setUint32( offset, v, requiredEndian );
 
 				break;
 
 			case 'I':
 
 				if ( field.size === 1 ) view.setInt8( offset, v );
-				else if ( field.size === 2 ) view.setInt16( offset, v, true );
-				else view.setInt32( offset, v, true );
+				else if ( field.size === 2 ) view.setInt16( offset, v, requiredEndian );
+				else view.setInt32( offset, v, requiredEndian );
 
 				break;
 
@@ -820,27 +862,29 @@ class PCDExporter {
 		// 2. Determine itemSize for each attribute
 
 		const attributeInfo = {};
+		const typePriority = [ Float64Array, Float32Array, Uint32Array, Uint16Array, Uint8Array ];
 
 		for ( const name of attributeNames ) {
+
+			let bestType = null;
+			let itemSize = null;
 
 			for ( const g of geoms ) {
 
 				const attr = g.getAttribute( name );
+				if ( !attr ) continue;
+				const t = attr.array.constructor;
 
-				if ( attr ) {
+				if ( !bestType || typePriority.indexOf( t ) < typePriority.indexOf( bestType ) ) {
 
-					attributeInfo[ name ] = {
-
-						itemSize: attr.itemSize,
-						arrayType: attr.array.constructor
-
-					};
-
-					break;
+					bestType = t;
+					itemSize = attr.itemSize;
 
 				}
 
 			}
+
+			attributeInfo[ name ] = { itemSize, arrayType: bestType };
 
 		}
 
