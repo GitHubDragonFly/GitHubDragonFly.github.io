@@ -22,6 +22,8 @@
           if ((event.target.src || '').includes('jquery')) {
             alert('jQuery failed to load. Limited functionality. Check your internet connection!');
           }
+
+          if (init_running === true) handle_error( 'RESOURCE ERROR' );
         }
       }, true); // The 'true' here is vital; it enables the "capturing" phase
 
@@ -66,6 +68,7 @@
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
     <script src="https://mrdoob.github.io/stats.js/build/stats.min.js" defer></script>
 
     <script>
@@ -78,9 +81,12 @@
       var min_allowed_point_size, max_allowed_point_size, pts_size;
       var extended_render, extended_count = 0, params, selectedDepth;
       var lod_displayed = false, warning_displayed = false;
-      var url_displayed = false, url_loading = false, elevation, lutTexture;
+      var url_displayed = false, url_loading = false, elevation;
       var filesMap, bounding_box, globalElevationRange, detected_classes;
       var classification_present, classification_enabled, classification_folder;
+      var pcdExportOptions, link, zip, lutTexture;
+
+      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
     </script>
 
     <script type="module">
@@ -130,6 +136,12 @@
         <label for="btn_minus" title="Decrease Points Size"></label>
         <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
         <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
+        <select title="Export to PCD (Point Cloud Data) format" id="export_names" style="min-width: 70px;" disabled>
+          <option title="Export Formats" value="export" selected disabled>Export</option>
+          <option title="PCD - Point Cloud Data Format ascii" value="pcda" onclick="pcd_export_selection();">PCD_a</option>
+          <option title="PCD - Point Cloud Data Format binary" value="pcdb" onclick="pcd_export_selection( true );">PCD_b</option>
+          <option title="PCD - Point Cloud Data Format binary compressed" value="pcdbc" onclick="pcd_export_selection( false, true );">PCD_c</option>
+        </select>
         <button title="Toggle Statistics" id="btn_stats" onclick="set_statistics();" style="min-width: 46px;" disabled>Stats</button>
         <label for="btn_stats" title="Toggle Statistics"></label>
         <button title="Toggle Elevation Colors" id="btn_elevation_colors" onclick="set_elevation_colors();" style="min-width: 28px;" disabled>EC</button>
@@ -170,6 +182,69 @@
           <option value="7" onclick="set_copc_details( 7 );">7 - xtreme</option>
           <option value="8" onclick="set_copc_details( 8 );">8 - xtreme</option>
         </select>
+      </div>
+      <div id="exportModalPCD" class="modal" style="min-width: 220px;">
+        <div class="modal-content">
+          <h3>PCD Export Options</h3>
+          <div id="pcd_export_options">
+            <label for="pcdIncludeColors" title="Include Colors" id="lbl_pcd_colors" style="min-width: 210px;">
+              <input type="checkbox" id="pcdIncludeColors" title="Include Colors" onclick="updateColorOptions( this );" style="padding: 5px; margin-left: 5px;" checked />
+              Include Colors
+            </label><br>
+            <label for="pcdIncludeAlpha" title="Include Alpha" id="lbl_pcd_alpha" style="min-width: 210px;">
+              <input type="checkbox" id="pcdIncludeAlpha" title="Include Alpha" style="padding: 5px; margin-left: 25px;" />
+              Include Alpha
+            </label><br>
+            <label for="pcdColorUnsigned" title="Unsigned Colors" id="lbl_pcd_ucolors" style="min-width: 210px;">
+              <input type="checkbox" id="pcdColorUnsigned" title="Unsigned Colors" onclick="updateColorOptions( this );" style="padding: 5px; margin-left: 25px;" />
+              Unsigned Colors RGB(A)
+            </label><br>
+            <label for="pcdSeparateRGB" title="Separate R G B (A)" id="lbl_pcd_separate" style="min-width: 210px;">
+              <input type="checkbox" id="pcdSeparateRGB" title="Separate R G B (A)" onclick="updateColorOptions( this );" style="padding: 5px; margin-left: 25px;" />
+              Separate R G B (A)
+            </label><br>
+            <label for="pcdLittleEndian" title="Little Endian (BGRA)" id="lbl_pcd_endianness" style="min-width: 210px;">
+              <input type="checkbox" id="pcdLittleEndian" title="Little Endian (BGRA)" onclick="updateColorOptions( this );" style="padding: 5px; margin-left: 25px;" checked />
+              Little Endian (BGRA)
+            </label><br>
+            <label for="pcdIncludeNormals" title="Include Normals" id="lbl_pcd_normals" style="min-width: 210px;">
+              <input type="checkbox" id="pcdIncludeNormals" title="Include Normals" style="padding: 5px; margin: 5px;" checked />
+              Include Normals
+            </label><br>
+            <label for="pcdIncludeIntensity" title="Include Intensity" id="lbl_pcd_intensity" style="min-width: 210px;">
+              <input type="checkbox" id="pcdIncludeIntensity" title="Include Intensity" style="padding: 5px; margin: 5px;" checked />
+              Include Intensity
+            </label><br>
+            <label for="pcdIntensityType" title="Intensity Type" id="lbl_pcd_iType" style="min-width: 210px;">
+              <select id="pcdIntensityType" title="Intensity Type" style="min-width: 70px;">
+                <option value="U2" disabled selected>iType</option>
+                <option value="U1">U1</option>
+                <option value="U2">U2</option>
+                <option value="U4">U4</option>
+                <option value="F4">F4</option>
+              </select>
+              Intensity Type
+            </label><br>
+            <label for="pcdIncludeClassification" title="Include Classification" id="lbl_pcd_classification" style="min-width: 210px;">
+              <input type="checkbox" id="pcdIncludeClassification" title="Include Classification" style="padding: 5px; margin: 5px;" checked />
+              Include Classification
+            </label><br>
+            <label for="pcdClassificationType" title="Classification Type" id="lbl_pcd_cType" style="min-width: 210px;">
+              <select id="pcdClassificationType" title="Classification Type" style="min-width: 70px;">
+                <option value="U1" disabled selected>cType</option>
+                <option value="U1">U1</option>
+                <option value="U2">U2</option>
+                <option value="U4">U4</option>
+              </select>
+              Classification Type
+            </label>
+          </div>
+          <!-- Buttons -->
+          <div class="modal-buttons">
+            <button onclick="document.getElementById('exportModalPCD').style.display = 'none'; export_pcd();">OK</button>
+            <button onclick="document.getElementById('exportModalPCD').style.display = 'none'; finish_export();">Cancel</button>
+          </div>
+        </div>
       </div>
     </div>
     <div id="gui_position"></div>
@@ -235,6 +310,7 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
         window.addEventListener( 'pointerup', (event) => { mouse_down = false; mouse_wheel = true; }, false);
@@ -242,11 +318,14 @@
         window.addEventListener( 'keydown', ( event ) => {
           if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
             controls.listenToKeyEvents( window );
+            activeKeys.add( event.key ); // Track this key
             mouse_wheel = true;
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
-          if (arrow_keys.some( k => k === event.key )) {
+          activeKeys.delete( event.key ); // Remove this key
+
+          if (controls && activeKeys.size === 0) {
             controls.stopListenToKeyEvents();
             mouse_wheel = false;
           }
@@ -299,6 +378,191 @@
           if (gui) set_gui_position();
 
           mouse_wheel = true;
+        }
+      }
+
+      function start_export() {
+        if (!link) {
+          link = document.createElement('a');
+          link.style.display = 'none';
+          document.body.appendChild( link );
+        }
+
+        render_requested = false;
+        document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = pw;
+
+        if (gui_set) document.getElementById('gui_position').style.display = 'none';
+      }
+
+      async function process_zip( name = 'Model' ) {
+        await zip.generateAsync( {
+          type: 'blob',
+          compression: "DEFLATE",
+          compressionOptions: { level: 9 }
+        })
+        .then( function( zipped_file ) {
+          link.href = URL.createObjectURL( zipped_file );
+          URL.revokeObjectURL( zipped_file );
+          link.download = name + '.zip';
+          link.click();
+
+          finish_export();
+        });
+      }
+
+      function handle_export_error() {
+        alert( 'Export error!' );
+        finish_export();
+      }
+
+      function finish_export() {
+        document.getElementById('div_loading').innerHTML = '';
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('fixed_menu').style.display = 'block';
+
+        if (gui_set) document.getElementById('gui_position').style.display = 'block';
+
+        render_requested = true;
+        mouse_wheel = true;
+        render();
+
+        zip = new JSZip();
+
+        if (link) {
+          document.body.removeChild( link );
+          link = undefined;
+        }
+      }
+
+      function updateColorOptions( change ) {
+        const includeColors = document.getElementById('pcdIncludeColors');
+        const includeAlpha = document.getElementById('pcdIncludeAlpha');
+        const colorUnsigned = document.getElementById('pcdColorUnsigned');
+        const separateRGB = document.getElementById('pcdSeparateRGB');
+        const littleEndian = document.getElementById('pcdLittleEndian');
+
+        if (change === includeColors) {
+          if (!includeColors.checked) {
+            includeAlpha.checked = false;
+            includeAlpha.disabled = true;
+
+            colorUnsigned.checked = false;
+            colorUnsigned.disabled = true;
+
+            separateRGB.checked = false;
+            separateRGB.disabled = true;
+
+            littleEndian.checked = false;
+            littleEndian.disabled = true;
+          } else {
+            includeAlpha.disabled = false;
+            colorUnsigned.disabled = false;
+            separateRGB.disabled = false;
+
+            littleEndian.checked = true;
+            littleEndian.disabled = false;
+          }
+        } else if (change === separateRGB) {
+          if (separateRGB.checked) {
+            includeAlpha.disabled = false;
+
+            colorUnsigned.checked = false;
+            colorUnsigned.disabled = true;
+
+            littleEndian.disabled = true;
+          } else {
+            colorUnsigned.disabled = false;
+            littleEndian.disabled = false;
+          }
+        } else if (change === colorUnsigned) {
+          if (colorUnsigned.checked) {
+            separateRGB.checked = false;
+            separateRGB.disabled = true;
+          } else {
+            separateRGB.disabled = false;
+          }
+        }
+
+        return;
+      }
+
+      async function set_pcd_export_defaults() {
+        if (copc_obj) {
+          document.getElementById('pcdIncludeColors').checked = true;
+          document.getElementById('pcdIncludeAlpha').checked = false;
+          document.getElementById('pcdColorUnsigned').checked = false;
+          document.getElementById('pcdSeparateRGB').checked = false;
+          document.getElementById('pcdLittleEndian').checked = true;
+          document.getElementById('pcdIncludeNormals').checked = true;
+          document.getElementById('pcdIncludeIntensity').checked = true;
+          document.getElementById('pcdIncludeClassification').checked = true;
+          document.getElementById('pcdIntensityType').selectedIndex = 0;
+          document.getElementById('pcdClassificationType').selectedIndex = 0;
+
+          document.getElementById('pcdIncludeAlpha').disabled = false;
+          document.getElementById('pcdColorUnsigned').disabled = false;
+          document.getElementById('pcdSeparateRGB').disabled = false;
+          document.getElementById('pcdLittleEndian').disabled = false;
+        }
+      }
+
+      async function pcd_export_selection( binary = false, compressed = false ) {
+        if (copc_obj) {
+          document.getElementById('export_names').selectedIndex = 0;
+
+          // Reset PCD export options
+          await set_pcd_export_defaults();
+
+          pcdExportOptions.binary = binary;
+          pcdExportOptions.binary_compressed = compressed;
+
+          // Let user set new PCD export options
+          document.getElementById('exportModalPCD').style.display = "block";
+        }
+      }
+
+      async function export_pcd() {
+        if (copc_obj) {
+          await start_export();
+
+          const { PCDExporter } = await import( "../static/jsm/exporters/PCDExporter.min.js" );
+
+          let pcd_exporter = new PCDExporter( manager );
+
+          pcdExportOptions.includeAlpha = document.getElementById('pcdIncludeAlpha').checked;
+          pcdExportOptions.includeColors = document.getElementById('pcdIncludeColors').checked;
+          pcdExportOptions.colorUnsigned = document.getElementById('pcdColorUnsigned').checked;
+          pcdExportOptions.littleEndian = document.getElementById('pcdLittleEndian').checked;
+          pcdExportOptions.separateRGB = document.getElementById('pcdSeparateRGB').checked;
+          pcdExportOptions.includeNormals = document.getElementById('pcdIncludeNormals').checked;
+          pcdExportOptions.includeIntensity = document.getElementById('pcdIncludeIntensity').checked;
+          pcdExportOptions.includeClassification = document.getElementById('pcdIncludeClassification').checked;
+          pcdExportOptions.intensityType = document.getElementById('pcdIntensityType').value || 'U2';
+          pcdExportOptions.classificationType = document.getElementById('pcdClassificationType').value || 'U1';
+
+          pcd_exporter.parse( copc_obj, async function( json ) {
+            let blob;
+
+            if (pcdExportOptions.binary || pcdExportOptions.binary_compressed) {
+              blob = new Blob( [ json ], { type: 'application/octet-stream' } );
+            } else {
+              let string = json.split( ',' );
+              blob = new Blob( [ string ], { type: 'text/plain' } );
+            }
+
+            let name = pcdExportOptions.binary_compressed
+              ? 'COPC to PCD binary_compressed'
+              : pcdExportOptions.binary
+                ? 'COPC to PCD binary'
+                : 'COPC to PCD ascii';
+
+            zip.file( name + '.pcd', blob );
+
+            await process_zip( name );
+          }, function( error ) { handle_export_error( error ); }, pcdExportOptions );
         }
       }
     </script>
@@ -365,6 +629,7 @@
              // Compute distance from center of the point
              vec2 c = gl_PointCoord * 2.0 - 1.0;
              float dist = dot(c, c);
+
              // Kill fragments outside the circle
              if (dist > 1.0) discard;
 
@@ -400,24 +665,24 @@
           // We must use 256 * 4 because RGBFormat is no longer supported.
           const data = new Uint8Array(256 * 4);
           const colors = {
-            0:[153,153,153],
-            1:[255,255,255],
-            2:[128,77,26],
+            0:[153,153,153],  // Never Classified
+            1:[255,255,255],  // Unassigned
+            2:[128,77,26],    // Ground
             3:[0,153,0,180],  // Low vegetation → 70% opaque
-            4:[0,204,0],
-            5:[0,255,0],
-            6:[153,153,153],
-            7:[77,77,77,80],  // Low point / noise → 30% opaque
-            8:[255,255,0],
-            9:[0,102,255],
-            10:[179,179,51],
-            11:[102,102,102],
-            12:[204,204,204],
-            13:[255,128,0],
-            14:[255,179,0],
-            15:[204,128,51],
-            16:[230,153,77],
-            17:[255,0,255],
+            4:[0,204,0],      // Medium Vegetation
+            5:[0,255,0],      // High Vegetation
+            6:[153,153,153],  // Building
+            7:[77,77,77,80],  // Low point / noise (cloud) → 30% opaque
+            8:[255,255,0],    // Model Key
+            9:[0,102,255],    // Water
+            10:[179,179,51],  // Rail
+            11:[102,102,102], // Road
+            12:[204,204,204], // Overlap
+            13:[255,128,0],   // Wire-Guard
+            14:[255,179,0],   // Wire-Conductor
+            15:[204,128,51],  // Transmission Tower
+            16:[230,153,77],  // Wire-Insulator
+            17:[255,0,255],   // Bridge
             18:[51,51,51,30], // High noise → 10% opaque
             19:[180,210,210], // Overhead Machinery
             20:[150,150,100], // Ignored Ground
@@ -617,6 +882,8 @@
 
         enable_disable( true );
 
+        if (zip === undefined) zip = new JSZip();
+
         mouse_down = false;
         mouse_wheel = true;
         needsRender = false;
@@ -625,6 +892,7 @@
         pts_size = null;
         count = 0;
         elevation = false;
+        pcdExportOptions = {};
         stats_enabled = false;
         halt_on_error = false;
         extended_render = false;
@@ -1031,7 +1299,7 @@
             needsRender = false;
 
             if (extended_render) {
-              if (extended_count > 10) {
+              if (extended_count > 5) {
                 extended_render = false;
                 extended_count = 0;
                 log_info();
@@ -1039,7 +1307,7 @@
                 extended_count ++;
               }
             } else if (mouse_wheel) {
-              if (count > 10) {
+              if (count > 5) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -1189,6 +1457,7 @@
         document.getElementById('btn_quick_x').disabled = disable;
         document.getElementById('btn_elevation_colors').disabled = disable;
         document.getElementById('btn_classification_colors').disabled = disable;
+        document.getElementById('export_names').disabled = disable;
         disabled_changed();
 
         mouse_wheel = true;
@@ -1211,11 +1480,18 @@
           select.querySelector( 'option[value="8"]' ).remove();
         }
 
+        $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#detail_level').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#tile_level').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
+
         if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile) {
+          $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#detail_level').change( function() { $(this).children(':selected').click(); });
           $('#tile_level').change( function() { $(this).children(':selected').click(); });
         }
 
+        document.getElementById('export_names').selectedIndex = 0;
         document.getElementById('detail_level').selectedIndex = 0;
         document.getElementById('tile_level').selectedIndex = 0;
 

@@ -11,11 +11,11 @@
 		<script type="importmap">
 			{
 				"imports": {
-					"three": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.webgpu.min.js",
-					"three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.webgpu.min.js",
-					"three/tsl": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.tsl.min.js",
-					"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/",
-					"three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/"
+					"three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.webgpu.min.js",
+					"three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.webgpu.min.js",
+					"three/tsl": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.tsl.min.js",
+					"three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/",
+					"three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
 				}
 			}
 		</script>
@@ -39,7 +39,7 @@
 			}
 		</style>
 
-		<title>Celestial Bodies (r178)</title>
+		<title>Celestial Bodies (r182)</title>
 	</head>
 
 	<body>
@@ -90,7 +90,9 @@
 
 			let scene = new THREE.Scene();
 
-			let postProcessing, earth_loaded = false, moon_loaded = false;
+			let earth, moon, earth_loaded = false, moon_loaded = false;
+			let mouse_down = false, mouse_wheel = false;
+			let postProcessing, render_requested = false, count = 0;
 
 			// Create sun independently since it is not using textures
 
@@ -116,10 +118,10 @@
 				await texture_loader.load( textureUrl, function( tex ) {
 					let body_geometry = new THREE.SphereGeometry( size, 64, 32 );
 					let body_material = new THREE.MeshStandardNodeMaterial({
-						map: tex.clone(),
-						bumpMap: name === 'Earth' ? bump_map.clone() : tex.clone(),
-						roughnessMap: name === 'Earth' ? bump_map.clone() : tex.clone(),
-						normalMap: name === 'Earth' ? normal_map.clone() : null,
+						map: tex,
+						bumpMap: name === 'Earth' ? bump_map : tex,
+						roughnessMap: name === 'Earth' ? bump_map : tex,
+						normalMap: name === 'Earth' ? normal_map : null,
 						side: THREE.DoubleSide,
 						metalness: 0.25,
 						roughness: 0.5
@@ -138,8 +140,10 @@
 					if ( name === 'Moon' ) { body.castShadow = true; moon_loaded = true; }
 
 					if ( earth_loaded === true && moon_loaded === true ) {
-						scene.getObjectByName( 'Earth' ).add( scene.getObjectByName( 'Moon' ) );
-						scene.getObjectByName( 'Earth' ).rotation.y -= Math.PI / 3.0;
+						earth = scene.getObjectByName( 'Earth' );
+						moon = scene.getObjectByName( 'Moon' );
+						earth.add( moon );
+						earth.rotation.y -= Math.PI / 3.0;
 
 						bump_map.dispose();
 						normal_map.dispose();
@@ -161,6 +165,8 @@
 						postProcessing = new THREE.PostProcessing( renderer );
 						postProcessing.outputNode = outputPass.add( bloomPass );
 
+						render_requested = true;
+						mouse_wheel = true;
 						render();
 					}
 				});
@@ -218,8 +224,8 @@
 				'dark-s_pz.jpg',
 				'dark-s_nz.jpg',
 			], async ( texture ) => {
-				scene.background = texture.clone();
-				scene.environment = texture.clone();
+				scene.background = texture;
+				scene.environment = texture;
 				scene.environmentIntensity = 0.25;
 				texture.dispose();
 
@@ -238,28 +244,80 @@
 				);
 			}, undefined, () => { console.log( 'Error loading textures' ) });
 
+			const rotation = document.getElementById( 'rotate' );
+
 			function render() {
-				requestAnimationFrame( render );
+				if ( mouse_down || mouse_wheel || rotation.checked ) {
+					if ( rotation.checked ) {
+						controls.autoRotate = true;
 
-				controls.update();
+						earth.rotation.y += 0.0005; // Earth + Moon rotation
+						moon.rotation.y -= 0.0015; // Moon rotation
+					} else {
+						controls.autoRotate = false;
+					}
 
-				if ( document.getElementById( 'rotate' ).checked === true ) {
-					controls.autoRotate = true;
+					controls.update();
+					postProcessing.render();
 
-					scene.getObjectByName( 'Earth' ).rotation.y += 0.0005; // Earth + Moon rotation
-					scene.getObjectByName( 'Moon' ).rotation.y -= 0.0015; // Moon rotation
-				} else {
-					controls.autoRotate = false;
+					if ( mouse_wheel ) {
+						if ( count > 5 ) {
+							mouse_wheel = false;
+							count = 0;
+						} else {
+							count ++;
+						}
+					}
+
 				}
 
-				postProcessing.render();
+				if ( render_requested ) requestAnimationFrame( render );
 			}
+
+			const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+			const activeKeys = new Set();
 
 			window.addEventListener( 'resize', ( event ) => {
 				renderer.setSize( innerWidth, innerHeight );
 				camera.aspect = innerWidth / innerHeight;
 				camera.updateProjectionMatrix();
+				mouse_wheel = true;
 			});
+
+			window.addEventListener( 'pointerdown', ( event ) => {
+				mouse_down = true;
+			}, false);
+
+			window.addEventListener( 'pointerup', ( event ) => {
+				mouse_down = false;
+				mouse_wheel = false;
+			}, false);
+
+			window.addEventListener( 'pointercancel', ( event ) => {
+				mouse_down = false;
+				mouse_wheel = false;
+			}, false);
+
+			window.addEventListener( 'wheel', ( event ) => {
+				mouse_wheel = true;
+			}, false);
+
+			window.addEventListener( 'keydown', ( event ) => {
+				if ( controls && arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey ) {
+					controls.listenToKeyEvents( window );
+					activeKeys.add( event.key ); // Track this key
+					mouse_wheel = true;
+				}
+			}, false);
+
+			window.addEventListener( 'keyup', ( event ) => {
+				activeKeys.delete( event.key ); // Remove this key
+
+				if ( controls && activeKeys.size === 0 ) {
+					controls.stopListenToKeyEvents();
+					mouse_wheel = false;
+				}
+			}, false);
 		</script>
 	</body>
 </html>
