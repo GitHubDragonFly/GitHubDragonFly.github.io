@@ -454,13 +454,14 @@ Number Type Converter
         - It is internally using [lzfjs](https://github.com/McSimp/lzfjs) compressor
       - Supports following PCD fields:
         - x y z
-        - rgb / rgba
+        - rgb / rgba (with endianess in binary exports)
         - r g b / r g b a (separate instances)
         - normal_x normal_y normal_z
         - classification
         - intensity
         - Customized PCD Loader in this repository supports all these fields as well
-      - Currently available in the desktop version of PCD+XYZ+LAS Viewer
+      - Currently available in the desktop version of the following viewers:
+        - COPC, EPT, GLTF, PCD+XYZ+LAS, PLY+STL
     - 3MF exporter was created with assistance from Microsoft Copilot:
       - This is a custom exporter not officially available in the three.js library
       - It supports basic features: vertex colors, material arrays and the mesh `material.map` texture exporting
