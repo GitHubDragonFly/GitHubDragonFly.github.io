@@ -233,7 +233,7 @@
         // Shader lighting
 
         if (mesh && mesh.material.uniforms) {
-          mesh.material.uniforms.uIntensity.value = val;
+          mesh.material.uniforms.uBrightness.value = val;
         }
 
         mouse_wheel = true;
@@ -463,7 +463,7 @@
 
           uniforms: {
             uOpacity: { value: 1.0 },
-            uIntensity: { value: 1.0 },
+            uBrightness: { value: 1.0 },
             uWireframe: { value: false },
             uUseFlatShading: { value: false },
             uUseVertexColors: { value: true },
@@ -491,29 +491,13 @@
               vec4 worldPos = modelMatrix * vec4(position, 1.0);
               vWorldPos = worldPos.xyz;
               gl_Position = projectionMatrix * viewMatrix * worldPos;
-
-              // Example 1: Use intensity to slightly bloat the mesh
-              // What it does: It takes the original vertex position and pushes it outward along the normal vector.
-              // The Result: The mesh physically expands or "inflates."
-              // If we increase uIntensity, the object gets bigger; if uIntensity is 0, it stays its original size.
-              // Math: It calculates the final screen position in one single line
-              // by multiplying the matrices against the altered position.
-              //vec3 newPosition = position + (normal * (uIntensity * 0.1));
-              //gl_Position = projectionMatrix * modelViewMatrix * vec4(newPosition, 1.0);
-
-              // Example 2:
-              // What it does: It takes the original position attribute and
-              // converts it to screen coordinates without any modification.
-              // The Result: This is the standard way Three.js renders a mesh by using the raw position.
-              //vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-              //gl_Position = projectionMatrix * mvPosition * worldPos;
             }
           `,
 
           fragmentShader: `
             uniform bool uUseVertexColors;
             uniform vec3 uBaseColor;
-            uniform float uIntensity;
+            uniform float uBrightness;
             uniform bool uWireframe;
             uniform float uOpacity;
             varying vec3 vNormal;
@@ -537,8 +521,8 @@
                 // If we are far from the edge, discard the pixel (render nothing)
                 if (e > 0.1) { discard; }
 
-                // Only pixels that survive the discard get colored gold-ish
-                gl_FragColor = vec4(1.0, 0.75, 0.1, uOpacity);
+                // Only pixels that survive the discard get colored grey-ish
+                gl_FragColor = vec4( 0.7, 0.7, 0.7, uOpacity);
               } else {
                 base = uUseVertexColors ? vColor : uBaseColor;
 
@@ -554,7 +538,7 @@
                 vec3 lightDir = normalize(uCameraPos - vWorldPos);
                 diff = dot(normalize(vNormal), lightDir) * 0.5 + 0.5;
 
-                gl_FragColor = vec4(base * diff * uIntensity, uOpacity);
+                gl_FragColor = vec4(base * diff * uBrightness, uOpacity);
               }
             }
           `
@@ -571,8 +555,7 @@
           uniforms: {
             uSize: { value: size },
             uOpacity: { value: 1.0 },
-            uIntensity: { value: 1.0 },
-            uUseLighting: { value: false },
+            uBrightness: { value: 3.5 },
             uUseVertexColors: { value: true },
             uUseRandomColors: { value: false },
             uBaseColor: { value: new THREE.Color( 1.0, 1.0, 1.0 ) }
@@ -580,13 +563,10 @@
 
           vertexShader: `
             uniform float uSize;
-            uniform float uIntensity;
-            uniform bool uUseLighting;
             uniform vec3 uBaseColor;
             uniform bool uUseVertexColors;
             uniform bool uUseRandomColors;
             attribute float intensity;
-            varying float vLight;
             varying vec3 vColor;
             varying float vDepth;
 
@@ -607,16 +587,6 @@
               vec3 base = uUseRandomColors ? randomColor(position) : (uUseVertexColors ? color : uBaseColor);
               vColor = base * pow(clamp(intensity, 0.001, 1.0), 0.45);
 
-              // Conditional Lighting for points models with normals
-              if (uUseLighting) {
-                vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
-                // normal is a built-in attribute in Three.js ShaderMaterial
-                float d = dot(normalize(normal), lightDir) * 0.5 + 0.5;
-                vLight = d * uIntensity;
-              } else {
-                vLight = uIntensity; // Just apply the slider brightness
-              }
-
               vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
 
               // Pass the view-space Z position to the fragment shader
@@ -629,15 +599,16 @@
           `,
 
           fragmentShader: `
+            uniform float uBrightness;
             uniform float uOpacity;
-            varying vec3 vColor;
-            varying float vLight;
             varying float vDepth;
+            varying vec3 vColor;
 
             void main() {
               float d = length(gl_PointCoord - vec2(0.5));
               if (d > 0.5) discard;   // circular points
-              gl_FragColor = vec4(vColor * vLight, (1.0 - d) * uOpacity);
+
+              gl_FragColor = vec4(vColor * uBrightness, (1.0 - d) * uOpacity);
             }
           `
         });
@@ -714,22 +685,6 @@
 
             let points_material = createPointShaderMaterial( isMobile === true ? 0.25 : 0.5 );
 
-            // The Condition: check if normals exist in the PLY
-
-            if (smooth.hasAttribute( 'normal' )) {
-              smooth.normalizeNormals();
-
-              const normals_are_valid = normalsAreValid( smooth );
-
-              if (normals_are_valid) {
-                points_material.uniforms.uUseLighting.value = true;
-              } else {
-                document.getElementById('btn_dc_dli').disabled = true;
-              }
-            } else {
-              document.getElementById('btn_dc_dli').disabled = true;
-            }
-
             // Shader material expects color attribute
             // Fill with white color if no color is present
 
@@ -741,7 +696,7 @@
 
             vertex_colors_enabled = true;
 
-            // Add intensity to geometry - START
+            // *** START - Add intensity to geometry ***
 
             // Some PLY point clouds might have intensity baked-in
 
@@ -757,7 +712,7 @@
                 const y = pos.getY( i );
                 const z = pos.getZ( i );
 
-                const d = Math.sqrt( x*x + y*y + z*z );
+                const d = Math.sqrt( x * x + y * y + z * z );
 
                 intensity[ i ] = d;
               }
@@ -783,7 +738,7 @@
               smooth.setAttribute( 'intensity', new THREE.BufferAttribute( intensity, 1 ) );
             }
 
-            // Add intensity to geometry - END
+            // *** END - Add intensity to geometry ***
 
             mesh = new THREE.Points( smooth, points_material );
             mesh.sizeAttenuation = true;
