@@ -145,8 +145,6 @@
         <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
         <button title="Toggle Elevation Colors" id="btn_elevation_colors" onclick="set_elevation_colors();" style="min-width: 28px;" disabled>EC</button>
         <label for="btn_elevation_colors" title="Toggle Elevation Colors"></label>
-        <button title="Toggle Vertex Colors" id="btn_vertex_colors" onclick="set_vertex_colors();" style="display: none; min-width: 28px;">VC</button>
-        <label for="btn_vertex_colors" title="Toggle Vertex Colors"></label>
         <button title="Toggle Classification Colors" id="btn_classification_colors" onclick="set_classification_colors();" style="display: none; min-width: 28px;">CC</button>
         <label for="btn_classification_colors" title="Toggle Classification Colors"></label>
         <button title="Toggle Normal Colors" id="btn_normal_colors" onclick="set_normal_colors();" style="display: none; min-width: 28px;">NC</button>
@@ -532,7 +530,7 @@
         }
 
         // Start flashing indicator
-        document.getElementById('status_indicator').style.display = 'block';
+        document.getElementById('status_indicator').style.display = 'inline-block';
 
         // Load PCD or XYZ or LAS/LAZ file
         selected_pcd_file !== null ? loadFile() : loadURLFile();
@@ -632,7 +630,7 @@
             uIsPCD: { value: pcd },
             uOpacity: { value: 1.0 },
             uBrightness: { value: 1.0 },
-            uIntensityGamma: { value: 0.1 },
+            uIntensityGamma: { value: 1.0 },
             uClassLUT: { value: lutTexture } // Passing the texture instead of array
           },
 
@@ -667,7 +665,9 @@
             void main() {
               vAlpha = alpha;
               vClass = classification;
-              vNormal = normalize(normalMatrix * normal);
+              vNormal = vec3(0.0);
+
+              if (uMode == 3.0) vNormal = normalize(normalMatrix * normal);
 
               // Normalize and apply smoothstep (built-in GLSL version)
               float t = clamp(((uIsPCD ? position.y : position.z) - uMinZ) / (uMaxZ - uMinZ), 0.0, 1.0);
@@ -746,7 +746,8 @@
 
               finalRGB *= uBrightness;
 
-              float outAlpha = vAlpha * uOpacity * (1.0 - edge) * vIntensityAlpha * classData.a;
+              float outAlpha = uOpacity;
+              if (uMode != 3.0) outAlpha *= (vAlpha * (1.0 - edge) * vIntensityAlpha * classData.a);
               if (outAlpha < 0.01) discard;
 
               gl_FragColor = vec4(finalRGB, outAlpha);
@@ -1069,7 +1070,7 @@
 
         if (gui_set === false) {
           // Add Brightness control
-          gui.add( params, 'brightness', 0, 4 ).name( 'Brightness' )
+          gui.add( params, 'brightness', 0, 5 ).name( 'Brightness' )
           .onChange( ( value ) => {
             if (pcd_obj.material && pcd_obj.material.uniforms) {
               pcd_obj.material.uniforms.uBrightness.value = value;
@@ -1129,10 +1130,12 @@
         }
 
         if (pcd_obj.geometry.hasAttribute( 'normal' )) {
-          document.getElementById('btn_normal_colors').style.backgroundColor = 'transparent';
-          document.getElementById('btn_normal_colors').style.display = '';
-          document.getElementById('btn_normal_colors').disabled = false;
-          normal_colors_present = true;
+          if (normalsAreValid( pcd_obj.geometry ) ) {
+            document.getElementById('btn_normal_colors').style.backgroundColor = 'transparent';
+            document.getElementById('btn_normal_colors').style.display = '';
+            document.getElementById('btn_normal_colors').disabled = false;
+            normal_colors_present = true;
+          }
         }
 
         console.timeEnd( 'Loading Time' );
@@ -1143,10 +1146,9 @@
         document.getElementById('div_loading').style.display = 'none';
 
         gui_container.style.display = 'block';
+        set_gui_position();
 
         init_running = false;
-
-        console.log('pcd_obj ', pcd_obj);
 
         render_requested = true;
         mouse_wheel = true;
@@ -1178,6 +1180,17 @@
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
+      }
+
+      function normalsAreValid( geometry ) {
+        const normals = geometry.attributes.normal.array;
+
+        for ( let i = 0; i < normals.length; i += 3 ) {
+          const nx = normals[ i ], ny = normals[ i + 1 ], nz = normals[ i + 2 ];
+          if (nx !== 0 || ny !== 0 || nz !== 0) return true;
+        }
+
+        return false;
       }
 
       function set_elevation_colors() {
