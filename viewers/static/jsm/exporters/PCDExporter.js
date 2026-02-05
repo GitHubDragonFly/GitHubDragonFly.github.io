@@ -68,7 +68,7 @@ class PCDExporter {
 
 			binary: false,
 			binaryCompressed: false,
-			littleEndian: true,         // for binary modes: false = AARRGGBB, true = BBGGRRAA
+			littleEndian: true,          // for binary modes: false = AARRGGBB, true = BBGGRRAA
 			includeAlpha: false,
 			includeColors: true,         // Required for either packed or separate color
 			colorUnsigned: false,        // Only applies to packed rgb or rgba, requires includeColors
@@ -398,8 +398,8 @@ class PCDExporter {
 
 				const pos = pc.geometry.attributes.position;
 				const alphaAttr = pc.geometry.getAttribute( 'alpha' );
-				const colorAttr = scope._normalize( pc.geometry.attributes.color );
-				const normalAttr = pc.geometry.attributes.normal;
+				const colorAttr = scope._normalizeColors( pc.geometry.attributes.color );
+				const normalAttr = scope._normalizeNormals( pc.geometry.attributes.normal );
 				const intensityAttr = pc.geometry.attributes.intensity;
 				const classificationAttr = pc.geometry.attributes.classification;
 
@@ -757,18 +757,36 @@ class PCDExporter {
 
 	}
 
-	_normalize( attrib ) {
+	_normalizeNormals( attr ) {
 
-		// Graceful exit for missing attributes
+		if ( !attr ) return null;
+
+		const count = attr.count;
+		const itemSize = attr.itemSize;
+		const array = new Float32Array( count * itemSize );
+
+		for ( let i = 0; i < count; i++ ) {
+
+			const x = attr.getX( i );
+			const y = attr.getY( i );
+			const z = attr.getZ( i );
+
+			const len = Math.sqrt( x * x + y * y + z * z ) || 1;
+
+			array[ i * 3 + 0 ] = x / len;
+			array[ i * 3 + 1 ] = y / len;
+			array[ i * 3 + 2 ] = z / len;
+
+		}
+
+		return new BufferAttribute( array, 3 );
+
+	}
+
+	_normalizeColors( attrib ) {
 
 		if ( !attrib ) return null;
-
-		// Defensive checks for malformed attributes
-
 		if ( attrib.count === 0 || attrib.itemSize === 0 ) return null;
-
-		// If already normalized (float32), return as-is
-
 		if ( attrib.array instanceof Float32Array ) { return attrib; }
 
 		const count = attrib.count;
