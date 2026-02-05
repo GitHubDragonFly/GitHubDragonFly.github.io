@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="PLY (Polygon) + STL (Stereolithography) Viewer with WebGPU">
+    <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
+    <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
+
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR:', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE:', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.webgpu.min.js",
+          "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.webgpu.min.js",
+          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.tsl.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/",
+          "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
+
+    <script>
+      var THREE, manager, ply_loader, stl_loader, renderer, scene, camera, render_requested;
+      var controls, mouse_down, mouse_wheel, events_initialized, init_running = false;
+      var mesh, gpu, gl2, bounding_box, flat_shading_enabled, object_is_points;
+      var merge_vertices, wireframe_enabled, vertex_colors_enabled;
+      var ww = window.innerWidth, wh = window.innerHeight, isMobile;
+      var min_allowed_point_size, max_allowed_point_size, count = 0;
+      var url_displayed = false, url_loading = false, url_ply;
+      var selected_ply_file, selected_stl_file, selected_url_file = '';
+
+      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
+    </script>
+
+    <script type="module">
+      import * as three_js from "three";
+      import { STLLoader } from "three/addons/loaders/STLLoader.min.js";
+      import { PLYLoader } from "three/addons/loaders/PLYLoader.min.js";
+
+      THREE = three_js;
+
+      manager = new THREE.LoadingManager();
+      manager.onLoad = function() { mouse_wheel = true; }
+
+      ply_loader = new PLYLoader( manager );
+      stl_loader = new STLLoader( manager );
+    </script>
+
+    <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- Using three.js library: https://github.com/mrdoob/three.js -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>PLY+STL WebGPU (r182)</title>
+  </head>
+  <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <button id="btn_desktop" title="Open Desktop Version" onclick="switch_to_desktop();">D</button>
+        <label for="btn_desktop" title="Open Desktop Version"></label>
+        <button title="Get remote model via URL" id="btn_url" onclick="show_url()" style="min-width: 38px;">URL</button>
+        <label for="btn_url" title="Get remote model via URL"></label>
+        <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
+        <label for="btn_file_input" title="Browse Local Files"></label>
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".ply, .stl" />
+        <label for="back_color" title="Background Color">B</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
+          <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
+            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="5" step="0.1" value="1" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
+            <span id="dli_val">1</span>
+          </div>
+        </button>
+        <label for="btn_dc_dli" title="Directional Light Intensity"></label>
+        <button title="Flat Shading" id="btn_flat" onclick="set_flat();" disabled>F</button>
+        <label for="btn_flat" title="Flat Shading"></label>
+        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
+        <label for="btn_wireframe" title="Wireframe"></label>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
+        <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
+        <div id="status_indicator" class="indicator"></div>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="width: calc(75% - 12px);" />
+        <button title="Load" id="btn_load" onclick="load_url_file();" style="min-width: 8.5%;">Load</button>
+        <label for="btn_load" title="Load"></label>
+        <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
+        <label for="btn_clear" title="Clear"></label>
+      </div>
+      <div class="fm" id="div_message" style="width: 99.1%; margin: 2px 0 2px 1px; color: maroon;">
+        Use inputs above
+      </div>
+    </div>
+
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">PLY+STL WebGPU</div>
+
+    <script>
+      function hide_dropdown_dli() { $('#dc_dli').fadeOut(); mouse_wheel = true; }
+
+      function show_hide_dropdown_dli() {
+        if ($('#dc_dli')[ 0 ].style.display === 'none') {
+          $('#dc_dli').fadeIn();
+
+          $('#dc_dli')[ 0 ].style.marginTop = '2px';
+
+          $('#directional_light_intensity').focus();
+        } else {
+          $('#dc_dli').fadeOut();
+        }
+
+        mouse_wheel = true;
+      }
+
+      function return_false() { return false; }
+
+      function switch_to_desktop() {
+        let link = document.createElement( 'a' );
+        link.style.display = 'none';
+        link.href = "../PLY Viewer.html";
+        link.click();
+      }
+
+      function show_url() {
+        if (url_displayed === true) {
+          url_displayed = false;
+          document.getElementById('url').style.display = 'none';
+          document.getElementById('btn_url').style.backgroundColor = 'transparent';
+        } else {
+          document.getElementById('btn_url').style.backgroundColor = 'lightgreen';
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+
+        window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
+        window.addEventListener( 'pointerup', (event) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
+        window.addEventListener( 'keydown', ( event ) => {
+          if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
+            controls.listenToKeyEvents( window );
+            mouse_wheel = true;
+          }
+        }, false);
+        window.addEventListener( 'keyup', ( event ) => {
+          if (arrow_keys.some( k => k === event.key )) {
+            controls.stopListenToKeyEvents();
+            mouse_wheel = false;
+          }
+        }, false);
+      }
+
+      function resize() {
+        if (scene !== undefined) {
+          mouse_wheel = true;
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          renderer.setSize( ww, wh );
+
+          camera.aspect = ww / wh;
+          camera.updateProjectionMatrix();
+
+          mouse_wheel = true;
+        }
+      }
+    </script>
+
+    <script>
+      function set_back_color() {
+        scene.background = null;
+        document.body.style.backgroundColor = document.getElementById('back_color').value;
+        mouse_wheel = true;
+      }
+
+      function set_directional_light_intensity() {
+        let dli_value = document.getElementById('directional_light_intensity').value;
+        document.getElementById('dli_val').innerText = dli_value;
+
+        const val = parseFloat( dli_value );
+
+        // Shader lighting
+
+        if (mesh && mesh.material.uniforms) {
+          mesh.material.uniforms.uBrightness.value = val;
+        }
+
+        mouse_wheel = true;
+      }
+
+      function frame_camera() {
+        bounding_box.setFromObject( mesh );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
+
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        camera.lookAt( center );
+
+        // Center root
+        mesh.position.sub( center );
+
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist * 1.5 );
+        camera.lookAt( 0, 0, 0 );
+        resize();
+      }
+
+      async function init() {
+        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+
+        init_running = true;
+
+        document.getElementById('div_message').innerHTML = 'Loading ... ' + pw;
+        document.getElementById('div_message').style.display = '';
+
+        if (scene) {
+          mouse_wheel = true;
+
+          if (mesh) await scene_cleanup();
+
+          await reset_all( true );
+        }
+
+        enable_disable( true );
+
+        selected_ply_file = null;
+        selected_stl_file = null;
+        object_is_points = false;
+        url_ply = false;
+        mouse_down = false;
+        mouse_wheel = true;
+        vertex_colors_enabled = false;
+        flat_shading_enabled = false;
+        render_requested = false;
+        bounding_box = new THREE.Box3();
+        max_allowed_point_size = isMobile ? 0.75 : 1.5;
+        min_allowed_point_size = isMobile ? 0.01 : 0.05;
+
+        document.getElementById('btn_flat').disabled = false;
+        document.getElementById('btn_wireframe').disabled = false;
+
+        console.time( 'Loading Time' );
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (url_loading === false) {
+          // Loaded file
+          var fi = document.getElementById('file_input');
+
+          for (let i = 0; i < fi.files.length; i++) {
+            if (fi.files[ i ].name.toUpperCase().endsWith('.PLY')) { selected_ply_file = fi.files[ i ]; }
+            else if (fi.files[ i ].name.toUpperCase().endsWith('.STL')) { selected_stl_file = fi.files[ i ]; }
+          };
+
+          if (selected_ply_file === null && selected_stl_file === null) {
+            handle_error( 'No valid PLY or STL file selected!' );
+            return;
+          }
+
+          selected_url_file = '';
+        } else {
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          url_loading = false;
+        }
+
+        if (renderer === undefined) {
+          try {
+            renderer = new THREE.WebGPURenderer( { antialias: true, alpha: true } );
+            await renderer.init();
+          } catch ( error ) {
+            handle_error( error );
+            return;
+          }
+
+          renderer.setPixelRatio( window.devicePixelRatio < 1.5 ? window.devicePixelRatio : 2.0 );
+          renderer.outputColorSpace = THREE.SRGBColorSpace;
+          renderer.toneMapping = THREE.NeutralToneMapping;
+          renderer.toneMappingExposure = 1.0;
+          renderer.setSize( ww, wh );
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.autoClear = false;
+
+          document.body.appendChild( renderer.domElement );
+        }
+
+        if (scene === undefined) scene = new THREE.Scene();
+        if (mesh === undefined) mesh = new THREE.Object3D();
+
+        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+        if (camera === undefined) {
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 1e9 );
+          camera.position.set( 0, 0, 250 );
+          scene.add( camera );
+        }
+
+        if (controls === undefined) {
+          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+
+          controls = new OrbitControls( camera, renderer.domElement );
+          controls.zoomToCursor = true;
+          controls.zoomSpeed = 0.5;
+          controls.rotateSpeed = 0.5;
+          controls.keyPanSpeed = 0.5; 
+          controls.panSpeed = 0.5;
+          //controls.enableDamping = true;
+          //controls.dampingFactor = 0.3;
+          //controls.enableKeys = false;
+          //controls.enableZoom = true;
+          //controls.maxPolarAngle = 2.2;
+          //controls.minPolarAngle = 1.1;
+          //controls.minDistance = 2;
+          //controls.maxDistance = 500;
+        }
+
+        // Start flashing indicator
+        document.getElementById('status_indicator').style.display = 'inline-block';
+
+        // Load the model
+        loadFile();
+      }
+
+      function allVertexColorsAreBlack( geometry ) {
+        if (!geometry.hasAttribute( 'color' ) ) return false;
+
+        const colors = geometry.getAttribute( 'color' );
+        const col_count = colors.count;
+
+        for ( let i = 0; i < col_count; i++ ) {
+          if (
+            colors.getX( i ) !== 0 ||
+            colors.getY( i ) !== 0 ||
+            colors.getZ( i ) !== 0
+          ) {
+            return false;  // found a non-black vertex
+          }
+        }
+
+        return true; // all black
+      }
+
+      function add_face_normals( geometry ) {
+        if (geometry.index) geometry = geometry.toNonIndexed();
+
+        const pos = geometry.attributes.position;
+        const pos_count = pos.count;
+        const normals = [];
+
+        for ( let i = 0; i < pos_count; i += 3 ) {
+          const a = new THREE.Vector3().fromBufferAttribute( pos, i );
+          const b = new THREE.Vector3().fromBufferAttribute( pos, i + 1 );
+          const c = new THREE.Vector3().fromBufferAttribute( pos, i + 2 );
+
+          // Compute face normal
+          const cb = new THREE.Vector3().subVectors( c, b );
+          const ab = new THREE.Vector3().subVectors( a, b );
+          cb.cross( ab ).normalize();
+
+          // Assign same normal to all 3 vertices of the face
+          normals.push(cb.x, cb.y, cb.z);
+          normals.push(cb.x, cb.y, cb.z);
+          normals.push(cb.x, cb.y, cb.z);
+        }
+
+        geometry.setAttribute( 'faceNormal', new THREE.Float32BufferAttribute( normals , 3 ) );
+
+        return geometry;
+      }
+
+      function add_barycentric( geometry ) {
+        if (geometry.index) geometry = geometry.toNonIndexed();
+
+        const pos_count = geometry.attributes.position.count;
+        const bary = new Float32Array( pos_count * 3 );
+
+        for ( let i = 0; i < pos_count; i += 3 ) {
+          bary.set( [ 1, 0, 0 ], ( i + 0 ) * 3 );
+          bary.set( [ 0, 1, 0 ], ( i + 1 ) * 3 );
+          bary.set( [ 0, 0, 1 ], ( i + 2 ) * 3 );
+        }
+
+        geometry.setAttribute( 'baryCentric', new THREE.BufferAttribute( bary , 3 ) );
+
+        return geometry;
+      }
+
+      function normalsAreValid( geometry ) {
+        if (!geometry.hasAttribute('normal')) return false;
+
+        const normals = geometry.getAttribute('normal');
+        let validCount = 0;
+        const sampleSize = Math.min(normals.count, 1000); // Check a sample for speed
+
+        for (let i = 0; i < sampleSize; i++) {
+          // Check if the normal has any length at all
+          if (Math.abs( normals.getX( i ) ) > 0.05 || 
+            Math.abs( normals.getY( i ) ) > 0.05 || 
+            Math.abs( normals.getZ( i ) ) > 0.05) {
+            validCount++;
+          }
+        }
+
+        // If less than 50% of sampled points have data, ignore normals
+        return (validCount / sampleSize) > 0.5;
+      }
+
+      async function createMeshShaderMaterialTSL() {
+        const {
+          attribute,
+          varying,
+          uniform,
+          vec3, vec4, float,
+          cameraPosition, modelViewProjection,
+          normalize, dot, fwidth, min,
+          smoothstep, step
+        } = await import( 'three/tsl' );
+
+        // float uniforms (0/1 toggles)
+
+        const uOpacity = uniform( 1.0, 'float' );
+        const uBrightness = uniform( 1.0, 'float' );
+        const uWireframe = uniform( 0.0, 'float' );
+        const uUseFlatShading = uniform( 0.0, 'float' );
+        const uUseVertexColors = uniform( 1.0, 'float' );
+
+        const uBaseColor = uniform( new THREE.Color( 1, 1, 1 ), 'color' );
+
+        // attributes
+
+        const position = attribute( 'position', 'vec3' );
+        const normalAttr = attribute( 'normal', 'vec3' );
+        const colorAttr = attribute( 'color', 'vec3' );
+        const baryAttr = attribute( 'baryCentric', 'vec3' );
+        const faceNormal = attribute( 'faceNormal', 'vec3' );
+
+        // varyings created *from* attributes (no Fn, no assign)
+        const vWorldPos = varying( position );
+        const vBary = varying( baryAttr );
+
+        // flat vs smooth normal
+
+        const flatFactor = step( float( 0.5 ), uUseFlatShading );
+        const smoothFactor = float( 1.0 ).sub( flatFactor );
+        const mixedNormal = faceNormal.mul( flatFactor ).add( normalAttr.mul( smoothFactor ) );
+        const vNormal = varying( mixedNormal );
+
+        // vertex colors vs base color
+
+        const vcFactor = step( float( 0.5 ), uUseVertexColors );
+        const baseFactor = float( 1.0 ).sub( vcFactor );
+        const mixedColor = colorAttr.mul( vcFactor ).add( uBaseColor.rgb.mul( baseFactor ) );
+        const vColor = varying( mixedColor );
+
+        // -------- fragment graph --------
+
+        const d = fwidth( vBary );
+        const a3 = smoothstep( vec3( 0, 0, 0 ), d.mul( 1.5 ), vBary );
+        const e = min( a3.x, min( a3.y, a3.z ) );
+
+        const lightDir = normalize( cameraPosition.sub( vWorldPos ) );
+        const diff = dot( normalize( vNormal ), lightDir ).mul( 0.5 ).add( 0.5 );
+        const shadedRGB = vColor.mul( diff ).mul( uBrightness );
+        const shadedColor = vec4( shadedRGB, uOpacity );
+
+        const wireRGB = vec3( 0.8, 0.8, 0.8 );
+        const edgeMask = step( float( 0.1 ), e );
+        const wireAlpha = float( 1.0 ).sub( edgeMask );
+        const wireColor = vec4( wireRGB, wireAlpha.mul( uOpacity ) );
+
+        const wfFactor = step( float( 0.5 ), uWireframe );
+        const shadeFactor = float( 1.0 ).sub( wfFactor );
+
+        const finalColor = wireColor.mul( wfFactor ).add( shadedColor.mul( shadeFactor ) );
+
+        const material = new THREE.NodeMaterial();
+
+        // no vertexNode at all – let NodeMaterial handle transforms
+
+        material.positionNode = modelViewProjection.mul( vec4( position, 1.0 ) );
+        material.colorNode = finalColor;
+
+        material.transparent = true;
+        material.depthWrite = true;
+        material.depthTest = true;
+        material.side = THREE.DoubleSide;
+        material.vertexColors = uUseVertexColors;
+
+        // expose uniforms to tweak them externally
+
+        material.uniforms = {
+          uOpacity,
+          uWireframe,
+          uBrightness,
+          uUseFlatShading,
+          uUseVertexColors
+        };
+
+        return material;
+      }
+
+      async function createPointShaderMaterialTSL() {
+        const { attribute, uniform, vec4, clamp, pow, positionView } = await import( 'three/tsl' );
+
+        // uniforms
+        const uOpacity = uniform( 1.0, 'float' );
+        const uBrightness = uniform( 1.0, 'float' );
+
+        // attributes
+        const colorAttr = attribute( 'color', 'vec3' );
+        const intensity = attribute( 'intensity', 'float' );
+
+        // color shaping
+        const shapedIntensity = pow( clamp( intensity, 0.001, 1.0 ), 0.1 );
+        const rgb = colorAttr.mul( shapedIntensity ).mul( uBrightness );
+        const finalColor = vec4( rgb, uOpacity );
+
+        // material
+        const material = new THREE.PointsNodeMaterial();
+        material.colorNode = finalColor;
+
+        material.transparent = true;
+        material.depthWrite = false;
+        material.blending = THREE.AdditiveBlending;
+
+        // expose uniforms to tweak them externally
+
+        material.uniforms = { uOpacity, uBrightness };
+
+        return material;
+      }
+
+      function loadFile() {
+        // Launch loading of the selected file, addFileInScene is the callback when it's ready
+        if (selected_ply_file !== null) {
+          ply_loader.load( URL.createObjectURL( selected_ply_file ), addFileInScene,
+          function( xhr ) { }, // onProgress
+          function ( error ) { handle_error( error ); }); // onError
+        } else if (selected_stl_file !== null) {
+          stl_loader.load( URL.createObjectURL( selected_stl_file ), addFileInScene,
+          function( xhr ) { }, // onProgress
+          function ( error ) { handle_error( error ); }); // onError
+        } else {
+          loadURLFile();
+        }
+      }
+
+      async function addFileInScene( object ) {
+        if (selected_ply_file) {
+          URL.revokeObjectURL( selected_ply_file );
+        } else if (selected_stl_file) {
+          URL.revokeObjectURL( selected_stl_file );
+        }
+
+        // object is geometry
+
+        let smooth = object;
+
+        smooth.computeBoundingBox();
+        smooth.computeBoundingSphere();
+
+        if ( smooth.index !== null ) {
+          // Compute smooth normals first (while we have the original vertex data)
+          if (!smooth.hasAttribute( 'normal' )) smooth.computeVertexNormals();
+
+          // Set attributes for flatShading and wireframe functionality
+
+          smooth = add_face_normals( smooth );
+          smooth = add_barycentric( smooth );
+
+          if (!smooth.hasAttribute( 'normal' )) smooth.computeVertexNormals();
+          smooth.normalizeNormals();
+          smooth.center();
+
+          smooth.computeBoundingBox();
+          smooth.computeBoundingSphere();
+
+          if ((smooth.hasAttribute( 'color' ) && allVertexColorsAreBlack( smooth )) || !smooth.hasAttribute( 'color' )) {
+            const pos_count = smooth.getAttribute( 'position' ).count;
+            const white = new Float32Array( pos_count * 3 ).fill( 1.0 );
+            smooth.setAttribute( 'color', new THREE.BufferAttribute( white, 3 ) );
+
+            vertex_colors_enabled = true;
+          }
+
+          //let mesh_material = createMeshShaderMaterial();
+          let mesh_material = await createMeshShaderMaterialTSL();
+
+          mesh = new THREE.Mesh( smooth, mesh_material );
+
+          document.getElementById('btn_flat').disabled = false;
+        } else {
+          if (selected_ply_file || url_ply) {
+            // PLY points model loaded
+
+            flat_shading_enabled = false;
+            document.getElementById('btn_flat').disabled = true;
+            document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+            document.getElementById('btn_wireframe').disabled = true;
+
+            //let points_material = createPointShaderMaterial( isMobile ? 0.25 : 0.5 );
+            let points_material = await createPointShaderMaterialTSL( isMobile ? 0.25 : 0.5 );
+
+            // Shader material expects color attribute
+            // Fill with white color if no color is present
+
+            if (!smooth.hasAttribute( 'color' )) {
+              const pos_count = smooth.getAttribute( 'position' ).count;
+              const colors = new Float32Array( pos_count * 3 ).fill( 0.9 );
+              smooth.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
+            }
+
+            vertex_colors_enabled = true;
+
+            // *** START - Add intensity to geometry ***
+
+            // Some PLY point clouds might have intensity baked-in
+
+            if (!smooth.hasAttribute( 'intensity' )) {
+              const pos = smooth.getAttribute( 'position' );
+              const points_count = pos.count;
+              const intensity = new Float32Array( points_count );
+
+              // Spherical falloff
+
+              for (let i = 0; i < points_count; i++) {
+                const x = pos.getX( i );
+                const y = pos.getY( i );
+                const z = pos.getZ( i );
+
+                const d = Math.sqrt( x * x + y * y + z * z );
+
+                intensity[ i ] = d;
+              }
+
+              // Normalize
+
+              let min = Infinity;
+              let max = -Infinity;
+
+              for (let i = 0; i < intensity.length; i++) {
+                const v = intensity[ i ];
+
+                if (v < min) min = v;
+                if (v > max) max = v;
+              }
+
+              const range = ( max - min );
+
+              for (let i = 0; i < points_count; i++) {
+                intensity[ i ] = ( intensity[ i ] - min ) / range;
+              }
+
+              smooth.setAttribute( 'intensity', new THREE.BufferAttribute( intensity, 1 ) );
+            }
+
+            // *** END - Add intensity to geometry ***
+
+            mesh = new THREE.Points( smooth, points_material );
+            mesh.sizeAttenuation = true;
+            mesh.sortPoints = true;
+            object_is_points = true;
+          } else {
+            // STL model loaded
+
+            if (merge_vertices === undefined) {
+              const { mergeVertices } = await import( "three/addons/utils/BufferGeometryUtils.min.js" );
+              merge_vertices = mergeVertices;
+            }
+
+            smooth.deleteAttribute('normal');
+            smooth = merge_vertices( smooth, 1e-6 );
+            smooth.computeVertexNormals();
+
+            // Set attributes for flatShading and wireframe functionality
+
+            smooth = add_face_normals( smooth );
+            smooth = add_barycentric( smooth );
+
+            if (!smooth.hasAttribute( 'normal' )) smooth.computeVertexNormals();
+            smooth.normalizeNormals();
+            smooth.center();
+
+            smooth.computeBoundingBox();
+            smooth.computeBoundingSphere();
+
+            if ((smooth.hasAttribute( 'color' ) && allVertexColorsAreBlack( smooth )) || !smooth.hasAttribute( 'color' )) {
+              const pos_count = smooth.getAttribute( 'position' ).count;
+              const white = new Float32Array( pos_count * 3 ).fill( 1.0 );
+              smooth.setAttribute( 'color', new THREE.BufferAttribute( white, 3 ) );
+
+              vertex_colors_enabled = true;
+            }
+
+            //let mesh_material = createMeshShaderMaterial();
+            let mesh_material = await createMeshShaderMaterialTSL();
+
+            mesh = new THREE.Mesh( smooth, mesh_material );
+
+            document.getElementById('btn_flat').disabled = false;
+          }
+        }
+
+        // Add mesh to the scene
+        scene.add( mesh );
+        camera.lookAt( mesh.position );
+
+        finish_loading();
+
+        mouse_wheel = true;
+      }
+
+      function loadURLFile() {
+        if (selected_url_file !== '') {
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+          }
+
+          // No extension checking for single URL so it has to point to PLY or STL file
+
+          stl_loader.load( selected_url_file, addFileInScene,
+          function( xhr ) { }, // onProgress
+          function ( error1 ) { // onError
+            url_ply = true;
+            ply_loader.load( selected_url_file, addFileInScene,
+            function( xhr ) { }, // onProgress
+            function ( error2 ) { handle_error( error2 ); }); // onError
+          });
+        }
+      }
+
+      async function finish_loading() {
+        frame_camera();
+
+        if (object_is_points === true) {
+          document.getElementById('btn_flat').disabled = true;
+          document.getElementById('btn_wireframe').disabled = true;
+        }
+
+        console.timeEnd( 'Loading Time' );
+
+        // Stop flashing indicator
+        document.getElementById('status_indicator').style.display = 'none';
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_message').style.display = 'none';
+
+        enable_disable( false );
+
+        init_running = false;
+
+        render_requested = true;
+        mouse_wheel = true;
+        render();
+
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+      }
+
+      function log_info() {
+        console.log( 'Memory: ', renderer.info.memory );
+        console.log( 'Render: ', renderer.info.render );
+      }
+
+      function handle_error( error ) {
+        if (isMobile === false) {
+          document.getElementById('div_message').innerText = 'Check the console for any error messages';
+          document.getElementById('div_message').style.display = '';
+        } else {
+          document.getElementById('div_message').style.display = 'none';
+        }
+
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        mouse_wheel = true;
+        render_requested = false;
+        enable_disable( true );
+
+        // Stop flashing indicator
+        document.getElementById('status_indicator').style.display = 'none';
+
+        init_running = false;
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      function quick_x_rotation( angle ) {
+        mesh.rotateX( - Math.PI / 2.0 );
+
+        mouse_wheel = true;
+      }
+
+      function set_flat() {
+        if (mesh) {
+          if (flat_shading_enabled) {
+            document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+            flat_shading_enabled = false;
+          } else {
+            document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
+            flat_shading_enabled = true;
+          }
+
+          mesh.traverse( ( child ) => {
+            if (child.isMesh && child.material.uniforms) {
+              child.material.uniforms.uUseFlatShading.value = flat_shading_enabled ? 1.0 : 0.0;
+            }
+
+            mouse_wheel = true;
+          });
+        }
+      }
+
+      function show_wireframe() {
+        if (mesh) {
+          if (wireframe_enabled) {
+            wireframe_enabled = false;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+          } else {
+            wireframe_enabled = true;
+            document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
+          }
+
+          mesh.traverse( ( child ) => {
+            if (child.isMesh && child.material.uniforms) {
+              child.material.uniforms.uWireframe.value = wireframe_enabled ? 1.0 : 0.0;
+            }
+
+            mouse_wheel = true;
+          });
+        }
+      }
+
+      async function render() {
+        if (mesh) {
+          if (mouse_down === true || mouse_wheel === true) {
+            controls.update();
+
+            renderer.clear();
+            renderer.render( scene, camera );
+
+            if (mouse_wheel === true) {
+              if (count > 5) {
+                mouse_wheel = false;
+                count = 0;
+              } else {
+                count ++;
+              }
+            }
+          }
+        }
+
+        if (render_requested === true) requestAnimationFrame( render );
+      }
+
+      async function reset_all( reset = false ) {
+        document.getElementById('back_color').value = '#000000';
+        document.getElementById('dli_val').innerText = 1;
+        document.getElementById('directional_light_intensity').value = 1;
+        document.getElementById('btn_url').style.backgroundColor = 'transparent';
+        document.getElementById('btn_flat').style.backgroundColor = 'transparent';
+        document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+
+        init_running = false;
+
+        // Reset the view
+        if (reset === true) {
+          controls.reset();
+          set_back_color();
+        } else {
+          // Page (re)loading
+          if (scene) {
+            if (scene.environment) {
+              scene.environment.dispose();
+              scene.environment = null;
+            }
+
+            if (mesh) await scene_cleanup();
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+
+            renderer.clear();
+            renderer.dispose();
+          }
+
+          document.getElementById('file_input').value = '';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('btn_flat').disabled = true;
+          document.getElementById('btn_wireframe').disabled = true;
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+          enable_disable( true );
+        }
+
+        mouse_wheel = true;
+      }
+
+      async function scene_cleanup() {
+        if (wireframe_enabled === true) await show_wireframe();
+
+        scene.remove( mesh );
+
+        renderer.clear();
+
+        mesh.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            if (child.geometry) {
+              child.geometry.dispose();
+              child.geometry = null;
+            }
+
+            if (child.material) {
+              if (child.material.uniforms) {
+                Object.keys( child.material.uniforms ).forEach( key => {
+                  const uniform = child.material.uniforms[ key ].value;
+                  if (uniform && uniform.isTexture) uniform.dispose();
+                });
+              } else {
+                if (child.material.map) child.material.map.dispose();
+              }
+
+              child.material.dispose();
+              child.material = null;
+            }
+          }
+        });
+
+        mesh = undefined;
+
+        if (!isMobile) renderer.info.reset();
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('directional_light_intensity').disabled = disable;
+        document.getElementById('btn_dc_dli').disabled = disable;
+        document.getElementById('back_color').disabled = disable;
+        document.getElementById('btn_quick_x').disabled = disable;
+        disabled_changed();
+
+        mouse_wheel = true;
+      }
+    </script>
+
+    <script>
+      async function document_ready() {
+        const WebGPU = await import( "three/addons/capabilities/WebGPU.min.js" );
+        const WebGL = await import( "three/addons/capabilities/WebGL.min.js" );
+
+        gpu = WebGPU[ 'default' ].isAvailable();
+        gl2 = WebGL[ 'default' ].isWebGL2Available();
+
+        if ( gpu === true ) {
+          console.log( 'WebGPU support detected' );
+          document.getElementById('div_message').innerText += ' - WebGPU';
+        } else if ( gl2 === true ) {
+          console.log( 'WebGL2 support detected' );
+          document.getElementById('div_message').innerText += ' - WebGL2';
+        } else {
+          document.body.appendChild( WebGPU[ 'default' ].getErrorMessage() );
+          document.getElementById('fixed_menu').style.display = 'none';
+          throw new Error( 'No WebGPU or WebGL2 support detected' );
+        }
+
+        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
+          (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
+      }
+
+      function disabled_changed() {
+        $('button').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+
+        $('input[type=color]').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+      }
+    </script>
+  </body>
+</html>

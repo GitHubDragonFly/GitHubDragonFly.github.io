@@ -7,6 +7,51 @@
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR:', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE:', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
@@ -36,7 +81,7 @@
       var ww = window.innerWidth, wh = window.innerHeight;
       var animation_running, extra_running, texture_maps;
       var render_requested, flat_shading_enabled;
-      var bounding_box, vertex_colors_enabled;
+      var bounding_box, vertex_colors_enabled, init_running = false;
       var local_files, local_files_indexes, local_bin_files;
       var url_displayed = false, url_loading = false, node_materials;
       var selected_gltf_file, selected_draco_file, selected_url_file = '';
@@ -93,8 +138,6 @@
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="btn_file_input" title="Browse Local Files"></label>
         <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".glb, .gltf, .vrm, .drc, .bin, .dds, .ktx2, .tga, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" multiple />
-        <label for="back_color" title="Background Color">B</label>
-        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
             <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="50" step="0.05" value="3" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
@@ -102,6 +145,8 @@
           </div>
         </button>
         <label for="btn_dc_dli" title="Directional Light Intensity"></label>
+        <label for="back_color" title="Background Color">B</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
@@ -240,57 +285,24 @@
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it hopefully comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( gltf_obj );
-        let size = bounding_box.getSize( new THREE.Vector3() );
-        let center = bounding_box.getCenter( new THREE.Vector3() );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        // Move to the center
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        camera.lookAt( center );
 
-        if (center.x !== 0) gltf_obj.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) gltf_obj.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) gltf_obj.translateZ( center.z * ( - 1 ) );
+        // Center root
+        gltf_obj.position.sub( center );
 
-        // Scale according to window width / height, whichever is greater
-
-        if (ww > wh) {
-          gltf_obj.scale.multiplyScalar( ( wh / size.y ) * 0.15 );
-        } else {
-          gltf_obj.scale.multiplyScalar( ( ww / size.x ) * 0.15 );
-        }
-
-        // Get center coordinates and move to the center again
-
-        bounding_box.setFromObject( gltf_obj );
-        size = bounding_box.getSize( new THREE.Vector3() );
-        center = bounding_box.getCenter( new THREE.Vector3() );
-
-        if (center.x !== 0) gltf_obj.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) gltf_obj.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) gltf_obj.translateZ( center.z * ( - 1 ) );
-
-        // Scale again and re-center if the model's width / height is greater than the screen's width / height
-
-        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
-          gltf_obj.scale.multiplyScalar( ww / (ww > wh ? size.x : size.y) );
-
-          bounding_box.setFromObject( gltf_obj );
-          size = bounding_box.getSize( new THREE.Vector3() );
-          center = bounding_box.getCenter( new THREE.Vector3() );
-
-          if (center.x !== 0) gltf_obj.translateX( center.x * ( - 1 ) );
-          if (center.y !== 0) gltf_obj.translateY( center.y * ( - 1 ) );
-          if (center.z !== 0) gltf_obj.translateZ( center.z * ( - 1 ) );
-        }
-
-        // Set the default camera's z distance
-
-        default_camera.position.z = bounding_box.max.z + 250;
-        default_camera.updateProjectionMatrix();
-
-        mouse_wheel = true;
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist * 1.5 );
+        camera.lookAt( 0, 0, 0 );
+        resize();
       }
 
       function quick_x_rotation( angle ) {
@@ -414,6 +426,8 @@
 
       async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+
+        init_running = true;
 
         document.getElementById('div_message').innerHTML = 'Loading ... ' + pw;
         document.getElementById('div_message').style.display = '';
@@ -1077,8 +1091,7 @@
       async function finish_loading() {
         enable_disable( false );
 
-        set_initial_scale();
-        resize();
+        frame_camera();
 
         let object_is_mesh = false;
 
@@ -1111,8 +1124,11 @@
         }
 
         console.timeEnd( 'Loading Time' );
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_message').style.display = 'none';
+
+        init_running = false;
 
         render_requested = true;
         mouse_wheel = true;
@@ -1136,8 +1152,11 @@
         }
 
         console.timeEnd( 'Loading Time' );
+
         console.log( 'Error loading model!' );
         console.log( error );
+
+        init_running = false;
 
         mouse_wheel = true;
         render_requested = false;
@@ -1239,6 +1258,8 @@
         document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
         document.getElementById('btn_cameras').style.backgroundColor = 'transparent';
         document.getElementById('btn_cameras').innerText = 'C0';
+
+        init_running = false;
 
         if (scene) {
           if (directionalLight) {
@@ -1440,12 +1461,6 @@
           console.log( 'WebGL2 support detected' );
           document.getElementById('div_message').innerText += ' - WebGL2';
         } else {
-          document.getElementById('div_message').innerText = 'No WebGPU or WebGL2 detected!';
-          document.getElementById('btn_url').disabled = true;
-          document.getElementById('file_input').disabled = true;
-          document.getElementById('btn_full_screen').disabled = true;
-          document.getElementById('btn_menu_location').disabled = true;
-
           document.body.appendChild( WebGPU[ 'default' ].getErrorMessage() );
           document.getElementById('fixed_menu').style.display = 'none';
           throw new Error( 'No WebGPU or WebGL2 support detected' );

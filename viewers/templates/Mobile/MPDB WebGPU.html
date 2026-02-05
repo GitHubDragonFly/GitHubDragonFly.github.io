@@ -7,6 +7,51 @@
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR:', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE:', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
@@ -28,15 +73,15 @@
       var gui, gpu, gl2, scene, camera, renderer, render_requested;
       var controls, count = 0, isMobile, bounding_box;
       var mouse_down, mouse_wheel, events_initialized;
-      var ambientLight, directionalLight;
+      var ambientLight, directionalLight, init_running = false;
       var ww = window.innerWidth, wh = window.innerHeight;
       var root, position, color, offset, start, end;
       var json, positions, colors, atom_colors;
-      var atoms, labels, bonds, atoms_visible, labels_visible, bonds_visible;
+      var selected_pdb_file, selected_url_file = '';
+      var url_displayed = false, url_loading = false;
       var geometryAtoms, geometryBonds, boxGeometry, boxMaterial;
       var sphereGeometry, sphereMaterial, labelGeometry, labelMaterial;
-      var url_displayed = false, url_loading = false;
-      var selected_pdb_file, selected_url_file = '';
+      var atoms, labels, bonds, atoms_visible, labels_visible, bonds_visible;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
     </script>
@@ -260,31 +305,30 @@
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( pdb_obj );
-        let size = bounding_box.getSize(new THREE.Vector3());
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        if ( size.y > 1 ) {
-          pdb_obj.scale.multiplyScalar( 50 / size.y );
-        } else if ( size.y > 0.02 ) {
-          pdb_obj.scale.multiplyScalar( 25 / size.y );
-        } else if ( size.y > 0.01 ) {
-          pdb_obj.scale.multiplyScalar( 10 / size.y );
-        } else {
-          pdb_obj.scale.multiplyScalar( 1 / size.y )
-        }
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        camera.lookAt( center );
 
-        bounding_box.setFromObject( pdb_obj );
-        let center = bounding_box.getCenter(new THREE.Vector3());
-        controls.target.set( center.x, center.y, center.z );
+        // Center root
+        pdb_obj.position.sub( center );
 
-        mouse_wheel = true;
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist * 1.5 );
+        camera.lookAt( 0, 0, 0 );
+        resize();
       }
 
       async function init(){
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+
+        init_running = true;
 
         document.getElementById('div_message').innerHTML = 'Loading ... ' + pw;
         document.getElementById('div_message').style.display = '';
@@ -512,8 +556,7 @@
         scene.add( pdb_obj );
         camera.lookAt( pdb_obj.position );
 
-        set_initial_scale();
-        resize();
+        frame_camera();
 
         enable_disable( false );
 
@@ -527,6 +570,8 @@
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_message').style.display = 'none';
         document.getElementById('gui_position').style.display = 'block';
+
+        init_running = false;
 
         render_requested = true;
         mouse_wheel = true;
@@ -552,6 +597,8 @@
         }
 
         set_gui_position();
+
+        init_running = false;
 
         console.timeEnd( 'Loading Time' );
         console.log( 'Error loading model!' );
@@ -962,6 +1009,8 @@
         document.getElementById('btn_bonds').style.backgroundColor = 'transparent';
         document.getElementById('btn_labels').style.backgroundColor = 'transparent';
 
+        init_running = false;
+
         if (scene !== undefined) {
           if (directionalLight) {
             set_directional_light_intensity();
@@ -1080,12 +1129,6 @@
           console.log( 'WebGL2 support detected' );
           document.getElementById('div_message').innerText += ' - WebGL2';
         } else {
-          document.getElementById('div_message').innerText = 'No WebGPU or WebGL2 detected!';
-          document.getElementById('btn_url').disabled = true;
-          document.getElementById('file_input').disabled = true;
-          document.getElementById('btn_full_screen').disabled = true;
-          document.getElementById('btn_menu_location').disabled = true;
-
           document.body.appendChild( WebGPU[ 'default' ].getErrorMessage() );
           document.getElementById('fixed_menu').style.display = 'none';
           throw new Error( 'No WebGPU or WebGL2 support detected' );
