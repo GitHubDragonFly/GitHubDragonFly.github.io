@@ -1,27 +1,41 @@
 import { BufferAttribute, BufferGeometry, Loader } from 'three';
 
-// Default for this loader, direct JS import of fzstd
+// Default ZST decompressor, direct JS import of fzstd
 import * as fzstd from 'https://cdn.skypack.dev/fzstd?min';
 
 // Reuse existing LAS/LAZ decoder
 import { LASZLoader } from './LASZLoader.min.js';
 
-// Created with assistance from Microsoft Copilot and Google Gemini
-// Supporting loading of streamed BIN/LAS/LAZ/ZST tiles from EPT datasets
-
-// EPT datasets should always contain:
-// ept.json
-// ept-hierarchy/
-//	- ept-hierarchy/0-0-0-0.json
-//	- ept-hierarchy/1-0-0-0.json
-//	- ept-hierarchy/1-0-0-1.json
-//	...
-//	- ept-hierarchy/2-0-0-0.json
-//	...
-// ept-data/
-//	ept-data/0-0-0-0.laz (or .bin or .zst)
-//	ept-data/1-0-0-0.laz (or .bin or .zst)
-//	...
+/**
+*	Created with assistance from Microsoft Copilot and Google Gemini
+*
+*	Supports loading of streamed:
+*	- EPT datasets with ept.json and BIN/LAS/LAZ/ZST tiles
+*	- POTREE datasets with cloud.js and BIN/LAS/LAZ tiles
+*
+*	Local loading is also supported (keep all files in the same folder)
+*
+*	EPT datasets should always contain:
+*
+*	ept.json
+*	ept-hierarchy/
+*		- ept-hierarchy/0-0-0-0.json
+*		- ept-hierarchy/1-0-0-0.json
+*		- ept-hierarchy/1-0-0-1.json
+*		...
+*		- ept-hierarchy/2-0-0-0.json
+*		...
+*	ept-data/
+*		ept-data/0-0-0-0.laz (or .bin or .zst)
+*		ept-data/1-0-0-0.laz (or .bin or .zst)
+*		...
+*
+*	POTREE could have the following:
+*	cloud.js
+*	data or data/r folder
+*	.hrc hierarchy files
+*
+*/
 
 const GIT_LFS_THRESHOLD_BYTES = 150;
 
@@ -37,6 +51,7 @@ class EPTStreamLoader extends Loader {
 		this.globalMaxZ = null;
 		this.localBlobs = null;
 		this.contrastFactor = 1.0;
+		this.potreeTileBounds = {};
 
 		this.zdecompressor = fzstd;
 
@@ -286,7 +301,7 @@ class EPTStreamLoader extends Loader {
 
 	}
 
-	async _loadBinTile( buffer, ept ) {
+	async _loadBinTile( buffer, ept, key, isPotree ) {
 
 		try {
 
@@ -295,6 +310,16 @@ class EPTStreamLoader extends Loader {
 			const attrs = ept.attributes || ept.schema;
 			const scale = ept.scale || [ 1, 1, 1 ];
 			const offset = ept.offset || [ 0, 0, 0 ];
+
+			// If this is a Potree tile, apply its bounding box origin
+
+			let tileMin = null;
+
+			if ( this.potreeTileBounds && isPotree ) {
+
+				tileMin = this.potreeTileBounds[ key ]?.min;
+
+			}
 
 			// ----- 1. Build attribute descriptors and compute stride -----
 
@@ -359,15 +384,15 @@ class EPTStreamLoader extends Loader {
 					switch ( info.name ) {
 
 						case 'x':
-							positions[ outIndex * 3 + 0 ] = value * ( scale[ 0 ] ?? a.scale ) + ( offset[ 0 ] ?? a.offset );
+							positions[ outIndex * 3 + 0 ] = ( tileMin ? tileMin.x : 0 ) + value * ( scale[ 0 ] || ( a.scale[ 0 ] ?? a.scale ) ) + ( offset[ 0 ] || ( a.offset[ 0 ] ?? a.offset ) );
 							break;
 
 						case 'y':
-							positions[ outIndex * 3 + 1 ] = value * ( scale[ 1 ] ?? a.scale ) + ( offset[ 1 ] ?? a.offset );
+							positions[ outIndex * 3 + 1 ] = ( tileMin ? tileMin.y : 0 ) + value * ( scale[ 1 ] || ( a.scale[ 1 ] ?? a.scale ) ) + ( offset[ 1 ] || ( a.offset[ 1 ] ?? a.offset ) );
 							break;
 
 						case 'z':
-							positions[ outIndex * 3 + 2 ] = value * ( scale[ 2 ] ?? a.scale ) + ( offset[ 2 ] ?? a.offset );
+							positions[ outIndex * 3 + 2 ] = ( tileMin ? tileMin.z : 0 ) + value * ( scale[ 2 ] || ( a.scale[ 2 ] ?? a.scale ) ) + ( offset[ 2 ] || ( a.offset[ 2 ] ?? a.offset ) );
 							break;
 
 						case 'intensity':
@@ -431,7 +456,14 @@ class EPTStreamLoader extends Loader {
 
 	}
 
-	_getTileDepth( key, ept ) {
+	_getTileDepth( key, ept, isPotree ) {
+
+		if ( isPotree ) {
+
+			// Potree key 'r' is depth 0, 'r0' is depth 1, 'r01' is depth 2
+
+			return Math.max( 0, key.length - 1 );
+		}
 
 		if ( this._isPDAL( ept ) ) {
 
@@ -444,6 +476,235 @@ class EPTStreamLoader extends Loader {
 		// Entwine Morton hierarchy: depth = parts - 1
 
 		return key.split( '-' ).length - 1;
+
+	}
+
+	async _probePotreeLayout( base, eptJson ) {
+
+		console.warn( 'Probing existence of folders and extensions for Potree Layout!' );
+
+		// Cache result on the eptJson object so we don't probe repeatedly
+
+		if ( eptJson._potreeLayout ) return eptJson._potreeLayout;
+
+		const layout = {
+
+			isPotree: true,
+			tileFolder: null,     // 'data/r/' or 'data/'
+			tileExt: null,        // '.bin' | '.las' | '.laz'
+			hasEmbeddedHierarchy: !!eptJson.hierarchy,
+			hasBinaryHierarchy: false,
+
+		};
+
+		if ( this.localBlobs ) {
+
+			for ( const key of Object.keys( this.localBlobs ) ) {
+
+				if ( key === 'r.bin' ) layout.tileExt = '.bin';
+				else if ( key === 'r.las' ) layout.tileExt = '.las';
+				else if ( key === 'r.laz' ) layout.tileExt = '.laz';
+				else if ( key === 'r.hrc' ) layout.hasBinaryHierarchy = true;
+
+			}
+
+			if ( !layout.tileExt ) layout.tileExt = '.bin';
+
+			eptJson._potreeLayout = layout;
+
+			eptJson.dataType = layout.tileExt === '.bin'
+				? 'binary'
+				: layout.tileExt === '.laz'
+					? 'laszip'
+					: 'las';
+
+			return layout;
+
+		}
+
+		// 1. Decide tile folder: try 'data/r/' first, then 'data/'
+
+		const foldersToTry = [ 'data/r/', 'data/' ];
+		let folderFound = null;
+
+		for ( const folder of foldersToTry ) {
+
+			const testUrl = `${ base }${ folder }r.bin`;
+
+			try {
+
+				const resp = await fetch( testUrl, { method: 'HEAD' } );
+
+				if ( resp.ok ) {
+
+					folderFound = folder;
+					layout.tileExt = '.bin';
+					break;
+
+				}
+
+			} catch ( e ) {
+
+				// ignore and keep trying
+				continue;
+
+			}
+
+		}
+
+		// If r.bin wasn't found, we still might have LAS/LAZ
+
+		if ( !folderFound ) {
+
+			for ( const folder of foldersToTry ) {
+
+				const testUrlLaz = `${ base }${ folder }r.laz`;
+
+				try {
+
+					let resp = await fetch( testUrlLaz, { method: 'HEAD' } );
+
+					if ( resp.ok ) {
+
+						folderFound = folder;
+						layout.tileExt = '.laz';
+						break;
+
+					}
+
+				} catch ( e ) {
+
+					// ignore
+					continue;
+
+				}
+
+			}
+
+		}
+
+		if ( !folderFound ) {
+
+			for ( const folder of foldersToTry ) {
+
+				const testUrlLas = `${ base }${ folder }r.las`;
+
+				try {
+
+					let resp = await fetch( testUrlLas, { method: 'HEAD' } );
+
+					if ( resp.ok ) {
+
+						folderFound = folder;
+						layout.tileExt = '.las';
+						break;
+
+					}
+
+				} catch ( e ) {
+
+					// ignore
+					continue;
+
+				}
+
+			}
+
+		}
+
+		layout.tileFolder = folderFound || 'data/r/'; // fallback
+
+		// Fallback for extension if nothing was found (some weird datasets)
+
+		if ( !layout.tileExt ) layout.tileExt = '.bin';
+
+		// 3. Detect binary hierarchy (.hrc) if no embedded hierarchy
+
+		if ( !layout.hasEmbeddedHierarchy ) {
+
+			const hrcUrl = `${ base }${ layout.tileFolder }r.hrc`;
+
+			try {
+
+				const resp = await fetch( hrcUrl, { method: 'HEAD' } );
+				layout.hasBinaryHierarchy = resp.ok;
+
+			} catch ( e ) {
+
+			layout.hasBinaryHierarchy = false;
+
+			}
+
+		}
+
+		eptJson._potreeLayout = layout;
+
+		eptJson.dataType = layout.tileExt === '.bin'
+			? 'binary'
+			: layout.tileExt === '.laz'
+				? 'laszip'
+				: 'las';
+
+		return layout;
+
+	}
+
+	_potreeChildIndexToXYZ( i ) {
+
+		return {
+
+			x: ( i & 4 ) ? 1 : 0,
+			y: ( i & 2 ) ? 1 : 0,
+			z: ( i & 1 ) ? 1 : 0
+
+		};
+
+	}
+
+	_computePotreeTileBounds( key, rootBounds ) {
+
+		let min = {
+
+			x: rootBounds[ 0 ],
+			y: rootBounds[ 1 ],
+			z: rootBounds[ 2 ]
+
+		};
+
+		let max = {
+
+			x: rootBounds[ 3 ],
+			y: rootBounds[ 4 ],
+			z: rootBounds[ 5 ]
+
+		};
+
+		// skip the leading 'r'
+
+		for ( let i = 1; i < key.length; i++ ) {
+
+			const child = parseInt( key[ i ], 10 );
+			const { x, y, z } = this._potreeChildIndexToXYZ( child );
+
+			const size = {
+
+				x: ( max.x - min.x ) / 2.0,
+				y: ( max.y - min.y ) / 2.0,
+				z: ( max.z - min.z ) / 2.0
+
+			};
+
+			min.x += size.x * x;
+			min.y += size.y * y;
+			min.z += size.z * z;
+
+			max.x = min.x + size.x;
+			max.y = min.y + size.y;
+			max.z = min.z + size.z;
+
+		}
+
+		return { min, max };
 
 	}
 
@@ -463,18 +724,116 @@ class EPTStreamLoader extends Loader {
 
 	}
 
-	async _discoverHierarchy( key, eptJson, base, allKeys ) {
+	async _loadPotreeBinaryHierarchy( url, key ) {
+
+		try {
+
+			const resp = await fetch( url );
+			if ( !resp.ok ) return null;
+			const buffer = await resp.arrayBuffer();
+			const view = new DataView( buffer );
+
+			const nodes = {};
+			const bytesPerNode = 5;
+
+			// This queue keeps track of names for the blocks we are about to read
+
+			let queue = [ key ]; 
+			let byteOffset = 0;
+
+			console.log('buffer.byteLength ', buffer.byteLength);
+
+			while ( queue.length > 0 && byteOffset + bytesPerNode <= buffer.byteLength ) {
+
+				const currentNodeKey = queue.shift();
+
+				const childMask = view.getUint8( byteOffset );
+				const numPoints = view.getUint32( byteOffset + 1, true );
+
+				// Store this node
+
+				nodes[ currentNodeKey ] = numPoints;
+
+				// Based on the mask, we know which children will appear 
+				// later in this same file. Add their names to the queue.
+
+				for ( let i = 0; i < 8; i++ ) {
+
+					if ( ( childMask & ( 1 << i ) ) !== 0 ) {
+
+						queue.push( currentNodeKey + i );
+
+					}
+
+				}
+
+				byteOffset += bytesPerNode;
+
+			}
+
+			return nodes;
+
+		} catch ( err ) {
+
+			console.error( 'Potree Hierarchy Error: ', err );
+			return null;
+
+		}
+
+	}
+
+	async _discoverHierarchy( key, eptJson, base, allKeys, isPotree ) {
+
+		// 1. Check if hierarchy is ALREADY in the metadata
+
+		if ( isPotree && eptJson.hierarchy && key === 'r' ) {
+
+			console.log( 'Using embedded hierarchy from cloud.js' );
+
+			// Transform Potree's [key, childMask, numPoints] array into your allKeys map
+
+			eptJson.hierarchy.forEach( node => {
+
+				const [ nKey, mask, count ] = node;
+				allKeys[ nKey ] = count;
+
+			});
+
+			return;
+
+		}
 
 		// Recursive function to discover all hierarchy nodes up to lodDepthLimit
 
-		const depth = this._getTileDepth( key, eptJson );
+		const depth = this._getTileDepth( key, eptJson, isPotree );
 		if (depth > this.lodDepthLimit) return;
 
-		const hUrl = this.localBlobs
-			? this.localBlobs[ `${ key }.json` ]
-			: `${ base }ept-hierarchy/${ key }.json`;
+		let hUrl;
 
-		const h = await this._loadHierarchyForDepth( hUrl );
+		if ( isPotree ) {
+
+			// Use values from detected _potreeLayout
+
+			const folder = eptJson._potreeLayout.tileFolder;
+			const ext = '.hrc';
+
+			hUrl = this.localBlobs
+				? this.localBlobs[ `${ key }${ ext }` ]
+				: `${ base }${ folder }${ key }${ ext }`;
+
+		} else {
+
+			hUrl = this.localBlobs
+				? this.localBlobs[ `${ key }.json` ]
+				: `${ base }ept-hierarchy/${ key }.json`;
+
+		}
+
+		const h = isPotree 
+			? ( eptJson._potreeLayout.hasBinaryHierarchy
+				? await this._loadPotreeBinaryHierarchy( hUrl, key )
+				: null )
+			: await this._loadHierarchyForDepth( hUrl );
 
 		if ( h ) {
 
@@ -487,11 +846,20 @@ class EPTStreamLoader extends Loader {
 
 			for ( const subKey of Object.keys( h ) ) {
 
-				const subDepth = this._getTileDepth( subKey, eptJson );
+				if ( isPotree ) {
+
+					this.potreeTileBounds[ subKey ] = this._computePotreeTileBounds(
+						subKey,
+						eptJson.bounds
+					);
+
+				}
+
+				const subDepth = this._getTileDepth( subKey, eptJson, isPotree );
 
 				if ( h[ subKey ] === -1 && subDepth <= this.lodDepthLimit ) {
 
-					await this._discoverHierarchy( subKey, eptJson, base, allKeys );
+					await this._discoverHierarchy( subKey, eptJson, base, allKeys, isPotree );
 
 				}
 
@@ -501,29 +869,48 @@ class EPTStreamLoader extends Loader {
 
 	}
 
-	_mortonSort( keys ) {
+	_mortonSort( keys, isPotree ) {
 
 		return keys.sort( ( a, b ) => {
 
-			const [ da, xa, ya, za ] = a.split( '-' ).map( Number );
-			const [ db, xb, yb, zb ] = b.split( '-' ).map( Number );
+			if ( isPotree ) {
 
-			// Sort by depth first
+				// 1. Sort by Depth (string length)
 
-			if ( da !== db ) return da - db;
+				if ( a.length !== b.length ) {
 
-			// Then sort by Morton index
+					return a.length - b.length;
 
-			const ma = ( xa << 40 ) | ( ya << 20 ) | za;
-			const mb = ( xb << 40 ) | ( yb << 20 ) | zb;
+				}
 
-			return ma - mb;
+				// 2. Sort Alphabetically
+				// In Potree, 'r0' comes before 'r1', which is correct Morton order
+
+				return a.localeCompare( b );
+
+			} else {
+
+				const [ da, xa, ya, za ] = a.split( '-' ).map( Number );
+				const [ db, xb, yb, zb ] = b.split( '-' ).map( Number );
+
+				// Sort by depth first
+
+				if ( da !== db ) return da - db;
+
+				// Then sort by Morton index
+
+				const ma = ( xa << 40 ) | ( ya << 20 ) | za;
+				const mb = ( xb << 40 ) | ( yb << 20 ) | zb;
+
+				return ma - mb;
+
+			}
 
 		});
 
 	}
 
-	async _mapWithConcurrency( items, limit, fn ) {
+	async _mapWithConcurrency( items, limit, fn, isPotree ) {
 
 		console.log('Requesting tiles with concurrency limit of ', limit);
 
@@ -535,7 +922,7 @@ class EPTStreamLoader extends Loader {
 
 		// Find the root tile
 
-		const rootIndex = items.indexOf( '0-0-0-0' );
+		const rootIndex = items.indexOf( isPotree ? 'r' : '0-0-0-0' );
 
 		if ( rootIndex > 0 ) {
 
@@ -608,6 +995,84 @@ class EPTStreamLoader extends Loader {
 
 	async parse( url, onTileLoaded, onTileError ) {
 
+		const POTREE_ATTRIBUTE_MAP = {
+
+			'POSITION_CARTESIAN': [
+
+				{ name: 'x', type: 'uint32', size: 4 },
+				{ name: 'y', type: 'uint32', size: 4 },
+				{ name: 'z', type: 'uint32', size: 4 }
+
+			],
+
+			'NORMAL': [
+
+				{ name: 'normal_x', type: 'float', size: 4 },
+				{ name: 'normal_y', type: 'float', size: 4 },
+				{ name: 'normal_z', type: 'float', size: 4 }
+
+			],
+
+			'NORMAL_FLOATS': [
+
+				{ name: 'normal_x', type: 'float', size: 4 },
+				{ name: 'normal_y', type: 'float', size: 4 },
+				{ name: 'normal_z', type: 'float', size: 4 }
+
+			],
+
+			'NORMAL_OCT16': [
+
+				{ name: 'normal', type: 'unsigned', size: 2 },
+
+			],
+
+			'NORMAL_SPHEREMAPPED': [
+
+				{ name: 'normal', type: 'unsigned', size: 2 },
+
+			],
+
+			'COLOR_PACKED': [
+
+				{ name: 'red', type: 'uint8', size: 1 },
+				{ name: 'green', type: 'uint8', size: 1 },
+				{ name: 'blue', type: 'uint8', size: 1 },
+				{ name: 'alpha', type: 'uint8', size: 1 }
+
+			],
+
+			'RGBA_PACKED': [
+
+				{ name: 'red', type: 'uint8', size: 1 },
+				{ name: 'green', type: 'uint8', size: 1 },
+				{ name: 'blue', type: 'uint8', size: 1 },
+				{ name: 'alpha', type: 'uint8', size: 1 }
+
+			],
+
+			'RGB_PACKED': [
+
+				{ name: 'red', type: 'uint8', size: 1 },
+				{ name: 'green', type: 'uint8', size: 1 },
+				{ name: 'blue', type: 'uint8', size: 1 }
+
+			],
+
+			'INTENSITY': [
+
+				{ name: 'intensity', type: 'uint16', size: 2 }
+
+			],
+
+			'CLASSIFICATION': [
+
+				{ name: 'classification', type: 'uint8', size: 1 }
+
+			]
+
+		};
+
 		let resp, eptJson, base;
 		let git_lfs = false;
 
@@ -628,7 +1093,6 @@ class EPTStreamLoader extends Loader {
 			}
 
 			eptJson = await resp.json();
-			base = url.replace( 'ept.json', '' );
 
 		} catch ( err ) {
 
@@ -643,6 +1107,82 @@ class EPTStreamLoader extends Loader {
 			}
 
 			return false;
+
+		}
+
+		let isPotree = false;
+
+		if ( eptJson.pointAttributes) {
+
+			// Potree 1.x (cloud.js) always has pointAttributes
+
+			isPotree = true;
+
+		}
+
+		base = url.replace( isPotree ? 'cloud.js' : 'ept.json', '' );
+
+		if ( isPotree ) {
+
+			// 1. Build the dynamic schema _loadBinTile needs
+
+			const potreeSchema = [];
+
+			if ( Array.isArray( eptJson.pointAttributes ) ) {
+
+				for ( const attrName of eptJson.pointAttributes ) {
+
+					const mapped = POTREE_ATTRIBUTE_MAP[ attrName ];
+
+					if ( mapped ) potreeSchema.push( ...mapped );
+
+				}
+
+			} else {
+
+				if ( eptJson.pointAttributes === "LAS" ) {
+
+					eptJson.isPotreeLAS = true;
+
+				} else if ( eptJson.pointAttributes === "LAZ" ) {
+
+					eptJson.isPotreeLAZ = true;
+
+				} else {
+
+					const mapped = POTREE_ATTRIBUTE_MAP[ eptJson.pointAttributes ];
+
+					if ( mapped ) potreeSchema.push( ...mapped );
+
+				}
+
+			}
+
+			// 2. Inject this schema into the object
+
+			eptJson.schema = potreeSchema;
+
+			// 3. Use unified checker to determine data type
+
+			await this._probePotreeLayout( base, eptJson );
+
+			// 4. Map Potree bounds to EPT-style bounds ( MinX, MinY, MinZ, MaxX, MaxY, MaxZ )
+
+			const b = eptJson.boundingBox;
+
+			eptJson.bounds = [ b.lx, b.ly, b.lz, b.ux, b.uy, b.uz ];
+
+			// 5. Map Potree Scale and Offset
+
+			// Potree 1.x scale is usually a single number (e.g., 0.001) or not present
+
+			const s = eptJson.scale || 1.0;
+			eptJson.scale = [ s, s, s ]; 
+
+			// Potree doesn't always have a central offset; sometimes it uses the Min Bounds
+			// Use eptJson.offset if it exists, otherwise use the bounding box minimums
+
+			eptJson.offset = eptJson.offset || [ b.lx, b.ly, b.lz ];
 
 		}
 
@@ -669,14 +1209,14 @@ class EPTStreamLoader extends Loader {
 
 		let allKeys = {};
 
-		await this._discoverHierarchy( '0-0-0-0', eptJson, base, allKeys );
+		await this._discoverHierarchy( isPotree ? 'r' : '0-0-0-0', eptJson, base, allKeys, isPotree );
 
 		const tileKeys = Object.keys( allKeys );
 		console.log( 'Total Tiles:', tileKeys.length );
 
 		let filteredKeys = tileKeys.filter( key => {
 
-			return this._getTileDepth( key, eptJson ) <= this.lodDepthLimit;
+			return this._getTileDepth( key, eptJson, isPotree ) <= this.lodDepthLimit;
 
 		});
 
@@ -684,7 +1224,7 @@ class EPTStreamLoader extends Loader {
 
 		// Ensure root tile loads first
 
-		filteredKeys = this._mortonSort( filteredKeys );
+		filteredKeys = this._mortonSort( filteredKeys, isPotree );
 
 		console.log( 'Selected Tiles:', totalSelectedTiles );
 
@@ -699,19 +1239,22 @@ class EPTStreamLoader extends Loader {
 
 			filteredKeys,
 			CONCURRENCY,
-			async (key) => {
+			async ( key ) => {
 
 				let buffer;
 
 				try {
 
-					const extension = eptJson.dataType === 'binary'
-						? '.bin'
-						: eptJson.dataType === 'zstandard'
-							? '.zst'
-							: '.laz';
+					const extension = isPotree
+						? eptJson._potreeLayout.tileExt
+						: eptJson.dataType === 'binary'
+							? '.bin'
+							: eptJson.dataType === 'zstandard'
+								? '.zst'
+								: '.laz'; // LAS/LAZ processed with the same loader
 
-					const data_url = `${ base }ept-data/${ key }${ extension }`;
+					const folder = isPotree ? eptJson._potreeLayout.tileFolder : 'ept-data/';
+					const data_url = `${ base }${ folder }${ key }${ extension }`;
 					const tileUrl = this.localBlobs ? this.localBlobs[ `${ key }${ extension }` ] : data_url;
 
 					const resp = await fetch( tileUrl );
@@ -755,7 +1298,7 @@ class EPTStreamLoader extends Loader {
 
 					if ( extension === '.bin' ) {
 
-						geom = await this._loadBinTile( buffer, eptJson );
+						geom = await this._loadBinTile( buffer, eptJson, key, isPotree );
 
 					} else if ( extension === '.zst' ) {
 
@@ -784,7 +1327,7 @@ class EPTStreamLoader extends Loader {
 								? decompressed.buffer
 								: decompressed.buffer.slice( decompressed.byteOffset, decompressed.byteOffset + decompressed.byteLength );
 
-						geom = await this._loadBinTile( arrayBuffer, eptJson );
+						geom = await this._loadBinTile( arrayBuffer, eptJson, key, isPotree );
 
 					} else {
 
@@ -809,7 +1352,7 @@ class EPTStreamLoader extends Loader {
 
 				}
 
-			}
+			}, isPotree
 
 		);
 
