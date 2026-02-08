@@ -356,11 +356,13 @@ Number Type Converter
   - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `EPT Viewer`:
-  - Specifically designed to stream tiles from Entwine Point Tiles (EPT) datasets
-  - Supports loading `ept.json` + `BIN / LAZ / ZST` tiles:
-    - Normally loaded via URL (containing `ept.json` file)
-    - Local loading is also supported but requires all files to be in a single folder
-    - It is using customized `EPTStreamLoader` (derived from custom `EPT Loader`)
+  - Specifically designed to stream tiles from EPT (Entwine Point Tiles) and POTREE datasets
+  - Supports loading `ept.json` or `cloud.js` + `BIN / LAZ / ZST` tiles:
+    - Normally loaded via a single URL pointing to `ept.json` or `cloud.js` file
+    - Local loading is also supported:
+      - Requires all files to be in a single folder
+      - Browse to that folder and select all required files at once
+    - It is using customized `EPTStreamLoader` (derived from custom `EPT Loader`):
       - Also created with assistance from Microsoft Copilot and Google Gemini
   - It has live Gamma and Brightness controls presented within [lil-gui](https://lil-gui.georgealways.com/)
   - It also has some switchable statistics:
