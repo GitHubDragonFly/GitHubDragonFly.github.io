@@ -393,6 +393,22 @@ Number Type Converter
     - Node selectivity is based on the LOD set depth (defaults to 0 which is root only)
   - Consider adjusting LOD settings to improve performance and memory usage
 
+- Special notes about `3D Tiles Viewer`:
+  - Simple viewer specifically designed to stream 3D Tiles:
+    - It is using customized `3DTilesLoader`:
+      - Also created with assistance from Microsoft Copilot and Google Gemini
+      - Internally using [OGC3DTile](https://github.com/ebeaufay/threedtiles) loader
+    - If bounding box is visible but no content is loading then internal loader just does not support features of that particular model
+  - Normally loaded via URL (containing a link to `tileset.json` file or some other named json file)
+  - Local loading is not supported unless files are served by some local HTTP server
+  - It has live Brightness control presented within [lil-gui](https://lil-gui.georgealways.com/)
+  - It also has some switchable statistics:
+    - FPS / MS / MB stats are using [stats.js](https://github.com/mrdoob/stats.js/) library
+  - The viewer allows setting Level Of Detail (LOD):
+    - `Quality` which defines 3D Tiles Visual Quality (Geometric Error Multiplier)
+    - `Cache` which defines how many tiles are loaded and kept in ready state (affects memory usage and smooth movement)
+  - Consider adjusting LOD settings to improve performance and memory usage
+
 - Special notes about `USDZ Viewer`:
   - Currently, it only supports USDZ files with USDA (ascii model packed in)
   - USDZ files with USDC (binary model packed in) can be viewed with the following:
