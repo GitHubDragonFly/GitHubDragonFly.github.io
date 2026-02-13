@@ -69,7 +69,7 @@ class Three3DTilesLoader extends Loader {
 
 	/**
 	 * Sets the point size for points models.
-	 * Clamped between 0.01 and 1.
+	 * Clamped between 0.01 and 3.0.
 	 * @param { float } maxPointSize
 	 */
 	setMaxPointSize( maxPointSize ) {
@@ -81,14 +81,14 @@ class Three3DTilesLoader extends Loader {
 
 		}
 
-		this._pointTargetSize = Math.max( 0.01, Math.min( 1, maxPointSize ) );
+		this._pointTargetSize = Math.max( 0.01, Math.min( 3.0, maxPointSize ) );
 		return this;
 
 	}
 
 	/**
 	 * Determines how many tiles are kept in the "ready" state.
-	 * Clamped between 100 and 2000.
+	 * Clamped between 100 and 5000.
 	 * @param { integer } maxCacheSize
 	 */
 	setMaxCacheSize( maxCacheSize ) {
@@ -100,7 +100,7 @@ class Three3DTilesLoader extends Loader {
 
 		}
 
-		this._maxCacheSize = Math.max( 100, Math.min( 2000, maxCacheSize ) );
+		this._maxCacheSize = Math.max( 100, Math.min( 5000, maxCacheSize ) );
 		return this;
 
 	}
