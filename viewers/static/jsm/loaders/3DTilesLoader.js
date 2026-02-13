@@ -37,7 +37,7 @@ class Three3DTilesLoader extends Loader {
 		super( manager );
 
 		this._keyAPI = '';
-		this._pointTargetSize = 0.01;
+		this._pointTargetSize = 1.0;
 
 		this._v1 = new Vector3();
 		this._corner = new Vector3();
@@ -81,7 +81,7 @@ class Three3DTilesLoader extends Loader {
 
 	/**
 	 * Sets the point size for points models.
-	 * Clamped between 0.01 and 3.0.
+	 * Clamped between 1 and 10.
 	 * @param { float } maxPointSize
 	 */
 	setMaxPointSize( maxPointSize ) {
@@ -93,7 +93,7 @@ class Three3DTilesLoader extends Loader {
 
 		}
 
-		this._pointTargetSize = Math.max( 0.01, Math.min( 3.0, maxPointSize ) );
+		this._pointTargetSize = Math.max( 1, Math.min( 10, maxPointSize ) );
 		return this;
 
 	}
@@ -335,10 +335,12 @@ class Three3DTilesLoader extends Loader {
 	 */
 	async loadAsync( url ) {
 
+		const scope = this;
+
 		try {
 
-			if ( !this._renderer ) this._renderer = new WebGLRenderer( { antialias: false } );
-			this._ktx2Loader.detectSupport( this._renderer );
+			if ( !scope._renderer ) scope._renderer = new WebGLRenderer( { antialias: false } );
+			scope._ktx2Loader.detectSupport( scope._renderer );
 
 			const json = await fetch( url ).then( r => r.json() );
 			const tilesetVersion = json.asset?.version || null;
@@ -349,13 +351,14 @@ class Three3DTilesLoader extends Loader {
 
 					url: url,
 					centerModel: true,
-					renderer: this._renderer,
-					ktx2Loader: this._ktx2Loader,
-					dracoLoader: this._dracoLoader,
-					maxCacheSize: this._maxCacheSize,
-					queryParams: { key: this._keyAPI },
-					loadOutsideView: (this._keyAPI.length > 0),
-					geometricErrorMultiplier: this._geometricErrorMultiplier,
+					renderer: scope._renderer,
+					ktx2Loader: scope._ktx2Loader,
+					dracoLoader: scope._dracoLoader,
+					maxCacheSize: scope._maxCacheSize,
+					queryParams: { key: scope._keyAPI },
+					loadOutsideView: (scope._keyAPI.length > 0),
+					geometricErrorMultiplier: scope._geometricErrorMultiplier,
+					pointsCallback: points => { points.material.size = scope._pointTargetSize; },
 					onLoadCallback: () => resolve( tile ) // Resolves when tileset JSON is ready
 
 				});
@@ -432,7 +435,7 @@ class Three3DTilesLoader extends Loader {
 
 			// Convert OBV → Box3
 
-			const box = this._computeBox3FromBoundingVolume( obv, scaleVec );
+			const box = scope._computeBox3FromBoundingVolume( obv, scaleVec );
 
 			if ( correction_applied ) {
 
@@ -483,22 +486,42 @@ class Three3DTilesLoader extends Loader {
 			 * @param { boolean } enabled - Whether to enable wireframe rendering.
 			 * @memberof OGC3DTile
 			 */
-			ogc3DTile.setWireframe = function( enabled ) {
+			ogc3DTile.setWireframe = ( enabled ) => {
 
-				this._wireframeMode = !!enabled;
-				this._syncMaterials();
+				ogc3DTile._wireframeMode = !!enabled;
+				ogc3DTile._syncMaterials();
 
 			};
 
 			/**
-			 * Traverses the tileset hierarchy to synchronize mesh materials with the 
-			 * current wireframe state. This is called automatically after LOD updates.
+			 * Internal point size for point clouds rendering.
+			 * @type { float }
+			 * @private
+			 */
+			ogc3DTile._pointTargetSize = scope._pointTargetSize;
+
+			/**
+			 * Sets the material point size for points models.
+			 * @param { float } size - Sets point size for rendering.
+			 * @memberof OGC3DTile
+			 */
+			ogc3DTile.setPointSize = ( size ) => {
+
+				ogc3DTile._pointTargetSize = size;
+				ogc3DTile._syncMaterials();
+
+			};
+
+			/**
+			 * Traverses the tileset hierarchy to synchronize materials 
+			 * with the current wireframe state and point size.
+			 * This is called automatically after LOD updates.
 			 * @private
 			 * @memberof OGC3DTile
 			 */
-			ogc3DTile._syncMaterials = function() {
+			ogc3DTile._syncMaterials = () => {
 
-				this.traverse( ( child ) => {
+				ogc3DTile.traverse( ( child ) => {
 
 					if ( child.isMesh ) {
 
@@ -506,9 +529,9 @@ class Three3DTilesLoader extends Loader {
 
 						mats.forEach( m => {
 
-							if ( m && m.wireframe !== this._wireframeMode ) {
+							if ( m && m.wireframe !== ogc3DTile._wireframeMode ) {
 
-								m.wireframe = this._wireframeMode;
+								m.wireframe = ogc3DTile._wireframeMode;
 
 							}
 
@@ -516,9 +539,9 @@ class Three3DTilesLoader extends Loader {
 
 					} else if ( child.isPoints && child.material ) {
 
-						if ( child.material.size !== this._pointTargetSize ) {
+						if ( child.material.size !== ogc3DTile._pointTargetSize ) {
 
-							child.material.size = this._pointTargetSize;
+							child.material.size = ogc3DTile._pointTargetSize;
 							child.material.needsUpdate = true;
 
 						}
@@ -558,11 +581,11 @@ class Three3DTilesLoader extends Loader {
 
 				// Force the tileset to update its matrices so we get current world positions
 
-				this.updateMatrixWorld( true );
+				ogc3DTile.updateMatrixWorld( true );
 
 				// Use the pre-calculated local bounding box
 
-				const localBox = this.boundingBox;
+				const localBox = ogc3DTile.boundingBox;
 				const size = localBox.getSize( new Vector3() );
 				const center = localBox.getCenter( new Vector3() );
 
@@ -590,15 +613,15 @@ class Three3DTilesLoader extends Loader {
 
 				// Remove from scene
 
-				if ( this.parent ) {
+				if ( ogc3DTile.parent ) {
 
-					this.parent.remove( this );
+					ogc3DTile.parent.remove( ogc3DTile );
 
 				}
 
 				// Deep traverse to free GPU resources
 
-				this.traverse( ( child ) => {
+				ogc3DTile.traverse( ( child ) => {
 
 					if ( child.isMesh || child.isPoints ) {
 
@@ -648,7 +671,9 @@ class Three3DTilesLoader extends Loader {
 
 				}
 
-				console.debug( 'OGC3DTileset and GPU resources disposed.' );
+				console.log( 'OGC3DTileset and GPU resources disposed.' );
+
+				return true;
 
 			};
 
