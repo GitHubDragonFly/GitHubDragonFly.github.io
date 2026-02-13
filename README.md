@@ -399,7 +399,10 @@ Number Type Converter
       - Also created with assistance from Microsoft Copilot and Google Gemini
       - Internally using [OGC3DTile](https://github.com/ebeaufay/threedtiles) loader
     - If bounding box is visible but no content is loading then internal loader just does not support features of that particular model
-  - Normally loaded via URL (containing a link to `tileset.json` file or some other named json file)
+  - API Key that might be required for some data providers can be entered:
+    - This feature is untested since I don't have a key available for testing
+    - Once the text box with the key is cleared then click the `Set` button to clear it in the loader as well
+  - 3D Tiles are normally loaded via URL (containing a link to `tileset.json` file or some other named json file)
   - Local loading is not supported unless files are served by some local HTTP server
   - It has live Brightness control presented within [lil-gui](https://lil-gui.georgealways.com/)
   - It also has some switchable statistics:
