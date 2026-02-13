@@ -1,7 +1,7 @@
 import { Box3, Loader, MathUtils, Matrix4, Quaternion, Sphere, Vector3, WebGLRenderer } from 'three';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.min.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.min.js';
-import { OGC3DTile } from 'https://cdn.jsdelivr.net/npm/@jdultra/threedtiles@14.0.26/dist/threedtiles.es.min.js';
+import { OGC3DTile, getOGC3DTilesCopyrightInfo } from 'https://cdn.jsdelivr.net/npm/@jdultra/threedtiles@14.0.26/dist/threedtiles.es.min.js';
 
 /**
  * A loader for 3D Tilesets - normally loaded via tileset.json URL link.
@@ -36,6 +36,7 @@ class Three3DTilesLoader extends Loader {
 
 		super( manager );
 
+		this._keyAPI = '';
 		this._pointTargetSize = 0.01;
 
 		this._v1 = new Vector3();
@@ -63,6 +64,17 @@ class Three3DTilesLoader extends Loader {
 	setRenderer( renderer ) {
 
 		this._renderer = renderer;
+		return this;
+
+	}
+
+	/**
+	 * Sets the API key required for some data providers.
+	 * @param { string } key
+	 */
+	setAPIKey( key ) {
+
+		this._keyAPI = key.toString();
 		return this;
 
 	}
@@ -336,12 +348,14 @@ class Three3DTilesLoader extends Loader {
 				const tile = new OGC3DTile({
 
 					url: url,
-					centerModel:true,
+					centerModel: true,
 					renderer: this._renderer,
-					maxCacheSize: this._maxCacheSize,
-					geometricErrorMultiplier: this._geometricErrorMultiplier,
 					ktx2Loader: this._ktx2Loader,
 					dracoLoader: this._dracoLoader,
+					maxCacheSize: this._maxCacheSize,
+					queryParams: { key: this._keyAPI },
+					loadOutsideView: (this._keyAPI.length > 0),
+					geometricErrorMultiplier: this._geometricErrorMultiplier,
 					onLoadCallback: () => resolve( tile ) // Resolves when tileset JSON is ready
 
 				});
@@ -637,6 +651,14 @@ class Three3DTilesLoader extends Loader {
 				console.debug( 'OGC3DTileset and GPU resources disposed.' );
 
 			};
+
+			const copyright_info = getOGC3DTilesCopyrightInfo();
+
+			if ( copyright_info.length > 0 ) {
+
+				console.log( 'Copyright Info: ', copyright_info );
+
+			}
 
 			return ogc3DTile;
 
