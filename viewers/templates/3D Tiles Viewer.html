@@ -1,0 +1,716 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="3D Tiles Streaming Viewer">
+    <link rel="stylesheet" href="../static/css/mobile-viewers.css">
+    <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
+
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR:', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running === true) handle_error( 'RESOURCE ERROR' );
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE:', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE' + event.reason );
+      });
+    </script>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
+    <script src="https://mrdoob.github.io/stats.js/build/stats.min.js" defer></script>
+
+    <script>
+      var THREE, manager, tiles_loader, tileset_obj, init_running = false;
+      var scene, renderer, camera, controls, render_requested, needsRender;
+      var gui, gui_container, gui_set = false, mouse_down, mouse_wheel;
+      var ww = window.innerWidth, wh = window.innerHeight, isMobile;
+      var stats, stats_enabled, events_initialized;
+      var selected_url_file = '', directionalLight;
+      var bounding_box, bbox_enabled, boxHelper, wireframe_enabled;
+      var lod_displayed = false, warning_displayed = false;
+      var url_displayed = false, url_loading = false, halt_on_error;
+      var extended_render, extended_count = 0, count = 0, params;
+    </script>
+
+    <script type="module">
+      import * as threejs from "three";
+      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
+      import { Three3DTilesLoader } from "../static/jsm/loaders/3DTilesLoader.js";
+
+      THREE = threejs;
+
+      manager = new THREE.LoadingManager();
+      manager.onLoad = function() { mouse_wheel = true; }
+
+      tiles_loader = new Three3DTilesLoader( manager );
+
+      gui_container = document.getElementById('gui_position');
+
+      // Override external CSS so we can have GUI in the top-right corner
+      gui_container.style.left = 'auto';         // Reset any left-side positioning
+      gui_container.style.right = '3px';         // Anchor to the right
+      gui_container.style.top = '2px';           // Anchor to the top
+      gui_container.style.marginLeft = '0px';    // Clear the 2px margin from your CSS
+
+      gui = new GUI( { autoPlace: false, container: gui_container } );
+      set_gui_position();
+    </script>
+
+    <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- Using three.js library: https://github.com/mrdoob/three.js -->
+    <!-- Internally using OGC3DTile loader: https://github.com/ebeaufay/threedtiles -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>3D Tiles Viewer (r182)</title>
+  </head>
+  <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <button title="Set Level of Details for Displaying Models" id="btn_lod" onclick="show_lod();" style="min-width: 34px;">LOD</button>
+        <label for="btn_lod" title="Set Level of Details for Displaying Models"></label>
+        <button title="Get remote model via URL" id="btn_url" onclick="show_url()" style="min-width: 34px;">URL</button>
+        <label for="btn_url" title="Get remote model via URL"></label>
+        <label for="back_color" title="Background Color">B</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Toggle Statistics" id="btn_stats" onclick="set_statistics();" style="min-width: 46px;" disabled>Stats</button>
+        <label for="btn_stats" title="Toggle Statistics"></label>
+        <button title="Toggle Bounding Box" id="btn_bounding_box" onclick="set_bounding_box();" style="min-width: 28px;" disabled>BB</button>
+        <label for="btn_bounding_box" title="Toggle Bounding Box"></label>
+        <button title="Toggle Material Wireframe" id="btn_wireframe" onclick="set_wireframe();" style="min-width: 28px;" disabled>W</button>
+        <label for="btn_wireframe" title="Toggle Material Wireframe"></label>
+        <div id="status_indicator" class="indicator"></div>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="width: calc(75% - 12px);" />
+        <button title="Load" id="btn_load" onclick="load_url_file();" style="min-width: 8.5%;">Load</button>
+        <label for="btn_load" title="Load"></label>
+        <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
+        <label for="btn_clear" title="Clear"></label>
+      </div>
+      <div class="fm" id="lod" title="Set Level Of Details" style="display: none;">
+        Quality&nbsp;
+        <select id="detail_level" title="Set 3D Tiles Visual Quality (Geometric Error Multiplier)" style="min-width: 80px;">
+          <option value="" disabled selected>Level</option>
+          <option value="0.5" onclick="set_tiles_quality( 0.5 );">Ultra</option>
+          <option value="1.0" onclick="set_tiles_quality( 1.0 );" selected>100%</option>
+          <option value="1.5" onclick="set_tiles_quality( 1.5 );">75%</option>
+          <option value="2.0" onclick="set_tiles_quality( 2.0 );">50%</option>
+          <option value="4.0" onclick="set_tiles_quality( 4.0 );">25%</option>
+        </select>
+
+        Cache&nbsp;
+        <select id="tile_level" title="Set tile cache size - affects memory usage and smooth movement" style="min-width: 80px;">
+          <option value="" disabled selected>Size</option>
+          <option value="100" onclick="set_tiles_cache( 100 );" selected>100</option>
+          <option value="300" onclick="set_tiles_cache( 300 );">300</option>
+          <option value="500" onclick="set_tiles_cache( 500 );">500</option>
+          <option value="1000" onclick="set_tiles_cache( 1000 );">1000</option>
+          <option value="2000" onclick="set_tiles_cache( 2000 );">2000</option>
+        </select>
+      </div>
+    </div>
+    <div id="gui_position"></div>
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">3D Tiles Viewer</div>
+
+    <script>
+      function return_false() { return false; }
+
+      function set_tiles_quality( val ) {
+        tiles_loader.setGeometricErrorMultiplier( parseFloat( val ) );
+      }
+
+      function set_tiles_cache( val ) {
+        tiles_loader.setMaxCacheSize( parseInt( val ) );
+      }
+
+      function show_lod() {
+        if (lod_displayed === true) {
+          document.getElementById('lod').style.display = 'none';
+          document.getElementById('btn_lod').style.backgroundColor = 'transparent';
+          lod_displayed = false;
+        } else {
+          document.getElementById('lod').style.display = 'block';
+          document.getElementById('btn_lod').style.backgroundColor = 'lightgreen';
+          lod_displayed = true;
+
+          if (!warning_displayed) {
+            alert('3D data could eventually use lot of memory.\nQuality adjusts tile geometric error (default = 1.0).\nCache defines how many tiles are loaded (default = 100).\nFor balance, set proper quality & cache before loading the model.\nChanging quality & cache does not update already‑loaded model.');
+            warning_displayed = true;
+          }
+        }
+
+        resize();
+      }
+
+      function show_url() {
+        if (url_displayed === true) {
+          url_displayed = false;
+          document.getElementById('url').style.display = 'none';
+          document.getElementById('btn_url').style.backgroundColor = 'transparent';
+        } else {
+          document.getElementById('btn_url').style.backgroundColor = 'lightgreen';
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+
+        resize();
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
+
+        window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
+        window.addEventListener( 'pointerup', (event) => { mouse_down = false; mouse_wheel = true; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
+        window.addEventListener( 'keydown', ( event ) => {
+          if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
+            controls.listenToKeyEvents( window );
+            activeKeys.add( event.key ); // Track this key
+            mouse_wheel = true;
+          }
+        }, false);
+        window.addEventListener( 'keyup', ( event ) => {
+          activeKeys.delete( event.key ); // Remove this key
+
+          if (controls && activeKeys.size === 0) {
+            controls.stopListenToKeyEvents();
+            mouse_wheel = false;
+          }
+        }, false);
+      }
+
+      function set_fps_stats() {
+        if (stats) {
+          let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+          stats.dom.style.top = fixed_menu_bottom;
+          stats.dom.style.left = '5px';
+        }
+      }
+
+      function set_statistics() {
+        stats_enabled = !stats_enabled;
+        document.getElementById('btn_stats').style.backgroundColor = stats_enabled ? 'lightgreen' : 'transparent';
+        stats.dom.style.visibility = stats_enabled ? 'visible' : 'hidden';
+        set_fps_stats();
+      }
+
+      function gui_reset() {
+        params.brightness = 2.25;
+
+        gui.reset();
+
+        gui_container.style.display = 'none';
+      }
+
+      function set_gui_position() {
+        let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+        gui_container.style.marginTop = fixed_menu_bottom;
+      }
+
+      function resize() {
+        if (scene !== undefined) {
+          mouse_wheel = true;
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          renderer.setSize( ww, wh );
+
+          camera.aspect = ww / wh;
+          camera.updateProjectionMatrix();
+
+          if (stats && stats_enabled) set_fps_stats();
+          if (gui) set_gui_position();
+
+          mouse_wheel = true;
+        }
+      }
+
+      function set_back_color() {
+        scene.background = null;
+        document.body.style.backgroundColor = document.getElementById('back_color').value;
+        mouse_wheel = true;
+      }
+
+      async function init() {
+        if (url_loading === false) return;
+
+        init_running = true;
+
+        if (scene) {
+          mouse_wheel = true;
+
+          if (tileset_obj) await scene_cleanup();
+
+          await reset_all( true );
+        }
+
+        if (!stats) {
+          stats = new Stats();
+          stats.dom.style.visibility = 'hidden';
+          document.body.appendChild( stats.dom );
+          stats.showPanel( 0 ); // 0: FPS, 1: ms, 2: mb
+          set_fps_stats();
+        }
+
+        enable_disable( true );
+
+        mouse_down = false;
+        mouse_wheel = true;
+        needsRender = false;
+        count = 0;
+        boxHelper = null;
+        bbox_enabled = false;
+        stats_enabled = false;
+        halt_on_error = false;
+        extended_render = false;
+        render_requested = false;
+        wireframe_enabled = false;
+        bounding_box = new THREE.Box3();
+
+        if (!params) params = { brightness: 2.25 };
+
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.toneMapping = THREE.NeutralToneMapping;
+          renderer.toneMappingExposure = 1.5;
+          renderer.setSize( ww, wh );
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
+          renderer.autoClear = false;
+
+          // Consider removing this for a production build
+          renderer.debug.onShaderError = ( gl, program, glVertexShader, glFragmentShader ) => {
+            const errorLog = gl.getProgramInfoLog( program );
+            const vertexSource = gl.getShaderSource( glVertexShader );
+            const fragmentSource = gl.getShaderSource( glFragmentShader );
+
+            halt_on_error = true;
+
+            handle_error( 'CRITICAL SHADER ERROR: ' + errorLog );
+          };
+
+          document.body.appendChild( renderer.domElement );
+        }
+
+        if (scene === undefined) scene = new THREE.Scene();
+
+        tileset_obj = new THREE.Object3D();
+
+        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+        if (camera === undefined) {
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 1e9 );
+          camera.position.set( 0, 0, 2000 );
+          scene.add( camera );
+        }
+
+        camera.lookAt( 0, 0, 0 );
+
+        // Add DirectionalLight to the camera
+        if (directionalLight === undefined) {
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2.25 );
+          directionalLight.position.set( 0, 100, 250 );
+          directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
+          camera.add( directionalLight );
+        }
+
+        if (controls === undefined) {
+          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+
+          controls = new OrbitControls( camera, renderer.domElement );
+          controls.zoomToCursor = true;
+          controls.zoomSpeed = 0.5;
+          controls.rotateSpeed = 0.5;
+          controls.keyPanSpeed = 0.5; 
+          controls.panSpeed = 0.5;
+          //controls.enableDamping = true;
+          //controls.dampingFactor = 0.3;
+          //controls.enableKeys = false;
+          //controls.enableZoom = true;
+          //controls.maxPolarAngle = 2.2;
+          //controls.minPolarAngle = 1.1;
+          //controls.minDistance = 2;
+          //controls.maxDistance = 500;
+        }
+
+        if (tiles_loader) {
+          tiles_loader.setRenderer( renderer );
+        }
+
+        // Start flashing indicator
+        document.getElementById('status_indicator').style.display = 'inline-block';
+
+        // Load tiles
+        loadURLFile();
+      }
+
+      async function loadURLFile() {
+        if (selected_url_file !== '') {
+          if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+          }
+
+          // URL has to point to tileset.json file
+
+          let url_lc = selected_url_file.toLowerCase();
+
+          if (!(url_lc.startsWith( 'http' )) || !(url_lc.endsWith( '.json' ))) {
+            handle_error( 'Invalid URL!' );
+            return;
+          }
+
+          tileset_obj = await tiles_loader.loadAsync( selected_url_file );
+          scene.add( tileset_obj );
+          tileset_obj.frameCamera( camera );
+
+          document.getElementById('btn_bounding_box').style.backgroundColor = 'lightgreen';
+          boxHelper = new THREE.Box3Helper( tileset_obj.boundingBox, 0xFFFF00 );
+          scene.add( boxHelper );
+          bbox_enabled = true;
+
+          // Start rendering
+          document.getElementById('div_loading').style.display = 'none';
+          render_requested = true;
+          extended_render = true;
+          extended_count = 0;
+          render();
+        }
+      }
+
+      async function finish_loading() {
+        if (halt_on_error) return;
+
+        // Stop flashing indicator
+        document.getElementById('status_indicator').style.display = 'none';
+
+        if (gui_set === false) {
+          // Add Brightness control
+          gui.add( params, 'brightness', 0, 5 ).name( 'Brightness' )
+          .onChange( ( value ) => {
+            directionalLight.intensity = value;
+            needsRender = true;
+          });
+
+          set_gui_position();
+
+          gui.open();
+          gui_set = true;
+        }
+
+        gui_container.style.display = 'block';
+        set_gui_position();
+
+        enable_disable( false );
+
+        init_running = false;
+
+        console.timeEnd( 'Loading Time' );
+
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 500 ) );
+      }
+
+      function log_info() {
+        console.log( 'Memory: ', renderer.info.memory );
+        console.log( 'Render: ', renderer.info.render );
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        mouse_wheel = true;
+        render_requested = false;
+        enable_disable( true );
+
+        // Stop flashing indicator
+        document.getElementById('status_indicator').style.display = 'none';
+
+        init_running = false;
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      function set_bounding_box() {
+          if (!tileset_obj) return;
+          bbox_enabled = !bbox_enabled;
+
+          bbox_enabled ? scene.add( boxHelper ) : scene.remove( boxHelper );
+
+          const bbox_color = bbox_enabled ? 'lightgreen' : 'transparent';
+          document.getElementById('btn_bounding_box').style.backgroundColor = bbox_color;
+          needsRender = true;
+      }
+
+      function set_wireframe() {
+          if (!tileset_obj) return;
+          wireframe_enabled = !wireframe_enabled;
+
+          tileset_obj.setWireframe( wireframe_enabled );
+
+          const w_color = wireframe_enabled ? 'lightgreen' : 'transparent';
+          document.getElementById('btn_wireframe').style.backgroundColor = w_color;
+          needsRender = true;
+      }
+
+      function render() {
+        if (tileset_obj) {
+          // Check if the tileset is still streaming data
+          const is_loading = (tileset_obj?.tileLoader?.downloads.length > 0) || false;
+
+          if (mouse_down || mouse_wheel || needsRender || extended_render || is_loading) {
+            if (stats_enabled) stats.begin();
+
+            controls.update();
+
+            if (tileset_obj.update) tileset_obj.update( camera );
+            if (tileset_obj.tileLoader) tileset_obj.tileLoader.update();
+
+            renderer.clear();
+            renderer.render( scene, camera );
+
+            if (stats_enabled) stats.end();
+
+            // Reset animation flag AFTER rendering
+            needsRender = false;
+
+            if (is_loading) {
+              // Keep counts in check for extended rendering
+              extended_count = -1;
+              count = -1;
+            }
+
+            if (extended_render) {
+              if (extended_count > 20) {
+                extended_render = false;
+                extended_count = 0;
+                finish_loading();
+              } else {
+                extended_count ++;
+              }
+            } else if (mouse_wheel) {
+              if (count > 20) {
+                mouse_wheel = false;
+                count = 0;
+              } else {
+                count ++;
+              }
+            }
+          }
+        }
+
+        if (render_requested === true) requestAnimationFrame( render );
+      }
+
+      async function reset_all( reset = false ) {
+        if (stats) stats.dom.style.visibility = 'hidden';
+        document.getElementById('back_color').value = '#000000';
+        document.getElementById('btn_stats').style.backgroundColor = 'transparent';
+
+        init_running = false;
+
+        if (gui_set) gui_reset();
+
+        // Reset the view
+        if (reset === true) {
+          controls.reset();
+          set_back_color();
+        } else {
+          // Page (re)loading
+          document.getElementById('btn_url').style.backgroundColor = 'transparent';
+          document.getElementById('btn_lod').style.backgroundColor = 'transparent';
+
+          if (scene) {
+            if (tileset_obj) await scene_cleanup();
+
+            if (gui) gui.dispose();
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+
+            renderer.clear();
+            renderer.dispose();
+          }
+
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+
+          enable_disable( true );
+        }
+
+        mouse_wheel = true;
+      }
+
+      async function scene_cleanup() {
+        if (!tileset_obj) return;
+
+        mouse_wheel = true;
+
+        if (bbox_enabled) await set_bounding_box();
+        if (wireframe_enabled) await set_wireframe();
+
+        if (stats_enabled) set_statistics();
+
+        if (stats && stats.dom && stats.dom.parentNode) {
+          stats.dom.parentNode.removeChild( stats.dom );
+          stats = null;
+        }
+
+        scene.remove( tileset_obj );
+
+        renderer.clear();
+        render_requested = false;
+
+        tileset_obj.dispose();
+
+        if (isMobile === false) {
+          renderer.info.reset();
+          renderer.resetState();
+        }
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('back_color').disabled = disable;
+        document.getElementById('btn_stats').disabled = disable;
+        document.getElementById('btn_wireframe').disabled = disable;
+        document.getElementById('btn_bounding_box').disabled = disable;
+        disabled_changed();
+
+        mouse_wheel = true;
+      }
+    </script>
+
+    <script>
+      function document_ready() {
+        isNewiPad = (/iPad/.test( navigator.platform ) && (/Mac OS X/i.test( navigator.userAgent ))) ||
+          (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        isMobile = (isNewiPad === false) && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
+
+        $('#detail_level').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#tile_level').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
+
+        if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile) {
+          $('#detail_level').change( function() { $(this).children(':selected').click(); });
+          $('#tile_level').change( function() { $(this).children(':selected').click(); });
+        }
+
+        document.getElementById('detail_level').selectedIndex = 0;
+        document.getElementById('tile_level').selectedIndex = 0;
+
+        alert('After loading some 3D Tiles model, if bounding box is visible but no content shows up then internal loader just does not have support for the features of that particular model yet.');
+      }
+
+      function disabled_changed() {
+        $('button').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+
+        $('select').each( function() {
+          if (this.disabled === false) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+
+        $('input[type=color]').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+      }
+    </script>
+  </body>
+</html>
