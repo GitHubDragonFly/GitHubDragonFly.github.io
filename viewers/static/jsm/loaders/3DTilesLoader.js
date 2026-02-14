@@ -13,6 +13,8 @@ import { OGC3DTile, getOGC3DTilesCopyrightInfo } from 'https://cdn.jsdelivr.net/
  * ```js
  * const loader = new Three3DTilesLoader();
  *
+ * loader.setRenderer( renderer );
+ *
  * const tileset_object = await loader.loadAsync( 'path_to/tileset.json' );
  * scene.add( tileset_object );
  * ```
@@ -23,6 +25,13 @@ import { OGC3DTile, getOGC3DTilesCopyrightInfo } from 'https://cdn.jsdelivr.net/
  *
  * Dynamically change mesh material wireframe with predefined boolean variable 'enabled':
  *  tileset_object.setWireframe( enabled );
+ *
+ * Dynamically change point size for loaded point clouds, with predefined float variable 'size'.
+ * Valid values are from range [1 to 10] and value can be entered directly instead of variable:
+ *  tileset_object.setPointSize( size );
+ *
+ * Dispose of the tileset_object to free resources:
+ *  if ( tileset_object.dispose ) tileset_object.dispose();
  *
  * @augments Loader
  * @three_import import { Three3DTilesLoader } from "path_to/3DTilesLoader.js"
@@ -37,7 +46,6 @@ class Three3DTilesLoader extends Loader {
 		super( manager );
 
 		this._keyAPI = '';
-		this._pointTargetSize = 1.0;
 
 		this._v1 = new Vector3();
 		this._corner = new Vector3();
@@ -75,25 +83,6 @@ class Three3DTilesLoader extends Loader {
 	setAPIKey( key ) {
 
 		this._keyAPI = key.toString();
-		return this;
-
-	}
-
-	/**
-	 * Sets the point size for points models.
-	 * Clamped between 1 and 10.
-	 * @param { float } maxPointSize
-	 */
-	setMaxPointSize( maxPointSize ) {
-
-		if ( typeof maxPointSize !== 'number' || !Number.isFinite( maxPointSize ) ) {
-
-			console.warn( `Invalid maxPointSize: ${ maxPointSize }. Using default.` );
-			return this;
-
-		}
-
-		this._pointTargetSize = Math.max( 1, Math.min( 10, maxPointSize ) );
 		return this;
 
 	}
@@ -358,7 +347,8 @@ class Three3DTilesLoader extends Loader {
 					queryParams: { key: scope._keyAPI },
 					loadOutsideView: (scope._keyAPI.length > 0),
 					geometricErrorMultiplier: scope._geometricErrorMultiplier,
-					pointsCallback: points => { points.material.size = scope._pointTargetSize; },
+					meshCallback: mesh => { mesh.material.wireframe = this._wireframeMode || false; },
+					pointsCallback: points => { points.material.size = this._pointTargetSize || 1.0; },
 					onLoadCallback: () => resolve( tile ) // Resolves when tileset JSON is ready
 
 				});
@@ -488,8 +478,9 @@ class Three3DTilesLoader extends Loader {
 			 */
 			ogc3DTile.setWireframe = ( enabled ) => {
 
+				// The override update function will pass this value
+
 				ogc3DTile._wireframeMode = !!enabled;
-				ogc3DTile._syncMaterials();
 
 			};
 
@@ -498,7 +489,7 @@ class Three3DTilesLoader extends Loader {
 			 * @type { float }
 			 * @private
 			 */
-			ogc3DTile._pointTargetSize = scope._pointTargetSize;
+			ogc3DTile._pointTargetSize = 1.0;
 
 			/**
 			 * Sets the material point size for points models.
@@ -507,8 +498,9 @@ class Three3DTilesLoader extends Loader {
 			 */
 			ogc3DTile.setPointSize = ( size ) => {
 
+				// The override update function will pass this value
+
 				ogc3DTile._pointTargetSize = size;
-				ogc3DTile._syncMaterials();
 
 			};
 
