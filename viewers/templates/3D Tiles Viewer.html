@@ -71,14 +71,16 @@
     <script>
       var THREE, manager, tiles_loader, tileset_obj, init_running = false;
       var scene, renderer, camera, controls, render_requested, needsRender;
-      var gui, gui_container, gui_set = false, mouse_down, mouse_wheel;
-      var ww = window.innerWidth, wh = window.innerHeight, isMobile;
-      var stats, stats_enabled, events_initialized;
-      var selected_url_file = '', directionalLight;
-      var bounding_box, bbox_enabled, boxHelper, wireframe_enabled;
+      var gui, gui_container, gui_set = false, gui_pointSize, mouse_down, mouse_wheel;
+      var animations, animation_mixer, current_animation, animation_running;
+      var ww = window.innerWidth, wh = window.innerHeight, points_model;
+      var stats, stats_enabled, events_initialized, clock;
+      var last_tile, last_level, last_uuid, params, halt_on_error;
+      var selected_url_file = '', directionalLight, isMobile;
       var lod_displayed = false, warning_displayed = false;
-      var url_displayed = false, keyAPI_displayed = false, params;
-      var extended_render, extended_count = 0, count = 0, halt_on_error;
+      var extended_render, extended_count = 0, count = 0;
+      var bounding_box, bbox_enabled, boxHelper, wireframe_enabled;
+      var url_displayed = false, keyAPI_displayed = false, token_displayed = false;
     </script>
 
     <script type="module">
@@ -116,8 +118,10 @@
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
-        <button title="Enter API Key for providers that require it" id="btn_keyAPI" onclick="show_keyAPI();" style="min-width: 34px;">Key</button>
-        <label for="btn_keyAPI" title="Enter API Key for providers that require it"></label>
+        <button title="Enter API key for providers that require it" id="btn_keyAPI" onclick="show_keyAPI();" style="min-width: 34px;">Key</button>
+        <label for="btn_keyAPI" title="Enter API key for providers that require it"></label>
+        <button title="Enter token for providers that require it" id="btn_token" onclick="show_token();" style="min-width: 42px;">Token</button>
+        <label for="btn_token" title="Enter token for providers that require it"></label>
         <button title="Set Level of Details for Displaying Models" id="btn_lod" onclick="show_lod();" style="min-width: 34px;">LOD</button>
         <label for="btn_lod" title="Set Level of Details for Displaying Models"></label>
         <button title="Get remote model via URL" id="btn_url" onclick="show_url()" style="min-width: 34px;">URL</button>
@@ -130,6 +134,8 @@
         <label for="btn_bounding_box" title="Toggle Bounding Box"></label>
         <button title="Toggle Material Wireframe" id="btn_wireframe" onclick="set_wireframe();" style="min-width: 28px;" disabled>W</button>
         <label for="btn_wireframe" title="Toggle Material Wireframe"></label>
+        <button title="Switch Animation" id="btn_animate" onclick="animate_gltf();" style="display: none;">A</button>
+        <label for="btn_animate" title="Switch Animation"></label>
         <div id="status_indicator" class="indicator"></div>
       </div>
       <div class="fm" id="keyAPI" style="display: none;">
@@ -140,6 +146,14 @@
         <button title="Clear API Key" id="btn_clear_keyAPI" onclick="clear_keyAPI();" style="min-width: 8.5%;">Clear</button>
         <label for="btn_clear_keyAPI" title="Clear API Key"></label>
       </div>
+      <div class="fm" id="token" style="display: none;">
+        <label for="token_entry" title="Enter token for providers that require it"></label>
+        <input type="text" id="token_entry" value="" style="width: calc(75% - 12px);" />
+        <button title="Set token" id="btn_set_token" onclick="set_token();" style="min-width: 8.5%;">Set Token</button>
+        <label for="btn_set_token" title="Set token"></label>
+        <button title="Clear token" id="btn_clear_token" onclick="clear_token();" style="min-width: 8.5%;">Clear</button>
+        <label for="btn_clear_token" title="Clear token"></label>
+      </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
         <input type="text" id="url_entry" value="" style="width: calc(75% - 12px);" />
@@ -149,18 +163,7 @@
         <label for="btn_clear" title="Clear"></label>
       </div>
       <div class="fm" id="lod" title="Set Level Of Details" style="display: none;">
-        <select id="detail_level" title="Set 3D Tiles visual quality (Geometric Error Multiplier)" style="min-width: 80px;">
-          <option value="" disabled selected>Quality</option>
-          <option value="0.1" onclick="set_tiles_quality( 0.1 );">0.1</option>
-          <option value="0.5" onclick="set_tiles_quality( 0.5 );">0.5</option>
-          <option value="1.0" onclick="set_tiles_quality( 1.0 );">1.0</option>
-          <option value="1.5" onclick="set_tiles_quality( 1.5 );">1.5</option>
-          <option value="2.0" onclick="set_tiles_quality( 2.0 );">2.0</option>
-          <option value="3.0" onclick="set_tiles_quality( 3.0 );">3.0</option>
-          <option value="4.0" onclick="set_tiles_quality( 4.0 );">4.0</option>
-          <option value="5.0" onclick="set_tiles_quality( 5.0 );">5.0</option>
-        </select>
-        <select id="tile_level" title="Set 3D Tiles cache size - affects memory usage and smooth movement" style="min-width: 80px;">
+        <select id="cache_level" title="Set 3D Tiles cache size - affects memory usage and smooth movement" style="min-width: 80px;">
           <option value="" disabled selected>Cache</option>
           <option value="100" onclick="set_tiles_cache( 100 );">100</option>
           <option value="300" onclick="set_tiles_cache( 300 );">300</option>
@@ -169,28 +172,6 @@
           <option value="2000" onclick="set_tiles_cache( 2000 );">2000</option>
           <option value="5000" onclick="set_tiles_cache( 5000 );">5000</option>
         </select>
-        <select id="point_size" title="Set 3D Tiles point size for points models" style="display: none; min-width: 80px;">
-          <option value="" disabled selected>Pt Size</option>
-          <option value="1" onclick="set_point_size( 1 );">1</option>
-          <option value="1.5" onclick="set_point_size( 1.5 );">1.5</option>
-          <option value="2" onclick="set_point_size( 2 );">2</option>
-          <option value="2.5" onclick="set_point_size( 2.5 );">2.5</option>
-          <option value="3" onclick="set_point_size( 3 );">3</option>
-          <option value="3.5" onclick="set_point_size( 3.5 );">3.5</option>
-          <option value="4" onclick="set_point_size( 4 );">4</option>
-          <option value="4.5" onclick="set_point_size( 4.5 );">4.5</option>
-          <option value="5" onclick="set_point_size( 5 );">5</option>
-          <option value="5.5" onclick="set_point_size( 5.5 );">5.5</option>
-          <option value="6" onclick="set_point_size( 6 );">6</option>
-          <option value="6.5" onclick="set_point_size( 6.5 );">6.5</option>
-          <option value="7" onclick="set_point_size( 7 );">7</option>
-          <option value="7.5" onclick="set_point_size( 7.5 );">7.5</option>
-          <option value="8" onclick="set_point_size( 8 );">8</option>
-          <option value="8.5" onclick="set_point_size( 8.5 );">8.5</option>
-          <option value="9" onclick="set_point_size( 9 );">9</option>
-          <option value="9.5" onclick="set_point_size( 9.5 );">9.5</option>
-          <option value="10" onclick="set_point_size( 10 );">10</option>
-        </select>
       </div>
     </div>
     <div id="gui_position"></div>
@@ -198,16 +179,8 @@
     <div id="div_loading" class="loading_msg">3D Tiles Viewer</div>
 
     <script>
-      function set_tiles_quality( val ) {
-        tiles_loader.setGeometricErrorMultiplier( parseFloat( val ) );
-      }
-
       function set_tiles_cache( val ) {
         tiles_loader.setMaxCacheSize( parseInt( val ) );
-      }
-
-      function set_point_size( val ) {
-        if (tileset_obj) tileset_obj.setPointSize( parseFloat( val ) );
       }
 
       function show_lod() {
@@ -221,7 +194,7 @@
           lod_displayed = true;
 
           if (!warning_displayed) {
-            alert('3D data could eventually use lot of memory.\nQuality adjusts tile geometric error multiplier (default 1.0).\nCache defines how many tiles are loaded (default 100).\nFor balance, set proper quality & cache before loading the model.\nChanging quality & cache does not update already‑loaded model.');
+            alert('3D data could eventually use lot of memory.\nCache defines how many tiles are loaded (default 100).\nSet proper cache size before loading the model.\nChanging cache size does not update already‑loaded model.');
             warning_displayed = true;
           }
         }
@@ -249,6 +222,27 @@
       }
 
       function clear_keyAPI() { document.getElementById('keyAPI_entry').value = ''; }
+
+      function show_token() {
+        if (token_displayed === true) {
+          token_displayed = false;
+          document.getElementById('token').style.display = 'none';
+          document.getElementById('btn_token').style.backgroundColor = 'transparent';
+        } else {
+          document.getElementById('btn_token').style.backgroundColor = 'lightgreen';
+          document.getElementById('token').style.display = 'block';
+          token_displayed = true;
+        }
+
+        resize();
+      }
+
+      function set_token() {
+        let token = document.getElementById('token_entry').value.trim();
+        tiles_loader.setToken( token );
+      }
+
+      function clear_token() { document.getElementById('token_entry').value = ''; }
 
       function show_url() {
         if (url_displayed === true) {
@@ -315,7 +309,10 @@
       }
 
       function gui_reset() {
-        params.brightness = 2.25;
+        params.brightness = 2.5;
+        params.multiplier = 0.5;
+        params.pointSize = 1.0;
+        params.bias = 1.0;
 
         gui.reset();
 
@@ -352,6 +349,28 @@
         mouse_wheel = true;
       }
 
+      function animate_gltf() {
+        if (animation_running === true) {
+          animation_mixer.clipAction( animations[ current_animation ] ).stop();
+          animation_mixer.clipAction( animations[ current_animation ] ).reset();
+
+          if (current_animation === animations.length - 1) {
+            document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+            current_animation = 0;
+            animation_running = false;
+          } else {
+            current_animation += 1;
+            animation_mixer.clipAction( animations[ current_animation ] ).play();
+          }
+        } else {
+          animation_mixer.clipAction( animations[ current_animation ] ).play();
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          animation_running = true;
+        }
+
+        mouse_wheel = true;
+      }
+
       async function init() {
         init_running = true;
 
@@ -376,7 +395,15 @@
         mouse_down = false;
         mouse_wheel = true;
         needsRender = false;
+        points_model = false;
+        animations = [];
+        animation_mixer = null;
+        animation_running = false;
+        last_tile = 0;
+        last_uuid = '';
+        last_level = 0;
         count = 0;
+        gui_pointSize = null;
         boxHelper = null;
         bbox_enabled = false;
         stats_enabled = false;
@@ -386,7 +413,7 @@
         wireframe_enabled = false;
         bounding_box = new THREE.Box3();
 
-        if (!params) params = { brightness: 2.25 };
+        if (!params) params = { brightness: 2.5, pointSize: 1.0, multiplier: 0.5, bias: 1.0 };
 
         console.time( 'Loading Time' );
         document.body.style.backgroundImage = 'none';
@@ -419,14 +446,14 @@
           document.body.appendChild( renderer.domElement );
         }
 
-        if (scene === undefined) scene = new THREE.Scene();
+        if (clock === undefined) clock = new THREE.Clock();
 
-        tileset_obj = new THREE.Object3D();
+        if (scene === undefined) scene = new THREE.Scene();
 
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 1e9 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 1e9 );
           camera.position.set( 0, 0, 2000 );
           scene.add( camera );
         }
@@ -435,7 +462,7 @@
 
         // Add DirectionalLight to the camera
         if (directionalLight === undefined) {
-          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2.25 );
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2.5 );
           directionalLight.position.set( 0, 100, 250 );
           directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
           camera.add( directionalLight );
@@ -486,7 +513,13 @@
             return;
           }
 
-          tileset_obj = await tiles_loader.loadAsync( selected_url_file );
+          try {
+            tileset_obj = await tiles_loader.loadAsync( selected_url_file );
+          } catch ( err ) {
+            handle_error( err );
+            return;
+          }
+
           scene.add( tileset_obj );
           tileset_obj.frameCamera( camera );
 
@@ -513,9 +546,8 @@
 
         tileset_obj.traverse( ( child ) => {
           if (child.isPoints) {
-            set_point_size( 1 );
-            document.getElementById('point_size').selectedIndex = 0;
-            document.getElementById('point_size').style.display = 'inline-block';
+            points_model = true;
+            if (tileset_obj) tileset_obj.setPointSize( 1.0 );
           }
         });
 
@@ -527,14 +559,64 @@
             needsRender = true;
           });
 
+          // Add LOD Multiplier control (Geometric Error Correction)
+          gui.add( params, 'multiplier', 0.5, 1.5, 0.1 ).name( 'LOD Multiplier' )
+          .onChange( ( value ) => {
+            if (tileset_obj) {
+              tileset_obj.setGeometricErrorMultiplier( parseFloat( value ) );
+              needsRender = true;
+            }
+          });
+
+          // Add LOD Distance Bias control
+          gui.add( params, 'bias', 1.0, 2.0, 0.1 ).name( 'LOD Distance Bias' )
+          .onChange( ( value ) => {
+            if (tileset_obj) {
+              tileset_obj.setDistanceBias( parseFloat( value ) );
+              needsRender = true;
+            }
+          });
+
+          // Add LOD Point Size control
+          gui.add( params, 'pointSize', 1.0, 10.0, 0.25 ).name( 'LOD Point Size' )
+          .onChange( ( value ) => {
+            if (tileset_obj) {
+              tileset_obj.setPointSize( parseFloat( value ) );
+              needsRender = true;
+            }
+          });
+
           set_gui_position();
 
           gui.open();
           gui_set = true;
         }
 
+        gui_pointSize = gui.controllersRecursive().find( c => c.property === 'pointSize' );
+
+        if (points_model) {
+          if (gui_pointSize !== null) {
+            gui_pointSize.reset();
+            gui_pointSize.show( true );
+          }
+        } else {
+          if (gui_pointSize !== null) gui_pointSize.show( false );
+        }
+
         gui_container.style.display = 'block';
         set_gui_position();
+
+        animations = tileset_obj.animations;
+
+        if (animations.length > 0) {
+          animation_mixer = new THREE.AnimationMixer( scene );
+          current_animation = 0;
+          animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+          animation_mixer.clipAction( animations[ 0 ] ).play();
+          document.getElementById('btn_animate').style.display = 'inline-block';
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          animation_running = true;
+        }
 
         enable_disable( false );
 
@@ -563,6 +645,7 @@
 
         init_running = false;
 
+        document.getElementById('btn_animate').style.display = 'none';
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
         document.getElementById('btn_load').disabled = false;
@@ -593,10 +676,12 @@
       function render() {
         if (tileset_obj) {
           // Check if the tileset is still streaming data
-          const is_loading = (tileset_obj?.tileLoader?.downloads.length > 0) || false;
+          const is_loading = tileset_obj.getStreamingInfo();
 
-          if (mouse_down || mouse_wheel || needsRender || extended_render || is_loading) {
+          if (animation_running || mouse_down || mouse_wheel || needsRender || extended_render || is_loading) {
             if (stats_enabled) stats.begin();
+
+            if (animation_running) animation_mixer.update( clock.getDelta() );
 
             controls.update();
 
@@ -612,25 +697,25 @@
             needsRender = false;
 
             if (is_loading) {
-              // Keep counts in check for extended rendering
+              // Keep extended render in check
               extended_count = -1;
               count = -1;
-            }
-
-            if (extended_render) {
-              if (extended_count > 20) {
-                extended_render = false;
-                extended_count = 0;
-                finish_loading();
-              } else {
-                extended_count ++;
-              }
-            } else if (mouse_wheel) {
-              if (count > 20) {
-                mouse_wheel = false;
-                count = 0;
-              } else {
-                count ++;
+            } else {
+              if (extended_render) {
+                if (extended_count > 20) {
+                  extended_render = false;
+                  extended_count = 0;
+                  finish_loading();
+                } else {
+                  extended_count ++;
+                }
+              } else if (mouse_wheel) {
+                if (count > 20) {
+                  mouse_wheel = false;
+                  count = 0;
+                } else {
+                  count ++;
+                }
               }
             }
           }
@@ -643,7 +728,6 @@
         if (stats) stats.dom.style.visibility = 'hidden';
         document.getElementById('back_color').value = '#000000';
         document.getElementById('btn_stats').style.backgroundColor = 'transparent';
-        document.getElementById('point_size').style.display = 'none';
 
         init_running = false;
 
@@ -651,14 +735,18 @@
 
         // Reset the view
         if (reset === true) {
-          controls.reset();
-          set_back_color();
+          if (scene) {
+            controls.reset();
+            set_back_color();
+          }
         } else {
           // Page (re)loading
           document.getElementById('btn_load').disabled = false;
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
           document.getElementById('btn_lod').style.backgroundColor = 'transparent';
+          document.getElementById('btn_token').style.backgroundColor = 'transparent';
           document.getElementById('btn_keyAPI').style.backgroundColor = 'transparent';
+          document.getElementById('btn_animate').style.backgroundColor = 'transparent';
 
           if (scene) {
             if (tileset_obj) await scene_cleanup();
@@ -673,8 +761,10 @@
             renderer.dispose();
           }
 
+          document.getElementById('btn_animate').style.display = 'none';
           document.getElementById('div_error').style.display = 'none';
           document.getElementById('keyAPI_entry').value = '';
+          document.getElementById('token_entry').value = '';
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
 
@@ -692,6 +782,17 @@
         if (bbox_enabled) await set_bounding_box();
         if (wireframe_enabled) await set_wireframe();
 
+        if (animation_mixer) {
+          animation_mixer.stopAllAction();
+
+          for ( let i = 0; i < animations.length; i++ ) {
+            animation_mixer.uncacheAction( animations[ i ] );
+            animation_mixer.uncacheClip( animations[ i ] );
+          }
+
+          animation_mixer.uncacheRoot( animation_mixer.getRoot() );
+        }
+
         if (stats_enabled) set_statistics();
 
         if (stats && stats.dom && stats.dom.parentNode) {
@@ -706,6 +807,8 @@
 
         if (tileset_obj.dispose) tileset_obj.dispose();
         if (boxHelper) boxHelper.dispose();
+
+        tileset_obj = null;
 
         if (isMobile === false) {
           renderer.info.reset();
@@ -732,22 +835,18 @@
         isMobile = (isNewiPad === false) && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
           (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
 
-        $('#detail_level').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
-        $('#tile_level').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
-        $('#point_size').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#cache_level').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#keyAPI_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_set_keyAPI').click(); });
+        $('#token_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_set_token').click(); });
         $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
 
         if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile) {
-          $('#detail_level').change( function() { $(this).children(':selected').click(); });
-          $('#tile_level').change( function() { $(this).children(':selected').click(); });
-          $('#point_size').change( function() { $(this).children(':selected').click(); });
+          $('#cache_level').change( function() { $(this).children(':selected').click(); });
         }
 
-        document.getElementById('detail_level').selectedIndex = 0;
-        document.getElementById('tile_level').selectedIndex = 0;
-        document.getElementById('point_size').selectedIndex = 0;
+        document.getElementById('cache_level').selectedIndex = 0;
 
-        alert('After loading some 3D Tiles model, if bounding box is visible but no content shows up then internal loader just does not have support for the features of that particular model yet.');
+        alert('After loading some 3D Tiles, if bounding box is visible but no content shows up then:\n- Those features require API Key or token\n- Those features are not implemented\n- Those features are not supported by internal loader\n  - Only B3DM and GLTF/GLB formats are supported\n- Check console for any silent errors');
       }
 
       function disabled_changed() {
