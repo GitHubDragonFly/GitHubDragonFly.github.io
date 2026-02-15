@@ -46,6 +46,7 @@ class Three3DTilesLoader extends Loader {
 		super( manager );
 
 		this._keyAPI = '';
+		this._token = '';
 
 		this._v1 = new Vector3();
 		this._corner = new Vector3();
@@ -53,7 +54,6 @@ class Three3DTilesLoader extends Loader {
 
 		this._renderer = null;
 		this._maxCacheSize = 100;
-		this._geometricErrorMultiplier = 1.0;
 
 		this._dracoLoader = new DRACOLoader();
 		this._dracoLoader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/libs/draco/" );
@@ -88,6 +88,17 @@ class Three3DTilesLoader extends Loader {
 	}
 
 	/**
+	 * Sets the token required for some data providers.
+	 * @param { string } token
+	 */
+	setToken( key ) {
+
+		this._token = token.toString();
+		return this;
+
+	}
+
+	/**
 	 * Determines how many tiles are kept in the "ready" state.
 	 * Clamped between 100 and 5000.
 	 * @param { integer } maxCacheSize
@@ -102,26 +113,6 @@ class Three3DTilesLoader extends Loader {
 		}
 
 		this._maxCacheSize = Math.max( 100, Math.min( 5000, maxCacheSize ) );
-		return this;
-
-	}
-
-	/**
-	 * Passes geometric error multiplier for displayed object quality.
-	 * Value > 1.0 reduces quality and increases performance
-	 * Clamped between 0.1 and 5.0.
-	 * @param { float } errorMultiplier
-	 */
-	setGeometricErrorMultiplier( errorMultiplier ) {
-
-		if ( typeof errorMultiplier !== 'number' || !Number.isFinite( errorMultiplier ) ) {
-
-			console.warn( `Invalid errorMultiplier: ${ errorMultiplier }. Using default.` );
-			return this;
-
-		}
-
-		this._geometricErrorMultiplier = Math.max( 0.1, Math.min( 5.0, errorMultiplier ) );
 		return this;
 
 	}
@@ -340,22 +331,23 @@ class Three3DTilesLoader extends Loader {
 
 					url: url,
 					centerModel: true,
+					displayErrors: true,
+					loadOutsideView: true,
 					renderer: scope._renderer,
+					loadingStrategy: "PERLEVEL",
+					geometricErrorMultiplier: 0.5,
 					ktx2Loader: scope._ktx2Loader,
 					dracoLoader: scope._dracoLoader,
 					maxCacheSize: scope._maxCacheSize,
-					queryParams: { key: scope._keyAPI },
-					loadOutsideView: (scope._keyAPI.length > 0),
-					geometricErrorMultiplier: scope._geometricErrorMultiplier,
+					queryParams: scope._keyAPI !== '' ? { key: scope._keyAPI } : undefined,
+					headers: scope._token ? { Authorization: `Bearer ${ scope._token }` } : undefined,
 					meshCallback: mesh => { mesh.material.wireframe = this._wireframeMode || false; },
 					pointsCallback: points => { points.material.size = this._pointTargetSize || 1.0; },
-					onLoadCallback: () => resolve( tile ) // Resolves when tileset JSON is ready
+					onLoadCallback: () => resolve( tile )
 
 				});
 
 			});
-
-			ogc3DTile.displayErrors = true;
 
 			const obv = ogc3DTile.boundingVolume;
 
@@ -596,6 +588,82 @@ class Three3DTilesLoader extends Loader {
 
 			};
 
+			/**
+			 * Cleans up stale tile registration entries in the TileLoader.
+			 *
+			 * The OGC TileLoader keeps a `register` map of tileIdentifier → callback
+			 * for tiles that are scheduled or in-flight. After a tile finishes loading,
+			 * the loader sets the callback to `null` but does not remove the entry.
+			 *
+			 * This results in "zombie" registrations that incorrectly signal that the
+			 * loader is still busy. Since a tile is guaranteed to be present in the
+			 * cache once fully processed, this function removes any register entries
+			 * whose keys already exist in the cache.
+			 *
+			 * @param {Object} loader - The internal tileLoader instance.
+			 * @private
+			 */
+			ogc3DTile._cleanupRegister = ( loader ) => {
+
+				for ( const key in loader.register ) {
+
+					const cached = loader.cache.get( key );
+
+					if ( cached ) {
+
+						// Remove all tileIdentifiers for this key
+
+						delete loader.register[ key ];
+
+					}
+
+				}
+
+			};
+
+			/**
+			 * Reports the current streaming/loading state of the internal TileLoader.
+			 *
+			 * This method inspects several internal loader signals to determine whether
+			 * the tileset is actively streaming content. A tileset is considered "loading"
+			 * if any of the following conditions are true:
+			 *
+			 *  - One or more network downloads are currently in flight
+			 *    (tracked via the global `concurrentDownloads` counter).
+			 *
+			 *  - The TileLoader still holds active registration entries for tiles that
+			 *    have not yet completed their load callbacks.
+			 *
+			 *  - The TileLoader has scheduled downloads waiting to be processed
+			 *    (`downloads` or `ready` queues are non‑empty).
+			 *
+			 * Additionally, this method performs a cleanup pass to remove stale
+			 * registration entries left behind by the upstream loader. Once a tile is
+			 * fully cached, its registration entry is no longer meaningful and is removed
+			 * to prevent false "still loading" signals.
+			 *
+			 * @returns {boolean} True if the tileset is actively streaming or processing
+			 *                    tile content; false when fully idle.
+			 */
+			ogc3DTile.getStreamingInfo = () => {
+
+				const loader = ogc3DTile.tileLoader;
+
+				const hasActiveDownloads = ( window.concurrentDownloads ?? 0 ) > 0;
+
+				const hasPendingRegistrations =
+					Object.values( loader.register ).some( entry => Object.keys( entry ).length > 0 );
+
+				const hasScheduledDownloads =
+					loader.downloads.length > 0 || loader.ready.length > 0;
+
+
+				if ( !hasScheduledDownloads ) ogc3DTile._cleanupRegister( loader );
+
+				return hasActiveDownloads || hasPendingRegistrations || hasScheduledDownloads;
+
+			};
+
 			const originalLibraryDispose = ogc3DTile.dispose.bind( ogc3DTile );
 
 			/**
@@ -682,6 +750,7 @@ class Three3DTilesLoader extends Loader {
 		} catch ( err ) {
 
 			console.error( err );
+			throw err;
 
 		}
 
