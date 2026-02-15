@@ -398,19 +398,26 @@ Number Type Converter
     - It is using customized `3DTilesLoader`:
       - Also created with assistance from Microsoft Copilot and Google Gemini
       - Internally using [OGC3DTile](https://github.com/ebeaufay/threedtiles) loader
-    - If bounding box is visible but no content is loading then internal loader just does not support features of that particular model
-  - API Key that might be required for some data providers can be entered:
-    - This feature is untested since I don't have a key available for testing
-    - Once the text box with the key is cleared then click the `Set` button to clear it in the loader as well
+    - If bounding box is visible but no content is loading then either:
+      - Those features require API Key or token
+      - Those features are not implemented in the viewer
+      - Those features are not supported by internal loader
+        - Only B3DM and GLTF/GLB formats are supported
+      - Check console for any silent errors that didn't bubble up
+  - API Key and / or Token can be entered, that might be required for some data providers:
+    - These features are untested since I don't have either available for testing
+    - Once the text box with the key / token is cleared then click the `Set Key` or `Set Token` button to clear it in the loader as well
   - 3D Tiles are normally loaded via URL (containing a link to `tileset.json` file or some other named json file)
   - Local loading is not supported unless files are served by some local HTTP server
-  - It has live Brightness control presented within [lil-gui](https://lil-gui.georgealways.com/)
-   - It also has some switchable statistics:
+  - It has the following live controls presented within [lil-gui](https://lil-gui.georgealways.com/):
+    - Brightness
+    - LOD Multiplier (Geometric Error Correction)
+    - LOD Distance Bias
+    - LOD Point Size (for when points models are loaded)
+  - It also has some switchable statistics:
     - FPS / MS / MB stats are using [stats.js](https://github.com/mrdoob/stats.js/) library
   - The viewer allows setting Level Of Detail (LOD):
-    - `Quality` which defines 3D Tiles Visual Quality (Geometric Error Multiplier)
     - `Cache` which defines how many tiles are loaded and kept in ready state (affects memory usage and smooth movement)
-    - `Pt Size` which is live point size control present only when points models are loaded
  - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `USDZ Viewer`:
