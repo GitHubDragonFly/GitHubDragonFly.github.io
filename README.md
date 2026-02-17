@@ -395,6 +395,7 @@ Number Type Converter
 
 - Special notes about `3D Tiles Viewer`:
   - Simple viewer specifically designed to stream 3D Tiles:
+    - Supports ImplicitTiling v1.1 by performing conversion to explicit
     - It is using customized `3DTilesLoader`:
       - Also created with assistance from Microsoft Copilot and Google Gemini
       - Internally using [OGC3DTile](https://github.com/ebeaufay/threedtiles) loader
