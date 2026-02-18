@@ -1,7 +1,7 @@
 import { Box3, Loader, MathUtils, Matrix4, Quaternion, Sphere, Vector3, WebGLRenderer } from 'three';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.min.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.min.js';
-import { OGC3DTile, getOGC3DTilesCopyrightInfo } from 'https://cdn.jsdelivr.net/npm/@jdultra/threedtiles@14.0.26/dist/threedtiles.es.min.js';
+import * as OGC3D from 'https://cdn.jsdelivr.net/npm/@jdultra/threedtiles@14.0.26/dist/threedtiles.es.min.js';
 
 /**
  * A loader for 3D Tilesets - normally loaded via tileset.json URL link.
@@ -51,6 +51,8 @@ class Three3DTilesLoader extends Loader {
 		this._rootUrl = '';
 		this._keyAPI = '';
 		this._token = '';
+
+		this._variantLookup = new Map();
 
 		this._v1 = new Vector3();
 		this._corner = new Vector3();
@@ -529,11 +531,21 @@ class Three3DTilesLoader extends Loader {
 	 */
 	_replaceTemplate( uri, level, x, y, z ) {
 
-		return uri
+		let result = uri
 			.replace( '{level}', level)
 			.replace( '{x}', x )
 			.replace( '{y}', y)
 			.replace( '{z}', z );
+
+		// 2. Ensure no leading slash so it matches the variantLookup keys
+
+		if ( result.startsWith( '/' ) ) {
+
+			result = result.substring( 1 );
+
+		}
+
+		return result;
 
 	}
 
@@ -1007,6 +1019,71 @@ class Three3DTilesLoader extends Loader {
 	}
 
 	/**
+	 * Recursively flattens 3D Tiles v1.1 'contents' arrays into a synthetic child hierarchy.
+	 * This ensures compatibility with OGC3DTile loaders that expect a single content per tile.
+	 * * Each additional content is injected as a child with a geometricError of 0 and 
+	 * an 'ADD' refinement to force simultaneous rendering with the parent tile.
+	 *
+	 * @async
+	 * @param {Object} tile - The 3D Tile JSON object to process.
+	 * @returns {Promise<void>}
+	 */
+	async _flattenExplicitContents( tile ) {
+
+		// Handle Multiple Contents in the current tile
+
+		if ( tile.contents && Array.isArray( tile.contents ) ) {
+
+			// Inject as children
+
+			if ( tile.contents.length > 1 ) {
+
+				if ( !tile.children ) tile.children = [];
+
+				for ( let i = 0; i < tile.contents.length; i++ ) {
+
+					let tile_uri = tile.contents[ i ].uri;
+
+					if ( tile_uri.startsWith( '/' ) ) {
+
+						tile_uri = tile_uri.substring( 1 );
+
+					}
+
+					this._variantLookup.set( tile_uri, i );
+
+					tile.children.push({
+
+						content: tile.contents[ i ],
+						boundingVolume: tile.boundingVolume,
+						geometricError: 0, // Render simultaneously with parent
+						refine: "ADD"
+
+					});
+
+				}
+
+			}
+
+			delete tile.contents; // Clean up to avoid confusion
+
+		}
+
+		// Recurse through existing explicit children
+
+		if ( tile.children ) {
+
+			for ( const child of tile.children ) {
+
+				await this._flattenExplicitContents( child );
+
+			}
+
+		}
+
+	}
+
+	/**
 	 * Resolves an implicit 3D Tiles tileset (using implicit tiling) into an explicit
 	 * tileset structure that the Three3DTilesLoader can consume.
 	 *
@@ -1068,26 +1145,21 @@ class Three3DTilesLoader extends Loader {
 	 * - It preserves all geometric error and bounding volume semantics defined by the
 	 *   implicit tiling specification.
 	 */
-	async _resolveImplicit( json, path, level = 0, x = 0, y = 0, z = 0 ) {
+	async _resolveImplicit( json, rootPath, level = 0, x = 0, y = 0, z = 0 ) {
 
-		const implicit = json.root?.implicitTiling || json.implicitTiling;
-		if (!implicit) return json;
+		const root = json.root;
+		const implicit = root?.implicitTiling || json.implicitTiling;
+		if ( !implicit ) return json;
 
 		const isQuadtree = implicit.subdivisionScheme === "QUADTREE";
 		const childCount = isQuadtree ? 4 : 8;
 		const subtreeLevels = implicit.subtreeLevels;
 
-		// Compute subtree root
+		// 1. Resolve Subtree URL and Fetch
 
 		const subtreeRootLevel = Math.floor( level / subtreeLevels ) * subtreeLevels;
 
-		// Build & Fetch Subtree
-
-		const basePath = path.substring( 0, path.lastIndexOf( '/' ) + 1 );
-
-		// Note: In Quadtrees, the {z} template variable is omitted or 0
-
-		const subtreeUrl = basePath + this._replaceTemplate(
+		const subtreeUrl = rootPath + this._replaceTemplate(
 
 			implicit.subtrees.uri,
 			subtreeRootLevel,
@@ -1100,52 +1172,115 @@ class Three3DTilesLoader extends Loader {
 		const buffer = await fetch( subtreeUrl ).then( r => r.arrayBuffer() );
 		const { subtreeJson, binary, binaryView } = this._parseSubtree( buffer );
 
+		// 2. Map ALL content availability layers (v1.1 support)
+
 		const tileBits = this._getAvailability( subtreeJson, subtreeJson.tileAvailability, binary );
-		const contentBits = this._getAvailability( subtreeJson, subtreeJson.contentAvailability[ 0 ], binary );
-		const childSubtreeBits = this._getAvailability( subtreeJson, subtreeJson.childSubtreeAvailability, binary );
+
+		const contentBitLayers = subtreeJson.contentAvailability.map( avail => 
+
+			this._getAvailability( subtreeJson, avail, binary )
+
+		);
+
+		// Identify content templates (plural for 1.1, fallback to singular for 1.0)
+
+		const contentTemplates = root.contents || ( root.content ? [ root.content ] : [] );
 
 		const buildNode = async ( lvl, cx, cy, cz ) => {
 
-			// Use generalized Morton index (2D for Quadtree, 3D for Octree)
-
 			const index = this._computeMortonIndex( lvl, cx, cy, cz || 0, subtreeRootLevel, isQuadtree );
+
+			// Tile existence check
 
 			if ( tileBits[ index ] !== 1 ) return null;
 
-			// Check if the tile exists
+			//if ( !this._checkAvailability( subtreeJson.tileAvailability, index, binaryView, subtreeJson ) ) {
 
-			if ( !this._checkAvailability( subtreeJson.tileAvailability, index, binaryView, subtreeJson ) ) {
+			//	return null;
 
-				return null;
+			//}
 
-			}
+			// 3. Process Multiple Contents
 
-			// Check if there is actual content (b3dm/glTF) for this tile
+			const validContents = [];
 
-			const hasContent = this._checkAvailability( subtreeJson.contentAvailability[ 0 ], index, binaryView, subtreeJson );
+			contentTemplates.forEach( ( template, layerIdx ) => {
+
+				const layerBits = contentBitLayers[ layerIdx ];
+
+				if ( layerBits && layerBits[ index ] === 1 ) {
+
+					// Apply template to get the actual URI
+
+					const template_uri = this._replaceTemplate( template.uri, lvl, cx, cy, isQuadtree ? 0 : cz );
+
+					const uri = rootPath + template_uri;
+
+					// Map metadata or variant info if needed for lookup
+
+					if ( template_uri.startsWith( '/' ) ) {
+
+						template_uri = template_uri.substring( 1 );
+
+					}
+
+					this._variantLookup.set( template_uri, layerIdx );
+
+					validContents.push( { uri: uri } );
+
+				}
+
+			});
 
 			const node = {
 
-				boundingVolume: this._computeChildBoundingVolume( json.root.boundingVolume, cx, cy, cz, isQuadtree ),
-				geometricError: json.root.geometricError / Math.pow( 2, lvl ),
-				refine: json.root.refine || "REPLACE",
-				content: ( contentBits[ index ] === 1 )
-					? { uri: basePath + this._replaceTemplate( json.root.content.uri, lvl, cx, cy, isQuadtree ? 0 : cz ) }
-					: undefined,
+				boundingVolume: this._computeChildBoundingVolume( root.boundingVolume, cx, cy, cz, isQuadtree ),
+				geometricError: root.geometricError / Math.pow( 2, lvl ),
+				refine: root.refine || "REPLACE",
 				children: []
 
 			};
+
+			// 4. Flattening logic for OGC3DTile compatibility
+
+			if ( validContents.length > 0 ) {
+
+				// Standard slot for the first content
+
+				node.content = validContents[ 0 ];
+
+				// Any additional contents are added as synthetic children
+				// These children have 0 geometric error so they load / render at the same time as the parent
+
+				if ( validContents.length > 1 ) {
+
+					for ( let i = 1; i < validContents.length; i++ ) {
+
+						node.children.push({
+
+							content: validContents[ i ],
+							boundingVolume: node.boundingVolume, // Inherit same volume
+							geometricError: 0,                   // Force immediate load
+							refine: "ADD"                        // Additive refinement
+
+						});
+
+					}
+
+				}
+
+			}
+
+			// 5. Handle Subtree Traversal
 
 			const isSubtreeLeaf = ( lvl + 1 ) % subtreeLevels === 0;
 			const nextLevel = lvl + 1;
 
 			if ( nextLevel < implicit.availableLevels ) {
 
-				// Loop 4 times for Quadtree, 8 for Octree
-
 				for ( let i = 0; i < childCount; i++ ) {
 
-					const [dx, dy, dz] = isQuadtree ? this._decodeMorton2D( i ) : this._decodeMorton3D( i );
+					const [ dx, dy, dz ] = isQuadtree ? this._decodeMorton2D( i ) : this._decodeMorton3D( i );
 
 					const nx = cx * 2 + dx;
 					const ny = cy * 2 + dy;
@@ -1155,24 +1290,14 @@ class Three3DTilesLoader extends Loader {
 
 						const relativeLevel = nextLevel - subtreeRootLevel;
 						const mask = ( 1 << relativeLevel ) - 1;
-						const rx = nx & mask;
-						const ry = ny & mask;
-						const rz = nz & mask;
 
-						const leafIndex = isQuadtree ? this._morton2D( rx, ry ) : this._morton3D( rx, ry, rz );
+						const leafIndex = isQuadtree 
+							? this._morton2D( nx & mask, ny & mask ) 
+							: this._morton3D( nx & mask, ny & mask, nz & mask );
 
-						const hasNextSubtree = this._checkAvailability(
+						if ( this._checkAvailability( subtreeJson.childSubtreeAvailability, leafIndex, binaryView, subtreeJson ) ) {
 
-							subtreeJson.childSubtreeAvailability, 
-							leafIndex, 
-							binaryView, 
-							subtreeJson
-
-						);
-
-						if ( hasNextSubtree ) {
-
-							const nextSubtree = await this._resolveImplicit( json, path, nextLevel, nx, ny, nz );
+							const nextSubtree = await this._resolveImplicit( json, rootPath, nextLevel, nx, ny, nz );
 							node.children.push( nextSubtree.root );
 
 						}
@@ -1245,12 +1370,26 @@ class Three3DTilesLoader extends Loader {
 			scope._ktx2Loader.detectSupport( scope._renderer );
 
 			let json = await fetch( url ).then( r => r.json() );
+
 			const tilesetVersion = json.asset?.version || null;
-			json = await scope._resolveImplicit( json, url );
 
-			const ogc3DTile = await new Promise( ( resolve ) => {
+			// Check if the root or any child has multiple contents to set a global flag
 
-				const tile = new OGC3DTile({
+			const hasMultiExplicit = json.root.contents?.length > 1;
+			const hasMultiImplicit = json.root.implicitTiling && 
+				json.root.implicitTiling.contentAvailability?.length > 1;
+
+			const hasMulti = hasMultiExplicit || hasMultiImplicit;
+
+			// Resolve Implicit Tiling first
+			json = await scope._resolveImplicit( json, rootPath );
+
+			// Resolve Multiple Contents to make it OGC3DTile compatible
+			await scope._flattenExplicitContents( json.root );
+
+			const ogc3DTile = await new Promise( resolve => {
+
+				const tileset = new OGC3D.OGC3DTile({
 
 					url: url,
 					json: json,
@@ -1267,11 +1406,10 @@ class Three3DTilesLoader extends Loader {
 					queryParams: scope._keyAPI !== '' ? { key: scope._keyAPI } : undefined,
 					headers: scope._token ? { Authorization: `Bearer ${ scope._token }` } : undefined,
 					meshCallback: mesh => { mesh.material.wireframe = this._wireframeMode || false; },
-					pointsCallback: points => { points.material.size = this._pointTargetSize || 1.0; }
+					pointsCallback: points => { points.material.size = this._pointTargetSize || 1.0; },
+					onLoadCallback: tileset => resolve( tileset )
 
 				});
-
-				resolve( tile );
 
 			});
 
@@ -1373,6 +1511,18 @@ class Three3DTilesLoader extends Loader {
 			// Store it for later
 
 			ogc3DTile.boundingBox = box;
+
+			if ( hasMulti ) {
+
+				// Flag for the viewer.
+				// Currently all contents will be visible so have the viewer set correct visibility.
+				// The viewer can traverse children and set visibility by using userData.variantLookup
+
+				ogc3DTile.userData.rootPath = rootPath;
+				ogc3DTile.userData.hasMultipleContents = true;
+				ogc3DTile.userData.variantLookup = this._variantLookup;
+
+			}
 
 			/**
 			 * Internal state for wireframe rendering.
@@ -1662,11 +1812,12 @@ class Three3DTilesLoader extends Loader {
 
 			};
 
-			const copyright_info = getOGC3DTilesCopyrightInfo();
+			const copyright_info = OGC3D.getOGC3DTilesCopyrightInfo();
 
 			if ( copyright_info.length > 0 ) {
 
-				console.log( 'Copyright Info: ', copyright_info );
+				ogc3DTile.showCopyright();
+				ogc3DTile.copyrightVisible = true;
 
 			}
 
