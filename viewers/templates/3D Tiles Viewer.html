@@ -73,12 +73,13 @@
       var scene, renderer, camera, controls, render_requested, needsRender;
       var gui, gui_container, gui_set = false, gui_pointSize, mouse_down, mouse_wheel;
       var animations, animation_mixer, current_animation, animation_running;
-      var ww = window.innerWidth, wh = window.innerHeight, points_model;
+      var ww = window.innerWidth, wh = window.innerHeight;
       var stats, stats_enabled, events_initialized, clock;
       var last_tile, last_level, last_uuid, params, halt_on_error;
       var selected_url_file = '', directionalLight, isMobile;
       var lod_displayed = false, warning_displayed = false;
       var extended_render, extended_count = 0, count = 0;
+      var variants, variants_available, current_variant;
       var bounding_box, bbox_enabled, boxHelper, wireframe_enabled;
       var url_displayed = false, keyAPI_displayed = false, token_displayed = false;
     </script>
@@ -136,6 +137,8 @@
         <label for="btn_wireframe" title="Toggle Material Wireframe"></label>
         <button title="Switch Animation" id="btn_animate" onclick="animate_gltf();" style="display: none;">A</button>
         <label for="btn_animate" title="Switch Animation"></label>
+        <button title="Switch Variant" id="btn_variants" onclick="switch_variant();" style="display: none; min-width: 36px;">V</button>
+        <label for="btn_variants" title="Switch Variant"></label>
         <div id="status_indicator" class="indicator"></div>
       </div>
       <div class="fm" id="keyAPI" style="display: none;">
@@ -349,6 +352,53 @@
         mouse_wheel = true;
       }
 
+      function switch_variant() {
+        if (variants_available) {
+          if (current_variant === tileset_obj.userData.variantLookup.size - 1) {
+            current_variant = 0;
+          } else {
+            current_variant ++;
+          }
+
+          document.getElementById('btn_variants').innerText = 'V' + current_variant;
+
+          // Get the root path
+          const rootPath = tileset_obj.userData.rootPath || '';
+
+          let points_present_and_visible = false;
+
+          tileset_obj.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              let fullURL = child.parent?.contentURL || child.parent?.parent?.contentURL || '';
+
+              // If it's an array, take the first element; otherwise, use the string
+              if (Array.isArray( fullURL )) fullURL = fullURL[ 0 ] || '';
+
+              const uri = fullURL.replace( rootPath, '' );
+
+              if ( tileset_obj.userData.variantLookup && tileset_obj.userData.variantLookup.has( uri ) ) {
+                const vId = tileset_obj.userData.variantLookup.get( uri );
+                child.visible = ( vId === current_variant );
+
+                if (child.isPoints && child.visible)
+                  points_present_and_visible = true;
+              }
+            }
+          });
+
+          if (points_present_and_visible) {
+            if (gui_pointSize !== null) {
+              gui_pointSize.reset();
+              gui_pointSize.show( true );
+            }
+          } else {
+            if (gui_pointSize !== null) gui_pointSize.show( false );
+          }
+
+          mouse_wheel = true;
+        }
+      }
+
       function animate_gltf() {
         if (animation_running === true) {
           animation_mixer.clipAction( animations[ current_animation ] ).stop();
@@ -395,7 +445,6 @@
         mouse_down = false;
         mouse_wheel = true;
         needsRender = false;
-        points_model = false;
         animations = [];
         animation_mixer = null;
         animation_running = false;
@@ -410,6 +459,9 @@
         halt_on_error = false;
         extended_render = false;
         render_requested = false;
+        variants = null;
+        current_variant = 0;
+        variants_available = false;
         wireframe_enabled = false;
         bounding_box = new THREE.Box3();
 
@@ -544,13 +596,6 @@
         document.getElementById('btn_load').disabled = false;
         document.getElementById('status_indicator').style.display = 'none';
 
-        tileset_obj.traverse( ( child ) => {
-          if (child.isPoints) {
-            points_model = true;
-            if (tileset_obj) tileset_obj.setPointSize( 1.0 );
-          }
-        });
-
         if (gui_set === false) {
           // Add Brightness control
           gui.add( params, 'brightness', 0, 5 ).name( 'Brightness' )
@@ -594,17 +639,40 @@
 
         gui_pointSize = gui.controllersRecursive().find( c => c.property === 'pointSize' );
 
-        if (points_model) {
-          if (gui_pointSize !== null) {
-            gui_pointSize.reset();
-            gui_pointSize.show( true );
-          }
-        } else {
-          if (gui_pointSize !== null) gui_pointSize.show( false );
-        }
-
         gui_container.style.display = 'block';
         set_gui_position();
+
+        let points_present_and_visible = false;
+
+        if (tileset_obj.userData.hasMultipleContents) {
+          // Get the root path
+          const rootPath = tileset_obj.userData.rootPath || '';
+
+          tileset_obj.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              let fullURL = child.parent?.contentURL || child.parent?.parent?.contentURL || '';
+
+              // If it's an array, take the first element; otherwise, use the string
+              if (Array.isArray( fullURL )) fullURL = fullURL[ 0 ] || '';
+
+              const uri = fullURL.replace( rootPath, '' );
+
+              if ( tileset_obj.userData.variantLookup && tileset_obj.userData.variantLookup.has( uri ) ) {
+                const vId = tileset_obj.userData.variantLookup.get( uri );
+                child.visible = ( vId === 0 );
+              }
+
+              if (child.isPoints && child.visible)
+                points_present_and_visible = true;
+            }
+          });
+
+          variants_available = true;
+          variants = tileset_obj.userData.contentsVariants;
+          document.getElementById('btn_variants').innerText = 'V0';
+          document.getElementById('btn_variants').style.display = 'inline-block';
+          document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
+        }
 
         animations = tileset_obj.animations;
 
@@ -618,13 +686,26 @@
           animation_running = true;
         }
 
+        if (points_present_and_visible) {
+          if (tileset_obj) tileset_obj.setPointSize( 1.0 );
+
+          if (gui_pointSize !== null) {
+            gui_pointSize.reset();
+            gui_pointSize.show( true );
+          }
+        } else {
+          if (gui_pointSize !== null) gui_pointSize.show( false );
+        }
+
+        if (tileset_obj.copyrightVisible) tileset_obj.hideCopyright();
+
         enable_disable( false );
 
         init_running = false;
 
         console.timeEnd( 'Loading Time' );
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 500 ) );
+        if (!isMobile) await new Promise( resolve => setTimeout( log_info(), 500 ) );
       }
 
       function log_info() {
@@ -645,6 +726,7 @@
 
         init_running = false;
 
+        document.getElementById('btn_variants').style.display = 'none';
         document.getElementById('btn_animate').style.display = 'none';
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
@@ -747,6 +829,7 @@
           document.getElementById('btn_token').style.backgroundColor = 'transparent';
           document.getElementById('btn_keyAPI').style.backgroundColor = 'transparent';
           document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+          document.getElementById('btn_variants').style.backgroundColor = 'transparent';
 
           if (scene) {
             if (tileset_obj) await scene_cleanup();
@@ -761,6 +844,7 @@
             renderer.dispose();
           }
 
+          document.getElementById('btn_variants').style.display = 'none';
           document.getElementById('btn_animate').style.display = 'none';
           document.getElementById('div_error').style.display = 'none';
           document.getElementById('keyAPI_entry').value = '';
