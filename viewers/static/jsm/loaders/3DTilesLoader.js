@@ -52,6 +52,7 @@ class Three3DTilesLoader extends Loader {
 		this._keyAPI = '';
 		this._token = '';
 
+		this._maxDepthLevel = 1;
 		this._variantLookup = new Map();
 
 		this._v1 = new Vector3();
@@ -100,6 +101,25 @@ class Three3DTilesLoader extends Loader {
 	setToken( key ) {
 
 		this._token = token.toString();
+		return this;
+
+	}
+
+	/**
+	 * Determines maximum number of levels to be loaded.
+	 * Clamped between 1 and 100.
+	 * @param { integer } maxDepthLevel
+	 */
+	setMaxDepthLevel( maxDepthLevel ) {
+
+		if ( typeof maxDepthLevel !== 'number' || !Number.isFinite( maxDepthLevel ) ) {
+
+			console.warn( `Invalid maxDepthLevel: ${ maxDepthLevel }. Using default.` );
+			return this;
+
+		}
+
+		this._maxDepthLevel = Math.max( 1, Math.min( 100, maxDepthLevel ) );
 		return this;
 
 	}
@@ -1021,8 +1041,8 @@ class Three3DTilesLoader extends Loader {
 	/**
 	 * Recursively flattens 3D Tiles v1.1 'contents' arrays into a synthetic child hierarchy.
 	 * This ensures compatibility with OGC3DTile loaders that expect a single content per tile.
-	 * * Each additional content is injected as a child with a geometricError of 0 and 
-	 * an 'ADD' refinement to force simultaneous rendering with the parent tile.
+	 * ** Each additional content is injected as a child with a geometricError of 0 and 
+	 *    an 'ADD' refinement to force simultaneous rendering with the parent tile.
 	 *
 	 * @async
 	 * @param {Object} tile - The 3D Tile JSON object to process.
@@ -1088,6 +1108,7 @@ class Three3DTilesLoader extends Loader {
 	 * tileset structure that the Three3DTilesLoader can consume.
 	 *
 	 * This function:
+	 *  - Will be limited by the selected Depth Level
 	 *  - Determines the correct subtree for the current tile (based on level/x/y/z)
 	 *  - Fetches and parses the subtree binary + JSON
 	 *  - Reads availability bitstreams (tile/content/child-subtree)
@@ -1188,17 +1209,16 @@ class Three3DTilesLoader extends Loader {
 
 		const buildNode = async ( lvl, cx, cy, cz ) => {
 
+			// This stops building children if we have reached 1 level deeper than the start level
+
+			const currentDepthRelativeToStart = lvl - level;
+			const maxAllowedDepth = this._maxDepthLevel;
+
 			const index = this._computeMortonIndex( lvl, cx, cy, cz || 0, subtreeRootLevel, isQuadtree );
 
 			// Tile existence check
 
 			if ( tileBits[ index ] !== 1 ) return null;
-
-			//if ( !this._checkAvailability( subtreeJson.tileAvailability, index, binaryView, subtreeJson ) ) {
-
-			//	return null;
-
-			//}
 
 			// 3. Process Multiple Contents
 
@@ -1276,7 +1296,7 @@ class Three3DTilesLoader extends Loader {
 			const isSubtreeLeaf = ( lvl + 1 ) % subtreeLevels === 0;
 			const nextLevel = lvl + 1;
 
-			if ( nextLevel < implicit.availableLevels ) {
+			if ( nextLevel < implicit.availableLevels && currentDepthRelativeToStart < maxAllowedDepth ) {
 
 				for ( let i = 0; i < childCount; i++ ) {
 
@@ -1359,10 +1379,19 @@ class Three3DTilesLoader extends Loader {
 	async loadAsync( url ) {
 
 		const scope = this;
-
 		scope._rootUrl = url;
-
 		const rootPath = url.substring( 0, url.lastIndexOf( '/' ) + 1 );
+
+		const urlObj = new URL( url );
+
+		const params = urlObj.searchParams;
+
+		// Check if this is a "Lazy" sub-call
+
+		const level = parseInt( params.get( 'level' ) ) || 0;
+		const x = parseInt( params.get( 'x' ) ) || 0;
+		const y = parseInt( params.get( 'y' ) ) || 0;
+		const z = parseInt( params.get( 'z' ) ) || 0;
 
 		try {
 
@@ -1371,21 +1400,24 @@ class Three3DTilesLoader extends Loader {
 
 			let json = await fetch( url ).then( r => r.json() );
 
+			const json_transform = json.root.transform;
+
 			const tilesetVersion = json.asset?.version || null;
+			const isImplicit = json.root.implicitTiling !== undefined;
 
 			// Check if the root or any child has multiple contents to set a global flag
 
 			const hasMultiExplicit = json.root.contents?.length > 1;
-			const hasMultiImplicit = json.root.implicitTiling && 
+			const hasMultiImplicit = isImplicit && 
 				json.root.implicitTiling.contentAvailability?.length > 1;
 
 			const hasMulti = hasMultiExplicit || hasMultiImplicit;
 
-			// Resolve Implicit Tiling first
-			json = await scope._resolveImplicit( json, rootPath );
+			// Resolve Implicit Tiling first (last param after 'z' is userMaxDepth = Infinity)
+			if ( isImplicit ) json = await scope._resolveImplicit( json, rootPath, level, x, y, z );
 
 			// Resolve Multiple Contents to make it OGC3DTile compatible
-			await scope._flattenExplicitContents( json.root );
+			if ( json.root.contents ) await scope._flattenExplicitContents( json.root );
 
 			const ogc3DTile = await new Promise( resolve => {
 
@@ -1393,16 +1425,17 @@ class Three3DTilesLoader extends Loader {
 
 					url: url,
 					json: json,
-					centerModel: true,
+					centerModel: false,
 					rootPath: rootPath,
 					displayErrors: true,
 					loadOutsideView: true,
+					drawBoundingVolume: true,
 					renderer: scope._renderer,
-					loadingStrategy: "PERLEVEL",
 					geometricErrorMultiplier: 0.5,
 					ktx2Loader: scope._ktx2Loader,
 					dracoLoader: scope._dracoLoader,
 					maxCacheSize: scope._maxCacheSize,
+					loadingStrategy: isImplicit ? "IMMEDIATE" : "PERLEVEL",
 					queryParams: scope._keyAPI !== '' ? { key: scope._keyAPI } : undefined,
 					headers: scope._token ? { Authorization: `Bearer ${ scope._token }` } : undefined,
 					meshCallback: mesh => { mesh.material.wireframe = this._wireframeMode || false; },
@@ -1412,6 +1445,8 @@ class Three3DTilesLoader extends Loader {
 				});
 
 			});
+
+			ogc3DTile.tilesetVersion = tilesetVersion;
 
 			const obv = ogc3DTile.boundingVolume;
 
@@ -1424,12 +1459,14 @@ class Three3DTilesLoader extends Loader {
 
 			matrix.decompose( position, quat, scale );
 
-			let correction;
-			let correction_applied = false;
+			const zToYMatrix = ogc3DTile.tileLoader.zUpToYUpMatrix;
 			const isIdentity = ( quat.x === 0 && quat.y === 0 && quat.z === 0 && quat.w === 1 );
 
-			const obvCenter = new Vector3( obv.center.x, obv.center.y, obv.center.z );
-			const zToYMatrix = ogc3DTile.tileLoader.zUpToYUpMatrix;
+			const isRegion = !!obv.region;
+
+			const obvCenter = ( isRegion && !!json_transform )
+				? new Vector3( json_transform[ 12 ], json_transform[ 13 ], json_transform[ 14 ] )
+				: new Vector3( obv.center.x, obv.center.y, obv.center.z );
 
 			const upVec = obvCenter.clone().normalize();
 			const worldUp = new Vector3( 0, 1, 0 );
@@ -1437,24 +1474,48 @@ class Three3DTilesLoader extends Loader {
 			const earthTiltAngle = upVec.angleTo( worldUp );
 
 			const isECEF = obvCenter.length() > 1000000;
+			ogc3DTile.isECEF = isECEF;
+
+			let correction;
 
 			if ( isECEF && MathUtils.radToDeg( earthTiltAngle ) > 0.1 ) {
 
 				const alignQuat = new Quaternion().setFromUnitVectors( upVec, worldUp );
 				ogc3DTile.quaternion.copy( alignQuat );
-				correction_applied = true;
+
+				// Calculate where the center is after rotation
+
+				const rotatedCenter = obvCenter.clone().applyQuaternion( alignQuat );
+
+				// Move the tile back to the origin based on that rotated center
+
+				ogc3DTile.position.copy( rotatedCenter ).multiplyScalar( -1 );
 
 			} else if ( !isECEF && !isIdentity ) {
 
 				correction = new Matrix4().makeRotationX( MathUtils.degToRad( -90 ) );
 				ogc3DTile.quaternion.setFromRotationMatrix( correction );
-				correction_applied = true;
 
-			} else if ( isECEF ) {
+			}
 
-				correction = new Matrix4().makeRotationX( MathUtils.degToRad( 90 ) );
-				ogc3DTile.quaternion.setFromRotationMatrix( correction );
-				correction_applied = true;
+			// Convert OBV → Box3
+
+			const box = scope._computeBox3FromBoundingVolume( obv );
+
+			// Apply correction to the box as well
+
+			if ( isECEF && MathUtils.radToDeg( earthTiltAngle ) > 0.1 ) {
+
+				const rotationMatrix = new Matrix4().makeRotationFromQuaternion( ogc3DTile.quaternion );
+				box.applyMatrix4( rotationMatrix );
+
+			} else if ( !isECEF && !isIdentity ) {
+
+				if ( correction ) box.applyMatrix4( correction );
+
+			} else if ( tilesetVersion === '1.0' ) {
+
+				box.applyMatrix4( zToYMatrix );
 
 			}
 
@@ -1471,34 +1532,9 @@ class Three3DTilesLoader extends Loader {
 
 			}
 
-			// Convert OBV → Box3
-
-			const box = scope._computeBox3FromBoundingVolume( obv );
-
-			if ( correction_applied ) {
-
-				if ( correction ) {
-
-					box.applyMatrix4( correction );
-
-				} else {
-
-					const ogcQuat = ogc3DTile.quaternion;
-					const rotationMatrix = new Matrix4().makeRotationFromQuaternion( ogcQuat );
-					box.applyMatrix4( rotationMatrix );
-
-				}
-
-			} else {
-
-				if ( tilesetVersion === '1.0' ) box.applyMatrix4( zToYMatrix );
-
-			}
-
 			// Center the tileset
 
-			const sphere = box.getBoundingSphere( new Sphere() );
-			const center = sphere.center.clone();
+			const center = box.getCenter( new Vector3() ).clone();
 
 			// Position the tileset so the model is at ( 0, 0, 0 )
 
@@ -1506,7 +1542,7 @@ class Three3DTilesLoader extends Loader {
 
 			// Shift the bounding box so it stays aligned with the moved tile
 
-			box.translate( center.clone().multiplyScalar( -1 ) );
+			box.translate( center.multiplyScalar( -1 ) );
 
 			// Store it for later
 
@@ -1646,11 +1682,11 @@ class Three3DTilesLoader extends Loader {
 				// Calculate distance based on the largest dimension to ensure it fits
 
 				const maxDim = Math.max( size.x, size.y, size.z );
-				const distance = ( maxDim / 2.0 ) / Math.tan( fov / 2.0 );
+				const distance = maxDim + ( maxDim / 2.0 ) / Math.tan( fov / 2.0 );
 
 				// Position camera looking at the center (which is 0,0,0 now)
 
-				camera.position.set( center.x, center.y, center.z + distance + 30 );
+				camera.position.set( center.x, center.y, center.z + distance );
 				camera.lookAt( center );
 				camera.updateProjectionMatrix();
 
@@ -1758,7 +1794,7 @@ class Three3DTilesLoader extends Loader {
 
 				ogc3DTile.traverse( ( child ) => {
 
-					if ( child.isMesh || child.isPoints ) {
+					if ( child.isMesh || child.isPoints || child.isLine ) {
 
 						if ( child.geometry ) {
 
@@ -1816,8 +1852,21 @@ class Three3DTilesLoader extends Loader {
 
 			if ( copyright_info.length > 0 ) {
 
-				ogc3DTile.showCopyright();
 				ogc3DTile.copyrightVisible = true;
+				ogc3DTile.displayCopyright = true;
+				ogc3DTile.showCopyright();
+
+			}
+
+			// This seems to be needed for IMMEDIATE strategy and v1.1 model with transform
+
+			if ( !!json_transform && tilesetVersion === '1.1' && ogc3DTile.loadingStrategy === 'IMMEDIATE' ) {
+
+				ogc3DTile.translateX( ogc3DTile.position.x * ( - 1 ) );
+				ogc3DTile.translateY( ogc3DTile.position.y * ( - 1 ) );
+				ogc3DTile.translateZ( ogc3DTile.position.z * ( - 1 ) );
+
+				ogc3DTile.position.set( 0, 0, 0 );
 
 			}
 
