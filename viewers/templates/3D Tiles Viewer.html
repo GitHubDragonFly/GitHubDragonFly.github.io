@@ -79,7 +79,7 @@
       var selected_url_file = '', directionalLight, isMobile;
       var lod_displayed = false, warning_displayed = false;
       var extended_render, extended_count = 0, count = 0;
-      var variants, variants_available, current_variant;
+      var variants, variants_available, current_variant, box_helper_added;
       var bounding_box, bbox_enabled, boxHelper, wireframe_enabled;
       var url_displayed = false, keyAPI_displayed = false, token_displayed = false;
     </script>
@@ -175,6 +175,18 @@
           <option value="2000" onclick="set_tiles_cache( 2000 );">2000</option>
           <option value="5000" onclick="set_tiles_cache( 5000 );">5000</option>
         </select>
+        <select id="depth_level" title="Set 3D Tiles depth level - affects memory usage and smooth movement" style="min-width: 80px;">
+          <option value="" disabled selected>Depth</option>
+          <option value="1" onclick="set_tiles_depth( 1 );">1</option>
+          <option value="2" onclick="set_tiles_depth( 2 );">2</option>
+          <option value="3" onclick="set_tiles_depth( 2 );">3</option>
+          <option value="4" onclick="set_tiles_depth( 4 );">4</option>
+          <option value="5" onclick="set_tiles_depth( 5 );">5</option>
+          <option value="10" onclick="set_tiles_depth( 10 );">10</option>
+          <option value="25" onclick="set_tiles_depth( 25 );">25</option>
+          <option value="50" onclick="set_tiles_depth( 50 );">50</option>
+          <option value="100" onclick="set_tiles_depth( 100 );">100</option>
+        </select>
       </div>
     </div>
     <div id="gui_position"></div>
@@ -184,6 +196,10 @@
     <script>
       function set_tiles_cache( val ) {
         tiles_loader.setMaxCacheSize( parseInt( val ) );
+      }
+
+      function set_tiles_depth( val ) {
+        tiles_loader.setMaxDepthLevel( parseInt( val ) );
       }
 
       function show_lod() {
@@ -197,7 +213,7 @@
           lod_displayed = true;
 
           if (!warning_displayed) {
-            alert('3D data could eventually use lot of memory.\nCache defines how many tiles are loaded (default 100).\nSet proper cache size before loading the model.\nChanging cache size does not update already‑loaded model.');
+            alert('3D data could eventually use a lot of memory.\nCache defines max number of tiles kept in ready state (default 100).\nDepth level defines how many subtrees are processed (default 1).\nSet proper cache & depth before loading the model.\nChanging cache & depth does not update already‑loaded model.');
             warning_displayed = true;
           }
         }
@@ -386,13 +402,8 @@
             }
           });
 
-          if (points_present_and_visible) {
-            if (gui_pointSize !== null) {
-              gui_pointSize.reset();
-              gui_pointSize.show( true );
-            }
-          } else {
-            if (gui_pointSize !== null) gui_pointSize.show( false );
+          if (gui_pointSize !== null) {
+            gui_pointSize.show( points_present_and_visible );
           }
 
           mouse_wheel = true;
@@ -463,6 +474,7 @@
         current_variant = 0;
         variants_available = false;
         wireframe_enabled = false;
+        box_helper_added = false;
         bounding_box = new THREE.Box3();
 
         if (!params) params = { brightness: 2.5, pointSize: 1.0, multiplier: 0.5, bias: 1.0 };
@@ -575,11 +587,6 @@
           scene.add( tileset_obj );
           tileset_obj.frameCamera( camera );
 
-          document.getElementById('btn_bounding_box').style.backgroundColor = 'lightgreen';
-          boxHelper = new THREE.Box3Helper( tileset_obj.boundingBox, 0xFFFF00 );
-          scene.add( boxHelper );
-          bbox_enabled = true;
-
           // Start rendering
           document.getElementById('div_loading').style.display = 'none';
           render_requested = true;
@@ -644,12 +651,15 @@
 
         let points_present_and_visible = false;
 
-        if (tileset_obj.userData.hasMultipleContents) {
-          // Get the root path
-          const rootPath = tileset_obj.userData.rootPath || '';
+        // Get the root path
+        const rootPath = tileset_obj.userData.rootPath || '';
 
-          tileset_obj.traverse( ( child ) => {
-            if (child.isMesh || child.isPoints) {
+        let bbox_found = false;
+
+        tileset_obj.traverse( ( child ) => {
+          if (child.isLineSegments && ( child.parent.bbox?.uuid === child.uuid )) bbox_found = true;
+          else if (child.isMesh || child.isPoints) {
+            if (tileset_obj.userData.hasMultipleContents) {
               let fullURL = child.parent?.contentURL || child.parent?.parent?.contentURL || '';
 
               // If it's an array, take the first element; otherwise, use the string
@@ -661,12 +671,22 @@
                 const vId = tileset_obj.userData.variantLookup.get( uri );
                 child.visible = ( vId === 0 );
               }
-
-              if (child.isPoints && child.visible)
-                points_present_and_visible = true;
             }
-          });
 
+            if (child.isPoints && child.visible) points_present_and_visible = true;
+          }
+        });
+
+        if (!bbox_found) {
+          boxHelper = new THREE.Box3Helper( tileset_obj.boundingBox, 0xFFFF00 );
+          box_helper_added = true;
+          scene.add( boxHelper );
+        }
+
+        document.getElementById('btn_bounding_box').style.backgroundColor = 'lightgreen';
+        bbox_enabled = true;
+
+        if (tileset_obj.userData.hasMultipleContents) {
           variants_available = true;
           variants = tileset_obj.userData.contentsVariants;
           document.getElementById('btn_variants').innerText = 'V0';
@@ -697,7 +717,10 @@
           if (gui_pointSize !== null) gui_pointSize.show( false );
         }
 
-        if (tileset_obj.copyrightVisible) tileset_obj.hideCopyright();
+        if (tileset_obj.copyrightVisible) {
+          tileset_obj.hideCopyright();
+          tileset_obj.displayCopyright = false;
+        }
 
         enable_disable( false );
 
@@ -737,7 +760,13 @@
           if (!tileset_obj) return;
           bbox_enabled = !bbox_enabled;
 
-          bbox_enabled ? scene.add( boxHelper ) : scene.remove( boxHelper );
+          if (box_helper_added) {
+            bbox_enabled ? scene.add( boxHelper ) : scene.remove( boxHelper );
+          } else {
+            tileset_obj.traverse( ( child ) => {
+              if (child.isLineSegments && ( child.parent.bbox?.uuid === child.uuid )) child.visible = bbox_enabled;
+            });
+          }
 
           const bbox_color = bbox_enabled ? 'lightgreen' : 'transparent';
           document.getElementById('btn_bounding_box').style.backgroundColor = bbox_color;
@@ -920,15 +949,18 @@
           (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
 
         $('#cache_level').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#depth_level').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#keyAPI_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_set_keyAPI').click(); });
         $('#token_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_set_token').click(); });
         $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
 
         if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile) {
           $('#cache_level').change( function() { $(this).children(':selected').click(); });
+          $('#depth_level').change( function() { $(this).children(':selected').click(); });
         }
 
         document.getElementById('cache_level').selectedIndex = 0;
+        document.getElementById('depth_level').selectedIndex = 0;
 
         alert('After loading some 3D Tiles, if bounding box is visible but no content shows up then:\n- Those features require API Key or token\n- Those features are not implemented\n- Those features are not supported by internal loader\n  - Only B3DM and GLTF/GLB formats are supported\n- Check console for any silent errors');
       }
