@@ -52,7 +52,7 @@
       });
     </script>
 
-    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
@@ -69,8 +69,9 @@
       var THREE, manager, ply_loader, stl_loader, renderer, scene, camera, render_requested;
       var controls, mouse_down, mouse_wheel, events_initialized, init_running = false;
       var mesh, bounding_box, flat_shading_enabled, object_is_points;
-      var merge_vertices, wireframe_enabled, vertex_colors_enabled;
-      var ww = window.innerWidth, wh = window.innerHeight, isMobile;
+      var gui, gui_container, gui_set = false, params;
+      var merge_vertices, wireframe_enabled, isMobile;
+      var ww = window.innerWidth, wh = window.innerHeight;
       var min_allowed_point_size, max_allowed_point_size, count = 0;
       var url_displayed = false, url_loading = false, url_ply;
       var selected_ply_file, selected_stl_file, selected_url_file = '';
@@ -78,6 +79,7 @@
 
     <script type="module">
       import * as three_js from "three";
+      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
       import { STLLoader } from "three/addons/loaders/STLLoader.min.js";
       import { PLYLoader } from "three/addons/loaders/PLYLoader.min.js";
 
@@ -88,6 +90,17 @@
 
       ply_loader = new PLYLoader( manager );
       stl_loader = new STLLoader( manager );
+
+      gui_container = document.getElementById('gui_position');
+
+      // Override external CSS so we can have GUI in the top-right corner
+      gui_container.style.left = 'auto';         // Reset any left-side positioning
+      gui_container.style.right = '3px';         // Anchor to the right
+      gui_container.style.top = '2px';           // Anchor to the top
+      gui_container.style.marginLeft = '0px';    // Clear the 2px margin from your CSS
+
+      gui = new GUI( { autoPlace: false, container: gui_container } );
+      set_gui_position();
     </script>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
@@ -109,16 +122,9 @@
         <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".ply, .stl" />
         <label for="back_color" title="Background Color">B</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
-        <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
-          <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
-            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="5" step="0.1" value="1" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
-            <span id="dli_val">1</span>
-          </div>
-        </button>
-        <label for="btn_dc_dli" title="Directional Light Intensity"></label>
-        <button title="Flat Shading" id="btn_flat" onclick="set_flat();" disabled>F</button>
+        <button title="Flat Shading" id="btn_flat" onclick="set_flat();" style="display: none;">F</button>
         <label for="btn_flat" title="Flat Shading"></label>
-        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
+        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" style="display: none;">W</button>
         <label for="btn_wireframe" title="Wireframe"></label>
         <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
         <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
@@ -137,29 +143,11 @@
         <label for="btn_clear" title="Clear"></label>
       </div>
     </div>
-
+    <div id="gui_position"></div>
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">PLY+STL Viewer</div>
 
     <script>
-      function hide_dropdown_dli() { $('#dc_dli').fadeOut(); mouse_wheel = true; }
-
-      function show_hide_dropdown_dli() {
-        if ($('#dc_dli')[ 0 ].style.display === 'none') {
-          $('#dc_dli').fadeIn();
-
-          $('#dc_dli')[ 0 ].style.marginTop = '2px';
-
-          $('#directional_light_intensity').focus();
-        } else {
-          $('#dc_dli').fadeOut();
-        }
-
-        mouse_wheel = true;
-      }
-
-      function return_false() { return false; }
-
       function switch_to_desktop() {
         let link = document.createElement( 'a' );
         link.style.display = 'none';
@@ -177,6 +165,8 @@
           document.getElementById('url').style.display = 'block';
           url_displayed = true;
         }
+
+        resize();
       }
 
       function load_url_file() {
@@ -211,6 +201,21 @@
         }, false);
       }
 
+      function gui_reset() {
+        params.brightness = 2.0;
+        params.roughness = 0.5;
+        params.metalness = 0.0;
+
+        gui.reset();
+
+        gui_container.style.display = 'none';
+      }
+
+      function set_gui_position() {
+        let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+        gui_container.style.marginTop = fixed_menu_bottom;
+      }
+
       function resize() {
         if (scene !== undefined) {
           mouse_wheel = true;
@@ -222,6 +227,8 @@
 
           camera.aspect = ww / wh;
           camera.updateProjectionMatrix();
+
+          if (gui) set_gui_position();
 
           mouse_wheel = true;
         }
@@ -249,21 +256,6 @@
           mesh.material.uniforms.uSize.value = Math.max( newSize, min_allowed_point_size );
           mouse_wheel = true;
         }
-      }
-
-      function set_directional_light_intensity() {
-        let dli_value = document.getElementById('directional_light_intensity').value;
-        document.getElementById('dli_val').innerText = dli_value;
-
-        const val = parseFloat( dli_value );
-
-        // Shader lighting
-
-        if (mesh && mesh.material.uniforms) {
-          mesh.material.uniforms.uBrightness.value = val;
-        }
-
-        mouse_wheel = true;
       }
 
       function frame_camera() {
@@ -307,12 +299,14 @@
         url_ply = false;
         mouse_down = false;
         mouse_wheel = true;
-        vertex_colors_enabled = false;
+        wireframe_enabled = false;
         flat_shading_enabled = false;
         render_requested = false;
         bounding_box = new THREE.Box3();
         max_allowed_point_size = isMobile ? 0.75 : 1.5;
         min_allowed_point_size = isMobile ? 0.01 : 0.05;
+
+        if (!params) params = { brightness: 2.0, roughness: 0.5, metalness: 0.0 };
 
         document.getElementById('btn_flat').disabled = false;
         document.getElementById('btn_wireframe').disabled = false;
@@ -476,100 +470,114 @@
         }
 
         // If less than 50% of sampled points have data, ignore normals
-        return (validCount / sampleSize) > 0.5;
+        return ( validCount / sampleSize ) > 0.5;
       }
 
       function createMeshShaderMaterial() {
-        return new THREE.ShaderMaterial({
-          transparent: true,
-          depthWrite: true,
-          depthTest: true,
-          side: THREE.FrontSide,
-          blending: THREE.NormalBlending,
-          vertexColors: true,
-
+        const material = new THREE.ShaderMaterial({
           uniforms: {
-            uOpacity: { value: 1.0 },
-            uBrightness: { value: 1.0 },
-            uWireframe: { value: false },
-            uUseFlatShading: { value: false },
-            uUseVertexColors: { value: true },
-            uBaseColor: { value: new THREE.Color( 1.0, 1.0, 1.0 ) },
-            uCameraPos: { value: new THREE.Vector3() }
+            uOpacity:        { value: 1.0 },
+            uBrightness:     { value: 2.0 },
+            uUseFlatShading: { value: 0.0 },
+            uUseVertexColors:{ value: 1.0 },
+            uBaseColor:      { value: new THREE.Color( 1, 1, 1 ) },
+            uRoughness:      { value: 0.5 },
+            uMetalness:      { value: 0.0 }
           },
 
-          vertexShader: `
-            uniform vec3 uBaseColor;
-            uniform bool uUseFlatShading;
-            uniform bool uUseVertexColors;
-            attribute vec3 baryCentric;
-            attribute vec3 faceNormal;
+          vertexShader: /* glsl */`
+            varying vec3 vViewPos;
             varying vec3 vNormal;
             varying vec3 vColor;
-            varying vec3 vBary;
-            varying vec3 vWorldPos;
 
             void main() {
-              vBary = baryCentric;
-              vNormal = uUseFlatShading ? faceNormal : normal;
-              vColor = uUseVertexColors ? color : uBaseColor;
+              vColor = color;
 
-              // Project light from camera position
-              vec4 worldPos = modelMatrix * vec4(position, 1.0);
-              vWorldPos = worldPos.xyz;
-              gl_Position = projectionMatrix * viewMatrix * worldPos;
+              // view-space position
+              vec4 viewPos = modelViewMatrix * vec4(position, 1.0);
+              vViewPos = viewPos.xyz;
+
+              // view-space normal
+              vNormal = normalize(normalMatrix * normal);
+
+              gl_Position = projectionMatrix * viewPos;
             }
           `,
 
-          fragmentShader: `
-            uniform bool uUseVertexColors;
-            uniform vec3 uBaseColor;
-            uniform float uBrightness;
-            uniform bool uWireframe;
+          fragmentShader: /* glsl */`
             uniform float uOpacity;
+            uniform float uBrightness;
+            uniform float uUseFlatShading;
+            uniform float uUseVertexColors;
+            uniform vec3  uBaseColor;
+            uniform float uRoughness;
+            uniform float uMetalness;
+
+            varying vec3 vViewPos;
             varying vec3 vNormal;
             varying vec3 vColor;
-            varying vec3 vBary;
-            uniform vec3 uCameraPos;
-            varying vec3 vWorldPos;
-
-            float edgeFactor() {
-              vec3 d = fwidth(vBary);
-              vec3 a3 = smoothstep(vec3(0.0), d * 1.5, vBary);
-              return min(min(a3.x, a3.y), a3.z);
-            }
 
             void main() {
-              float e = edgeFactor();
-              vec3 base;
-              float diff;
 
-              if (uWireframe) {
-                // If we are far from the edge, discard the pixel (render nothing)
-                if (e > 0.1) { discard; }
+              // -------- vertex colors vs base color --------
+              float vcFactor = step(0.5, uUseVertexColors);
+              float baseFactor = 1.0 - vcFactor;
+              vec3 albedo = vColor * vcFactor + uBaseColor * baseFactor;
 
-                // Only pixels that survive the discard get colored grey-ish
-                gl_FragColor = vec4( 0.7, 0.7, 0.7, uOpacity);
-              } else {
-                base = uUseVertexColors ? vColor : uBaseColor;
+              // -------- flat vs smooth normal --------
+              vec3 N_smooth = normalize(vNormal);
 
-                // Normal rendering when wireframe is OFF
+              // compute flat normal in view space
+              vec3 dx = dFdx(vViewPos);
+              vec3 dy = dFdy(vViewPos);
+              vec3 N_flat = normalize(cross(dx, dy));
 
-                // Example 1:
-                // Simple directional light effect (light coming from top-right):
-                //vec3 lightDir = normalize(vec3(0.5, 1.0, 0.5));
-                //diff = dot(normalize(vNormal), lightDir) * 0.5 + 0.5;
+              vec3 N = normalize(mix(N_smooth, N_flat, uUseFlatShading));
 
-                // Example 2:
-                // Simple directional light effect (light coming from camera position):
-                vec3 lightDir = normalize(uCameraPos - vWorldPos);
-                diff = dot(normalize(vNormal), lightDir) * 0.5 + 0.5;
+              // -------- lighting vectors --------
+              vec3 V = normalize(-vViewPos);     // view direction
+              vec3 L = vec3(0.0, 0.0, 1.0);       // camera light
+              vec3 H = normalize(V + L);
 
-                gl_FragColor = vec4(base * diff * uBrightness, uOpacity);
-              }
+              float NdotV = max(dot(N, V), 0.0);
+              float NdotL = max(N.z, 0.0);
+              float NdotH = max(dot(N, H), 0.0);
+
+              // -------- Fresnel (Schlick) --------
+              vec3 F0 = mix(vec3(0.04), albedo, uMetalness);
+              vec3 F = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
+
+              // -------- simple specular --------
+              float shininess = 32.0 * (1.0 - uRoughness);
+              float spec = pow(NdotH, shininess);
+              vec3 specular = F * spec;
+
+              // -------- diffuse --------
+              vec3 kd = (1.0 - F) * (1.0 - uMetalness);
+              vec3 diffuse = albedo * kd / 3.14159265;
+
+              // -------- hybrid lighting --------
+              vec3 Lo = (diffuse + specular) * NdotL;
+              float simple = dot(N, V) * 0.5 + uRoughness;
+              float hybrid = mix(simple, Lo.r, 0.9);
+
+              vec3 shaded = albedo * hybrid * uBrightness;
+
+              #include <colorspace_fragment>
+
+              gl_FragColor = vec4(shaded, uOpacity);
+              gl_FragColor = linearToOutputTexel(gl_FragColor);
             }
-          `
+          `,
+
+          transparent: true,
+          depthWrite: true,
+          depthTest: true,
+          vertexColors: true,
+          side: THREE.FrontSide
         });
+
+        return material;
       }
 
       function createPointShaderMaterial( size ) {
@@ -582,7 +590,7 @@
           uniforms: {
             uSize: { value: size },
             uOpacity: { value: 1.0 },
-            uBrightness: { value: 1.0 },
+            uBrightness: { value: 2.0 },
             uUseVertexColors: { value: true },
             uUseRandomColors: { value: false },
             uBaseColor: { value: new THREE.Color( 1.0, 1.0, 1.0 ) }
@@ -671,7 +679,6 @@
           // Set attributes for flatShading and wireframe functionality
 
           smooth = add_face_normals( smooth );
-          smooth = add_barycentric( smooth );
 
           if (!smooth.hasAttribute( 'normal' )) smooth.computeVertexNormals();
           smooth.normalizeNormals();
@@ -686,25 +693,14 @@
               const white = new Float32Array( col_count * 3 ).fill( 1.0 );
               smooth.setAttribute( 'color', new THREE.BufferAttribute( white, 3 ) );
             }
-
-            vertex_colors_enabled = true;
           }
 
           let mesh_material = createMeshShaderMaterial();
 
           mesh = new THREE.Mesh( smooth, mesh_material );
-
-          document.getElementById('btn_flat').disabled = false;
         } else {
           if (selected_ply_file || url_ply) {
             // PLY points model loaded
-
-            flat_shading_enabled = false;
-            document.getElementById('btn_flat').disabled = true;
-            document.getElementById('btn_flat').style.backgroundColor = 'transparent';
-            document.getElementById('btn_wireframe').disabled = true;
-            document.getElementById('btn_plus').style.display = 'inline-block';
-            document.getElementById('btn_minus').style.display = 'inline-block';
 
             let points_material = createPointShaderMaterial( isMobile ? 0.25 : 0.5 );
 
@@ -716,8 +712,6 @@
               const colors = new Float32Array( pos_count * 3 ).fill( 0.9 );
               smooth.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
             }
-
-            vertex_colors_enabled = true;
 
             // *** START - Add intensity to geometry ***
 
@@ -766,6 +760,7 @@
             mesh = new THREE.Points( smooth, points_material );
             mesh.sizeAttenuation = true;
             mesh.sortPoints = true;
+
             object_is_points = true;
           } else {
             // STL model loaded
@@ -782,7 +777,6 @@
             // Set attributes for flatShading and wireframe functionality
 
             smooth = add_face_normals( smooth );
-            smooth = add_barycentric( smooth );
 
             if (!smooth.hasAttribute( 'normal' )) smooth.computeVertexNormals();
             smooth.normalizeNormals();
@@ -797,15 +791,11 @@
                 const white = new Float32Array( col_count * 3 ).fill( 1.0 );
                 smooth.setAttribute( 'color', new THREE.BufferAttribute( white, 3 ) );
               }
-
-              vertex_colors_enabled = true;
             }
 
             let mesh_material = createMeshShaderMaterial();
 
             mesh = new THREE.Mesh( smooth, mesh_material );
-
-            document.getElementById('btn_flat').disabled = false;
           }
         }
 
@@ -842,17 +832,70 @@
       async function finish_loading() {
         frame_camera();
 
-        if (object_is_points === true) {
-          document.getElementById('btn_flat').disabled = true;
-          document.getElementById('btn_wireframe').disabled = true;
-        }
-
         console.timeEnd( 'Loading Time' );
 
         // Stop flashing indicator
         document.getElementById('status_indicator').style.display = 'none';
 
         document.getElementById('div_loading').style.display = 'none';
+
+        if (gui_set === false) {
+          // Add Brightness control
+          gui.add( params, 'brightness', 0, 10, 0.1 ).name( 'Brightness' )
+          .onChange( ( value ) => {
+            if (mesh) {
+              mesh.material.uniforms.uBrightness.value = parseFloat( value );
+              mouse_wheel = true;
+            }
+          });
+
+          // Add Roughness control
+          gui.add( params, 'roughness', 0.0, 1.0, 0.025 ).name( 'Roughness' )
+          .onChange( ( value ) => {
+            if (mesh && !object_is_points) {
+              mesh.material.uniforms.uRoughness.value = parseFloat( value );
+              mouse_wheel = true;
+            }
+          });
+
+          // Add Metalness control
+          gui.add( params, 'metalness', 0.0, 1.0, 0.025 ).name( 'Metalness' )
+          .onChange( ( value ) => {
+            if (mesh && !object_is_points) {
+              mesh.material.uniforms.uMetalness.value = parseFloat( value );
+              mouse_wheel = true;
+            }
+          });
+
+          set_gui_position();
+
+          gui.open();
+          gui_set = true;
+        }
+
+        const gui_roughness = gui.controllersRecursive().find( c => c.property === 'roughness' );
+        const gui_metalness = gui.controllersRecursive().find( c => c.property === 'metalness' );
+
+        if (object_is_points) {
+          gui_roughness.show( false );
+          gui_metalness.show( false );
+
+          document.getElementById('btn_flat').style.display = 'none';
+          document.getElementById('btn_wireframe').style.display = 'none';
+          document.getElementById('btn_plus').style.display = 'inline-block';
+          document.getElementById('btn_minus').style.display = 'inline-block';
+        } else {
+          gui_roughness.show( true );
+          gui_metalness.show( true );
+
+          document.getElementById('btn_flat').style.display = 'inline-block';
+          document.getElementById('btn_wireframe').style.display = 'inline-block';
+          document.getElementById('btn_plus').style.display = 'none';
+          document.getElementById('btn_minus').style.display = 'none';
+        }
+
+        gui_container.style.display = 'block';
+        set_gui_position();
 
         enable_disable( false );
 
@@ -877,6 +920,8 @@
         mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
+
+        gui_container.style.display = 'none';
 
         // Stop flashing indicator
         document.getElementById('status_indicator').style.display = 'none';
@@ -925,7 +970,7 @@
 
           mesh.traverse( ( child ) => {
             if (child.isMesh) {
-              child.material.uniforms.uWireframe.value = wireframe_enabled;
+              child.material.wireframe = wireframe_enabled;
             }
 
             mouse_wheel = true;
@@ -937,9 +982,6 @@
         if (mesh) {
           if (mouse_down === true || mouse_wheel === true) {
             controls.update();
-
-            if (mesh && mesh.isMesh && mesh.material.uniforms)
-              mesh.material.uniforms.uCameraPos.value.copy( camera.position );
 
             renderer.clear();
             renderer.render( scene, camera );
@@ -960,13 +1002,17 @@
 
       async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
-        document.getElementById('dli_val').innerText = 1;
-        document.getElementById('directional_light_intensity').value = 1;
         document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_flat').style.backgroundColor = 'transparent';
         document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
+        document.getElementById('btn_wireframe').style.display = 'none';
+        document.getElementById('btn_flat').style.display = 'none';
+        document.getElementById('btn_plus').style.display = 'none';
+        document.getElementById('btn_minus').style.display = 'none';
 
         init_running = false;
+
+        if (gui_set) gui_reset();
 
         // Reset the view
         if (reset === true) {
@@ -975,10 +1021,7 @@
         } else {
           // Page (re)loading
           if (scene) {
-            if (scene.environment) {
-              scene.environment.dispose();
-              scene.environment = null;
-            }
+            if (gui) gui.dispose();
 
             if (mesh) await scene_cleanup();
 
@@ -992,8 +1035,6 @@
 
           document.getElementById('file_input').value = '';
           document.getElementById('div_error').style.display = 'none';
-          document.getElementById('btn_flat').disabled = true;
-          document.getElementById('btn_wireframe').disabled = true;
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
           enable_disable( true );
@@ -1041,8 +1082,6 @@
       }
 
       function enable_disable( disable = false ) {
-        document.getElementById('directional_light_intensity').disabled = disable;
-        document.getElementById('btn_dc_dli').disabled = disable;
         document.getElementById('back_color').disabled = disable;
         document.getElementById('btn_quick_x').disabled = disable;
         disabled_changed();
@@ -1058,9 +1097,6 @@
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
 
         $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
-
-        document.getElementById('btn_plus').style.display = 'none';
-        document.getElementById('btn_minus').style.display = 'none';
       }
 
       function disabled_changed() {
