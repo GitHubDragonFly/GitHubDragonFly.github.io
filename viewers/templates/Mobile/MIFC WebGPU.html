@@ -3,7 +3,7 @@
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="PLY (Polygon) + STL (Stereolithography) Viewer with WebGPU">
+    <meta name="description" content="IFC (International Foundation Class) Viewer">
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
@@ -12,7 +12,7 @@
       window.addEventListener( 'error', function ( event ) {
         // We check if the target has a 'src' or 'href' to identify it as a resource
         if (event.target.src || event.target.href) {
-          console.error( 'RESOURCE ERROR:', {
+          console.error( 'RESOURCE ERROR: ', {
             element: event.target.tagName,
             url: event.target.src || event.target.href,
             html: event.target.outerHTML
@@ -48,7 +48,7 @@
         // event.promise is the promise that failed
         // event.reason is usually the error object or message
 
-        if (init_running === true) handle_error( 'UNHANDLED PROMISE: ' + event.reason );
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE' );
       });
     </script>
 
@@ -61,7 +61,10 @@
           "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.183.1/build/three.webgpu.min.js",
           "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.183.1/build/three.tsl.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.1/examples/jsm/",
-          "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.183.1/examples/jsm/"
+          "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.183.1/examples/jsm/",
+          "three/examples/jsm/utils/BufferGeometryUtils": "https://cdn.jsdelivr.net/npm/three@0.183.1/examples/jsm/utils/BufferGeometryUtils.min.js",
+          "web-ifc": "https://cdn.jsdelivr.net/npm/web-ifc@0.0.75/web-ifc-api.min.js",
+          "web-ifc-three": "https://cdn.jsdelivr.net/npm/web-ifc-three@0.0.126/IFCLoader.min.js"
         }
       }
     </script>
@@ -69,14 +72,14 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var THREE, manager, ply_loader, stl_loader, renderer, scene, camera, render_requested;
-      var controls, mouse_down, mouse_wheel, events_initialized, init_running = false;
-      var mesh, gpu, gl2, bounding_box, flat_shading_enabled, halt_on_error;
-      var gui, gui_container, gui_set = false, object_is_points;
-      var merge_vertices, wireframe_enabled, isMobile, params;
-      var ww = window.innerWidth, wh = window.innerHeight;
-      var url_displayed = false, url_loading = false, url_ply, count = 0;
-      var selected_ply_file, selected_stl_file, selected_url_file = '';
+      var THREE, manager, texture_loader, ifc_loader, ifc_obj, scene, camera;
+      var renderer, gpu, gl2, controls, wireframe_enabled, render_requested;
+      var gui, gui_container, gui_set = false, params;
+      var init_running = false, halt_on_error;
+      var mouse_down, mouse_wheel, events_initialized, bounding_box;
+      var ww = window.innerWidth, wh = window.innerHeight, count = 0;
+      var url_displayed = false, url_loading = false, modelID = -1, isMobile;
+      var first_run = false, fr_count = 0, selected_ifc_file, selected_url_file = '';
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
     </script>
@@ -84,8 +87,6 @@
     <script type="module">
       import * as threejs from "three";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { STLLoader } from "three/addons/loaders/STLLoader.min.js";
-      import { PLYLoader } from "three/addons/loaders/PLYLoader.min.js";
 
       THREE = threejs;
 
@@ -94,8 +95,7 @@
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
 
-      ply_loader = new PLYLoader( manager );
-      stl_loader = new STLLoader( manager );
+      texture_loader = new THREE.TextureLoader();
 
       gui_container = document.getElementById('gui_position');
 
@@ -111,10 +111,13 @@
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
+    <!-- Using web-ifc library: https://github.com/ThatOpen/engine_web-ifc -->
+    <!-- Using web-ifc-three IFC Loader: https://github.com/ThatOpen/web-ifc-three -->
+    <!-- Using jQuery: https://github.com/jquery/jquery -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>PLY+STL WebGPU (r183)</title>
+    <title>IFC WebGPU (r183)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -123,24 +126,18 @@
         <label for="btn_url" title="Get remote model via URL"></label>
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="btn_file_input" title="Browse Local Files"></label>
-        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".ply, .stl" />
-        <label for="back_color" title="Background Color">B</label>
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".ifc" />
+        <label for="back_color" title="Background Color">BG</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
-        <button title="Flat Shading" id="btn_flat" onclick="set_flat();" style="display: none">F</button>
-        <label for="btn_flat" title="Flat Shading"></label>
-        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" style="display: none">W</button>
+        <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
         <label for="btn_wireframe" title="Wireframe"></label>
-        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
-        <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
         <div id="status_indicator" class="indicator"></div>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
         <input type="text" id="url_entry" value="" style="width: calc(75% - 12px);" />
         <button title="Load" id="btn_load" onclick="load_url_file();" style="min-width: 8.5%;">Load</button>
-        <label for="btn_load" title="Load"></label>
         <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
-        <label for="btn_clear" title="Clear"></label>
       </div>
       <div class="fm" id="div_message" style="width: 99.1%; margin: 2px 0 2px 1px; color: maroon;">
         Use inputs above
@@ -148,7 +145,7 @@
     </div>
     <div id="gui_position"></div>
     <div id="div_error" class="error_msg">E R R O R !</div>
-    <div id="div_loading" class="loading_msg">PLY+STL WebGPU</div>
+    <div id="div_loading" class="loading_msg">IFC WebGPU</div>
 
     <script>
       function show_url() {
@@ -177,7 +174,7 @@
         const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
-        window.addEventListener( 'pointerup', (event) => { mouse_down = false; }, false);
+        window.addEventListener( 'pointerup', (event) => { mouse_down = false; mouse_wheel = true; }, false);
         window.addEventListener( 'pointercancel', ( event ) => { mouse_down = false; mouse_wheel = false; }, false);
         window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
         window.addEventListener( 'keydown', ( event ) => {
@@ -239,15 +236,15 @@
       }
 
       function frame_camera() {
-        bounding_box.setFromObject( mesh );
+        bounding_box.setFromObject( ifc_obj );
         const center = bounding_box.getCenter( new THREE.Vector3() );
         const size = bounding_box.getSize( new THREE.Vector3() );
 
-        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length() ) ) );
         camera.lookAt( center );
 
         // Center root
-        mesh.position.sub( center );
+        ifc_obj.position.sub( center );
 
         // Frame camera to root
         const maxDim = Math.max( size.x, size.y, size.z );
@@ -269,28 +266,37 @@
         if (scene) {
           mouse_wheel = true;
 
-          if (mesh) await scene_cleanup();
+          if (ifc_obj) await scene_cleanup();
 
           await reset_all( true );
         }
 
         enable_disable( true );
 
-        selected_ply_file = null;
-        selected_stl_file = null;
-        object_is_points = false;
-        url_ply = false;
+        if (ifc_loader === undefined) {
+          const { IFCSPACE } = await import( "web-ifc" );
+          const { IFCLoader } = await import( "web-ifc-three" );
+
+          ifc_loader = new IFCLoader( manager );
+          await ifc_loader.ifcManager.setWasmPath( 'https://cdn.jsdelivr.net/npm/web-ifc@0.0.75/', true );
+          await ifc_loader.ifcManager.parser.setupOptionalCategories( { [ IFCSPACE ]: false } );
+          await ifc_loader.ifcManager.applyWebIfcConfig( { USE_FAST_BOOLS: true } );
+
+          manager.addHandler(/\.ifc$/i, ifc_loader);
+        }
+
+        selected_ifc_file = null;
         mouse_down = false;
         mouse_wheel = true;
         halt_on_error = false;
-        wireframe_enabled = false;
-        flat_shading_enabled = false;
         render_requested = false;
+        wireframe_enabled = false;
         bounding_box = new THREE.Box3();
 
         if (!params) params = { brightness: 2.0, roughness: 0.5, metalness: 0.0 };
 
         console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
         document.getElementById('div_error').style.display = 'none';
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
@@ -299,13 +305,10 @@
           // Loaded file
           var fi = document.getElementById('file_input');
 
-          for (let i = 0; i < fi.files.length; i++) {
-            if (fi.files[ i ].name.toUpperCase().endsWith('.PLY')) { selected_ply_file = fi.files[ i ]; }
-            else if (fi.files[ i ].name.toUpperCase().endsWith('.STL')) { selected_stl_file = fi.files[ i ]; }
-          };
+          if (fi.files[ 0 ].name.toUpperCase().endsWith('.IFC')) { selected_ifc_file = fi.files[ 0 ]; }
 
-          if (selected_ply_file === null && selected_stl_file === null) {
-            handle_error( 'No valid PLY or STL file selected!' );
+          if (selected_ifc_file === null) {
+            handle_error( 'No valid IFC file selected!' );
             return;
           }
 
@@ -353,7 +356,7 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 1e9 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 2000 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -377,30 +380,15 @@
           //controls.minPolarAngle = 1.1;
         }
 
-        // Start flashing indicator
-        document.getElementById('status_indicator').style.display = 'inline-block';
+        if (ifc_loader) {
+          // Start flashing indicator
+          document.getElementById('status_indicator').style.display = 'inline-block';
 
-        // Load the model
-        loadFile();
-      }
-
-      function allVertexColorsAreBlack( geometry ) {
-        if (!geometry.hasAttribute( 'color' ) ) return false;
-
-        const colors = geometry.getAttribute( 'color' );
-        const col_count = colors.count;
-
-        for ( let i = 0; i < col_count; i++ ) {
-          if (
-            colors.getX( i ) !== 0 ||
-            colors.getY( i ) !== 0 ||
-            colors.getZ( i ) !== 0
-          ) {
-            return false;  // found a non-black vertex
-          }
+          // Load the ifc file
+          selected_ifc_file !== null ? loadFile() : loadURLFile();
+        } else {
+          handle_error( 'IFCLoader does not exist!' );
         }
-
-        return true; // all black
       }
 
       async function createMeshShaderMaterialTSL() {
@@ -413,41 +401,20 @@
         // uniforms
         const uOpacity         = uniform( 1.0, 'float' );
         const uBrightness      = uniform( 2.0, 'float' );
-        const uUseFlatShading  = uniform( 0.0, 'float' ); // 0 = smooth, 1 = flat
-        const uUseVertexColors = uniform( 1.0, 'float' ); // 0 = off, 1 = on
         const uBaseColor       = uniform( new THREE.Color( 1, 1, 1 ), 'color' );
         const uRoughness       = uniform( 0.5, 'float' ); // 0.0 = mirror, 1.0 = matte
         const uMetalness       = uniform( 0.0, 'float' ); // 0.0 = plastic/dielectric, 1.0 = metal
 
         // attributes
-        const position   = attribute( 'position', 'vec3' );
-        const colorAttr  = attribute( 'color',    'vec3' );
+        const position  = attribute( 'position', 'vec3' );
 
         // varyings
-        const vViewPos = varying( modelViewMatrix.mul( vec4( position, 1.0 ) ).xyz );
+        const vViewPos    = varying( modelViewMatrix.mul( vec4( position, 1.0 ) ).xyz );
         const vViewNormal = varying( normalView );
-        const vColor   = varying( colorAttr );
 
-        // -------- vertex colors vs base color --------
+        // -------- lighting --------
 
-        const vcFactor    = step( float( 0.5 ), uUseVertexColors );
-        const baseFactor  = float( 1.0 ).sub( vcFactor );
-        const albedoRGB = vColor.mul( vcFactor ).add( uBaseColor.rgb.mul( baseFactor ) );
-
-        // -------- flat vs smooth normal view & light directions --------
-
-        // Calculate the flat normal using the VIEW SPACE position
-        // This ensures the flat faces are aligned with the camera
-
-        const dViewPosdx     = dFdx( vViewPos );
-        const dViewPosdy     = dFdy( vViewPos );
-        const flatNormalView = normalize( cross( dViewPosdx, dViewPosdy ) );
-
-        // Define N by mixing the smooth view normal and the flat view normal
-        // We use uUseFlatShading to toggle between them
-
-        const N = normalize( mix( vViewNormal, flatNormalView, uUseFlatShading ) );
-
+        const N = normalize( vViewNormal );
         const V = vViewPos.negate().normalize();
         const L = vec3( 0, 0, 1 ); // Light comes from the screen/camera
         const H = normalize( V.add( L ) );
@@ -462,7 +429,7 @@
 
         // Fresnel (Schlick)
 
-        const F0 = mix( vec3( 0.04 ), albedoRGB, uMetalness );
+        const F0 = mix( vec3( 0.04 ), uBaseColor, uMetalness );
         const F  = F0.add( vec3( one.sub( F0 ) ).mul( pow( one.sub( NdotV ), float( 5.0 ) ) ) );
 
         // simple stable specular
@@ -474,14 +441,14 @@
         // diffuse (energy conserving)
 
         const kd      = one.sub( F ).mul( one.sub( uMetalness ) );
-        const diffuse = albedoRGB.div( Math.PI ).mul( kd );
+        const diffuse = uBaseColor.div( Math.PI ).mul( kd );
 
         // final hybrid lighting
 
         const Lo         = diffuse.add( specular ).mul( NdotL );
         const simple     = dot( N, V ).mul( 0.5 ).add( uRoughness );
         const hybrid     = mix( simple, Lo, 0.9 ); // 0.0 = simple, 1.0 = PBR
-        const shadedRGB  = albedoRGB.mul( hybrid ).mul( uBrightness );
+        const shadedRGB  = uBaseColor.mul( hybrid ).mul( uBrightness );
 
         const finalColor = vec4( shadedRGB, uOpacity ).context( { colorspace: true } );
 
@@ -491,217 +458,79 @@
         material.positionNode = modelViewProjection.mul( vec4( position, 1.0 ) );
         material.colorNode = finalColor;
 
-        material.transparent = true;
+        material.transparent = false;
         material.depthWrite = true;
         material.depthTest = true;
-        material.side = THREE.FrontSide; // IMPORTANT: keeps triangle count correct
-        material.vertexColors = uUseVertexColors;
+        material.side = THREE.DoubleSide;
         material.wireframeLinewidth = 1.0; // IMPORTANT: avoids browser warnings
 
         // expose uniforms to tweak them externally
 
         material.uniforms = {
           uOpacity,
+          uBaseColor,
           uRoughness,
           uMetalness,
-          uBrightness,
-          uUseFlatShading,
-          uUseVertexColors
+          uBrightness
         };
 
         return material;
       }
 
-      async function createPointShaderMaterialTSL() {
-        const {
-          attribute, uniform, vec4, clamp, pow, positionView
-        } = await import( 'three/tsl' );
+      const cache = new Map();
 
-        // uniforms
-        const uOpacity = uniform( 1.0, 'float' );
-        const uBrightness = uniform( 1.0, 'float' );
+      async function getCachedShaderMaterial( color, opacity, transparency ) {
+        const key = `${ color.getHexString() }_${ opacity }_${ transparency ? 1 : 0 }`;
 
-        // attributes
-        const colorAttr = attribute( 'color', 'vec3' );
-        const intensity = attribute( 'intensity', 'float' );
+        if (!cache.has( key )) {
+          const mat = await createMeshShaderMaterialTSL();
+          mat.uniforms.uBaseColor.value.copy( color );
+          mat.uniforms.uOpacity.value = opacity;
+          mat.transparent = transparency;
 
-        // color shaping
-        const shapedIntensity = pow( clamp( intensity, 0.001, 1.0 ), 0.1 );
-        const rgb = colorAttr.mul( shapedIntensity ).mul( uBrightness );
-        const finalColor = vec4( rgb, uOpacity );
+          cache.set( key, mat );
+        }
 
-        // material
-        const material = new THREE.PointsNodeMaterial();
-        material.colorNode = finalColor;
-
-        material.transparent = true;
-        material.depthWrite = false;
-        material.blending = THREE.AdditiveBlending;
-
-        // expose uniforms to tweak them externally
-
-        material.uniforms = { uOpacity, uBrightness };
-
-        return material;
+        return cache.get( key );
       }
 
       function loadFile() {
-        // Launch loading of the selected file, addFileInScene is the callback when it's ready
-        if (selected_ply_file !== null) {
-          ply_loader.load( URL.createObjectURL( selected_ply_file ), addFileInScene,
-          function( xhr ) { }, // onProgress
-          function ( error ) { handle_error( error ); }); // onError
-        } else if (selected_stl_file !== null) {
-          stl_loader.load( URL.createObjectURL( selected_stl_file ), addFileInScene,
-          function( xhr ) { }, // onProgress
-          function ( error ) { handle_error( error ); }); // onError
-        } else {
-          loadURLFile();
-        }
-      }
+        ifc_loader.load( URL.createObjectURL( selected_ifc_file ), async function( object ) {
+          if (halt_on_error) return;
 
-      async function addFileInScene( object ) {
-        if (halt_on_error) return;
+          URL.revokeObjectURL( selected_ifc_file );
 
-        if (selected_ply_file) {
-          URL.revokeObjectURL( selected_ply_file );
-        } else if (selected_stl_file) {
-          URL.revokeObjectURL( selected_stl_file );
-        }
+          ifc_obj = object;
 
-        // object is geometry
+          const oldMaterials = ifc_obj.material;
+          const meshMaterials = ifc_obj.mesh.material;
+          const newMaterials = [];
 
-        let smooth = object;
+          for ( let i = 0; i < oldMaterials.length; i++ ) {
+            const lambert = oldMaterials[ i ];
+            const shaderMat = await getCachedShaderMaterial( lambert.color, lambert.opacity, lambert.transparent );
+            shaderMat.uuid = lambert.uuid;
 
-        smooth.computeBoundingBox();
-        smooth.computeBoundingSphere();
-
-        if ( smooth.index !== null ) {
-          if (!smooth.hasAttribute( 'normal' )) smooth.computeVertexNormals();
-          smooth.normalizeNormals();
-          smooth.center();
-
-          smooth.computeBoundingBox();
-          smooth.computeBoundingSphere();
-
-          if (( smooth.hasAttribute( 'color' ) && allVertexColorsAreBlack( smooth ) ) || !smooth.hasAttribute( 'color' )) {
-            const pos_count = smooth.getAttribute( 'position' ).count;
-            const white = new Float32Array( pos_count * 3 ).fill( 1.0 );
-            smooth.setAttribute( 'color', new THREE.BufferAttribute( white, 3 ) );
+            lambert.dispose();
+            meshMaterials[ i ].dispose();
+            newMaterials.push( shaderMat );
           }
 
-          let mesh_material = await createMeshShaderMaterialTSL();
+          oldMaterials.length = 0;
+          meshMaterials.length = 0;
+          ifc_obj.material = newMaterials;
+          ifc_obj.mesh.material = newMaterials;
 
-          mesh = new THREE.Mesh( smooth, mesh_material );
+          // Add ifc_obj to the scene
+          scene.add( ifc_obj );
+          camera.lookAt( ifc_obj.position );
 
-          smooth.dispose();
-          mesh_material.dispose();
-        } else {
-          if (selected_ply_file || url_ply) {
-            // PLY points model loaded
-
-            let points_material = await createPointShaderMaterialTSL();
-
-            // Shader material expects color attribute
-            // Fill with white color if no color is present
-
-            if (!smooth.hasAttribute( 'color' )) {
-              const pos_count = smooth.getAttribute( 'position' ).count;
-              const colors = new Float32Array( pos_count * 3 ).fill( 0.9 );
-              smooth.setAttribute( 'color', new THREE.BufferAttribute( colors, 3 ) );
-            }
-
-            // *** START - Add intensity to geometry ***
-
-            // Some PLY point clouds might have intensity baked-in
-
-            if (!smooth.hasAttribute( 'intensity' )) {
-              const pos = smooth.getAttribute( 'position' );
-              const points_count = pos.count;
-              const intensity = new Float32Array( points_count );
-
-              // Spherical falloff
-
-              for (let i = 0; i < points_count; i++) {
-                const x = pos.getX( i );
-                const y = pos.getY( i );
-                const z = pos.getZ( i );
-
-                const d = Math.sqrt( x * x + y * y + z * z );
-
-                intensity[ i ] = d;
-              }
-
-              // Normalize
-
-              let min = Infinity;
-              let max = -Infinity;
-
-              for (let i = 0; i < intensity.length; i++) {
-                const v = intensity[ i ];
-
-                if (v < min) min = v;
-                if (v > max) max = v;
-              }
-
-              const range = ( max - min );
-
-              for (let i = 0; i < points_count; i++) {
-                intensity[ i ] = ( intensity[ i ] - min ) / range;
-              }
-
-              smooth.setAttribute( 'intensity', new THREE.BufferAttribute( intensity, 1 ) );
-            }
-
-            // *** END - Add intensity to geometry ***
-
-            mesh = new THREE.Points( smooth, points_material );
-
-            smooth.dispose();
-            points_material.dispose();
-
-            mesh.sizeAttenuation = true;
-            mesh.sortPoints = true;
-            object_is_points = true;
-          } else {
-            // STL model loaded
-
-            if (merge_vertices === undefined) {
-              const { mergeVertices } = await import( "three/addons/utils/BufferGeometryUtils.min.js" );
-              merge_vertices = mergeVertices;
-            }
-
-            smooth.deleteAttribute('normal');
-            smooth = merge_vertices( smooth, 1e-6 );
-            smooth.computeVertexNormals();
-            smooth.normalizeNormals();
-            smooth.center();
-
-            smooth.computeBoundingBox();
-            smooth.computeBoundingSphere();
-
-            if (( smooth.hasAttribute( 'color' ) && allVertexColorsAreBlack( smooth ) ) || !smooth.hasAttribute( 'color' )) {
-              const pos_count = smooth.getAttribute( 'position' ).count;
-              const white = new Float32Array( pos_count * 3 ).fill( 1.0 );
-              smooth.setAttribute( 'color', new THREE.BufferAttribute( white, 3 ) );
-            }
-
-            let mesh_material = await createMeshShaderMaterialTSL();
-
-            mesh = new THREE.Mesh( smooth, mesh_material );
-
-            smooth.dispose();
-            mesh_material.dispose();
-          }
-        }
-
-        // Add mesh to the scene
-        scene.add( mesh );
-        camera.lookAt( mesh.position );
-
-        finish_loading();
-
-        mouse_wheel = true;
+          finish_loading();
+        }, function ( xhr ) { // onProgress
+        }, function ( error ) { // onError
+          handle_error( error );
+          URL.revokeObjectURL( selected_ifc_file );
+        });
       }
 
       function loadURLFile() {
@@ -712,15 +541,40 @@
             selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          // No extension checking for single URL so it has to point to PLY or STL file
+          // No extension checking for URL so it has to point to IFC model
 
-          stl_loader.load( selected_url_file, addFileInScene,
-          function( xhr ) { }, // onProgress
-          function ( error1 ) { // onError
-            url_ply = true;
-            ply_loader.load( selected_url_file, addFileInScene,
-            function( xhr ) { }, // onProgress
-            function ( error2 ) { handle_error( error2 ); }); // onError
+          ifc_loader.load( selected_url_file, async function( object ) {
+            if (halt_on_error) return;
+
+            ifc_obj = object;
+
+            const oldMaterials = ifc_obj.material;
+            const meshMaterials = ifc_obj.mesh.material;
+            const newMaterials = [];
+
+            for ( let i = 0; i < oldMaterials.length; i++ ) {
+              const lambert = oldMaterials[ i ];
+              const shaderMat = await getCachedShaderMaterial( lambert.color, lambert.opacity, lambert.transparent );
+              shaderMat.uuid = lambert.uuid;
+
+              lambert.dispose();
+              meshMaterials[ i ].dispose();
+              newMaterials.push( shaderMat );
+            }
+
+            oldMaterials.length = 0;
+            meshMaterials.length = 0;
+            ifc_obj.material = newMaterials;
+            ifc_obj.mesh.material = newMaterials;
+
+            // Add ifc_obj to the scene
+            scene.add( ifc_obj );
+            camera.lookAt( ifc_obj.position );
+
+            finish_loading();
+          }, function ( xhr ) { // onProgress
+          }, function ( error ) { // onError
+            handle_error( error );
           });
         }
       }
@@ -742,8 +596,15 @@
           // Add Brightness control
           gui.add( params, 'brightness', 0, 10, 0.1 ).name( 'Brightness' )
           .onChange( ( value ) => {
-            if (mesh) {
-              mesh.material.uniforms.uBrightness.value = parseFloat( value );
+            if (ifc_obj) {
+              if (Array.isArray( ifc_obj.material )) {
+                ifc_obj.material.forEach( m => {
+                  m.uniforms.uBrightness.value = parseFloat( value );
+                });
+              } else {
+                ifc_obj.material.uniforms.uBrightness.value = parseFloat( value );
+              }
+
               mouse_wheel = true;
             }
           });
@@ -751,8 +612,15 @@
           // Add Roughness control
           gui.add( params, 'roughness', 0.0, 1.0, 0.025 ).name( 'Roughness' )
           .onChange( ( value ) => {
-            if (mesh && !object_is_points) {
-              mesh.material.uniforms.uRoughness.value = parseFloat( value );
+            if (ifc_obj) {
+              if (Array.isArray( ifc_obj.material )) {
+                ifc_obj.material.forEach( m => {
+                  m.uniforms.uRoughness.value = parseFloat( value );
+                });
+              } else {
+                ifc_obj.material.uniforms.uRoughness.value = parseFloat( value );
+              }
+
               mouse_wheel = true;
             }
           });
@@ -760,8 +628,15 @@
           // Add Metalness control
           gui.add( params, 'metalness', 0.0, 1.0, 0.025 ).name( 'Metalness' )
           .onChange( ( value ) => {
-            if (mesh && !object_is_points) {
-              mesh.material.uniforms.uMetalness.value = parseFloat( value );
+            if (ifc_obj) {
+              if (Array.isArray( ifc_obj.material )) {
+                ifc_obj.material.forEach( m => {
+                  m.uniforms.uMetalness.value = parseFloat( value );
+                });
+              } else {
+                ifc_obj.material.uniforms.uMetalness.value = parseFloat( value );
+              }
+
               mouse_wheel = true;
             }
           });
@@ -772,25 +647,6 @@
           gui_set = true;
         }
 
-        const gui_roughness = gui.controllersRecursive().find( c => c.property === 'roughness' );
-        const gui_metalness = gui.controllersRecursive().find( c => c.property === 'metalness' );
-
-        if (object_is_points) {
-          gui_roughness.show( false );
-          gui_metalness.show( false );
-
-          document.getElementById('btn_flat').style.display = 'none';
-          document.getElementById('btn_wireframe').style.display = 'none';
-        } else {
-          gui_roughness.show( true );
-          gui_metalness.show( true );
-
-          document.getElementById('btn_flat').style.display = 'inline-block';
-          document.getElementById('btn_wireframe').style.display = 'inline-block';
-          document.getElementById('btn_flat').style.backgroundColor = 'transparent';
-          document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
-        }
-
         gui_container.style.display = 'block';
         set_gui_position();
 
@@ -799,7 +655,9 @@
         init_running = false;
 
         render_requested = true;
-        mouse_wheel = true;
+        mouse_wheel = false;
+        first_run = true;
+        fr_count = 0;
         render();
 
         if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
@@ -823,7 +681,6 @@
         console.timeEnd( 'Loading Time' );
         console.log( 'Error loading model!' );
         console.log( error );
-        mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
 
@@ -836,35 +693,9 @@
         document.getElementById('div_error').style.display = 'block';
       }
 
-      function quick_x_rotation( angle ) {
-        mesh.rotateX( - Math.PI / 2.0 );
-
-        mouse_wheel = true;
-      }
-
-      function set_flat() {
-        if (mesh) {
-          if (flat_shading_enabled) {
-            document.getElementById('btn_flat').style.backgroundColor = 'transparent';
-            flat_shading_enabled = false;
-          } else {
-            document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
-            flat_shading_enabled = true;
-          }
-
-          mesh.traverse( ( child ) => {
-            if (child.isMesh && child.material.uniforms) {
-              child.material.uniforms.uUseFlatShading.value = flat_shading_enabled ? 1.0 : 0.0;
-            }
-
-            mouse_wheel = true;
-          });
-        }
-      }
-
       function show_wireframe() {
-        if (mesh) {
-          if (wireframe_enabled) {
+        if (ifc_obj) {
+          if (wireframe_enabled === true) {
             wireframe_enabled = false;
             document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
           } else {
@@ -872,27 +703,49 @@
             document.getElementById('btn_wireframe').style.backgroundColor = 'lightgreen';
           }
 
-          mesh.traverse( ( child ) => {
-            if (child.isMesh) child.material.wireframe = wireframe_enabled;
-            mouse_wheel = true;
+          ifc_obj.traverse( ( child ) => {
+            if (child.isMesh) {
+              if (child.material) {
+                if (Array.isArray( child.material )) {
+                  child.material.forEach( mtl => {
+                    mtl.wireframe = wireframe_enabled;
+                  });
+                } else {
+                  child.material.wireframe = wireframe_enabled;
+                }
+              }
+
+              mouse_wheel = true;
+            }
           });
         }
       }
 
       async function render() {
-        if (mesh) {
-          if (mouse_down || mouse_wheel) {
+        if (ifc_obj) {
+          if (first_run || mouse_down || mouse_wheel) {
             controls.update();
 
             renderer.clear();
             renderer.render( scene, camera );
 
-            if (mouse_wheel) {
-              if (count > 5) {
-                mouse_wheel = false;
+            // If it might be slow to render initially
+            if (first_run) {
+              fr_count ++;
+              if (fr_count > 10) {
+                mouse_wheel = true;
+                first_run = false;
+                fr_count = 0;
                 count = 0;
-              } else {
-                count ++;
+              }
+            } else {
+              if (mouse_wheel) {
+                if (count > 5) {
+                  mouse_wheel = false;
+                  count = 0;
+                } else {
+                  count ++;
+                }
               }
             }
           }
@@ -904,10 +757,7 @@
       async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
         document.getElementById('btn_url').style.backgroundColor = 'transparent';
-        document.getElementById('btn_flat').style.backgroundColor = 'transparent';
         document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
-        document.getElementById('btn_wireframe').style.display = 'none';
-        document.getElementById('btn_flat').style.display = 'none';
 
         init_running = false;
 
@@ -920,17 +770,21 @@
         } else {
           // Page (re)loading
           if (scene) {
-            if (gui) gui.dispose();
+            if (ifc_obj) await scene_cleanup();
 
-            if (mesh) await scene_cleanup();
+            if (gui) gui.dispose();
 
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
             }
 
+            modelID = -1;
+
             renderer.clear();
             renderer.dispose();
           }
+
+          mouse_wheel = true;
 
           document.getElementById('file_input').value = '';
           document.getElementById('div_error').style.display = 'none';
@@ -943,53 +797,64 @@
       }
 
       async function scene_cleanup() {
-        if (wireframe_enabled === true) await show_wireframe();
+        if (!ifc_obj) return;
 
-        scene.remove( mesh );
+        ifc_loader.ifcManager.close( ++ modelID );
 
+        if (wireframe_enabled) await show_wireframe();
+
+        scene.remove( ifc_obj );
         renderer.clear();
 
-        mesh.traverse( ( child ) => {
-          if (child.isMesh || child.isPoints) {
-            if (child.geometry) {
-              child.geometry.dispose();
-              child.geometry = null;
-            }
-
-            if (child.material) {
-              if (child.material.uniforms) {
-                Object.keys( child.material.uniforms ).forEach( key => {
-                  const uniform = child.material.uniforms[ key ].value;
+        if (ifc_obj.material) {
+          if (Array.isArray( ifc_obj.material )) {
+            ifc_obj.material.forEach( m => {
+              if (m.uniforms) {
+                Object.keys( m.uniforms ).forEach( key => {
+                  const uniform = m.uniforms[ key ].value;
                   if (uniform && uniform.isTexture) uniform.dispose();
                 });
               } else {
-                if (child.material.map) child.material.map.dispose();
+                if (m.map) m.map.dispose();
               }
 
-              child.material.dispose();
-              child.material = null;
+              m.dispose();
+              m = null;
+            });
+          } else {
+            if (ifc_obj.material.uniforms) {
+              Object.keys( ifc_obj.material.uniforms ).forEach( key => {
+                const uniform = ifc_obj.material.uniforms[ key ].value;
+                if (uniform && uniform.isTexture) uniform.dispose();
+              });
+            } else {
+              if (ifc_obj.material.map) ifc_obj.material.map.dispose();
+              ifc_obj.material.dispose();
+              ifc_obj.material = null;
             }
           }
-        });
+        }
 
-        mesh = undefined;
+        ifc_obj.geometry.dispose();
+        ifc_obj.geometry = null;
 
-        if (!isMobile) renderer.info.reset();
+        if (isMobile === false) {
+          renderer.info.reset();
+          renderer.resetState();
+        }
       }
 
       function enable_disable( disable = false ) {
         document.getElementById('back_color').disabled = disable;
-        document.getElementById('btn_quick_x').disabled = disable;
+        document.getElementById('btn_wireframe').disabled = disable;
         disabled_changed();
 
         mouse_wheel = true;
       }
-    </script>
 
-    <script>
       async function document_ready() {
-        const WebGPU = await import( "three/addons/capabilities/WebGPU.min.js" );
-        const WebGL = await import( "three/addons/capabilities/WebGL.min.js" );
+        const WebGPU = await import( 'three/addons/capabilities/WebGPU.min.js' );
+        const WebGL = await import( 'three/addons/capabilities/WebGL.min.js' );
 
         gpu = WebGPU[ 'default' ].isAvailable();
         gl2 = WebGL[ 'default' ].isWebGL2Available();
