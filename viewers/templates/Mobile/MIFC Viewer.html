@@ -72,8 +72,8 @@
       var THREE, manager, texture_loader, ifc_loader, renderer, scene, camera;
       var ifc_obj, controls, wireframe_enabled, render_requested;
       var gui, gui_container, gui_set = false, params, init_running = false;
-      var mouse_down, mouse_wheel, events_initialized, bounding_box;
-      var ww = window.innerWidth, wh = window.innerHeight, count = 0;
+      var mouse_down, mouse_wheel, events_initialized, bounding_box, count = 0;
+      var ww = window.innerWidth, wh = window.innerHeight, halt_on_error = false;
       var url_displayed = false, url_loading = false, modelID = -1, isMobile;
       var first_run = false, fr_count = 0, selected_ifc_file, selected_url_file = '';
     </script>
@@ -283,6 +283,7 @@
         selected_ifc_file = null;
         mouse_down = false;
         mouse_wheel = true;
+        halt_on_error = false;
         render_requested = false;
         wireframe_enabled = false;
         bounding_box = new THREE.Box3();
@@ -324,6 +325,14 @@
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
           renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
           renderer.autoClear = false;
+
+          // Consider removing this for a production build
+          renderer.debug.onShaderError = ( gl, program, glVertexShader, glFragmentShader ) => {
+            const errorLog = gl.getProgramInfoLog( program );
+            const vertexSource = gl.getShaderSource( glVertexShader );
+            const fragmentSource = gl.getShaderSource( glFragmentShader );
+
+            halt_on_error = true;
 
           document.body.appendChild( renderer.domElement );
         }
@@ -469,12 +478,13 @@
 
       function loadFile() {
         ifc_loader.load( URL.createObjectURL( selected_ifc_file ), function( object ) {
+          if (halt_on_error) return;
+
           URL.revokeObjectURL( selected_ifc_file );
 
           ifc_obj = object;
 
           const oldMaterials = ifc_obj.material;
-          const meshMaterials = ifc_obj.mesh.material;
           const newMaterials = [];
 
           for ( let i = 0; i < oldMaterials.length; i++ ) {
@@ -483,14 +493,11 @@
             shaderMat.uuid = lambert.uuid;
 
             lambert.dispose();
-            meshMaterials[ i ].dispose();
             newMaterials.push( shaderMat );
           }
 
           oldMaterials.length = 0;
-          meshMaterials.length = 0;
           ifc_obj.material = newMaterials;
-          ifc_obj.mesh.material = newMaterials;
 
           // Add ifc_obj to the scene
           scene.add( ifc_obj );
@@ -515,10 +522,11 @@
           // No extension checking for URL so it has to point to IFC model
 
           ifc_loader.load( selected_url_file, function( object ) {
+            if (halt_on_error) return;
+
             ifc_obj = object;
 
             const oldMaterials = ifc_obj.material;
-            const meshMaterials = ifc_obj.mesh.material;
             const newMaterials = [];
 
             for ( let i = 0; i < oldMaterials.length; i++ ) {
@@ -527,14 +535,11 @@
               shaderMat.uuid = lambert.uuid;
 
               lambert.dispose();
-              meshMaterials[ i ].dispose();
               newMaterials.push( shaderMat );
             }
 
             oldMaterials.length = 0;
-            meshMaterials.length = 0;
             ifc_obj.material = newMaterials;
-            ifc_obj.mesh.material = newMaterials;
 
             // Add ifc_obj to the scene
             scene.add( ifc_obj );
@@ -549,6 +554,8 @@
       }
 
       async function finish_loading() {
+        if (halt_on_error) return;
+
         frame_camera();
 
         console.timeEnd( 'Loading Time' );
@@ -715,7 +722,6 @@
 
       async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
-        document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
 
         init_running = false;
@@ -745,8 +751,9 @@
 
           mouse_wheel = true;
 
-          document.getElementById('file_input').value = '';
+          document.getElementById('btn_url').style.backgroundColor = 'transparent';
           document.getElementById('div_error').style.display = 'none';
+          document.getElementById('file_input').value = '';
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
           enable_disable( true );
