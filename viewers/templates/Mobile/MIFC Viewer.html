@@ -69,25 +69,61 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var THREE, manager, texture_loader, ifc_loader, renderer, scene, camera;
-      var ifc_obj, controls, wireframe_enabled, render_requested;
+      var THREE, manager, ifc_loader, ifc_obj, renderer, scene, camera;
+      var IFC_CLASSES, ifcCategories, ifcFolder, controls, wireframe_enabled, render_requested;
       var gui, gui_container, gui_set = false, params, init_running = false;
       var mouse_down, mouse_wheel, events_initialized, bounding_box, count = 0;
       var ww = window.innerWidth, wh = window.innerHeight, halt_on_error;
-      var url_displayed = false, url_loading = false, modelID = -1, isMobile;
+      var url_displayed = false, url_loading = false, isMobile;
       var first_run = false, fr_count = 0, selected_ifc_file, selected_url_file = '';
     </script>
 
     <script type="module">
-      import * as threejs from "three";
-      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
+      import * as threejs from 'three';
+      import * as webIFC from 'web-ifc';
+      import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+
+      ifcCategories = Object.fromEntries( Object.entries( webIFC )
+      .filter( ( [ key, value ] ) => key.startsWith( 'IFC' ) && typeof value === 'number' && Number.isFinite( value ) ) );
+
+      IFC_CLASSES = new Set([
+        'IFCWALL',
+        'IFCCURTAINWALL',
+        'IFCWALLSTANDARDCASE',
+        'IFCCOVERING',
+        'IFCRAILING',
+        'IFCWINDOW',
+        'IFCDOOR',
+        'IFCSLAB',
+        'IFCROOF',
+        'IFCBEAM',
+        'IFCCOLUMN',
+        'IFCMEMBER',
+        'IFCPLATE',
+        'IFCSTAIR',
+        'IFCSTAIRFLIGHT',
+        'IFCPIPESEGMENT',
+        'IFCPIPEFITTING',
+        'IFCFLOWSEGMENT',
+        'IFCFLOWFITTING',
+        'IFCFLOWTERMINAL',
+        'IFCFLOWTREATMENTDEVICE',
+        'IFCENERGYCONVERSIONDEVICE',
+        'IFCDISTRIBUTIONPORT',
+        'IFCLIGHTFIXTURE',
+        'IFCSPACE',
+        'IFCSPACEHEATER',
+        'IFCOPENINGELEMENT',
+        'IFCFURNISHINGELEMENT',
+        'IFCBUILDINGELEMENTPROXY',
+        'IFCMECHANICALFASTENER',
+        // add more as needed
+      ]);
 
       THREE = threejs;
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
-
-      texture_loader = new THREE.TextureLoader();
 
       gui_container = document.getElementById('gui_position');
 
@@ -95,7 +131,11 @@
       gui_container.style.left = 'auto';         // Reset any left-side positioning
       gui_container.style.right = '3px';         // Anchor to the right
       gui_container.style.top = '2px';           // Anchor to the top
-      gui_container.style.marginLeft = '0px';    // Clear the 2px margin from your CSS
+      gui_container.style.marginLeft = '0px';    // Clear the 2px margin from CSS
+      gui_container.style.paddingRight = '4px';
+      gui_container.style.maxHeight = '100vh';
+      gui_container.style.overflowY = 'auto';
+      gui_container.style.overflowX = 'hidden';
 
       gui = new GUI( { autoPlace: false, container: gui_container } );
       set_gui_position();
@@ -269,8 +309,8 @@
         enable_disable( true );
 
         if (ifc_loader === undefined) {
-          const { IFCSPACE } = await import( "web-ifc" );
-          const { IFCLoader } = await import( "web-ifc-three" );
+          const { IFCSPACE } = await import( 'web-ifc' );
+          const { IFCLoader } = await import( 'web-ifc-three' );
 
           ifc_loader = new IFCLoader( manager );
           await ifc_loader.ifcManager.setWasmPath( 'https://cdn.jsdelivr.net/npm/web-ifc@0.0.75/', true );
@@ -281,6 +321,7 @@
         }
 
         selected_ifc_file = null;
+        ifcFolder = null;
         mouse_down = false;
         mouse_wheel = true;
         halt_on_error = false;
@@ -349,7 +390,7 @@
         }
 
         if (controls === undefined) {
-          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+          const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
 
           controls = new OrbitControls( camera, renderer.domElement );
           controls.enableZoom = true;
@@ -460,6 +501,53 @@
         return material;
       }
 
+      let present_categories = {};
+      let filtered_categories;
+      let categoryParams = {};
+
+      async function detect_present_categories() {
+        const mgr = ifc_loader.ifcManager;
+
+        for ( const [ key, type ] of Object.entries( ifcCategories ) ) {
+          const ids = await mgr.getAllItemsOfType( 0, type, false );
+
+          if (ids && ids.length > 0) {
+            present_categories[ key ] = { ids };
+          }
+        }
+
+        filtered_categories = Object.fromEntries(
+          Object.entries( present_categories )
+          .filter( ( [ key ] ) => IFC_CLASSES.has( key ) )
+        );
+      }
+
+      async function setup_filtered_categories() {
+        const categories = Object.keys( filtered_categories );
+        const mgr = ifc_loader.ifcManager;
+
+        for ( const key of categories ) {
+          const ids = filtered_categories[ key ].ids;
+
+          await mgr.createSubset({
+            customID: key,
+            modelID: 0,
+            scene: scene,
+            ids: ids,
+            removePrevious: false
+          });
+        }
+      }
+
+      function show_hide_category( key, value ) {
+        const subsetKey = `0 - DEFAULT - ${ key }`;
+        const subsetRecord = ifc_loader.ifcManager.subsets.subsets[subsetKey];
+
+        if (subsetRecord && subsetRecord.mesh) {
+          subsetRecord.mesh.visible = value;
+        }
+      }
+
       const cache = new Map();
 
       function getCachedShaderMaterial( color, opacity, transparency ) {
@@ -500,11 +588,7 @@
           oldMaterials.length = 0;
           ifc_obj.material = newMaterials;
 
-          // Add ifc_obj to the scene
-          scene.add( ifc_obj );
-          camera.lookAt( ifc_obj.position );
-
-          finish_loading();
+          finish_loading( object );
         }, function ( xhr ) { // onProgress
         }, function ( error ) { // onError
           handle_error( error );
@@ -542,10 +626,6 @@
             oldMaterials.length = 0;
             ifc_obj.material = newMaterials;
 
-            // Add ifc_obj to the scene
-            scene.add( ifc_obj );
-            camera.lookAt( ifc_obj.position );
-
             finish_loading();
           }, function ( xhr ) { // onProgress
           }, function ( error ) { // onError
@@ -556,6 +636,9 @@
 
       async function finish_loading() {
         if (halt_on_error) return;
+
+        await detect_present_categories();
+        await setup_filtered_categories();
 
         frame_camera();
 
@@ -619,6 +702,24 @@
 
           gui.open();
           gui_set = true;
+        }
+
+        if (!ifcFolder) {
+          // Add filtered categories visibility toggles
+          // Create a folder for IFC categories
+
+          ifcFolder = gui.addFolder( 'Filtered IFC Categories' );
+
+          for ( const key of Object.keys( filtered_categories ) ) {
+            // Initialize checkbox state
+            categoryParams[ key ] = true;
+
+            ifcFolder.add( categoryParams, key ).name( key.substring( 3 ) )
+            .onChange( ( value ) => {
+              show_hide_category( key, value );
+              mouse_wheel = true;
+            });
+          }
         }
 
         gui_container.style.display = 'block';
@@ -744,8 +845,6 @@
               scene.remove( scene.children[ 0 ] );
             }
 
-            modelID = -1;
-
             renderer.clear();
             renderer.dispose();
           }
@@ -766,12 +865,10 @@
       async function scene_cleanup() {
         if (!ifc_obj) return;
 
-        ifc_loader.ifcManager.close( ++ modelID );
-
         if (wireframe_enabled) await show_wireframe();
 
-        scene.remove( ifc_obj );
-        renderer.clear();
+        await ifc_loader.ifcManager.dispose();
+        ifc_loader = undefined;
 
         if (ifc_obj.material) {
           if (Array.isArray( ifc_obj.material )) {
@@ -804,6 +901,15 @@
 
         ifc_obj.geometry.dispose();
         ifc_obj.geometry = null;
+        ifc_obj = undefined;
+
+        renderer.clear();
+
+        if (ifcFolder) ifcFolder.destroy();
+
+        present_categories = {};
+        filtered_categories = {};
+        categoryParams = {};
 
         if (isMobile === false) {
           renderer.info.reset();
