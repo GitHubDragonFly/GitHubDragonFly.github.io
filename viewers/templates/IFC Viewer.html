@@ -7,7 +7,52 @@
     <link rel="stylesheet" href="../static/css/desktop-viewers.css">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
-    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
@@ -37,23 +82,25 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
-      var THREE, fflate, ifc_loader, texture_loader, tiff_loader;
+      var THREE, ifc_loader, texture_loader, tiff_loader;
       var ktx2_loader, exr_loader, rgbe_loader, hdrJPGLoader;
       var manager, renderer, ifc_obj, render_requested;
+      var IFC_CLASSES, ifcCategories, ifcFolder;
+      var ifc_gui, ifc_gui_set = false, equi_enabled;
+      var gui, gui_set = false, guiExposure = null, params;
       var scene, camera, controls, gizmo, isMobile, isNewiPad;
       var first_run = false, fr_count = 0, link, bg_flip;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var edges, edges_visible, count = 0, scene_bgnd, hdrjpg_texture;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
-      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
-      var ambientLight, directionalLight, modelID = -1;
-      var ww = window.innerWidth, wh = window.innerHeight;
+      var ambientLight, directionalLight, init_running = false;
+      var ww = window.innerWidth, wh = window.innerHeight, toneMappingOptions;
       var rot_x = 0, rot_y = 0, rot_z = 0, filename, zip, wireframe_enabled;
       var bounding_box, bgnd_linear_gradient, gif_export, outline_material;
       var initial_opacity, initial_opacity_array, enable_opacity, slider_height = 0;
-      var initial_transparency, initial_transparency_array, menu_location_bottom = false;
-      var selected_ifc_file, selected_ifc_url_file, selected_url_file = '', url_displayed = false, url_loading = false;
-      var vertex_colors_enabled, random_vertex_colors_enabled, original_vertex_color_array, random_vertex_color_array;
+      var initial_transparency, initial_transparency_array;
+      var selected_ifc_file, selected_ifc_url_file, selected_url_file = '';
+      var url_displayed = false, url_loading = false, menu_location_bottom = false;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
@@ -64,19 +111,81 @@
     </script>
 
     <script type="module">
-      import * as three_js from "three";
-      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import * as fflate_js from "three/addons/libs/fflate.module.min.js";
+      import * as threejs from 'three';
+      import * as webIFC from 'web-ifc';
+      import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
-      THREE = three_js;
-      fflate = fflate_js;
+      ifcCategories = Object.fromEntries( Object.entries( webIFC )
+      .filter( ( [ key, value ] ) => key.startsWith( 'IFC' ) && typeof value === 'number' && Number.isFinite( value ) ) );
+
+      IFC_CLASSES = new Set([
+        'IFCACTUATOR',
+        'IFCAIRTERMINAL',
+        'IFCAIRTERMINALBOX',
+        'IFCALARM',
+        'IFCAUDIOVISUALAPPLIANCE',
+        'IFCWALL',
+        'IFCCURTAINWALL',
+        'IFCWALLSTANDARDCASE',
+        'IFCRAILING',
+        'IFCWINDOW',
+        'IFCDOOR',
+        'IFCSLAB',
+        'IFCROOF',
+        'IFCBEAM',
+        'IFCBEARING',
+        'IFCBOILER',
+        'IFCBRIDGE',
+        'IFCBRIDGEPART',
+        'IFCBURNER',
+        'IFCCIVILELEMENT',
+        'IFCCOIL',
+        'IFCCOLUMN',
+        'IFCCOMPRESSOR',
+        'IFCCOVERING',
+        'IFCMEMBER',
+        'IFCMEDICALDEVICE',
+        'IFCPLATE',
+        'IFCSTAIR',
+        'IFCSTAIRFLIGHT',
+        'IFCDUCTFITTING',
+        'IFCDUCTSEGMENT',
+        'IFCDUCTSILENCER',
+        'IFCELECTRICALELEMENT',
+        'IFCELECTRICALCIRCUIT',
+        'IFCELECTRICAPPLIANCE',
+        'IFCELECTRICMOTOR',
+        'IFCENGINE',
+        'IFCFAN',
+        'IFCLAMP',
+        'IFCLIGHTFIXTURE',
+        'IFCPAVEMENT',
+        'IFCPIPESEGMENT',
+        'IFCPIPEFITTING',
+        'IFCFLOWSEGMENT',
+        'IFCFLOWFITTING',
+        'IFCFLOWTERMINAL',
+        'IFCFLOWTREATMENTDEVICE',
+        'IFCENERGYCONVERSIONDEVICE',
+        'IFCDISTRIBUTIONPORT',
+        'IFCSPACE',
+        'IFCSPACEHEATER',
+        'IFCOPENINGELEMENT',
+        'IFCFURNISHINGELEMENT',
+        'IFCBUILDINGELEMENTPROXY',
+        'IFCMECHANICALFASTENER',
+        // add more as needed
+      ]);
+
+      THREE = threejs;
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
 
       texture_loader = new THREE.TextureLoader( manager );
 
-      gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
+      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
+      ifc_gui = new GUI( { autoPlace: false, container: document.getElementById('right_gui_position') } );
       set_gui_position();
     </script>
 
@@ -117,6 +226,7 @@
         <input title="Background Image" type="file" id="file_image_input" style="display: none;" accept=".exr, .hdr, .ktx2, .tif, .tiff, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
         <button title="Background Image" id="btn_file_image_input" style="background-color: transparent; min-width: 54px;" onclick="document.getElementById('file_image_input').click();" disabled>BGND</button>
         <button title="Y-Flip Background Image" id="btn_bg_flip" onclick="set_bg_flip();" style="background-color: transparent; color: blue;" disabled>Y</button>
+        <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="background-color: transparent; color: blue; min-width: 25px;" disabled>Eq</button>
         <button title="Toggle Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
         <button title="Model Opacity - double click to enable/disable" id="btn_dc_opacity" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" ondblclick="set_opacity();" onclick="show_hide_dropdown_opacity();">O
           <div id="dc_opacity" class="dropdown-content" style="display: none;" onfocusout="if (enable_opacity === true) hide_dropdown_opacity();">
@@ -162,9 +272,6 @@
           <option title="GIF - Animated GIF" value="gif" onclick="export_animated_gif();">GIF</option>
           <option title="PNG - Animated PNG (APNG)" value="apng" onclick="export_animated_png();">PNG</option>
         </select>
-        <button title="Reset" id="reset" onclick="reset_only()" style="background-color: transparent; color: maroon; width: 40px;" disabled>RST</button>
-        <button title="Toggle Full Screen" id="btn_full_screen" onclick="full_screen()" style="background-color: transparent; min-width: 24px;"><p class="full_screen"></p></button>
-        <button title="Switch Menu Location" id="btn_menu_location" onclick="change_menu_location()" style="background-color: transparent; min-width: 15px;">&#x2193</button>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
@@ -206,17 +313,17 @@
             <span id="ali_val">0</span>
           </div>
         </button>
-        <label title="Toggle Equirectangular Background">Eq<input type="checkbox" id="equi" onchange="set_equi();" disabled /></label>
         <label for="ambient_light_color" title="Ambient Light Color">AL<input type="color" title="Ambient Light Color" id="ambient_light_color" onchange="set_ambient_light_color();" disabled /></label>
         <label for="directional_light_color" title="Directional Light Color">DL<input type="color" title="Directional Light Color" id="directional_light_color" onchange="set_directional_light_color();" disabled /></label>
         <label for="back_color" title="Background Color">BG<input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled /></label>
         <label for="edge_color" title="Edge Color">EC<input type="color" title="Edge Color" id="edge_color" onchange="set_edge_color();" disabled /></label>
         <button title="Toggle Edges" id="btn_edges" onclick="show_edges();" disabled>E</button>
-        <button title="Toggle Vertex Colors" id="btn_vertex_colors" onclick="set_vertex_colors();" style="min-width: 28px;" disabled>VC</button>
-        <button title="Toggle Random Vertex Colors" id="btn_random_vertex_colors" onclick="set_random_vertex_colors();" style="min-width: 15px;" disabled>!</button>
         <button title="Toggle Wireframe" id="btn_wireframe" onclick="show_wireframe();" style="min-width: 22px;" disabled >W</button>
         <button title="Toggle Grid - 200 x 200" id="btn_grid" onclick="show_grid();" disabled>#</button>
         <button title="Toggle Polar Grid - radius 100" id="btn_polar_grid" onclick="show_polar_grid();" style="min-width: 24px;" disabled><p class="polar"></p></button>
+        <button title="Reset" id="reset" onclick="reset_only()" style="background-color: transparent; color: maroon; width: 40px;" disabled>RST</button>
+        <button title="Toggle Full Screen" id="btn_full_screen" onclick="full_screen()" style="background-color: transparent; min-width: 24px;"><p class="full_screen"></p></button>
+        <button title="Switch Menu Location" id="btn_menu_location" onclick="change_menu_location()" style="background-color: transparent; min-width: 15px;">&#x2193</button>
       </div>
       <div id="exportModal" class="modal">
         <div class="modal-content">
@@ -354,6 +461,7 @@
       </div>
     </div>
     <div id="gui_position"></div>
+    <div id="right_gui_position"></div>
     <div id="animation_progress" style="display: none; background-color: whitesmoke; border: none;">
       <progress id="progress" value="0" max="1"></progress>
     </div>
@@ -537,11 +645,11 @@
         if (menu_location_bottom === false) {
           let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
           document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
+          document.getElementById('right_gui_position').style.marginTop = fixed_menu_bottom;
         } else {
           document.getElementById('gui_position').style.marginTop = '2px';
+          document.getElementById('right_gui_position').style.marginTop = '2px';
         }
-
-        mouse_wheel = true;
       }
 
       function show_url() {
@@ -556,8 +664,6 @@
         }
 
         resize();
-
-        mouse_wheel = true;
       }
 
       function load_url_file() {
@@ -569,21 +675,26 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
         window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'pointercancel', ( event ) => { mouse_down = false; mouse_wheel = false; }, false);
         window.addEventListener( 'wheel', ( event ) => { if (progress.value === 0) mouse_wheel = true; }, false);
         window.addEventListener( 'keydown', ( event ) => {
           if (progress.value === 0) {
             if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
               controls.listenToKeyEvents( window );
+              activeKeys.add( event.key ); // Track this key
               mouse_wheel = true;
             }
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
           if (progress.value === 0) {
-            if (arrow_keys.some( k => k === event.key )) {
+            activeKeys.delete( event.key ); // Remove this key
+
+            if ( controls && activeKeys.size === 0 ) {
               controls.stopListenToKeyEvents();
               mouse_wheel = false;
             }
@@ -677,7 +788,8 @@
 
         if (gizmo) gizmo.enabled = false;
 
-        if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
+        document.getElementById('gui_position').style.display = 'none';
+        document.getElementById('right_gui_position').style.display = 'none';
 
         set_filename();
       }
@@ -722,7 +834,8 @@
 
         if (gizmo) gizmo.enabled = true;
 
-        if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
+        if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'block';
+        document.getElementById('right_gui_position').style.display = 'block';
 
         render_requested = true;
         mouse_wheel = true;
@@ -740,7 +853,7 @@
         if (ifc_obj) {
           await start_export();
 
-          const { BIMExporter } = await import( "../static/jsm/exporters/BIMExporter.min.js" );
+          const { BIMExporter } = await import( '../static/jsm/exporters/BIMExporter.min.js' );
 
           let bim_exporter = new BIMExporter( manager );
 
@@ -768,7 +881,7 @@
 
         const options = { printer: printer, filament: filament };
 
-        const { GcodeExporter } = await import( "../static/jsm/exporters/GCODEExporter.min.js" );
+        const { GcodeExporter } = await import( '../static/jsm/exporters/GCODEExporter.min.js' );
 
         let gcode_exporter = new GcodeExporter( manager );
 
@@ -784,7 +897,7 @@
         if (ifc_obj) {
           await start_export();
 
-          const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.min.js" );
+          const { OBJExporter } = await import( '../static/jsm/exporters/OBJExporter.min.js' );
 
           let obj_exporter = new OBJExporter( manager );
 
@@ -821,7 +934,7 @@
         if (ifc_obj) {
           await start_export();
 
-          const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.min.js" );
+          const { PLYExporter } = await import( '../static/jsm/exporters/PLYExporter.min.js' );
 
           let ply_exporter = new PLYExporter( manager );
 
@@ -847,7 +960,7 @@
         if (ifc_obj) {
           await start_export();
 
-          const { STLExporter } = await import( "../static/jsm/exporters/STLExporter.min.js" );
+          const { STLExporter } = await import( '../static/jsm/exporters/STLExporter.min.js' );
 
           let stl_exporter = new STLExporter( manager );
 
@@ -864,7 +977,7 @@
         if (ifc_obj) {
           await start_export();
 
-          const { ColladaExporter } = await import( "../static/jsm/exporters/ColladaExporter.min.js" );
+          const { ColladaExporter } = await import( '../static/jsm/exporters/ColladaExporter.min.js' );
 
           let dae_exporter = new ColladaExporter( manager );
 
@@ -894,7 +1007,7 @@
         if (ifc_obj) {
           await start_export();
 
-          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+          const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
           let gltf_exporter = new GLTFExporter( manager );
 
@@ -941,7 +1054,7 @@
         if (ifc_obj) {
           await start_export();
 
-          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+          const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
           let gltf_exporter = new GLTFExporter( manager );
 
@@ -1003,7 +1116,7 @@
         if (ifc_obj) {
           await start_export();
 
-          const { Rhino3dmExporter } = await import( "../static/jsm/exporters/3DMExporter.min.js" );
+          const { Rhino3dmExporter } = await import( '../static/jsm/exporters/3DMExporter.min.js' );
 
           let rhino_exporter = new Rhino3dmExporter( manager );
 
@@ -1023,7 +1136,7 @@
         if (ifc_obj) {
           await start_export();
 
-          const { AMFExporter } = await import( "../static/jsm/exporters/AMFExporter.min.js" );
+          const { AMFExporter } = await import( '../static/jsm/exporters/AMFExporter.min.js' );
 
           let amf_exporter = new AMFExporter( manager );
 
@@ -1043,7 +1156,7 @@
         if (ifc_obj) {
           await start_export();
 
-          const { ThreeMFExporter } = await import( "../static/jsm/exporters/3MFExporter.min.js" );
+          const { ThreeMFExporter } = await import( '../static/jsm/exporters/3MFExporter.min.js' );
 
           let tmf_exporter = new ThreeMFExporter( manager );
 
@@ -1096,8 +1209,8 @@
         if (ifc_obj) {
           await start_export();
 
-          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
-          const { GLTFLoader } = await import( "../static/jsm/loaders/GLTFLoader.min.js" );
+          const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
+          const { GLTFLoader } = await import( '../static/jsm/loaders/GLTFLoader.min.js' );
 
           let gltf_exporter = new GLTFExporter( manager );
 
@@ -1109,7 +1222,7 @@
             new GLTFLoader().load( URL.createObjectURL( blob ), async function( gltf ) {
               URL.revokeObjectURL( blob );
 
-              const { USDZExporter } = await import( "../static/jsm/exporters/USDZExporter.min.js" );
+              const { USDZExporter } = await import( '../static/jsm/exporters/USDZExporter.min.js' );
 
               let usdz_exporter = new USDZExporter( manager );
 
@@ -1192,7 +1305,7 @@
               document.getElementById('animation_progress').style.display = 'block';
               document.getElementById('div_gif_rectangle').style.display = 'block';
 
-              if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
+              if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'none';
 
               setTimeout( addFrame, 100 );
             }
@@ -1337,7 +1450,7 @@
               document.getElementById('animation_progress').style.display = 'block';
               document.getElementById('div_gif_rectangle').style.display = 'block';
 
-              if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
+              if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'none';
 
               setTimeout( addFrame, 100 );
             }
@@ -1502,7 +1615,7 @@
 
         clone.colorSpace = ((hd === true || hdrjpg_texture === true) ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace);
 
-        if (document.getElementById('equi').checked) {
+        if (equi_enabled) {
           clone.mapping = THREE.EquirectangularReflectionMapping;
           clone.needsUpdate = true;
 
@@ -1539,7 +1652,7 @@
       async function set_equi() {
         await set_bgenv_message();
 
-        if (document.getElementById('equi').checked) {
+        if (equi_enabled === false) {
           if (gui_set === false) {
             gui.add( params, 'setEnvMap' )
             .onChange( function ( value ) {
@@ -1576,6 +1689,9 @@
 
           document.getElementById('back_color').disabled = true;
           document.getElementById('btn_bgnd_linear_gradient').disabled = true;
+
+          equi_enabled = true;
+          document.getElementById('btn_equi').style.backgroundColor = 'lightgreen';
 
           if (scene_bgnd !== null) {
             // Background already exists
@@ -1620,6 +1736,9 @@
         } else {
           if (gui) gui_reset();
 
+          equi_enabled = false;
+          document.getElementById('btn_equi').style.backgroundColor = 'transparent';
+
           document.getElementById('back_color').disabled = false;
           document.getElementById('btn_bgnd_linear_gradient').disabled = false;
 
@@ -1633,7 +1752,7 @@
           disabled_changed();
         }
 
-        equi_checked_changed();
+        equi_changed();
 
         mouse_wheel = true;
       }
@@ -1907,7 +2026,7 @@
             });
           } else if (fn_uc.endsWith('.TIF') || fn_uc.endsWith('.TIFF')) {
             if (tiff_loader === undefined) {
-              const { TIFFLoader } = await import( "three/addons/loaders/TIFFLoader.min.js" );
+              const { TIFFLoader } = await import( 'three/addons/loaders/TIFFLoader.min.js' );
               tiff_loader = new TIFFLoader( manager );
             }
 
@@ -1999,8 +2118,8 @@
 
               await set_bgenv_message( true );
             } else {
-              const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
-              const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
+              const { compress, encode, findTextureMinMax } = await import( '@monogrid/gainmap-js/encode' );
+              const { encodeJPEGMetadata } = await import( '@monogrid/gainmap-js/libultrahdr' );
 
               // Encode a Gain map from EXR or HDR file
               // See the code example at: https://github.com/MONOGRID/gainmap-js
@@ -2014,9 +2133,18 @@
               });
 
               // obtain the RAW RGBA SDR buffer and create an ImageData
-              const sdrImageData = new ImageData( encodingResult.sdr.toArray(), encodingResult.sdr.width, encodingResult.sdr.height );
+              const sdrImageData = new ImageData(
+                encodingResult.sdr.toArray(),
+                encodingResult.sdr.width,
+                encodingResult.sdr.height
+              );
+
               // obtain the RAW RGBA Gain map buffer and create an ImageData
-              const gainMapImageData = new ImageData( encodingResult.gainMap.toArray(), encodingResult.gainMap.width, encodingResult.gainMap.height );
+              const gainMapImageData = new ImageData(
+                encodingResult.gainMap.toArray(),
+                encodingResult.gainMap.width,
+                encodingResult.gainMap.height
+              );
 
               // parallel compress the RAW buffers into the specified mimeType
               const mimeType = 'image/jpeg';
@@ -2197,28 +2325,24 @@
         mouse_wheel = true;
       }
 
-      function set_camera_distance() {
-        // Set the camera distance from the object so it comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( ifc_obj );
-        let size = bounding_box.getSize(new THREE.Vector3());
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        if ( size.y > 1 ) {
-          ifc_obj.scale.multiplyScalar( 50 / size.y );
-        } else if ( size.y > 0.02 ) {
-          ifc_obj.scale.multiplyScalar( 25 / size.y );
-        } else if ( size.y > 0.01 ) {
-          ifc_obj.scale.multiplyScalar( 10 / size.y );
-        } else {
-          ifc_obj.scale.multiplyScalar( 1 / size.y )
-        }
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length() ) ) );
+        camera.lookAt( center );
 
-        bounding_box.setFromObject( ifc_obj );
-        let center = bounding_box.getCenter(new THREE.Vector3());
+        // Center root
+        ifc_obj.position.sub( center );
 
-        controls.target.set( center.x, center.y, center.z );
-
-        mouse_wheel = true;
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist );
+        camera.lookAt( 0, 0, 0 );
+        resize();
       }
 
       function set_model_scale( scale ) {
@@ -2310,6 +2434,8 @@
       async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
+        init_running = true;
+
         document.getElementById('div_message').innerHTML = 'Loading ... ' + pw;
         document.getElementById('div_message').style.display = '';
 
@@ -2328,20 +2454,20 @@
         if (zip === undefined) zip = new JSZip();
 
         if (exr_loader === undefined) {
-          const { EXRLoader } = await import( "three/addons/loaders/EXRLoader.min.js" );
+          const { EXRLoader } = await import( 'three/addons/loaders/EXRLoader.min.js' );
           exr_loader = new EXRLoader( manager );
           manager.addHandler( /\.exr$/i, exr_loader );
         }
 
         if (rgbe_loader === undefined) {
-          const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
+          const { RGBELoader } = await import( 'three/addons/loaders/RGBELoader.min.js' );
           rgbe_loader = new RGBELoader( manager );
           manager.addHandler( /\.hdr$/i, rgbe_loader );
         }
 
         if (ifc_loader === undefined) {
-          const { IFCSPACE } = await import( "web-ifc" );
-          const { IFCLoader } = await import( "web-ifc-three" );
+          const { IFCSPACE } = await import( 'web-ifc' );
+          const { IFCLoader } = await import( 'web-ifc-three' );
 
           ifc_loader = new IFCLoader( manager );
           await ifc_loader.ifcManager.setWasmPath( 'https://cdn.jsdelivr.net/npm/web-ifc@0.0.75/', true );
@@ -2379,6 +2505,7 @@
 
         selected_ifc_file = null;
         selected_ifc_url_file = null;
+        ifcFolder = null;
         mouse_down = false;
         mouse_wheel = false;
         edges = {};
@@ -2390,16 +2517,13 @@
         enable_opacity = false;
         wireframe_enabled = false;
         bgnd_linear_gradient = false;
-        vertex_colors_enabled = false;
-        random_vertex_colors_enabled = false;
-        original_vertex_color_array = null;
-        random_vertex_color_array = null;
         render_requested = false;
         grid_visible = false;
         polar_grid_visible = false;
         hdrjpg_texture = false;
         scene_bgnd = null;
         gif_export = false;
+        equi_enabled = false;
         bounding_box = new THREE.Box3();
 
         console.time( 'Loading Time' );
@@ -2452,7 +2576,7 @@
         }
 
         if (hdrJPGLoader === undefined) {
-          const { HDRJPGLoader } = await import( "@monogrid/gainmap-js/decode" );
+          const { HDRJPGLoader } = await import( '@monogrid/gainmap-js/decode' );
           hdrJPGLoader = new HDRJPGLoader( renderer );
         }
 
@@ -2465,8 +2589,6 @@
         scene.backgroundBlurriness = 0.0;
         scene.backgroundIntensity = 1.0;
 
-        if (ifc_obj === undefined) ifc_obj = new THREE.Object3D();
-
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         // Create a grid helper for use with Orbit Controls
@@ -2474,8 +2596,8 @@
         if (grid === undefined) grid = new THREE.GridHelper( 200, 200, 'yellow' );
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 5000 );
-          camera.position.set( 0, 0, 250 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 2000 );
+          camera.position.set( 0, 0, 100 );
           scene.add( camera );
         }
 
@@ -2495,22 +2617,22 @@
         }
 
         if (controls === undefined) {
-          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+          const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
 
           controls = new OrbitControls( camera, renderer.domElement );
+          controls.enableZoom = true;
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.6;
           controls.rotateSpeed = 0.6;
           controls.keyPanSpeed = 0.6; 
           controls.panSpeed = 0.6;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.05;
           //controls.enableKeys = false;
-          //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
         }
 
         if (ifc_loader) {
@@ -2521,29 +2643,78 @@
         }
       }
 
+      let present_categories = {};
+      let filtered_categories;
+      let categoryParams = {};
+
+      async function detect_present_categories() {
+        const mgr = ifc_loader.ifcManager;
+
+        for ( const [ key, type ] of Object.entries( ifcCategories ) ) {
+          const ids = await mgr.getAllItemsOfType( 0, type, false );
+
+          if (ids && ids.length > 0) {
+            present_categories[ key ] = { ids };
+          }
+        }
+
+        filtered_categories = Object.fromEntries(
+          Object.entries( present_categories )
+          .filter( ( [ key ] ) => IFC_CLASSES.has( key ) )
+        );
+      }
+
+      async function setup_filtered_categories() {
+        const categories = Object.keys( filtered_categories );
+        const mgr = ifc_loader.ifcManager;
+
+        for ( const key of categories ) {
+          const ids = filtered_categories[ key ].ids;
+
+          await mgr.createSubset({
+            customID: key,
+            modelID: 0,
+            scene: scene,
+            ids: ids,
+            removePrevious: false
+          });
+        }
+      }
+
+      async function setup_edges() {
+        const categories = Object.keys( filtered_categories );
+
+        for ( const key of categories ) {
+          const subsetKey = `0 - DEFAULT - ${ key }`;
+          const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
+
+          if (subsetRecord && subsetRecord.mesh && subsetRecord.mesh?.geometry?.index?.count > 0) {
+            edges[ subsetKey ] = new THREE.LineSegments(
+              new THREE.EdgesGeometry( subsetRecord.mesh.geometry, 30 ),
+              outline_material
+            );
+          }
+        }
+      }
+
+      function show_hide_category( key, value ) {
+        const subsetKey = `0 - DEFAULT - ${ key }`;
+        const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
+
+        if (subsetRecord && subsetRecord.mesh) {
+          subsetRecord.mesh.visible = value;
+
+          if (edges_visible) {
+            value ? scene.add( edges[ subsetKey ] ) : scene.remove( edges[ subsetKey ] );
+          }
+        }
+      }
+
       function loadFile() {
         ifc_loader.load( URL.createObjectURL( selected_ifc_file ), function( object ) {
           URL.revokeObjectURL( selected_ifc_file );
 
-          ifc_obj = object.clone();
-
-          if (ifc_obj.geometry) {
-            ifc_obj.geometry.computeVertexNormals();
-            ifc_obj.geometry.normalizeNormals();
-            ifc_obj.geometry.center();
-
-            if (ifc_obj.geometry.attributes.position) edges[ 'mesh_0' ] = new THREE.LineSegments( new THREE.EdgesGeometry( ifc_obj.geometry, 30 ), outline_material );
-
-            random_vertex_color_array = new Float32Array( Array.from( { length: ifc_obj.geometry.attributes.position.array.length }, () => Math.round( Math.random() * 1 ) ) );
-            original_vertex_color_array = ifc_obj.geometry.getAttribute( 'color' );
-          }
-
-          if (ifc_obj.geometry.attributes.color && ifc_obj.geometry.attributes.color.array.length > 0) {
-            vertex_colors_enabled = true;
-            document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-            document.getElementById('btn_random_vertex_colors').disabled = false;
-            random_vertex_changed();
-          }
+          ifc_obj = object;
 
           if (ifc_obj.material) {
             if (Array.isArray( ifc_obj.material )) {
@@ -2552,25 +2723,16 @@
               initial_opacity_array[ 'mesh_0' ] = {};
               initial_transparency_array[ 'mesh_0' ] = {};
 
-              ifc_obj.material.forEach( mtl => {
-                initial_opacity_array[ 'mesh_0' ][ child_count_array ] = mtl.opacity;
-                initial_transparency_array[ 'mesh_0' ][ child_count_array ] = mtl.transparent;
-
-                mtl.vertexColors = vertex_colors_enabled;
-
+              ifc_obj.material.forEach( m => {
+                initial_opacity_array[ 'mesh_0' ][ child_count_array ] = m.opacity;
+                initial_transparency_array[ 'mesh_0' ][ child_count_array ] = m.transparent;
                 child_count_array += 1;
               });
             } else {
               initial_opacity[ 'mesh_0' ] = child.material.opacity;
               initial_transparency[ 'mesh_0' ] = child.material.transparent;
-
-              child.material.vertexColors = vertex_colors_enabled;
             }
           }
-
-          // Add ifc_obj to the scene
-          scene.add( ifc_obj );
-          camera.lookAt( ifc_obj.position );
 
           finish_loading();
         }, function ( xhr ) { // onProgress
@@ -2598,26 +2760,7 @@
           }
 
           ifc_loader.load( selected_ifc_url_file, function( object ) {
-            ifc_obj = object.clone();
-
-            if (ifc_obj.geometry) {
-              ifc_obj.geometry.computeVertexNormals();
-              ifc_obj.geometry.normalizeNormals();
-              ifc_obj.geometry.center();
-
-              if (ifc_obj.geometry.attributes.position) edges[ 'mesh_0' ] = new THREE.LineSegments( new THREE.EdgesGeometry( ifc_obj.geometry, 30 ), outline_material );
-
-              let length = ifc_obj.geometry.attributes.position.array.length;
-              random_vertex_color_array = new Float32Array( Array.from( { length: length }, () => Math.round( Math.random() * 1 ) ) );
-              original_vertex_color_array = ifc_obj.geometry.getAttribute( 'color' );
-            }
-
-            if (ifc_obj.geometry.attributes.color && ifc_obj.geometry.attributes.color.array.length > 0) {
-              vertex_colors_enabled = true;
-              document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-              document.getElementById('btn_random_vertex_colors').disabled = false;
-              random_vertex_changed();
-            }
+            ifc_obj = object;
 
             if (ifc_obj.material) {
               if (Array.isArray( ifc_obj.material )) {
@@ -2626,25 +2769,17 @@
                 initial_opacity_array[ 'mesh_0' ] = {};
                 initial_transparency_array[ 'mesh_0' ] = {};
 
-                ifc_obj.material.forEach( mtl => {
-                  initial_opacity_array[ 'mesh_0' ][ child_count_array ] = mtl.opacity;
-                  initial_transparency_array[ 'mesh_0' ][ child_count_array ] = mtl.transparent;
-
-                  mtl.vertexColors = vertex_colors_enabled;
+                ifc_obj.material.forEach( m => {
+                  initial_opacity_array[ 'mesh_0' ][ child_count_array ] = m.opacity;
+                  initial_transparency_array[ 'mesh_0' ][ child_count_array ] = m.transparent;
 
                   child_count_array += 1;
                 });
               } else {
                 initial_opacity[ 'mesh_0' ] = child.material.opacity;
                 initial_transparency[ 'mesh_0' ] = child.material.transparent;
-
-                child.material.vertexColors = vertex_colors_enabled;
               }
             }
-
-            // Add ifc_obj to the scene
-            scene.add( ifc_obj );
-            camera.lookAt( ifc_obj.position );
 
             finish_loading();
           }, function ( xhr ) { // onProgress
@@ -2654,9 +2789,12 @@
         }
       }
 
-      function finish_loading() {
-        set_camera_distance();
-        resize();
+      async function finish_loading() {
+        await detect_present_categories();
+        await setup_filtered_categories();
+        await setup_edges();
+
+        frame_camera();
 
         render_requested = true;
         mouse_wheel = false;
@@ -2670,7 +2808,7 @@
 
         // Skip gizmo creation on mobile devices
         if (isMobile === false && gizmo === undefined) {
-          const { ViewportGizmo } = await import( "three-viewport-gizmo" );
+          const { ViewportGizmo } = await import( 'three-viewport-gizmo' );
 
           gizmo = new ViewportGizmo( camera, renderer, {
             placement: menu_location_bottom === true ? 'top-right' : 'bottom-right',
@@ -2682,10 +2820,48 @@
           gizmo._domElement.addEventListener( 'click', ( event ) => { if (progress.value === 0) mouse_wheel = true; }, false);
         }
 
+        if (ifc_gui_set === false) {
+          set_gui_position();
+
+          ifc_gui.open();
+          ifc_gui_set = true;
+        }
+
+        if (!ifcFolder) {
+          // Add filtered categories visibility toggles
+          // Create a folder for IFC categories
+
+          ifcFolder = ifc_gui.addFolder( 'Filtered IFC Categories' );
+
+          for ( const key of Object.keys( filtered_categories ) ) {
+            const subsetKey = `0 - DEFAULT - ${ key }`;
+            const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
+
+            if (subsetRecord && subsetRecord.mesh && subsetRecord.mesh?.geometry?.index?.count > 0) {
+              // Initialize checkbox state
+              categoryParams[ key ] = true;
+
+              ifcFolder.add( categoryParams, key ).name( key.substring( 3 ) )
+              .onChange( ( value ) => {
+                show_hide_category( key, value );
+                mouse_wheel = true;
+              });
+            }
+          }
+        }
+
+        document.getElementById('right_gui_position').style.display = 'block';
+
         console.timeEnd( 'Loading Time' );
+
+        init_running = false;
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_message').style.display = 'none';
+
+        set_gui_position();
+
+        console.log('ifc_obj ', ifc_obj);
 
         if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
       }
@@ -2711,6 +2887,8 @@
         mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
+
+        init_running = false;
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
@@ -2750,10 +2928,10 @@
       /* Simplify */
 
       async function simplify( arrayBuffer ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
-        const { dedup, flatten, instance, join, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
+        const { WebIO } = await import( '@gltf-transform/core' );
+        const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
+        const { MeshoptSimplifier } = await import( 'meshoptimizer_simplifier' );
+        const { dedup, flatten, instance, join, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
 
@@ -2781,10 +2959,10 @@
       /* Encode GLB with draco compression - geometry */
 
       async function draco_compress( arrayBuffer ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
-        const { dedup, flatten, instance, join, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
+        const { WebIO } = await import( '@gltf-transform/core' );
+        const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
+        const { MeshoptSimplifier } = await import( 'meshoptimizer_simplifier' );
+        const { dedup, flatten, instance, join, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
 
@@ -2825,11 +3003,11 @@
       /* Encode GLB with meshopt compression - geometry, morphs, animations */
 
       async function meshopt_compress( arrayBuffer ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { MeshoptEncoder } = await import( "meshoptimizer_encoder" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
-        const { dedup, flatten, instance, join, meshopt, prune, resample, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
+        const { WebIO } = await import( '@gltf-transform/core' );
+        const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
+        const { MeshoptEncoder } = await import( 'meshoptimizer_encoder' );
+        const { MeshoptSimplifier } = await import( 'meshoptimizer_simplifier' );
+        const { dedup, flatten, instance, join, meshopt, prune, resample, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         await MeshoptEncoder.ready;
 
@@ -3027,7 +3205,7 @@
       }
 
       function show_polar_grid() {
-        if (polar_grid_visible === true) {
+        if (polar_grid_visible) {
           scene.remove( polar_grid );
           polar_grid_visible = false;
           document.getElementById('btn_polar_grid').style.backgroundColor = '#d1cefc';
@@ -3046,7 +3224,7 @@
       }
 
       function show_grid() {
-        if (grid_visible === true) {
+        if (grid_visible) {
           scene.remove( grid );
           grid_visible = false;
           document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
@@ -3092,18 +3270,19 @@
 
       function show_edges() {
         if (Object.getOwnPropertyNames( edges ).length !== 0) {
-          if (edges_visible === true) {
-            edges_visible = false;
-            ifc_obj.remove( edges[ 'mesh_0' ] );
+          edges_visible = !edges_visible;
+          const btn_edge_color = edges_visible ? 'lightgreen' : '#d1cefc';
 
-            document.getElementById('edge_color').disabled = true;
-            document.getElementById('btn_edges').style.backgroundColor = '#d1cefc';
-          } else {
-            edges_visible = true;
-            ifc_obj.add( edges[ 'mesh_0' ] );
+          document.getElementById('edge_color').disabled = !edges_visible;
+          document.getElementById('btn_edges').style.backgroundColor = btn_edge_color;
 
-            document.getElementById('edge_color').disabled = false;
-            document.getElementById('btn_edges').style.backgroundColor = 'lightgreen';
+          for ( const key of Object.keys( filtered_categories ) ) {
+            const subsetKey = `0 - DEFAULT - ${ key }`;
+            const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
+
+            if (subsetRecord && subsetRecord.mesh && subsetRecord.mesh.visible && edges[ subsetKey ] !== undefined) {
+              edges_visible ? scene.add( edges[ subsetKey ] ) : scene.remove( edges[ subsetKey ] );
+            }
           }
         }
 
@@ -3134,73 +3313,13 @@
         }
       }
 
-      function set_vertex_colors() {
-        if (vertex_colors_enabled === true) {
-          document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
-          document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
-          document.getElementById('btn_random_vertex_colors').disabled = true;
-          random_vertex_colors_enabled = true;
-          set_random_vertex_colors();
-          vertex_colors_enabled = false;
-        } else {
-          document.getElementById('btn_vertex_colors').style.backgroundColor = 'lightgreen';
-          document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
-          document.getElementById('btn_random_vertex_colors').disabled = false;
-          vertex_colors_enabled = true;
-        }
-
-        random_vertex_changed();
-
-        if (Array.isArray( ifc_obj.material )) {
-          ifc_obj.material.forEach( mtl => {
-            mtl.vertexColors = vertex_colors_enabled;
-            mtl.needsUpdate = true;
-          });
-        } else {
-          ifc_obj.material.vertexColors = vertex_colors_enabled;
-          ifc_obj.material.needsUpdate = true;
-        }
-
-        mouse_wheel = true;
-      }
-
-      function set_random_vertex_colors() {
-        if (random_vertex_colors_enabled === true) {
-          document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
-          random_vertex_colors_enabled = false;
-        } else {
-          document.getElementById('btn_random_vertex_colors').style.backgroundColor = 'lightgreen';
-          random_vertex_colors_enabled = true;
-        }
-
-        if (random_vertex_colors_enabled === true) {
-          ifc_obj.geometry.setAttribute( 'color', new THREE.BufferAttribute( random_vertex_color_array, 3 ) );
-        } else {
-          if (original_vertex_color_array) {
-            ifc_obj.geometry.setAttribute( 'color', original_vertex_color_array );
-          } else {
-            ifc_obj.geometry.deleteAttribute( 'color' );
-          }
-        }
-
-        if (Array.isArray( ifc_obj.material )) {
-          ifc_obj.material.forEach( mtl => {
-            mtl.needsUpdate = true;
-          });
-        } else {
-          child.material.needsUpdate = true;
-        }
-
-        mouse_wheel = true;
-      }
-
       async function render() {
         if (document.getElementById('animation_progress').style.display === 'none') {
           if (render_requested === true) requestAnimationFrame( render );
         }
 
         if (ifc_obj) {
-          if (first_run === true || mouse_down === true || mouse_wheel === true || reset_rotation === true ||
+          if (first_run || mouse_down || mouse_wheel || reset_rotation ||
             progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
 
             // Reset ifc_obj rotational values
@@ -3210,7 +3329,7 @@
             }
 
             // Rotate the mesh
-            if (mouse_down === false) {
+            if (!mouse_down) {
               if (rot_x === 0 && rot_y === 0 && rot_z === 0) {
                 // Animated GIF / APNG generation
                 if (progress.value > 0) {
@@ -3224,7 +3343,7 @@
             }
 
             // If it might be slow to render initially
-            if (first_run === true) {
+            if (first_run) {
               fr_count ++;
               if (fr_count > 10) {
                 mouse_wheel = true;
@@ -3233,7 +3352,7 @@
                 load_gizmo();
               }
             } else {
-              if (mouse_wheel === true) {
+              if (mouse_wheel) {
                 if (count > 5) {
                   mouse_wheel = false;
                   count = 0;
@@ -3294,16 +3413,15 @@
         document.getElementById('dlight').checked = false;
         radio_changed();
 
-        // Reset the equi checkbox
-        document.getElementById('equi').checked = false;
-
         // Reset the opacity values
         enable_opacity = false;
         document.getElementById('model_opacity').value = 1;
         document.getElementById('model_opacity').disabled = true;
         document.getElementById('btn_dc_opacity').style.backgroundColor = 'transparent';
 
-        // Reset wireframe, edges, reflectivity and vertex colors values
+        // Reset equi, wireframe, edges and reflectivity values
+        equi_enabled = false;
+        document.getElementById('btn_equi').style.backgroundColor = 'transparent';
         wireframe_enabled = false;
         document.getElementById('btn_wireframe').style.backgroundColor = '#d1cefc';
         edges_visible = false;
@@ -3313,12 +3431,6 @@
         document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
         bg_flip = false;
         document.getElementById('btn_bg_flip').style.backgroundColor = 'transparent';
-        vertex_colors_enabled = false;
-        document.getElementById('btn_vertex_colors').style.backgroundColor = '#d1cefc';
-        random_vertex_colors_enabled = false;
-        document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
-        document.getElementById('btn_random_vertex_colors').disabled = true;
-        random_vertex_changed();
 
         document.getElementById('model_scale').selectedIndex = 0;
         document.getElementById('export_names').selectedIndex = 0;
@@ -3361,8 +3473,6 @@
               scene.remove( scene.children[ 0 ] );
             }
 
-            modelID = -1;
-
             renderer.clear();
             renderer.dispose();
           }
@@ -3386,16 +3496,10 @@
       async function scene_cleanup() {
         mouse_wheel = true;
 
-        if (polar_grid_visible === true) show_polar_grid();
-        if (grid_visible === true) show_grid();
+        if (polar_grid_visible) await show_polar_grid();
+        if (grid_visible) await show_grid();
 
-        ifc_loader.ifcManager.close( ++ modelID );
-
-        scene.remove( ifc_obj );
-
-        renderer.clear();
-
-        if (wireframe_enabled === true) show_wireframe();
+        if (wireframe_enabled) await show_wireframe();
 
         if (edges && Object.entries( edges ).length !== 0) {
           if (edges_visible === true) await show_edges();
@@ -3411,19 +3515,34 @@
           });
         }
 
+        await ifc_loader.ifcManager.dispose();
+        ifc_loader = undefined;
+
         if (ifc_obj.material) {
           if (Array.isArray( ifc_obj.material )) {
             ifc_obj.material.forEach( mtl => {
               if (mtl.map) mtl.map.dispose();
               mtl.dispose();
+              mtl = null;
             });
           } else {
             if (ifc_obj.material.map) ifc_obj.material.map.dispose();
             ifc_obj.material.dispose();
+            ifc_obj.material = null;
           }
         }
 
         ifc_obj.geometry.dispose();
+        ifc_obj.geometry = null;
+        ifc_obj = undefined;
+
+        renderer.clear();
+
+        if (ifcFolder) ifcFolder.destroy();
+
+        present_categories = {};
+        filtered_categories = {};
+        categoryParams = {};
 
         if (scene_bgnd) {
           scene_bgnd.dispose();
@@ -3444,13 +3563,13 @@
         document.getElementById('rotation_x').disabled = disable;
         document.getElementById('rotation_y').disabled = disable;
         document.getElementById('rotation_z').disabled = disable;
-        document.getElementById('equi').disabled = disable;
         document.getElementById('model_scale').disabled = disable;
         document.getElementById('ambient_light_color').disabled = disable;
         document.getElementById('directional_light_color').disabled = disable;
         document.getElementById('directional_light_intensity').disabled = disable;
         document.getElementById('ambient_light_intensity').disabled = disable;
         document.getElementById('back_color').disabled = disable;
+        document.getElementById('btn_equi').disabled = disable;
         document.getElementById('btn_edges').disabled = disable;
         document.getElementById('btn_dc_x').disabled = disable;
         document.getElementById('btn_dc_y').disabled = disable;
@@ -3461,7 +3580,6 @@
         document.getElementById('btn_quick_x').disabled = disable;
         document.getElementById('btn_wireframe').disabled = disable;
         document.getElementById('btn_dc_opacity').disabled = disable;
-        document.getElementById('btn_vertex_colors').disabled = disable;
         document.getElementById('btn_bgnd_linear_gradient').disabled = disable;
         document.getElementById('btn_polar_grid').disabled = disable;
         document.getElementById('btn_grid').disabled = disable;
@@ -3570,8 +3688,8 @@
         mouse_wheel = true;
       }
 
-      function equi_checked_changed() {
-        if ($('#equi')[ 0 ].checked === true) {
+      function equi_changed() {
+        if (equi_enabled === true) {
           $('#btn_bgnd_linear_gradient').unbind('mouseenter mouseleave');
           $('#back_color').unbind('mouseenter mouseleave');
         } else {
@@ -3582,18 +3700,6 @@
           $('#back_color').hover(
           function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
           function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
-        }
-
-        mouse_wheel = true;
-      }
-
-      function random_vertex_changed() {
-        if ($('#btn_random_vertex_colors')[ 0 ].disabled === true) {
-          $('#btn_random_vertex_colors').unbind('mouseenter mouseleave');
-        } else {
-          $('#btn_random_vertex_colors').hover(
-          function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
-          function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
         }
 
         mouse_wheel = true;
