@@ -74,6 +74,7 @@
       var gui, gui_container, gui_set = false, params, init_running = false;
       var mouse_down, mouse_wheel, events_initialized, bounding_box, count = 0;
       var ww = window.innerWidth, wh = window.innerHeight, halt_on_error;
+      var lod_displayed = false, warning_displayed = false;
       var url_displayed = false, url_loading = false, isMobile;
       var first_run = false, fr_count = 0, selected_ifc_file, selected_url_file = '';
     </script>
@@ -87,21 +88,47 @@
       .filter( ( [ key, value ] ) => key.startsWith( 'IFC' ) && typeof value === 'number' && Number.isFinite( value ) ) );
 
       IFC_CLASSES = new Set([
+        'IFCACTUATOR',
+        'IFCAIRTERMINAL',
+        'IFCAIRTERMINALBOX',
+        'IFCALARM',
+        'IFCAUDIOVISUALAPPLIANCE',
         'IFCWALL',
         'IFCCURTAINWALL',
         'IFCWALLSTANDARDCASE',
-        'IFCCOVERING',
         'IFCRAILING',
         'IFCWINDOW',
         'IFCDOOR',
         'IFCSLAB',
         'IFCROOF',
         'IFCBEAM',
+        'IFCBEARING',
+        'IFCBOILER',
+        'IFCBRIDGE',
+        'IFCBRIDGEPART',
+        'IFCBURNER',
+        'IFCCIVILELEMENT',
+        'IFCCOIL',
         'IFCCOLUMN',
+        'IFCCOMPRESSOR',
+        'IFCCOVERING',
         'IFCMEMBER',
+        'IFCMEDICALDEVICE',
         'IFCPLATE',
         'IFCSTAIR',
         'IFCSTAIRFLIGHT',
+        'IFCDUCTFITTING',
+        'IFCDUCTSEGMENT',
+        'IFCDUCTSILENCER',
+        'IFCELECTRICALELEMENT',
+        'IFCELECTRICALCIRCUIT',
+        'IFCELECTRICAPPLIANCE',
+        'IFCELECTRICMOTOR',
+        'IFCENGINE',
+        'IFCFAN',
+        'IFCLAMP',
+        'IFCLIGHTFIXTURE',
+        'IFCPAVEMENT',
         'IFCPIPESEGMENT',
         'IFCPIPEFITTING',
         'IFCFLOWSEGMENT',
@@ -110,7 +137,6 @@
         'IFCFLOWTREATMENTDEVICE',
         'IFCENERGYCONVERSIONDEVICE',
         'IFCDISTRIBUTIONPORT',
-        'IFCLIGHTFIXTURE',
         'IFCSPACE',
         'IFCSPACEHEATER',
         'IFCOPENINGELEMENT',
@@ -125,18 +151,7 @@
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
 
-      gui_container = document.getElementById('gui_position');
-
-      // Override external CSS so we can have GUI in the top-right corner
-      gui_container.style.left = 'auto';         // Reset any left-side positioning
-      gui_container.style.right = '3px';         // Anchor to the right
-      gui_container.style.top = '2px';           // Anchor to the top
-      gui_container.style.marginLeft = '0px';    // Clear the 2px margin from CSS
-      gui_container.style.paddingRight = '4px';
-      gui_container.style.maxHeight = '100vh';
-      gui_container.style.overflowY = 'auto';
-      gui_container.style.overflowX = 'hidden';
-
+      gui_container = document.getElementById('right_gui_position');
       gui = new GUI( { autoPlace: false, container: gui_container } );
       set_gui_position();
     </script>
@@ -174,7 +189,7 @@
         <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
       </div>
     </div>
-    <div id="gui_position"></div>
+    <div id="right_gui_position"></div>
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">IFC Viewer</div>
 
@@ -287,8 +302,8 @@
         // Frame camera to root
         const maxDim = Math.max( size.x, size.y, size.z );
         const fov = THREE.MathUtils.degToRad( camera.fov );
-        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
-        camera.position.set( 0, 0, dist * 1.5 );
+        const dist = maxDim + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist );
         camera.lookAt( 0, 0, 0 );
         resize();
       }
@@ -385,7 +400,7 @@
 
         if (camera === undefined) {
           camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 2000 );
-          camera.position.set( 0, 0, 250 );
+          camera.position.set( 0, 0, 150 );
           scene.add( camera );
         }
 
@@ -541,7 +556,7 @@
 
       function show_hide_category( key, value ) {
         const subsetKey = `0 - DEFAULT - ${ key }`;
-        const subsetRecord = ifc_loader.ifcManager.subsets.subsets[subsetKey];
+        const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
 
         if (subsetRecord && subsetRecord.mesh) {
           subsetRecord.mesh.visible = value;
@@ -572,6 +587,8 @@
           URL.revokeObjectURL( selected_ifc_file );
 
           ifc_obj = object;
+
+          // Replace all materials with shader material
 
           const oldMaterials = ifc_obj.material;
           const newMaterials = [];
@@ -610,6 +627,8 @@
             if (halt_on_error) return;
 
             ifc_obj = object;
+
+            // Replace all materials with shader material
 
             const oldMaterials = ifc_obj.material;
             const newMaterials = [];
@@ -711,14 +730,19 @@
           ifcFolder = gui.addFolder( 'Filtered IFC Categories' );
 
           for ( const key of Object.keys( filtered_categories ) ) {
-            // Initialize checkbox state
-            categoryParams[ key ] = true;
+            const subsetKey = `0 - DEFAULT - ${ key }`;
+            const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
 
-            ifcFolder.add( categoryParams, key ).name( key.substring( 3 ) )
-            .onChange( ( value ) => {
-              show_hide_category( key, value );
-              mouse_wheel = true;
-            });
+            if (subsetRecord && subsetRecord.mesh && subsetRecord.mesh?.geometry?.index?.count > 0) {
+              // Initialize checkbox state
+              categoryParams[ key ] = true;
+
+              ifcFolder.add( categoryParams, key ).name( key.substring( 3 ) )
+              .onChange( ( value ) => {
+                show_hide_category( key, value );
+                mouse_wheel = true;
+              });
+            }
           }
         }
 
