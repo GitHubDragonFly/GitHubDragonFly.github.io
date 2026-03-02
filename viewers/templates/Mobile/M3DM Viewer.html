@@ -7,13 +7,58 @@
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
-    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR:', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE:', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE' + event.reason );
+      });
+    </script>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.183.1/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.1/examples/jsm/"
         }
       }
     </script>
@@ -22,9 +67,9 @@
 
     <script>
       var THREE, manager, rhino_loader, rhino_obj, obj_is_mesh, gui, lil_gui;
-      var renderer, scene, camera, render_requested, bounding_box, count = 0;
-      var controls, mouse_down, mouse_wheel, events_initialized;
-      var ambientLight, directionalLight, wireframe_enabled;
+      var controls, scene, camera, renderer, render_requested, bounding_box;
+      var mouse_down, mouse_wheel, events_initialized, init_running = false;
+      var ambientLight, directionalLight, wireframe_enabled, count = 0;
       var ww = window.innerWidth, wh = window.innerHeight;
       var first_run = false, fr_count = 0, flat_shading_enabled;
       var selected_rhino_file, selected_url_file = '', isMobile;
@@ -56,7 +101,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>3DM Viewer (r182)</title>
+    <title>3DM Viewer (r183)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -81,7 +126,7 @@
         <label for="btn_flat" title="Flat Shading"></label>
         <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
         <label for="btn_wireframe" title="Wireframe"></label>
-        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="min-width: 15px;" disabled>&#x2191</button>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
         <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
       </div>
       <div class="fm" id="url" style="display: none;">
@@ -207,30 +252,30 @@
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( rhino_obj );
-        let size = bounding_box.getSize( new THREE.Vector3() );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        if ( size.y > 1 ) {
-          rhino_obj.scale.multiplyScalar( 50 / size.y );
-        } else if ( size.y > 0.02 ) {
-          rhino_obj.scale.multiplyScalar( 25 / size.y );
-        } else if ( size.y > 0.01 ) {
-          rhino_obj.scale.multiplyScalar( 10 / size.y );
-        } else {
-          rhino_obj.scale.multiplyScalar( 1 / size.y )
-        }
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length() ) ) );
+        camera.lookAt( center );
 
-        camera.position.z = bounding_box.max.z + 250;
-        camera.updateProjectionMatrix();
+        // Center root
+        rhino_obj.position.sub( center );
 
-        mouse_wheel = true;
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist );
+        camera.lookAt( 0, 0, 0 );
+        resize();
       }
 
       async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+
+        init_running = true;
 
         if (scene) {
           mouse_wheel = true;
@@ -329,19 +374,19 @@
           const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
 
           controls = new OrbitControls( camera, renderer.domElement );
+          controls.enableZoom = true;
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.5;
           controls.rotateSpeed = 0.5;
           controls.keyPanSpeed = 0.5; 
           controls.panSpeed = 0.5;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.3;
           //controls.enableKeys = false;
-          //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
         }
 
         if (scene.environment === null) {
@@ -473,7 +518,7 @@
               }
             });
 
-            if (obj_is_mesh) rhino_obj.rotation.x -= Math.PI / 2;
+            if (obj_is_mesh) rhino_obj.rotation.x -= Math.PI / 2.0;
 
             if (rhino_obj.userData.layers.length > 1) start_gui();
 
@@ -580,8 +625,7 @@
       }
 
       function finish_loading() {
-        set_initial_scale();
-        resize();
+        frame_camera();
 
         render_requested = true;
         mouse_wheel = false;
@@ -606,7 +650,9 @@
         console.timeEnd( 'Loading Time' );
         document.getElementById('div_loading').style.display = 'none';
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 100 ) );
+        init_running = false;
+
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
       function log_info() {
@@ -661,18 +707,20 @@
         render_requested = false;
         enable_disable( true );
 
+        init_running = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
       }
 
-      function quick_x_rotation( angle ) {
-        rhino_obj.rotateX( Math.PI * parseFloat( angle ) );
+      function quick_x_rotation() {
+        rhino_obj.rotateX( - Math.PI / 2.0 );
 
         mouse_wheel = true;
       }
 
       function set_flat() {
-        if (flat_shading_enabled === true) {
+        if (flat_shading_enabled) {
           flat_shading_enabled = false;
           document.getElementById('btn_flat').style.backgroundColor = 'transparent';
         } else {
@@ -699,7 +747,7 @@
 
       function show_wireframe() {
         if (rhino_obj) {
-          if (wireframe_enabled === true) {
+          if (wireframe_enabled) {
             wireframe_enabled = false;
             document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
           } else {
@@ -725,14 +773,14 @@
 
       async function render() {
         if (rhino_obj) {
-          if (first_run === true || mouse_down === true || mouse_wheel === true) {
+          if (first_run || mouse_down || mouse_wheel) {
             controls.update();
 
             renderer.clear();
             renderer.render( scene, camera );
 
             // If it might be slow to render initially
-            if (first_run === true) {
+            if (first_run) {
               fr_count ++;
               if (fr_count > 10) {
                 mouse_wheel = true;
@@ -743,7 +791,7 @@
                 enable_controls();
               }
             } else {
-              if (mouse_wheel === true) {
+              if (mouse_wheel) {
                 if (count > 5) {
                   mouse_wheel = false;
                   count = 0;
@@ -762,7 +810,6 @@
         document.getElementById('back_color').value = '#000000';
         document.getElementById('dli_val').innerText = 3;
         document.getElementById('directional_light_intensity').value = 3;
-        document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_flat').style.backgroundColor = 'transparent';
         document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
 
@@ -796,8 +843,11 @@
 
           mouse_wheel = true;
 
+          document.getElementById('btn_url').style.backgroundColor = 'transparent';
           document.getElementById('file_input').value = '';
           document.getElementById('div_error').style.display = 'none';
+          document.getElementById('btn_flat').disabled = true;
+          document.getElementById('btn_wireframe').disabled = true;
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
           enable_disable( true );
@@ -811,8 +861,8 @@
 
         renderer.clear();
 
-        if (wireframe_enabled === true) await show_wireframe();
-        if (flat_shading_enabled === true) await set_flat();
+        if (wireframe_enabled) await show_wireframe();
+        if (flat_shading_enabled) await set_flat();
 
         rhino_obj.traverse( ( child ) => {
           if (child.type === 'Mesh' || child.isMesh || child.type === 'Points' || child.isPoints ||
