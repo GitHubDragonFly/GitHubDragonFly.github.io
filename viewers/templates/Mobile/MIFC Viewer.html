@@ -160,6 +160,7 @@
     <!-- Using web-ifc library: https://github.com/ThatOpen/engine_web-ifc -->
     <!-- Using web-ifc-three IFC Loader: https://github.com/ThatOpen/web-ifc-three -->
     <!-- Using jQuery: https://github.com/jquery/jquery -->
+    <!-- Certain features were done with assistance from Microsoft Copilot and Google Gemini -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
@@ -371,7 +372,7 @@
 
         if (renderer === undefined) {
           renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
-          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.setPixelRatio( window.devicePixelRatio < 1.5 ? window.devicePixelRatio : 2.0 );
           renderer.toneMapping = THREE.NeutralToneMapping;
           renderer.toneMappingExposure = 1.5;
           renderer.setSize( ww, wh );
@@ -484,7 +485,7 @@
               vec3 F = F0 + (1.0 - F0) * pow(1.0 - NdotV, 5.0);
 
               // -------- simple specular --------
-              float shininess = 32.0 * (1.0 - uRoughness);
+              float shininess = exp2(10.0 * (1.0 - uRoughness) + 1.0);
               float spec = pow(NdotH, shininess);
               vec3 specular = F * spec;
 
@@ -497,12 +498,16 @@
               float simple = dot(vNormal, V) * 0.5 + uRoughness;
               float hybrid = mix(simple, Lo.r, 0.9);
 
-              vec3 shaded = uBaseColor * hybrid * uBrightness;
+              // "Rim Darkening" to simulate depth on curved surfaces
+              float rim = pow(NdotV, 0.2); // Softening factor
+              vec3 finalBase = uBaseColor * rim;
 
-              #include <colorspace_fragment>
+              vec3 shaded = finalBase * hybrid * uBrightness;
 
               gl_FragColor = vec4(shaded, uOpacity);
-              gl_FragColor = linearToOutputTexel(gl_FragColor);
+
+              #include <tonemapping_fragment>  // Adds NeutralToneMapping support
+              #include <colorspace_fragment>   // Handles sRGB conversion
             }
           `,
 
@@ -562,21 +567,21 @@
         }
       }
 
-      const cache = new Map();
+      const mat_cache = new Map();
 
       function getCachedShaderMaterial( color, opacity, transparency ) {
         const key = `${ color.getHexString() }_${ opacity }_${ transparency ? 1 : 0 }`;
 
-        if (!cache.has( key )) {
+        if (!mat_cache.has( key )) {
           const mat = createMeshShaderMaterial();
           mat.uniforms.uBaseColor.value.copy( color );
           mat.uniforms.uOpacity.value = opacity;
           mat.transparent = transparency;
 
-          cache.set( key, mat );
+          mat_cache.set( key, mat );
         }
 
-        return cache.get( key );
+        return mat_cache.get( key );
       }
 
       function loadFile() {
@@ -670,53 +675,40 @@
 
         document.getElementById('div_loading').style.display = 'none';
 
+        function updateUniform( name, value ) {
+          if (ex_ifc_obj && ex_ifc_obj.material) {
+            const mats = Array.isArray( ex_ifc_obj.material )
+              ? ex_ifc_obj.material
+              : [ ex_ifc_obj.material ];
+
+            mats.forEach( m => {
+              if (m.uniforms && m.uniforms[ name ]) {
+                m.uniforms[ name ].value = value;
+              }
+            });
+          }
+        }
+
         if (gui_set === false) {
           // Add Brightness control
           gui.add( params, 'brightness', 0, 10, 0.1 ).name( 'Brightness' )
           .onChange( ( value ) => {
-            if (ifc_obj) {
-              if (Array.isArray( ex_ifc_obj.material )) {
-                ex_ifc_obj.material.forEach( m => {
-                  m.uniforms.uBrightness.value = value;
-                });
-              } else {
-                ex_ifc_obj.material.uniforms.uBrightness.value = value;
-              }
-
-              mouse_wheel = true;
-            }
+            updateUniform( 'uBrightness', value );
+            mouse_wheel = true;
           });
 
           // Add Roughness control
           gui.add( params, 'roughness', 0.0, 1.0, 0.025 ).name( 'Roughness' )
           .onChange( ( value ) => {
-            if (ifc_obj) {
-              if (Array.isArray( ex_ifc_obj.material )) {
-                ex_ifc_obj.material.forEach( m => {
-                  m.uniforms.uRoughness.value = (value === 1.0 ? 0.99 : value);
-                });
-              } else {
-                ex_ifc_obj.material.uniforms.uRoughness.value = (value === 1.0 ? 0.99 : value);
-              }
-
-              mouse_wheel = true;
-            }
+            updateUniform( 'uRoughness', (value === 1.0 ? 0.99 : value) );
+            mouse_wheel = true;
           });
 
           // Add Metalness control
           gui.add( params, 'metalness', 0.0, 1.0, 0.025 ).name( 'Metalness' )
           .onChange( ( value ) => {
-            if (ifc_obj) {
-              if (Array.isArray( ex_ifc_obj.material )) {
-                ex_ifc_obj.material.forEach( m => {
-                  m.uniforms.uMetalness.value = value;
-                });
-              } else {
-                ex_ifc_obj.material.uniforms.uMetalness.value = value;
-              }
-
-              mouse_wheel = true;
-            }
+            updateUniform( 'uMetalness', value );
+            mouse_wheel = true;
           });
 
           set_gui_position();
@@ -725,11 +717,117 @@
           gui_set = true;
         }
 
+        const geom = ex_ifc_obj.geometry;
+        const posAttr = geom.getAttribute( 'position' );
+        posAttr.setUsage( THREE.DynamicDrawUsage );
+
         if (!ifcFolder) {
-          // Add filtered categories visibility toggles
           // Create a folder for IFC categories
 
           ifcFolder = gui.addFolder( 'Filtered IFC Categories' );
+
+          // Add "Explode All" slider
+
+          if (!geom.boundingBox) geom.computeBoundingBox();
+          const modelBox = geom.boundingBox;
+          const modelCenter = modelBox.getCenter( new THREE.Vector3() );
+          const modelSize = modelBox.getSize( new THREE.Vector3() );
+          const maxDim = Math.max( modelSize.x, modelSize.y, modelSize.z );
+          const EXPLOSION_DISTANCE = maxDim / 2.0;
+
+          const idAttr = geom.getAttribute( 'expressID' );
+
+          // ------------------------------------------------------------
+          // SINGLE PASS: Compute Bounding Boxes for ALL elements at once
+          // ------------------------------------------------------------
+
+          const elementBounds = {}; // expressID -> { min: [ x, y, z ], max: [ x, y, z ] }
+
+          for ( let i = 0; i < posAttr.count; i++ ) {
+            const id = idAttr.getX( i );
+            const x = posAttr.getX( i );
+            const y = posAttr.getY( i );
+            const z = posAttr.getZ( i );
+
+            if (!elementBounds[ id ]) {
+              elementBounds[ id ] = {
+                min: [ x, y, z ],
+                max: [ x, y, z ]
+              };
+            } else {
+              const b = elementBounds[ id ];
+              if (x < b.min[ 0 ]) b.min[ 0 ] = x; else if (x > b.max[ 0 ]) b.max[ 0 ] = x;
+              if (y < b.min[ 1 ]) b.min[ 1 ] = y; else if (y > b.max[ 1 ]) b.max[ 1 ] = y;
+              if (z < b.min[ 2 ]) b.min[ 2 ] = z; else if (z > b.max[ 2 ]) b.max[ 2 ] = z;
+            }
+          }
+
+          // ------------------------------------------------------------
+          // COMPUTE DIRECTIONS: Turn bounds into normalized vectors
+          // ------------------------------------------------------------
+
+          const elementDirs = new Map(); // expressID -> { x, y, z }
+          const tempVec = new THREE.Vector3();
+
+          for ( const id in elementBounds ) {
+            const b = elementBounds[ id ];
+
+            // Center of the element's bounding box
+
+            const cx = ( b.min[ 0 ] + b.max[ 0 ] ) / 2.0;
+            const cy = ( b.min[ 1 ] + b.max[ 1 ] ) / 2.0;
+            const cz = ( b.min[ 2 ] + b.max[ 2 ] ) / 2.0;
+
+            tempVec.set( cx, cy, cz ).sub( modelCenter );
+            if (tempVec.lengthSq() > 0) tempVec.normalize();
+
+            elementDirs.set( Number( id ), { x: tempVec.x, y: tempVec.y, z: tempVec.z } );
+          }
+
+          // ------------------------------------------------------------
+          // POSITION MANAGEMENT
+          // ------------------------------------------------------------
+
+          if (!geom.userData.originalPosition) {
+            geom.userData.originalPosition = new Float32Array( posAttr.array );
+          }
+
+          const originalPos = geom.userData.originalPosition;
+
+          function applyExplosionScale( scale ) {
+            const array = posAttr.array;
+            const offset = scale * EXPLOSION_DISTANCE;
+
+            for ( let i = 0; i < posAttr.count; i++ ) {
+              const id = idAttr.getX( i );
+              const dir = elementDirs.get( id );
+              const i3 = i * 3;
+
+              if (!dir) continue;
+
+              array[ i3 ]     = originalPos[ i3 ]     + dir.x * offset;
+              array[ i3 + 1 ] = originalPos[ i3 + 1 ] + dir.y * offset;
+              array[ i3 + 2 ] = originalPos[ i3 + 2 ] + dir.z * offset;
+            }
+
+            posAttr.needsUpdate = true;
+
+            // Important: computeBoundingSphere is used by Three.js for frustum culling. 
+            // If we don't update it, the model will vanish when we zoom in during explosion.
+
+            geom.computeBoundingSphere();
+          }
+
+          const explosionParams = { scale: 0.0 };
+
+          ifcFolder.add( explosionParams, 'scale', 0, 2.0, 0.01 )
+          .name( 'Explode All' )
+          .onChange( value => {
+            applyExplosionScale( value );
+            mouse_wheel = true;
+          });
+
+          // Add filtered categories visibility toggles
 
           for ( const key of Object.keys( filtered_categories ) ) {
             const subsetKey = `0 - DEFAULT - ${ key }`;
@@ -887,98 +985,82 @@
 
         if (wireframe_enabled) await show_wireframe();
 
-        // Reset BRM for the currently loaded model
+        // Helper for disposing materials/textures to avoid repetition
 
-        if (Array.isArray( ex_ifc_obj.material )) {
-          ex_ifc_obj.material.forEach( m => {
-            m.uniforms.uBrightness.value = 2.0;
-            m.uniforms.uRoughness.value = 0.5;
-            m.uniforms.uMetalness.value = 0.0;
-          });
-        } else {
-          ex_ifc_obj.material.uniforms.uBrightness.value = 2.0;
-          ex_ifc_obj.material.uniforms.uRoughness.value = 0.5;
-          ex_ifc_obj.material.uniforms.uMetalness.value = 0.0;
-        }
+        const disposeMaterial = ( m ) => {
+          if (!m) return;
+
+          if (m.uniforms) {
+            Object.values( m.uniforms ).forEach( u => {
+              if (u.value && u.value.isTexture) u.value.dispose();
+            });
+          } else if (m.map) {
+            m.map.dispose();
+          }
+
+          m.dispose();
+        };
+
+        // Dispose ifcManager and the main object
 
         await ifc_loader.ifcManager.dispose();
         ifc_loader = undefined;
 
         ifc_obj.traverse( ( child ) => {
           if (child.isMesh) {
-            if (child.material) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( m => {
-                  if (m.uniforms) {
-                    Object.keys( m.uniforms ).forEach( key => {
-                      const uniform = m.uniforms[ key ].value;
-                      if (uniform && uniform.isTexture) uniform.dispose();
-                    });
-                  } else {
-                    if (m.map) m.map.dispose();
-                  }
-
-                  m.dispose();
-                  m = null;
-                });
-              } else {
-                if (child.material.uniforms) {
-                  Object.keys( child.material.uniforms ).forEach( key => {
-                    const uniform = child.material.uniforms[ key ].value;
-                    if (uniform && uniform.isTexture) uniform.dispose();
-                  });
-                } else {
-                  if (child.material.map) child.material.map.dispose();
-                  child.material.dispose();
-                  child.material = null;
-                }
-              }
+            if (Array.isArray( child.material )) {
+              child.material.forEach( disposeMaterial );
+            } else {
+              disposeMaterial(child.material);
             }
 
-            child.geometry.dispose();
-            child.geometry = null;
+            if (child.geometry) {
+              // Crucial: Clear our custom explosion backup
+
+              if (child.geometry.userData.originalPosition) {
+                child.geometry.userData.originalPosition = null; 
+                delete child.geometry.userData.originalPosition;
+              }
+
+              child.geometry.dispose();
+            }
           }
         });
 
         scene.remove( ifc_obj );
         ifc_obj = undefined;
 
-        if (ex_ifc_obj.material) {
-          if (Array.isArray( ex_ifc_obj.material )) {
-            ex_ifc_obj.material.forEach( m => {
-              if (m.uniforms) {
-                Object.keys( m.uniforms ).forEach( key => {
-                  const uniform = m.uniforms[ key ].value;
-                  if (uniform && uniform.isTexture) uniform.dispose();
-                });
-              } else {
-                if (m.map) m.map.dispose();
-              }
+        // Clean up the external reference (ex_ifc_obj)
 
-              m.dispose();
-              m = null;
-            });
+        if (ex_ifc_obj) {
+          if (Array.isArray( ex_ifc_obj.material )) {
+            ex_ifc_obj.material.forEach( disposeMaterial );
           } else {
-            if (ex_ifc_obj.material.uniforms) {
-              Object.keys( ex_ifc_obj.material.uniforms ).forEach( key => {
-                const uniform = ex_ifc_obj.material.uniforms[ key ].value;
-                if (uniform && uniform.isTexture) uniform.dispose();
-              });
-            } else {
-              if (ex_ifc_obj.material.map) ex_ifc_obj.material.map.dispose();
-              ex_ifc_obj.material.dispose();
-              ex_ifc_obj.material = null;
-            }
+            disposeMaterial( ex_ifc_obj.material );
           }
+
+          if (ex_ifc_obj.geometry) {
+            if (ex_ifc_obj.geometry.userData.originalPosition) {
+              ex_ifc_obj.geometry.userData.originalPosition = null;
+              delete ex_ifc_obj.geometry.userData.originalPosition;
+            }
+
+            ex_ifc_obj.geometry.dispose();
+          }
+
+          ex_ifc_obj = undefined;
         }
 
-        ex_ifc_obj.geometry.dispose();
-        ex_ifc_obj.geometry = null;
-        ex_ifc_obj = undefined;
+        // Global cache and UI cleanup
+
+        if (mat_cache) mat_cache.clear();
+
+        if (ifcFolder) {
+          ifcFolder.destroy();
+          ifcFolder = null; // Ensure reference is cleared
+        }
 
         renderer.clear();
-
-        if (ifcFolder) ifcFolder.destroy();
 
         present_categories = {};
         filtered_categories = {};
