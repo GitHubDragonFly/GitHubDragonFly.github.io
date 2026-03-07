@@ -87,6 +87,7 @@ Originally designed for a desktop but has been adapted to also show properly on 
 
 The `Mobile 3D` button provides access to stripped down and simplified version of mobile friendly 3D viewers:
 - Almost all viewers are currently available and should work fine on desktop devices as well
+- Some of these viewers use shader materials instead, so they might be better choice for viewing on any device
 - Mobile `Quick Viewer`, `GM Viewer` and `GLTF Viewer` also include some export options and more features
 - Consider bookmarking the [mobile main page](https://githubdragonfly.github.io/viewers/templates/Mobile/index.html) for continuous access to all viewers
 - Consider bookmarking any single viewer's link for continuous access to that particular viewer
