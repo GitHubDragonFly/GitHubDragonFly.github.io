@@ -57,9 +57,9 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.183.1/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.1/examples/jsm/",
-          "three/examples/jsm/utils/BufferGeometryUtils": "https://cdn.jsdelivr.net/npm/three@0.183.1/examples/jsm/utils/BufferGeometryUtils.min.js",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/",
+          "three/examples/jsm/utils/BufferGeometryUtils": "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/utils/BufferGeometryUtils.min.js",
           "web-ifc": "https://cdn.jsdelivr.net/npm/web-ifc@0.0.76/web-ifc-api.min.js",
           "web-ifc-three": "https://cdn.jsdelivr.net/npm/web-ifc-three@0.0.126/IFCLoader.min.js"
         }
@@ -160,7 +160,7 @@
     <!-- Using web-ifc library: https://github.com/ThatOpen/engine_web-ifc -->
     <!-- Using web-ifc-three IFC Loader: https://github.com/ThatOpen/web-ifc-three -->
     <!-- Using jQuery: https://github.com/jquery/jquery -->
-    <!-- Certain features were done with assistance from Microsoft Copilot and Google Gemini -->
+    <!-- Certain features refined with assistance from Microsoft Copilot, ChatGPT and Google Gemini -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
@@ -376,11 +376,13 @@
           renderer.toneMapping = THREE.NeutralToneMapping;
           renderer.toneMappingExposure = 1.5;
           renderer.setSize( ww, wh );
+          renderer.sortObjects = false;
           renderer.info.autoReset = false;
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
           renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
           renderer.autoClear = false;
+          renderer.setAnimationLoop( null );
 
           // Consider removing this for a production build
           renderer.debug.onShaderError = ( gl, program, glVertexShader, glFragmentShader ) => {
@@ -439,18 +441,23 @@
           uniforms: {
             uOpacity:        { value: 1.0 },
             uBrightness:     { value: 2.0 },
-            uBaseColor:      { value: new THREE.Color( 1, 1, 1 ) },
             uRoughness:      { value: 0.5 },
-            uMetalness:      { value: 0.0 }
+            uMetalness:      { value: 0.0 },
+            uExplosion:      { value: 0.0 },
+            uBaseColor:      { value: new THREE.Color( 1, 1, 1 ) }
           },
 
           vertexShader: /* glsl */`
+            uniform float uExplosion;
+            attribute vec3 explodeDir;
             varying vec3 vViewPos;
             varying vec3 vNormal;
 
             void main() {
+              vec3 explodedPosition = position + explodeDir * uExplosion;
+
               // view-space position
-              vec4 viewPos = modelViewMatrix * vec4(position, 1.0);
+              vec4 viewPos = modelViewMatrix * vec4(explodedPosition, 1.0);
               vViewPos = viewPos.xyz;
 
               // view-space normal
@@ -668,13 +675,6 @@
         scene.add( ifc_obj );
         frame_camera();
 
-        console.timeEnd( 'Loading Time' );
-
-        // Stop flashing indicator
-        document.getElementById('status_indicator').style.display = 'none';
-
-        document.getElementById('div_loading').style.display = 'none';
-
         function updateUniform( name, value ) {
           if (ex_ifc_obj && ex_ifc_obj.material) {
             const mats = Array.isArray( ex_ifc_obj.material )
@@ -691,21 +691,21 @@
 
         if (gui_set === false) {
           // Add Brightness control
-          gui.add( params, 'brightness', 0, 10, 0.1 ).name( 'Brightness' )
+          gui.add( params, 'brightness', 0, 10, 0.01 ).name( 'Brightness' )
           .onChange( ( value ) => {
             updateUniform( 'uBrightness', value );
             mouse_wheel = true;
           });
 
           // Add Roughness control
-          gui.add( params, 'roughness', 0.0, 1.0, 0.025 ).name( 'Roughness' )
+          gui.add( params, 'roughness', 0.0, 1.0, 0.01 ).name( 'Roughness' )
           .onChange( ( value ) => {
             updateUniform( 'uRoughness', (value === 1.0 ? 0.99 : value) );
             mouse_wheel = true;
           });
 
           // Add Metalness control
-          gui.add( params, 'metalness', 0.0, 1.0, 0.025 ).name( 'Metalness' )
+          gui.add( params, 'metalness', 0.0, 1.0, 0.01 ).name( 'Metalness' )
           .onChange( ( value ) => {
             updateUniform( 'uMetalness', value );
             mouse_wheel = true;
@@ -719,7 +719,7 @@
 
         const geom = ex_ifc_obj.geometry;
         const posAttr = geom.getAttribute( 'position' );
-        posAttr.setUsage( THREE.DynamicDrawUsage );
+        const pcount = posAttr.count;
 
         if (!ifcFolder) {
           // Create a folder for IFC categories
@@ -728,7 +728,11 @@
 
           // Add "Explode All" slider
 
-          if (!geom.boundingBox) geom.computeBoundingBox();
+          if (!geom.boundingBox) {
+            geom.computeBoundingBox();
+            geom.computeBoundingSphere();
+            geom.boundingSphere.radius *= 2; // done once so exploded elements remain visible
+          }
           const modelBox = geom.boundingBox;
           const modelCenter = modelBox.getCenter( new THREE.Vector3() );
           const modelSize = modelBox.getSize( new THREE.Vector3() );
@@ -743,7 +747,7 @@
 
           const elementBounds = {}; // expressID -> { min: [ x, y, z ], max: [ x, y, z ] }
 
-          for ( let i = 0; i < posAttr.count; i++ ) {
+          for ( let i = 0; i < pcount; i++ ) {
             const id = idAttr.getX( i );
             const x = posAttr.getX( i );
             const y = posAttr.getY( i );
@@ -766,13 +770,12 @@
           // COMPUTE DIRECTIONS: Turn bounds into normalized vectors
           // ------------------------------------------------------------
 
-          const elementDirs = new Map(); // expressID -> { x, y, z }
+          const elementDirs = new Float32Array( pcount * 3 );
           const tempVec = new THREE.Vector3();
 
-          for ( const id in elementBounds ) {
+          for ( let i = 0; i < pcount; i++ ) {
+            const id = idAttr.getX( i );
             const b = elementBounds[ id ];
-
-            // Center of the element's bounding box
 
             const cx = ( b.min[ 0 ] + b.max[ 0 ] ) / 2.0;
             const cy = ( b.min[ 1 ] + b.max[ 1 ] ) / 2.0;
@@ -781,41 +784,24 @@
             tempVec.set( cx, cy, cz ).sub( modelCenter );
             if (tempVec.lengthSq() > 0) tempVec.normalize();
 
-            elementDirs.set( Number( id ), { x: tempVec.x, y: tempVec.y, z: tempVec.z } );
+            const i3 = i * 3;
+
+            elementDirs[ i3 ]     = tempVec.x;
+            elementDirs[ i3 + 1 ] = tempVec.y;
+            elementDirs[ i3 + 2 ] = tempVec.z;
           }
 
-          // ------------------------------------------------------------
-          // POSITION MANAGEMENT
-          // ------------------------------------------------------------
+          geom.setAttribute( 'explodeDir', new THREE.BufferAttribute( elementDirs, 3 ) );
 
-          if (!geom.userData.originalPosition) {
-            geom.userData.originalPosition = new Float32Array( posAttr.array );
-          }
+          // Set the same attribute on all subset meshes so GPU explosion works
 
-          const originalPos = geom.userData.originalPosition;
+          for ( const key of Object.keys( filtered_categories ) ) {
+            const subsetKey = `0 - DEFAULT - ${ key }`;
+            const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
 
-          function applyExplosionScale( scale ) {
-            const array = posAttr.array;
-            const offset = scale * EXPLOSION_DISTANCE;
-
-            for ( let i = 0; i < posAttr.count; i++ ) {
-              const id = idAttr.getX( i );
-              const dir = elementDirs.get( id );
-              const i3 = i * 3;
-
-              if (!dir) continue;
-
-              array[ i3 ]     = originalPos[ i3 ]     + dir.x * offset;
-              array[ i3 + 1 ] = originalPos[ i3 + 1 ] + dir.y * offset;
-              array[ i3 + 2 ] = originalPos[ i3 + 2 ] + dir.z * offset;
+            if (subsetRecord && subsetRecord.mesh && subsetRecord.mesh?.geometry?.index?.count > 0) {
+              subsetRecord.mesh.geometry.setAttribute( 'explodeDir', geom.getAttribute( 'explodeDir' ) );
             }
-
-            posAttr.needsUpdate = true;
-
-            // Important: computeBoundingSphere is used by Three.js for frustum culling. 
-            // If we don't update it, the model will vanish when we zoom in during explosion.
-
-            geom.computeBoundingSphere();
           }
 
           const explosionParams = { scale: 0.0 };
@@ -823,7 +809,8 @@
           ifcFolder.add( explosionParams, 'scale', 0, 2.0, 0.01 )
           .name( 'Explode All' )
           .onChange( value => {
-            applyExplosionScale( value );
+            const offset = value * EXPLOSION_DISTANCE;
+            updateUniform( 'uExplosion', offset );
             mouse_wheel = true;
           });
 
@@ -845,6 +832,13 @@
             }
           }
         }
+
+        console.timeEnd( 'Loading Time' );
+
+        // Stop flashing indicator
+        document.getElementById('status_indicator').style.display = 'none';
+
+        document.getElementById('div_loading').style.display = 'none';
 
         gui_container.style.display = 'block';
         set_gui_position();
@@ -1003,8 +997,6 @@
           m = null;
         };
 
-        // Dispose ifcManager and the main object
-
         await ifc_loader.ifcManager.dispose();
         ifc_loader = undefined;
 
@@ -1017,11 +1009,6 @@
             }
 
             if (child.geometry) {
-              if (child.geometry.userData.originalPosition) {
-                child.geometry.userData.originalPosition = null; 
-                delete child.geometry.userData.originalPosition;
-              }
-
               child.geometry.dispose();
               child.geometry = null;
             }
@@ -1031,8 +1018,6 @@
         scene.remove( ifc_obj );
         ifc_obj = undefined;
 
-        // Clean up the external reference (ex_ifc_obj)
-
         if (ex_ifc_obj) {
           if (Array.isArray( ex_ifc_obj.material )) {
             ex_ifc_obj.material.forEach( disposeMaterial );
@@ -1041,19 +1026,12 @@
           }
 
           if (ex_ifc_obj.geometry) {
-            if (ex_ifc_obj.geometry.userData.originalPosition) {
-              ex_ifc_obj.geometry.userData.originalPosition = null;
-              delete ex_ifc_obj.geometry.userData.originalPosition;
-            }
-
             ex_ifc_obj.geometry.dispose();
             ex_ifc_obj.geometry = null;
           }
 
           ex_ifc_obj = undefined;
         }
-
-        // Global cache and UI cleanup
 
         if (mat_cache) mat_cache.clear();
 
