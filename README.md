@@ -396,11 +396,13 @@ Number Type Converter
 
 - Special notes about `3D Tiles Viewer`:
   - Simple viewer specifically designed to stream 3D Tiles:
-    - Supports ImplicitTiling and MultipleContents v1.1 by performing conversion to explicit
+    - Supports ImplicitTiling, MultipleContents and Metadata v1.1 by performing conversion to explicit:
+      - For quick testing maybe try loading official [Cesium](https://github.com/CesiumGS/3d-tiles-samples) examples
     - It is using customized `3DTilesLoader`:
       - Also created with assistance from Microsoft Copilot and Google Gemini
       - Internally using [OGC3DTile](https://github.com/ebeaufay/threedtiles) loader
     - If bounding box is visible but no content is loading then either:
+      - The model is out-of-sight in a far away land
       - Those features require API Key or token
       - Those features are not implemented in the viewer
       - Those features are not supported by internal loader
