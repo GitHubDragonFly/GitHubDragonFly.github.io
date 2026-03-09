@@ -54,6 +54,7 @@ class Three3DTilesLoader extends Loader {
 
 		this._maxDepthLevel = 1;
 		this._variantLookup = new Map();
+		this._metadataLookup = [];
 
 		this._v1 = new Vector3();
 		this._corner = new Vector3();
@@ -411,6 +412,40 @@ class Three3DTilesLoader extends Loader {
 		n = ( n | ( n << 1 ) ) & 0x5555;
 
 		return n;
+
+	}
+
+	/**
+	 * Collapses bits by removing the one-bit gap between them.
+	 * Reverse of _interleaveBits2D. Works for coordinates up to 16 bits.
+	 * @param {number} n - The interleaved bit pattern.
+	 * @returns {number} The original coordinate component.
+	 */
+	_deinterleaveBits2D( n ) { // QUADTREE
+
+		n &= 0x55555555;
+		n = ( n | ( n >> 1 ) ) & 0x33333333;
+		n = ( n | ( n >> 2 ) ) & 0x0F0F0F0F;
+		n = ( n | ( n >> 4 ) ) & 0x00FF00FF;
+		n = ( n | ( n >> 8 ) ) & 0x0000FFFF;
+
+		return n;
+
+	}
+
+	/**
+	 * Decodes a large 2D Morton index back into its constituent [x, y, 0] coordinates.
+	 * Use this instead of _decodeMorton2D if the index exceeds the range of 0-3.
+	 * @param {number} index - The 2D Morton index.
+	 * @returns {number[]} Array containing [x, y, 0].
+	 */
+	_decodeFullMorton2D( index ) { // QUADTREE
+
+		return [
+			this._deinterleaveBits2D( index ),      // x
+			this._deinterleaveBits2D( index >> 1 ), // y
+			0                                       // z
+		];
 
 	}
 
@@ -1039,67 +1074,240 @@ class Three3DTilesLoader extends Loader {
 	}
 
 	/**
-	 * Recursively flattens 3D Tiles v1.1 'contents' arrays into a synthetic child hierarchy.
+	 * Recursively flattens 3D Tiles v1.1 'contents' arrays into a synthetic v1.0 child hierarchy.
 	 * This ensures compatibility with OGC3DTile loaders that expect a single content per tile.
-	 * ** Each additional content is injected as a child with a geometricError of 0 and 
-	 *    an 'ADD' refinement to force simultaneous rendering with the parent tile.
 	 *
 	 * @async
 	 * @param {Object} tile - The 3D Tile JSON object to process.
 	 * @returns {Promise<void>}
 	 */
-	async _flattenExplicitContents( tile ) {
+	async _flattenExplicitContents( tile, hasMetadata = false ) {
 
-		// Handle Multiple Contents in the current tile
+		// 1. Capture Tile-level metadata (if any)
 
-		if ( tile.contents && Array.isArray( tile.contents ) ) {
+		const tileMetadata = tile.metadata || null;
 
-			// Inject as children
+		// 2. Process v1.1 'contents' array
 
-			if ( tile.contents.length > 1 ) {
+		if ( tile.contents ) {
 
-				if ( !tile.children ) tile.children = [];
+			tile.children = tile.children || [];
+			let i = 0;
 
-				for ( let i = 0; i < tile.contents.length; i++ ) {
+			for ( const contentObj of tile.contents ) {
 
-					let tile_uri = tile.contents[ i ].uri;
+				let tile_uri = contentObj.uri;
+				if ( tile_uri && tile_uri.startsWith( '/' ) ) tile_uri = tile_uri.substring( 1 );
 
-					if ( tile_uri.startsWith( '/' ) ) {
+				if ( hasMetadata ) {
 
-						tile_uri = tile_uri.substring( 1 );
+					const finalMetadata = contentObj.metadata || tileMetadata;
 
-					}
+					// Modify the value stored in the Map
+
+					const metadataPackage = {
+						uri: tile_uri,
+						metadataContent: finalMetadata,
+						metadataTile: tileMetadata,
+						groupIndex: contentObj.group ?? null // This is the index into the groups array
+					};
+
+					// Store the metadata keyed by the likely mesh prefix
+
+					this._metadataLookup.push( metadataPackage );
+
+				} else {
 
 					this._variantLookup.set( tile_uri, i );
-
-					tile.children.push({
-
-						content: tile.contents[ i ],
-						boundingVolume: tile.boundingVolume,
-						geometricError: 0, // Render simultaneously with parent
-						refine: "ADD"
-
-					});
+					i++;
 
 				}
 
+				const syntheticChild = {
+
+					content: { uri: tile_uri }, 
+					boundingVolume: contentObj.boundingVolume || tile.boundingVolume,
+					geometricError: tile.geometricError,
+					refine: tile.refine || "ADD"
+
+				};
+
+				tile.children.push( syntheticChild );
+
 			}
 
-			delete tile.contents; // Clean up to avoid confusion
+			delete tile.contents;
 
 		}
 
-		// Recurse through existing explicit children
+		// 3. Recurse through all children (including the ones we just added)
 
 		if ( tile.children ) {
 
 			for ( const child of tile.children ) {
 
-				await this._flattenExplicitContents( child );
+				await this._flattenExplicitContents( child, hasMetadata );
 
 			}
 
 		}
+
+	}
+
+	/**
+	 * Calculates the stride (total byte length) of a property based on its type and component type.
+	 * 
+	 * @param {string} type - The element type (e.g., 'SCALAR', 'VEC3', 'MAT4').
+	 * @param {string} componentType - The data type of individual components (e.g., 'FLOAT32', 'UINT16').
+	 * @returns {number} The total number of bytes for one instance of the type.
+	 */
+	_getStride( type, componentType ) {
+
+		const typeMap = { 'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT2': 4, 'MAT3': 9, 'MAT4': 16 };
+
+		const componentMap = { 
+
+			'INT8': 1, 'UINT8': 1, 
+			'INT16': 2, 'UINT16': 2, 
+			'INT32': 4, 'UINT32': 4, 
+			'INT64': 8, 'UINT64': 8, 
+			'FLOAT32': 4, 'FLOAT64': 8 
+
+		};
+
+		const numComponents = typeMap[ type ] || 1;
+		const bytesPerComponent = componentMap[ componentType ] || 1;
+
+		return numComponents * bytesPerComponent;
+
+	}
+
+	/**
+	 * Returns the size in bytes for a given component type.
+	 * 
+	 * @param {string} componentType - The component type string (e.g., 'INT8', 'FLOAT64').
+	 * @returns {number} The size in bytes, or 0 if the type is unrecognized.
+	 */
+	_getComponentSize( componentType ) {
+
+		const sizes = { 'INT8': 1, 'UINT8': 1, 'INT16': 2, 'UINT16': 2, 'INT32': 4, 'UINT32': 4, 'FLOAT32': 4, 'FLOAT64': 8, 'INT64': 8, 'UINT64': 8 };
+		return sizes[ componentType ] || 0;
+
+	}
+
+	/**
+	 * Reads a value (or array of values) from a binary buffer based on the 3D Tiles metadata spec.
+	 *
+	 * @param {ArrayBuffer} buffer - The source binary data.
+	 * @param {number} offset - The starting byte offset in the buffer.
+	 * @param {string} type - The element type (e.g., 'SCALAR', 'VEC3').
+	 * @param {string} componentType - The component data type (e.g., 'FLOAT32').
+	 * @returns {number|BigInt|Array|null} A single value for SCALAR types, or an array for VEC/MAT types.
+	 */
+	_readBinaryValue( buffer, offset, type, componentType ) {
+
+		const view = new DataView( buffer );
+		const typeMap = { 'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT2': 4, 'MAT3': 9, 'MAT4': 16 };
+		const numComponents = typeMap[ type ] || 1;
+
+		const results = [];
+
+		for ( let i = 0; i < numComponents; i++ ) {
+
+			const currentOffset = offset + ( i * this._getComponentSize( componentType ) );
+			let val;
+
+			switch ( componentType ) {
+				case 'INT8':   val = view.getInt8( currentOffset ); break;
+				case 'UINT8':  val = view.getUint8( currentOffset ); break;
+				case 'INT16':  val = view.getInt16( currentOffset, true ); break;
+				case 'UINT16': val = view.getUint16( currentOffset, true ); break;
+				case 'INT32':  val = view.getInt32( currentOffset, true ); break;
+				case 'UINT32': val = view.getUint32( currentOffset, true ); break;
+				case 'FLOAT32': val = view.getFloat32( currentOffset, true ); break;
+				case 'FLOAT64': val = view.getFloat64( currentOffset, true ); break;
+				case 'INT64':   val = view.getBigInt64( currentOffset, true ); break;
+				case 'UINT64':  val = view.getBigUint64( currentOffset, true ); break;
+				default: val = null;
+			}
+
+			results.push( val );
+
+		}
+
+		// Return a single value for SCALAR, or an array for VEC/MAT
+
+		return type === 'SCALAR' ? results[ 0 ] : results;
+
+	}
+
+	/**
+	 * Extracts metadata for a specific tile or feature from a v1.1 Property Table.
+	 *
+	 * @param {number} metadataIndex - The index of the property table within the subtree.
+	 * @param {number} mortonIndex - The Morton index (Z-order) of the tile within the current subtree.
+	 * @param {Object} subtreeJson - The parsed JSON descriptor of the subtree.
+	 * @param {ArrayBuffer} binary - The binary buffer containing the property values.
+	 * @returns {Object|null} An object containing the class name and property values, or null if not found.
+	 */
+	_extractPropertyTableMetadata( metadataIndex, mortonIndex, subtreeJson, binary ) {
+
+		const table = subtreeJson.propertyTables[ metadataIndex ];
+		if ( !table ) return null;
+
+		const metadata = {
+			class: table.class,
+			properties: {}
+		};
+
+		for ( const [ propName, propDef ] of Object.entries( table.properties ) ) {
+
+			const bufferViewIdx = propDef.values;
+			const view = subtreeJson.bufferViews[ bufferViewIdx ];
+
+			// Check if this is a variable-length property (like a String)
+
+			if ( propDef.arrayOffsets !== undefined ) {
+
+				const offsetViewIdx = propDef.arrayOffsets;
+				const offsetBufferView = subtreeJson.bufferViews[ offsetViewIdx ];
+
+				// 1. Get the start and end offsets for this specific row from the offsets buffer
+				// Note: offsets are usually UINT32 or UINT64
+
+				const offsetType = propDef.offsetComponentType || 'UINT32';
+				const offsetSize = this._getComponentSize( offsetType );
+
+				const startByte = this._readBinaryValue( binary, offsetBufferView.byteOffset + ( mortonIndex * offsetSize ), 'SCALAR', offsetType );
+				const endByte = this._readBinaryValue( binary, offsetBufferView.byteOffset + ( ( mortonIndex + 1 ) * offsetSize ), 'SCALAR', offsetType );
+
+				// 2. Slice the actual data buffer using these offsets
+
+				const dataSlice = binary.slice( view.byteOffset + startByte, view.byteOffset + endByte );
+
+				// 3. Decode (Assuming UTF-8 for strings)
+
+				metadata.properties[ propName ] = new TextDecoder().decode( dataSlice );
+
+			} else {
+
+				// Standard fixed-width logic
+
+				const stride = this._getStride( propDef.type, propDef.componentType );
+				const byteOffset = view.byteOffset + ( mortonIndex * stride );
+
+				metadata.properties[ propName ] = this._readBinaryValue( 
+					binary,
+					byteOffset,
+					propDef.type,
+					propDef.componentType 
+				);
+
+			}
+
+		}
+
+		return metadata;
 
 	}
 
@@ -1193,6 +1401,25 @@ class Three3DTilesLoader extends Loader {
 		const buffer = await fetch( subtreeUrl ).then( r => r.arrayBuffer() );
 		const { subtreeJson, binary, binaryView } = this._parseSubtree( buffer );
 
+		if ( subtreeJson.subtreeMetadata !== undefined ) {
+
+			// This is global to all tiles in this subtree
+
+			const subMetadata = this._extractPropertyTableMetadata(
+				subtreeJson.subtreeMetadata,
+				0, // Subtree metadata usually only has one row (index 0)
+				subtreeJson,
+				binary
+			);
+
+			// You could store this or attach it to the root of the subtree
+
+		}
+
+		// Extract property tables if they exist in this subtree
+
+		const propertyTables = subtreeJson.propertyTables || [];
+
 		// 2. Map ALL content availability layers (v1.1 support)
 
 		const tileBits = this._getAvailability( subtreeJson, subtreeJson.tileAvailability, binary );
@@ -1215,6 +1442,19 @@ class Three3DTilesLoader extends Loader {
 			const maxAllowedDepth = this._maxDepthLevel;
 
 			const index = this._computeMortonIndex( lvl, cx, cy, cz || 0, subtreeRootLevel, isQuadtree );
+
+			let resolvedTileMetadata = null;
+
+			// If the subtree defines metadata for tiles at this index:
+
+			if ( subtreeJson.tileMetadata !== undefined ) {
+
+				// Use helper to extract values from the binary property table 
+				// based on the Morton index
+
+				resolvedTileMetadata = this._extractPropertyTableMetadata( subtreeJson.tileMetadata, index, subtreeJson, binary );
+
+			}
 
 			// Tile existence check
 
@@ -1246,7 +1486,10 @@ class Three3DTilesLoader extends Loader {
 
 					this._variantLookup.set( template_uri, layerIdx );
 
-					validContents.push( { uri: uri } );
+					validContents.push({
+						uri: uri,
+						metadata: template.metadata
+					});
 
 				}
 
@@ -1257,6 +1500,7 @@ class Three3DTilesLoader extends Loader {
 				boundingVolume: this._computeChildBoundingVolume( root.boundingVolume, cx, cy, cz, isQuadtree ),
 				geometricError: root.geometricError / Math.pow( 2, lvl ),
 				refine: root.refine || "REPLACE",
+				metadata: resolvedTileMetadata,
 				children: []
 
 			};
@@ -1268,6 +1512,22 @@ class Three3DTilesLoader extends Loader {
 				// Standard slot for the first content
 
 				node.content = validContents[ 0 ];
+
+				// If the content has specific metadata, it overrides or augments the tile metadata
+
+				if ( validContents[ 0 ].metadata ) {
+
+					node.content.metadata = validContents[ 0 ].metadata;
+
+				}
+
+				// Add a reference to the metadata class if applicable
+
+				if ( contentTemplates[ 0 ].metadata ) {
+
+					node.metadata = contentTemplates[ 0 ].metadata;
+
+				}
 
 				// Any additional contents are added as synthetic children
 				// These children have 0 geometric error so they load / render at the same time as the parent
@@ -1281,7 +1541,8 @@ class Three3DTilesLoader extends Loader {
 							content: validContents[ i ],
 							boundingVolume: node.boundingVolume, // Inherit same volume
 							geometricError: 0,                   // Force immediate load
-							refine: "ADD"                        // Additive refinement
+							refine: "ADD",                       // Additive refinement
+							metadata: contentTemplates[ i ].metadata
 
 						});
 
@@ -1382,6 +1643,9 @@ class Three3DTilesLoader extends Loader {
 		scope._rootUrl = url;
 		const rootPath = url.substring( 0, url.lastIndexOf( '/' ) + 1 );
 
+		scope._variantLookup.clear();
+		scope._metadataLookup.length = 0;
+
 		const urlObj = new URL( url );
 
 		const params = urlObj.searchParams;
@@ -1400,6 +1664,22 @@ class Three3DTilesLoader extends Loader {
 
 			let json = await fetch( url ).then( r => r.json() );
 
+			const hasMetadata = !!(
+				json.metadata ||
+				json.schema ||
+				json.groups ||
+				json.root?.metadata ||
+				json.root?.contents?.some( c => c.metadata )
+			);
+
+			if ( hasMetadata ) {
+
+				scope._currentGroups = json.groups || [];
+				scope._currentSchema = json.schema || null;
+				scope._tilesetMetadata = json.metadata || null;
+
+			}
+
 			const json_transform = json.root.transform;
 
 			const tilesetVersion = json.asset?.version || null;
@@ -1417,7 +1697,7 @@ class Three3DTilesLoader extends Loader {
 			if ( isImplicit ) json = await scope._resolveImplicit( json, rootPath, level, x, y, z );
 
 			// Resolve Multiple Contents to make it OGC3DTile compatible
-			if ( json.root.contents ) await scope._flattenExplicitContents( json.root );
+			await scope._flattenExplicitContents( json.root, hasMetadata );
 
 			const ogc3DTile = await new Promise( resolve => {
 
@@ -1438,15 +1718,27 @@ class Three3DTilesLoader extends Loader {
 					loadingStrategy: isImplicit ? "IMMEDIATE" : "PERLEVEL",
 					queryParams: scope._keyAPI !== '' ? { key: scope._keyAPI } : undefined,
 					headers: scope._token ? { Authorization: `Bearer ${ scope._token }` } : undefined,
-					meshCallback: mesh => { mesh.material.wireframe = this._wireframeMode || false; },
+					meshCallback: mesh => {	mesh.material.wireframe = this._wireframeMode || false; },
 					pointsCallback: points => { points.material.size = this._pointTargetSize || 1.0; },
-					onLoadCallback: tileset => resolve( tileset )
+					onLoadCallback: tileset => { resolve( tileset ); }
 
 				});
 
 			});
 
 			ogc3DTile.tilesetVersion = tilesetVersion;
+
+			if ( hasMetadata ) {
+
+				ogc3DTile.hasMetadata = true;
+				ogc3DTile.userData.groups = scope._currentGroups;
+				ogc3DTile.userData.schema = scope._currentSchema;
+				ogc3DTile.userData.tileset = scope._tilesetMetadata;
+				ogc3DTile.userData.metadataRegistry = scope._metadataLookup;
+
+				console.log( 'Metadata Support: ENABLED' );
+
+			}
 
 			const obv = ogc3DTile.boundingVolume;
 
@@ -1557,6 +1849,7 @@ class Three3DTilesLoader extends Loader {
 				ogc3DTile.userData.rootPath = rootPath;
 				ogc3DTile.userData.hasMultipleContents = true;
 				ogc3DTile.userData.variantLookup = this._variantLookup;
+				ogc3DTile.userData.metadataLookup = this._metadataLookup;
 
 			}
 
