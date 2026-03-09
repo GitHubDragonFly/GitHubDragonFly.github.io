@@ -45,7 +45,7 @@
 
       // Unhandled Promise Rejections (Async Errors)
       window.addEventListener( 'unhandledrejection', function ( event ) {
-        console.warn( 'UNHANDLED PROMISE:', event.reason );
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
 
         // event.promise is the promise that failed
         // event.reason is usually the error object or message
@@ -54,13 +54,13 @@
       });
     </script>
 
-    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/"
         }
       }
     </script>
@@ -79,8 +79,9 @@
       var selected_url_file = '', directionalLight, isMobile;
       var lod_displayed = false, warning_displayed = false;
       var extended_render, extended_count = 0, count = 0;
-      var variants, variants_available, current_variant, box_helper_added;
-      var bounding_box, bbox_enabled, boxHelper, wireframe_enabled;
+      var variants, variants_available, current_variant;
+      var bounding_box, bbox_enabled, boxHelper, box_helper_added, wireframe_enabled;
+      var raycaster, mouse, selectedObject = null, pickedObject = null, click_listener_added = false;
       var url_displayed = false, keyAPI_displayed = false, token_displayed = false;
     </script>
 
@@ -96,17 +97,38 @@
 
       tiles_loader = new Three3DTilesLoader( manager );
 
-      gui_container = document.getElementById('gui_position');
-
-      // Override external CSS so we can have GUI in the top-right corner
-      gui_container.style.left = 'auto';         // Reset any left-side positioning
-      gui_container.style.right = '3px';         // Anchor to the right
-      gui_container.style.top = '2px';           // Anchor to the top
-      gui_container.style.marginLeft = '0px';    // Clear the 2px margin from your CSS
-
+      gui_container = document.getElementById('right_gui_position');
       gui = new GUI( { autoPlace: false, container: gui_container } );
       set_gui_position();
     </script>
+
+    <style>
+      #metadata-card {
+        position: absolute;
+        display: none; /* Hidden by default */
+        background: rgba(25, 25, 25, 0.9);
+        color: #fff;
+        padding: 12px;
+        border-radius: 8px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 13px;
+        min-width: 180px;
+        max-width: 90vw;
+        max-height: 70vh;    /* Limits height to 70% of the screen */
+        overflow-y: auto;    /* Enables vertical scroll */
+        border: 1px solid #444;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        pointer-events: auto;
+        z-index: 1000;
+      }
+
+      #metadata-card::-webkit-scrollbar { width: 6px; }
+      #metadata-card::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+      #metadata-card h4 { margin: 0 0 8px 0; color: #00d4ff; text-transform: uppercase; font-size: 11px; }
+      #metadata-card .prop-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+      #metadata-card .prop-label { color: #aaa; margin-right: 15px; }
+      #metadata-card .prop-value { font-weight: bold; color: #fff; }
+    </style>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
@@ -114,7 +136,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>3D Tiles Viewer (r182)</title>
+    <title>3D Tiles Viewer (r183)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -189,9 +211,10 @@
         </select>
       </div>
     </div>
-    <div id="gui_position"></div>
+    <div id="right_gui_position"></div>
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">3D Tiles Viewer</div>
+    <div id="metadata-card"></div>
 
     <script>
       function set_tiles_cache( val ) {
@@ -213,7 +236,8 @@
           lod_displayed = true;
 
           if (!warning_displayed) {
-            alert('3D data could eventually use a lot of memory.\nCache defines max number of tiles kept in ready state (default 100).\nDepth level defines how many subtrees are processed (default 1).\nSet proper cache & depth before loading the model.\nChanging cache & depth does not update already‑loaded model.');
+            alert( '3D data could eventually use a lot of memory.\nCache defines max number of tiles kept in ready state (default 100).\nDepth level defines how many subtrees are processed (default 1).\nSet proper cache & depth before loading the model.\nChanging cache & depth does not update already‑loaded model.');
+
             warning_displayed = true;
           }
         }
@@ -296,6 +320,8 @@
         window.addEventListener( 'pointerup', (event) => { mouse_down = false; mouse_wheel = true; }, false);
         window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
         window.addEventListener( 'keydown', ( event ) => {
+          if (event.key === 'Escape') hideUiPanel();
+
           if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
             controls.listenToKeyEvents( window );
             activeKeys.add( event.key ); // Track this key
@@ -510,7 +536,10 @@
           document.body.appendChild( renderer.domElement );
         }
 
-        if (clock === undefined) clock = new THREE.Clock();
+        if (clock === undefined) {
+          clock = new THREE.Timer();
+          clock.connect( document );
+        }
 
         if (scene === undefined) scene = new THREE.Scene();
 
@@ -533,7 +562,7 @@
         }
 
         if (controls === undefined) {
-          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+          const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
 
           controls = new OrbitControls( camera, renderer.domElement );
           controls.enableZoom = true;
@@ -694,6 +723,22 @@
           document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
         }
 
+        if (tileset_obj.hasMetadata) {
+          // Apply metadata to each mesh
+
+          await applyMetadataToLoadedTileset();
+
+          if (click_listener_added === false) {
+            window.addEventListener( 'click', handle_raycast_click );
+            click_listener_added = true;
+          }
+        } else {
+          if (click_listener_added) {
+            window.removeEventListener( 'click', handle_raycast_click );
+            click_listener_added = false;
+          }
+        }
+
         animations = tileset_obj.animations;
 
         if (animations.length > 0) {
@@ -728,7 +773,7 @@
 
         console.timeEnd( 'Loading Time' );
 
-        if (!isMobile) await new Promise( resolve => setTimeout( log_info(), 500 ) );
+        if (!isMobile) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
       function log_info() {
@@ -754,6 +799,253 @@
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
         document.getElementById('btn_load').disabled = false;
+      }
+
+      function handle_raycast_click() {
+        // Setup raycasting
+
+        if (!raycaster) raycaster = new THREE.Raycaster();
+        if (!mouse) mouse = new THREE.Vector2();
+
+        pickedObject = null;
+        let tilesetMetadataOnly = false;
+        const HIGHLIGHT_COLOR = new THREE.Color( 0xf08080 ); // light coral red
+
+        // 1. Calculate mouse position in normalized device coordinates
+
+        mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+        mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+
+        // 2. Raycast against the scene
+
+        raycaster.setFromCamera( mouse, camera );
+        const intersects = raycaster.intersectObjects( scene.children, true );
+
+        if (selectedObject) {
+          selectedObject?.material?.emissive?.setHex(0x000000);
+          selectedObject = null;
+        }
+
+        if (intersects.length === 0) {
+          document.getElementById('metadata-card').style.display = 'none';
+          return;
+        }
+
+        if (intersects.length > 0) {
+          pickedObject = intersects[ 0 ].object;
+          selectedObject = pickedObject;
+
+          // Check parents if the mesh itself is empty
+
+          if (!pickedObject.userData.metadata && pickedObject.parent) {
+            // Allow showing tileset info card
+            tilesetMetadataOnly = true;
+          }
+
+          if (selectedObject.material && selectedObject.material.emissive) {
+            selectedObject.material.emissive.copy( HIGHLIGHT_COLOR );
+          }
+
+          // 3. Get metadata directly from selected object
+
+          const data = pickedObject.userData.metadata;
+
+          if (data || tilesetMetadataOnly) {
+            showUiPanel( data, event, tiles_loader._currentSchema, pickedObject.name, tilesetMetadataOnly );
+          } else {
+            selectedObject?.material?.emissive?.setHex( 0x000000 );
+            selectedObject = null;
+            document.getElementById('metadata-card').style.display = 'none';
+          }
+        }
+      }
+
+      async function applyMetadataToLoadedTileset() {
+        if (!tileset_obj || !tileset_obj.userData) return;
+
+        const registry = tileset_obj.userData.metadataRegistry;
+        if (!registry || registry.length === 0) return;
+
+        // Traverse the entire 3D hierarchy once
+
+        tileset_obj.traverse( object => {
+          if (object.isMesh || object.isPoints) {
+            let internalURL = null;
+            let curr = object;
+
+            // Climb parents until we find the loader's contentURL
+
+            while (curr) {
+              if (curr.contentURL) {
+                internalURL = curr.contentURL;
+                break;
+              }
+
+              curr = curr.parent;
+            }
+
+            if (internalURL) {
+              const cleanURL = internalURL[ 0 ].split( '?' )[ 0 ].toLowerCase();
+
+              // Direct URI matching
+
+              const match = registry.find( entry => 
+                cleanURL.endsWith( entry.uri.toLowerCase() )
+              );
+
+              if (match) {
+                if (!object.userData.metadata) object.userData.metadata = {};
+                object.userData.metadata[ 'tileset' ] = tileset_obj.userData.tileset;
+                object.userData.metadata[ 'schema' ] = tileset_obj.userData.schema;
+
+                object.userData.metadata[ 'content' ] = match.metadataContent;
+                object.userData.metadata[ 'tile' ] = match.metadataTile;
+
+                // Link the Group if it exists
+
+                if (match.groupIndex !== null && tileset_obj.userData.groups?.[ match.groupIndex ]) {
+                  object.userData.metadata[ 'group' ] = tileset_obj.userData.groups?.[ match.groupIndex ];
+                }
+              }
+            }
+          }
+        });
+
+        console.log("Metadata mapping complete for all loaded meshes.");
+      }
+
+      function showUiPanel( data, event, schema = null, meshName = '', tilesetMetadataOnly = false ) {
+        const card = document.getElementById('metadata-card');
+        if (!card) return;
+
+        // Enhanced resolver to handle the complex types in your new JSON
+
+        const resolveValue = ( className, propName, val ) => {
+          // Convert BigInt to string immediately to avoid math errors or render crashes
+          const sanitize = ( v ) => typeof v === 'bigint' ? v.toString() : v;
+
+          if (!schema?.classes?.[ className ]) return sanitize( val );
+
+          const propDef = schema.classes[ className ].properties?.[ propName ];
+
+          // 1. Handle Enums
+
+          if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
+            const enumType = schema.enums[ propDef.enumType ];
+            const match = enumType.values.find( v => sanitize( v.value ) === sanitize( val ) );
+            return match ? match.name : sanitize( val );
+            //const match = enumType.values.find( v => v.value === val || v.name === val );
+            //return match ? match.name : val;
+          }
+
+          // 2. Handle Booleans (ensures 'false' is visible)
+
+          if (propDef?.type === 'BOOLEAN') {
+            return val ? 'Yes' : 'No';
+          }
+
+          // 3. Handle Arrays (fixed or variable length)
+
+          if (Array.isArray( val )) {
+            const formatItem = ( item ) => {
+              if (Array.isArray( item )) return `[ ${ item.map( formatItem ).join( ', ' ) } ]`; // Recursive for VEC/MAT
+              if (typeof item === 'boolean') return item ? 'Yes' : 'No';
+              return sanitize( item );
+            };
+
+            return `[ ${ val.map( formatItem ).join( ', ' ) } ]`;
+          }
+
+          return sanitize( val );
+        };
+
+        // 1. Tileset Metadata - Maybe entries like author, date, tile count...
+
+        const tileset = tilesetMetadataOnly ? tileset_obj.userData.tileset : data?.tileset;
+
+        let html = `
+          <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+            <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${tileset?.class || 'Tileset Metadata: None'}</div>
+          </div>`;
+
+        if (tileset?.properties) {
+          for ( const [ key, val ] of Object.entries( tileset.properties || {} ) ) {
+            const display = resolveValue( tileset.class, key, val );
+            html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+          }
+        }
+
+        if (!tilesetMetadataOnly) {
+          html += `<br>`;
+
+          // 2. Tile Metadata - Maybe entries like district, population...
+
+          html += `
+            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.tile?.class || 'Tile Metadata: None'}</div>
+            </div>`;
+
+          if (data.tile?.properties) {
+            for ( const [ key, val ] of Object.entries( data.tile.properties || {} ) ) {
+              const display = resolveValue( data.tile.class, key, val );
+              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+            }
+          }
+
+          html += `<br>`;
+
+          // 3. Selected Object
+
+          html += `<div style="font-size: 12px; font-weight: bold; color: #fff; line-height: 1.0;">Selected: ${meshName}</div><br>`;
+
+          // 4. Group Metadata - Maybe entries like color, priority...
+
+          html += `
+            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.group?.class || 'Group Metadata: None'}</div>
+            </div>`;
+
+          if (data.group?.properties) {
+            for ( const [ key, val ] of Object.entries( data.group.properties || {} ) ) {
+              const display = resolveValue( data.group.class, key, val );
+              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+            }
+          }
+
+          html += `<br>`;
+
+          // 5. Content Metadata - Maybe entries like vertices, materials...
+
+          html += `
+            <div style="border-bottom: 1px solid #555; margin-bottom: 8px; padding-bottom: 6px;">
+              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.content?.class || 'Content Metadata: None'}</div>
+            </div>`;
+
+          if (data.content?.properties) {
+            for ( const [ key, val ] of Object.entries( data.content.properties || {} ) ) {
+              const display = resolveValue( data.content.class, key, val );
+              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+            }
+          }
+        }
+
+        card.innerHTML = html;
+        card.style.display = 'block';
+
+        // 6. Position Logic
+
+        const cardWidth = 220; 
+        let x = event.clientX + 15;
+        let y = event.clientY + 15;
+        if (x + cardWidth > window.innerWidth) x = event.clientX - cardWidth - 15;
+
+        card.style.left = x + 'px';
+        card.style.top = y + 'px';
+      }
+
+      function hideUiPanel() {
+        const card = document.getElementById('metadata-card');
+        if (card) card.style.display = 'none';
       }
 
       function set_bounding_box() {
@@ -784,7 +1076,7 @@
           needsRender = true;
       }
 
-      function render() {
+      function render( timestamp ) {
         if (tileset_obj) {
           // Check if the tileset is still streaming data
           const is_loading = tileset_obj.getStreamingInfo();
@@ -792,7 +1084,10 @@
           if (animation_running || mouse_down || mouse_wheel || needsRender || extended_render || is_loading) {
             if (stats_enabled) stats.begin();
 
-            if (animation_running) animation_mixer.update( clock.getDelta() );
+            if (animation_running) {
+              clock.update( timestamp );
+              animation_mixer.update( clock.getDelta() );
+            }
 
             controls.update();
 
@@ -832,13 +1127,15 @@
           }
         }
 
-        if (render_requested === true) requestAnimationFrame( render );
+        if (render_requested) requestAnimationFrame( render );
       }
 
       async function reset_all( reset = false ) {
         if (stats) stats.dom.style.visibility = 'hidden';
         document.getElementById('back_color').value = '#000000';
         document.getElementById('btn_stats').style.backgroundColor = 'transparent';
+        document.getElementById('btn_variants').style.backgroundColor = 'transparent';
+          document.getElementById('btn_variants').style.display = 'none';
 
         init_running = false;
 
@@ -858,7 +1155,6 @@
           document.getElementById('btn_token').style.backgroundColor = 'transparent';
           document.getElementById('btn_keyAPI').style.backgroundColor = 'transparent';
           document.getElementById('btn_animate').style.backgroundColor = 'transparent';
-          document.getElementById('btn_variants').style.backgroundColor = 'transparent';
 
           if (scene) {
             if (tileset_obj) await scene_cleanup();
@@ -873,7 +1169,6 @@
             renderer.dispose();
           }
 
-          document.getElementById('btn_variants').style.display = 'none';
           document.getElementById('btn_animate').style.display = 'none';
           document.getElementById('div_error').style.display = 'none';
           document.getElementById('keyAPI_entry').value = '';
@@ -891,6 +1186,8 @@
         if (!tileset_obj) return;
 
         mouse_wheel = true;
+
+        hideUiPanel();
 
         if (bbox_enabled) await set_bounding_box();
         if (wireframe_enabled) await set_wireframe();
@@ -917,6 +1214,12 @@
 
         renderer.clear();
         render_requested = false;
+
+        if (clock) {
+          clock.disconnect();
+          clock.dispose();
+          clock = undefined;
+        }
 
         if (tileset_obj.dispose) tileset_obj.dispose();
         if (boxHelper) boxHelper.dispose();
@@ -962,7 +1265,7 @@
         document.getElementById('cache_level').selectedIndex = 0;
         document.getElementById('depth_level').selectedIndex = 0;
 
-        alert('After loading some 3D Tiles, if bounding box is visible but no content shows up then:\n- Those features require API Key or token\n- Those features are not implemented\n- Those features are not supported by internal loader\n  - Only B3DM and GLTF/GLB formats are supported\n- Check console for any silent errors');
+        alert('After loading some 3D Tiles, if bounding box is visible but no content shows up then:\n- The model might be in a land far far away\n- Its features require API Key or token\n- Its features are not implemented\n- Its features are not supported by internal loader\n  - Only B3DM and GLTF/GLB formats are supported\n- Check console for any silent errors');
       }
 
       function disabled_changed() {
