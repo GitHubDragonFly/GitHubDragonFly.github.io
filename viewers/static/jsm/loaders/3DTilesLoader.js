@@ -1848,8 +1848,7 @@ class Three3DTilesLoader extends Loader {
 
 				ogc3DTile.userData.rootPath = rootPath;
 				ogc3DTile.userData.hasMultipleContents = true;
-				ogc3DTile.userData.variantLookup = this._variantLookup;
-				ogc3DTile.userData.metadataLookup = this._metadataLookup;
+				ogc3DTile.userData.variantLookup = scope._variantLookup;
 
 			}
 
