@@ -52,7 +52,7 @@ class Three3DTilesLoader extends Loader {
 		this._keyAPI = '';
 		this._token = '';
 
-		this._maxDepthLevel = 1;
+		this._maxDepthLevel = 4;
 		this._variantLookup = new Map();
 		this._metadataLookup = [];
 
@@ -1197,16 +1197,17 @@ class Three3DTilesLoader extends Loader {
 
 	/**
 	 * Reads a value (or array of values) from a binary buffer based on the 3D Tiles metadata spec.
+	 * Uses DataView relative to the binary's byteOffset to ensure correct alignment within the subtree.
 	 *
-	 * @param {ArrayBuffer} buffer - The source binary data.
-	 * @param {number} offset - The starting byte offset in the buffer.
-	 * @param {string} type - The element type (e.g., 'SCALAR', 'VEC3').
-	 * @param {string} componentType - The component data type (e.g., 'FLOAT32').
-	 * @returns {number|BigInt|Array|null} A single value for SCALAR types, or an array for VEC/MAT types.
+	 * @param {Uint8Array} binary - The binary chunk from the .subtree file (sliced to start after JSON).
+	 * @param {number} offset - The byte offset within the binary chunk.
+	 * @param {string} type - The element type (e.g., 'SCALAR', 'VEC3', 'MAT4').
+	 * @param {string} componentType - The component data type (e.g., 'FLOAT32', 'UINT32').
+	 * @returns {number|BigInt|Array|null} A single value for SCALAR, or an array for VEC/MAT.
 	 */
-	_readBinaryValue( buffer, offset, type, componentType ) {
+	_readBinaryValue( binary, offset, type, componentType ) {
 
-		const view = new DataView( buffer );
+		const view = new DataView( binary.buffer, binary.byteOffset, binary.byteLength );
 		const typeMap = { 'SCALAR': 1, 'VEC2': 2, 'VEC3': 3, 'VEC4': 4, 'MAT2': 4, 'MAT3': 9, 'MAT4': 16 };
 		const numComponents = typeMap[ type ] || 1;
 
@@ -1242,18 +1243,25 @@ class Three3DTilesLoader extends Loader {
 	}
 
 	/**
-	 * Extracts metadata for a specific tile or feature from a v1.1 Property Table.
+	 * Extracts metadata for a specific tile or content from a v1.1 Property Table.
+	 * Maps the property definitions from the Schema against the binary data in the Subtree.
 	 *
-	 * @param {number} metadataIndex - The index of the property table within the subtree.
-	 * @param {number} mortonIndex - The Morton index (Z-order) of the tile within the current subtree.
+	 * @param {number} tableIndex - The index of the property table within subtreeJson.propertyTables.
+	 * @param {number} rowIndex - The specific row to read (e.g., mortonIndex * numContents + layerIdx).
 	 * @param {Object} subtreeJson - The parsed JSON descriptor of the subtree.
-	 * @param {ArrayBuffer} binary - The binary buffer containing the property values.
-	 * @returns {Object|null} An object containing the class name and property values, or null if not found.
+	 * @param {Uint8Array} binary - The binary chunk of the subtree.
+	 * @param {Object} schema - The 3D Tileset schema containing class and property definitions.
+	 * @returns {Object|null} The extracted properties mapped by name, or null if schema/table is missing.
 	 */
-	_extractPropertyTableMetadata( metadataIndex, mortonIndex, subtreeJson, binary ) {
+	_extractPropertyTableMetadata( tableIndex, rowIndex, subtreeJson, binary, schema ) {
 
-		const table = subtreeJson.propertyTables[ metadataIndex ];
-		if ( !table ) return null;
+		const table = subtreeJson.propertyTables[ tableIndex ];
+		if ( !table || !schema ) return null;
+
+		// Get the class definition from the schema
+
+		const classDef = schema.classes[ table.class ];
+		if ( !classDef ) return null;
 
 		const metadata = {
 			class: table.class,
@@ -1262,12 +1270,20 @@ class Three3DTilesLoader extends Loader {
 
 		for ( const [ propName, propDef ] of Object.entries( table.properties ) ) {
 
+			// Look up the actual data types from the schema
+
+			const schemaProp = classDef.properties[ propName ];
+			const type = schemaProp.type; // e.g., "SCALAR"
+			const componentType = schemaProp.componentType; // e.g., "UINT32"
+
 			const bufferViewIdx = propDef.values;
 			const view = subtreeJson.bufferViews[ bufferViewIdx ];
 
-			// Check if this is a variable-length property (like a String)
+			// ... String/Variable logic ...
 
 			if ( propDef.arrayOffsets !== undefined ) {
+
+				// VARIABLE-LENGTH LOGIC
 
 				const offsetViewIdx = propDef.arrayOffsets;
 				const offsetBufferView = subtreeJson.bufferViews[ offsetViewIdx ];
@@ -1278,8 +1294,8 @@ class Three3DTilesLoader extends Loader {
 				const offsetType = propDef.offsetComponentType || 'UINT32';
 				const offsetSize = this._getComponentSize( offsetType );
 
-				const startByte = this._readBinaryValue( binary, offsetBufferView.byteOffset + ( mortonIndex * offsetSize ), 'SCALAR', offsetType );
-				const endByte = this._readBinaryValue( binary, offsetBufferView.byteOffset + ( ( mortonIndex + 1 ) * offsetSize ), 'SCALAR', offsetType );
+				const startByte = this._readBinaryValue( binary, offsetBufferView.byteOffset + ( rowIndex * offsetSize ), 'SCALAR', offsetType );
+				const endByte = this._readBinaryValue( binary, offsetBufferView.byteOffset + ( ( rowIndex + 1 ) * offsetSize ), 'SCALAR', offsetType );
 
 				// 2. Slice the actual data buffer using these offsets
 
@@ -1291,16 +1307,19 @@ class Three3DTilesLoader extends Loader {
 
 			} else {
 
-				// Standard fixed-width logic
+				// FIXED-WIDTH LOGIC (SCALAR, VEC, etc.)
 
-				const stride = this._getStride( propDef.type, propDef.componentType );
-				const byteOffset = view.byteOffset + ( mortonIndex * stride );
+				const stride = this._getStride( type, componentType );
 
-				metadata.properties[ propName ] = this._readBinaryValue( 
+				// USE rowIndex (which is (index * 2) + layerIdx)
+
+				const byteOffset = view.byteOffset + ( rowIndex * stride );
+
+				metadata.properties[ propName ] = this._readBinaryValue(
 					binary,
 					byteOffset,
-					propDef.type,
-					propDef.componentType 
+					type,
+					componentType
 				);
 
 			}
@@ -1312,69 +1331,33 @@ class Three3DTilesLoader extends Loader {
 	}
 
 	/**
-	 * Resolves an implicit 3D Tiles tileset (using implicit tiling) into an explicit
-	 * tileset structure that the Three3DTilesLoader can consume.
+	 * Resolves an implicit 3D Tileset into an explicit structure.
 	 *
-	 * This function:
-	 *  - Will be limited by the selected Depth Level
-	 *  - Determines the correct subtree for the current tile (based on level/x/y/z)
-	 *  - Fetches and parses the subtree binary + JSON
-	 *  - Reads availability bitstreams (tile/content/child-subtree)
-	 *  - Recursively expands implicit tiles into explicit tile nodes
-	 *  - Computes child bounding volumes and geometric errors
-	 *  - Generates explicit content URIs using template replacement
-	 *
-	 * The result is a fully explicit `{ asset, root }` tileset object.
+	 * This core recursive function translates Implicit Tiling (3D Tiles 1.1) into a 
+	 * standard explicit tree. It handles subtree fetching, availability bitstream 
+	 * parsing, Morton Z-order indexing, and multi-content layering.
 	 *
 	 * @async
-	 * @param {Object} json - The original tileset JSON.
-	 * @param {string} path - The URL from which the tileset JSON was loaded.
-	 * @param {number} [level=0] The current implicit tile level. Level 0 corresponds to the root tile.
-	 * @param {number} [x=0] The implicit tile's X coordinate within its level.
-	 * @param {number} [y=0] The implicit tile's Y coordinate within its level.
-	 * @param {number} [z=0] The implicit tile's Z coordinate (only used for OCTREE subdivision).
-	 * @returns {Promise<Object>} A promise resolving to an explicit tileset object:
+	 * @param {Object} json - The original tileset JSON containing `implicitTiling` metadata.
+	 * @param {string} rootPath - The base URL for resolving relative subtree and content URIs.
+	 * @param {number} [level=0] - The current global subdivision level.
+	 * @param {number} [x=0] - The global X coordinate in the quadtree/octree grid.
+	 * @param {number} [y=0] - The global Y coordinate.
+	 * @param {number} [z=0] - The global Z coordinate (used only for OCTREE).
+	 * @param {boolean} [hasMultipleContent=false] - Whether the tileset uses the 1.1 `contents` array.
+	 * @returns {Promise<Object>} A promise resolving to an explicit { asset, root } object.
 	 *
 	 * @description
-	 * ### How it works
-	 *
-	 * **1. Detect implicit tiling**
-	 * If the tileset does not use implicit tiling, the function returns the JSON unchanged.
-	 *
-	 * **2. Determine subtree root**
-	 * Each subtree spans `subtreeLevels` implicit levels. The function computes the
-	 * subtree root level and derives the subtree's (x, y, z) coordinates relative to it.
-	 *
-	 * **3. Fetch and parse the subtree**
-	 * Loads the subtree binary, extracts:
-	 *  - `tileAvailability`
-	 *  - `contentAvailability`
-	 *  - `childSubtreeAvailability`
-	 *
-	 * These availability bitstreams determine which tiles exist, which have content,
-	 * and which spawn new subtrees.
-	 *
-	 * **4. Recursively build explicit nodes**
-	 * For each tile inside the subtree:
-	 *  - Compute its Morton index (2D for QUADTREE, 3D for OCTREE)
-	 *  - Check tile availability
-	 *  - Compute bounding volume subdivision
-	 *  - Compute geometric error reduction
-	 *  - Generate content URI if available
-	 *
-	 * **5. Handle subtree boundaries**
-	 * When reaching the last level of a subtree, the function checks
-	 * `childSubtreeAvailability` and recursively loads the next subtree if present.
-	 *
-	 * This continues until all reachable implicit tiles are expanded.
-	 *
-	 * ### Notes
-	 * - This function is the core of implicit → explicit conversion.
-	 * - It ensures compatibility with loaders that only support explicit tilesets.
-	 * - It preserves all geometric error and bounding volume semantics defined by the
-	 *   implicit tiling specification.
+	 * ### Key Mechanisms:
+	 * 1. **Subtree Alignment**: Calculates the subtree root level to fetch the correct `.subtree` file.
+	 * 2. **Morton Indexing**: Maps 2D/3D coordinates to a linear bitstream index within the subtree.
+	 * 3. **Availability Mapping**: Uses `tileAvailability` and `contentAvailability` to prune empty tiles.
+	 * 4. **1.1 Multi-Content Support**: Handles `contents` arrays by creating synthetic children with 
+	 * `geometricError: 0` to ensure all variants load simultaneously.
+	 * 5. **Subtree Boundary Traversal**: Detects when a tile is a subtree leaf and triggers 
+	 * a new subtree fetch to continue expansion.
 	 */
-	async _resolveImplicit( json, rootPath, level = 0, x = 0, y = 0, z = 0 ) {
+	async _resolveImplicit( json, rootPath, level = 0, x = 0, y = 0, z = 0, hasMultipleContent = false ) {
 
 		const root = json.root;
 		const implicit = root?.implicitTiling || json.implicitTiling;
@@ -1409,10 +1392,11 @@ class Three3DTilesLoader extends Loader {
 				subtreeJson.subtreeMetadata,
 				0, // Subtree metadata usually only has one row (index 0)
 				subtreeJson,
-				binary
+				binary,
+				json.schema
 			);
 
-			// You could store this or attach it to the root of the subtree
+			// Store this or attach it to the root of the subtree
 
 		}
 
@@ -1424,7 +1408,7 @@ class Three3DTilesLoader extends Loader {
 
 		const tileBits = this._getAvailability( subtreeJson, subtreeJson.tileAvailability, binary );
 
-		const contentBitLayers = subtreeJson.contentAvailability.map( avail => 
+		const contentBitLayers = ( subtreeJson.contentAvailability || [] ).map( avail => 
 
 			this._getAvailability( subtreeJson, avail, binary )
 
@@ -1432,16 +1416,49 @@ class Three3DTilesLoader extends Loader {
 
 		// Identify content templates (plural for 1.1, fallback to singular for 1.0)
 
-		const contentTemplates = root.contents || ( root.content ? [ root.content ] : [] );
+		let contentTemplates = [];
+
+		if ( root.contents ) {
+
+			contentTemplates = Array.isArray( root.contents ) ? root.contents : [ root.contents ];
+
+		} else if ( root.content ) {
+
+			contentTemplates = [ root.content ];
+
+		}
 
 		const buildNode = async ( lvl, cx, cy, cz ) => {
 
 			// This stops building children if we have reached 1 level deeper than the start level
 
 			const currentDepthRelativeToStart = lvl - level;
-			const maxAllowedDepth = this._maxDepthLevel;
 
-			const index = this._computeMortonIndex( lvl, cx, cy, cz || 0, subtreeRootLevel, isQuadtree );
+			if ( currentDepthRelativeToStart >= subtreeLevels ) {
+
+				return ( await this._resolveImplicit( json, rootPath, lvl, cx, cy, cz ) ).root;
+
+			}
+
+			// 2. Compute the Local Morton Index for 3D Tiles 1.1
+			// We need local coordinates within the subtree (0 to 2^relativeLevel - 1)
+
+			const mask = ( 1 << currentDepthRelativeToStart ) - 1;
+			const localX = cx & mask;
+			const localY = cy & mask;
+			const localZ = cz & mask;
+
+			// Level Offset formula: (childCount^relativeLevel - 1) / (childCount - 1)
+
+			const levelOffset = Math.floor( ( Math.pow( childCount, currentDepthRelativeToStart ) - 1 ) / ( childCount - 1 ) );
+
+			const mortonCode = isQuadtree 
+				? this._morton2D( localX, localY )
+				: this._morton3D( localX, localY, localZ );
+
+			const index = levelOffset + mortonCode;
+
+			const maxAllowedDepth = this._maxDepthLevel;
 
 			let resolvedTileMetadata = null;
 
@@ -1452,7 +1469,13 @@ class Three3DTilesLoader extends Loader {
 				// Use helper to extract values from the binary property table 
 				// based on the Morton index
 
-				resolvedTileMetadata = this._extractPropertyTableMetadata( subtreeJson.tileMetadata, index, subtreeJson, binary );
+				resolvedTileMetadata = this._extractPropertyTableMetadata(
+					subtreeJson.tileMetadata,
+					index,
+					subtreeJson,
+					binary,
+					json.schema
+				);
 
 			}
 
@@ -1472,23 +1495,57 @@ class Three3DTilesLoader extends Loader {
 
 					// Apply template to get the actual URI
 
-					const template_uri = this._replaceTemplate( template.uri, lvl, cx, cy, isQuadtree ? 0 : cz );
-
+					let template_uri = this._replaceTemplate( template.uri, lvl, cx, cy, isQuadtree ? 0 : cz );
 					const uri = rootPath + template_uri;
 
-					// Map metadata or variant info if needed for lookup
+					// Clean URI for lookup keys (remove leading slash)
 
-					if ( template_uri.startsWith( '/' ) ) {
+					const lookupKey = template_uri.startsWith( '/' ) ? template_uri.substring( 1 ) : template_uri;
 
-						template_uri = template_uri.substring( 1 );
+					// 2. Metadata Logic
+
+					let specificMetadata = null;
+
+					if ( subtreeJson.tileMetadata !== undefined ) {
+
+						// Mapping: (MortonIndex * TotalLayers) + CurrentLayer
+
+						const metadataIndex = ( index * contentTemplates.length ) + layerIdx;
+
+						specificMetadata = this._extractPropertyTableMetadata(
+							subtreeJson.tileMetadata, 
+							metadataIndex, 
+							subtreeJson, 
+							binary,
+							json.schema
+						);
 
 					}
 
-					this._variantLookup.set( template_uri, layerIdx );
+					// 3. Populate Lookups
+
+					this._variantLookup.set( lookupKey, layerIdx );
+
+					if ( specificMetadata ) {
+
+						// Push to metadataLookup so the picker can find it by URI
+
+						this._metadataLookup.push({
+
+							uri: lookupKey,
+							metadataContent: null,
+							metadataTile: specificMetadata,
+							groupIndex: null
+
+						});
+
+					}
 
 					validContents.push({
+
 						uri: uri,
-						metadata: template.metadata
+						metadata: specificMetadata
+
 					});
 
 				}
@@ -1499,7 +1556,7 @@ class Three3DTilesLoader extends Loader {
 
 				boundingVolume: this._computeChildBoundingVolume( root.boundingVolume, cx, cy, cz, isQuadtree ),
 				geometricError: root.geometricError / Math.pow( 2, lvl ),
-				refine: root.refine || "REPLACE",
+				refine: hasMultipleContent ? "ADD" : root.refine || "REPLACE",
 				metadata: resolvedTileMetadata,
 				children: []
 
@@ -1554,7 +1611,7 @@ class Three3DTilesLoader extends Loader {
 
 			// 5. Handle Subtree Traversal
 
-			const isSubtreeLeaf = ( lvl + 1 ) % subtreeLevels === 0;
+			const isSubtreeLeaf = ( lvl + 1 - subtreeRootLevel ) % subtreeLevels === 0;
 			const nextLevel = lvl + 1;
 
 			if ( nextLevel < implicit.availableLevels && currentDepthRelativeToStart < maxAllowedDepth ) {
@@ -1569,8 +1626,11 @@ class Three3DTilesLoader extends Loader {
 
 					if ( isSubtreeLeaf ) {
 
-						const relativeLevel = nextLevel - subtreeRootLevel;
-						const mask = ( 1 << relativeLevel ) - 1;
+						// Check if a child subtree exists at this leaf position
+						const mask = ( 1 << subtreeLevels ) - 1;
+
+						//const relativeLevel = nextLevel - subtreeRootLevel;
+						//const mask = ( 1 << relativeLevel ) - 1;
 
 						const leafIndex = isQuadtree 
 							? this._morton2D( nx & mask, ny & mask ) 
@@ -1689,12 +1749,12 @@ class Three3DTilesLoader extends Loader {
 
 			const hasMultiExplicit = json.root.contents?.length > 1;
 			const hasMultiImplicit = isImplicit && 
-				json.root.implicitTiling.contentAvailability?.length > 1;
+				( json.root.implicitTiling.contentAvailability?.length > 1 || json.root.implicitTiling.multipleContents );
 
 			const hasMulti = hasMultiExplicit || hasMultiImplicit;
 
 			// Resolve Implicit Tiling first (last param after 'z' is userMaxDepth = Infinity)
-			if ( isImplicit ) json = await scope._resolveImplicit( json, rootPath, level, x, y, z );
+			if ( isImplicit ) json = await scope._resolveImplicit( json, rootPath, level, x, y, z, hasMulti );
 
 			// Resolve Multiple Contents to make it OGC3DTile compatible
 			await scope._flattenExplicitContents( json.root, hasMetadata );
@@ -1719,7 +1779,13 @@ class Three3DTilesLoader extends Loader {
 					queryParams: scope._keyAPI !== '' ? { key: scope._keyAPI } : undefined,
 					headers: scope._token ? { Authorization: `Bearer ${ scope._token }` } : undefined,
 					meshCallback: mesh => {	mesh.material.wireframe = this._wireframeMode || false; },
-					pointsCallback: points => { points.material.size = this._pointTargetSize || 1.0; },
+					pointsCallback: points => {
+						points.material.size = this._pointTargetSize || 1.0;
+
+						if ( points.name.startsWith( 'mesh_' ) ) {
+							points.name = points.name.replace( 'mesh', 'points' );
+						}
+					},
 					onLoadCallback: tileset => { resolve( tileset ); }
 
 				});
@@ -1728,7 +1794,7 @@ class Three3DTilesLoader extends Loader {
 
 			ogc3DTile.tilesetVersion = tilesetVersion;
 
-			if ( hasMetadata ) {
+			if ( hasMetadata || scope._metadataLookup.length > 0 ) {
 
 				ogc3DTile.hasMetadata = true;
 				ogc3DTile.userData.groups = scope._currentGroups;
@@ -1737,6 +1803,18 @@ class Three3DTilesLoader extends Loader {
 				ogc3DTile.userData.metadataRegistry = scope._metadataLookup;
 
 				console.log( 'Metadata Support: ENABLED' );
+
+			}
+
+			if ( hasMulti ) {
+
+				// Flag for the viewer.
+				// Currently all contents will be visible so have the viewer set correct visibility.
+				// The viewer can traverse children and set visibility by using userData.variantLookup
+
+				ogc3DTile.hasMultipleContents = true;
+				ogc3DTile.userData.rootPath = rootPath;
+				ogc3DTile.userData.variantLookup = scope._variantLookup;
 
 			}
 
@@ -1839,18 +1917,6 @@ class Three3DTilesLoader extends Loader {
 			// Store it for later
 
 			ogc3DTile.boundingBox = box;
-
-			if ( hasMulti ) {
-
-				// Flag for the viewer.
-				// Currently all contents will be visible so have the viewer set correct visibility.
-				// The viewer can traverse children and set visibility by using userData.variantLookup
-
-				ogc3DTile.userData.rootPath = rootPath;
-				ogc3DTile.userData.hasMultipleContents = true;
-				ogc3DTile.userData.variantLookup = scope._variantLookup;
-
-			}
 
 			/**
 			 * Internal state for wireframe rendering.
