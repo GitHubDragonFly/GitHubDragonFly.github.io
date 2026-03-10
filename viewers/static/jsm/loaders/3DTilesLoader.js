@@ -64,12 +64,12 @@ class Three3DTilesLoader extends Loader {
 		this._maxCacheSize = 100;
 
 		this._dracoLoader = new DRACOLoader();
-		this._dracoLoader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/libs/draco/" );
+		this._dracoLoader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/libs/draco/" );
 		this._dracoLoader.setDecoderConfig( { type: 'js' } );
 		this._dracoLoader.preload();
 
 		this._ktx2Loader = new KTX2Loader();
-		this._ktx2Loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/libs/basis/" );
+		this._ktx2Loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/libs/basis/" );
 
 	}
 
@@ -1596,9 +1596,9 @@ class Three3DTilesLoader extends Loader {
 						node.children.push({
 
 							content: validContents[ i ],
-							boundingVolume: node.boundingVolume, // Inherit same volume
-							geometricError: 0,                   // Force immediate load
-							refine: "ADD",                       // Additive refinement
+							boundingVolume: node.boundingVolume,     // Inherit same volume
+							geometricError: 0,                       // Force immediate load
+							refine: "ADD",                           // Additive refinement
 							metadata: contentTemplates[ i ].metadata
 
 						});
