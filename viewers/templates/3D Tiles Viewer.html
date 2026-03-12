@@ -60,7 +60,8 @@
       {
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/"
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/",
+          "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/"
         }
       }
     </script>
@@ -78,10 +79,10 @@
       var last_tile, last_level, last_uuid, params, halt_on_error;
       var selected_url_file = '', directionalLight, isMobile;
       var lod_displayed = false, warning_displayed = false;
-      var extended_render, extended_count = 0, count = 0;
+      var extended_render, extended_count = 0, count = 0, featureId_canvas;
       var variants, variants_available, current_variant, click_listener_added = false;
       var bounding_box, bbox_enabled, boxHelper, box_helper_added, wireframe_enabled;
-      var raycaster, mouse, raycastableObjects, selectedObject, pickedObject;
+      var raycaster, mouse, mouseDownPos, raycastableObjects, featureHighlightMesh, selectedObject, pickedObject;
       var url_displayed = false, keyAPI_displayed = false, token_displayed = false;
     </script>
 
@@ -316,8 +317,12 @@
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
         const activeKeys = new Set();
 
-        window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
-        window.addEventListener( 'pointerup', (event) => { mouse_down = false; mouse_wheel = true; }, false);
+        window.addEventListener( 'pointerdown', ( event ) => {
+          mouse_down = true;
+          mouseDownPos.x = event.clientX;
+          mouseDownPos.y = event.clientY;
+        }, false);
+        window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; mouse_wheel = true; }, false);
         window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
         window.addEventListener( 'keydown', ( event ) => {
           if (event.key === 'Escape') hideUiPanel();
@@ -513,12 +518,15 @@
         extended_render = false;
         render_requested = false;
         raycastableObjects = [];
+        featureId_canvas = null;
         variants = null;
         current_variant = 0;
         variants_available = false;
         wireframe_enabled = false;
         box_helper_added = false;
         bounding_box = new THREE.Box3();
+        featureHighlightMesh = null;
+        mouseDownPos = { x: 0, y: 0 };
 
         if (!params) params = { brightness: 2.5, pointSize: 1.0, multiplier: 0.5, bias: 1.0 };
 
@@ -695,29 +703,6 @@
         gui_container.style.display = 'block';
         set_gui_position();
 
-        if (tileset_obj.hasMultipleContents) {
-          variants_available = true;
-          variants = tileset_obj.userData.contentsVariants;
-          document.getElementById('btn_variants').innerText = 'V0';
-          document.getElementById('btn_variants').style.display = 'inline-block';
-          document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
-        }
-
-        if (tileset_obj.hasMetadata) {
-          // Apply metadata to each mesh
-          await applyMetadataToLoadedTileset();
-
-          if (click_listener_added === false) {
-            window.addEventListener( 'click', handle_raycast_click );
-            click_listener_added = true;
-          }
-        } else {
-          if (click_listener_added) {
-            window.removeEventListener( 'click', handle_raycast_click );
-            click_listener_added = false;
-          }
-        }
-
         let points_present_and_visible = false;
 
         // Get the root path
@@ -728,6 +713,15 @@
         tileset_obj.traverse( ( child ) => {
           if (child.isLineSegments && ( child.parent.bbox?.uuid === child.uuid )) bbox_found = true;
           else if (child.isMesh || child.isPoints || child.isLine) {
+            if (child.isMesh && child.userData.gltfExtensions) {
+              // Currently only EXT_mesh_features with attributes is partially functional
+              const ext = child.userData.gltfExtensions.EXT_mesh_features;
+
+              if (ext && ext.featureIds && !ext.featureIds.find( f => f.texture !== undefined )) {
+                tileset_obj.hasGLTFExtensions = true;
+              }
+            }
+
             if (tileset_obj.hasMultipleContents) {
               let fullURL = child.parent?.contentURL || child.parent?.parent?.contentURL || '';
 
@@ -755,6 +749,26 @@
           boxHelper = new THREE.Box3Helper( tileset_obj.boundingBox, 0xFFFF00 );
           box_helper_added = true;
           scene.add( boxHelper );
+        }
+
+        if (tileset_obj.hasMultipleContents) {
+          variants_available = true;
+          variants = tileset_obj.userData.contentsVariants;
+          document.getElementById('btn_variants').innerText = 'V0';
+          document.getElementById('btn_variants').style.display = 'inline-block';
+          document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
+        }
+
+        if (tileset_obj.hasMetadata || tileset_obj.hasGLTFExtensions) {
+          if (click_listener_added === false) {
+            window.addEventListener( 'click', handle_raycast_click );
+            click_listener_added = true;
+          }
+        } else {
+          if (click_listener_added) {
+            window.removeEventListener( 'click', handle_raycast_click );
+            click_listener_added = false;
+          }
         }
 
         document.getElementById('btn_bounding_box').style.backgroundColor = 'lightgreen';
@@ -822,124 +836,211 @@
         document.getElementById('btn_load').disabled = false;
       }
 
-      function handle_raycast_click() {
-        // Setup raycasting
+      function highlightFeature( featureId, attrName ) {
+        const geometry = pickedObject.geometry;
+        const featureIdAttr = geometry.getAttribute( attrName );
+        const indexAttr = geometry.index;
+        const positionAttr = geometry.getAttribute( 'position' );
+
+        if (!featureIdAttr || !indexAttr || !positionAttr) return;
+
+        // Find all triangles that belong to this featureId
+        const activeIndices = [];
+
+        for ( let i = 0; i < indexAttr.count; i += 3 ) {
+          const a = indexAttr.getX( i );
+          const b = indexAttr.getX( i + 1 );
+          const c = indexAttr.getX( i + 2 );
+
+          // If the first vertex of the triangle matches the ID, we take the whole triangle
+          if (featureIdAttr.getX( a ) === featureId) {
+            activeIndices.push( a, b, c );
+          }
+        }
+
+        if (activeIndices.length === 0) return;
+
+        // Create a new "Slice" geometry
+        const highlightGeo = new THREE.BufferGeometry();
+        highlightGeo.setAttribute( 'position', positionAttr );
+        highlightGeo.setIndex( activeIndices );
+
+        // Create the overlay mesh
+        featureHighlightMesh = new THREE.Mesh(
+          highlightGeo,
+          new THREE.MeshBasicMaterial({
+            color: 0xf08080,
+            transparent: true,
+            opacity: 0.5,
+            side: THREE.DoubleSide,
+            depthTest: true,
+            depthWrite: false,   // Keeps the highlight from messing up the depth buffer for other transparents
+            polygonOffset: true, // Physically pushes the quad slightly toward the camera
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1
+          })
+        );
+
+        // Create the Wireframe Outline (The "Border")
+        const wireframeGeo = new THREE.EdgesGeometry( highlightGeo );
+        const wireframe = new THREE.LineSegments(
+          wireframeGeo,
+          new THREE.LineBasicMaterial( { color: 0xffffff, linewidth: 3 } ) // White border
+        );
+
+        // Add the wireframe to our highlight mesh so they move together
+        featureHighlightMesh.add( wireframe );
+
+        // Sync transformation with the parent object
+        pickedObject.add( featureHighlightMesh );
+      }
+
+      function handle_raycast_click( event ) {
+        document.getElementById('metadata-card').style.display = 'none';
+
+        // Clean up previous highlight
+        if (featureHighlightMesh && pickedObject) {
+          pickedObject.remove( featureHighlightMesh );
+
+          // Clean up the children (the wireframe)
+          featureHighlightMesh.traverse((child) => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          });
+
+          featureHighlightMesh = null;
+        }
+
+        // --- RESTORE PREVIOUS SELECTION ---
+        if (selectedObject && selectedObject.material && selectedObject.material.emissive) {
+          const oldColor = selectedObject.userData.originalEmissive || new THREE.Color( 0x000000 );
+          selectedObject.material.emissive.copy( oldColor );
+        }
+
+        selectedObject = null;
+
+        if (event.target.closest( '#fixed_menu' )) {
+          return; // Exit the function if pointer is on the fixed menu
+        }
+
+        // Calculate how far the mouse moved
+        const deltaX = Math.abs( event.clientX - mouseDownPos.x );
+        const deltaY = Math.abs( event.clientY - mouseDownPos.y );
+
+        // If moved more than 5 pixels, it was likely a camera drag, not a click
+        if (deltaX > 5 || deltaY > 5) return;
 
         if (!raycaster) raycaster = new THREE.Raycaster();
         if (!mouse) mouse = new THREE.Vector2();
 
-        pickedObject = null;
-        let tilesetMetadataOnly = false;
-        const HIGHLIGHT_COLOR = new THREE.Color( 0xf08080 ); // light coral red
+        const HIGHLIGHT_COLOR = new THREE.Color( 0xf08080 );
 
-        // 1. Calculate mouse position in normalized device coordinates
-
+        // Calculate mouse position in normalized device coordinates
         mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
-        mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+        mouse.y = -( event.clientY / window.innerHeight ) * 2 + 1;
 
-        // 2. Raycast against the scene
-
+        // Raycast against raycastableObjects or the scene
         raycaster.setFromCamera( mouse, camera );
         const intersects = raycaster.intersectObjects( raycastableObjects.length > 0 ? raycastableObjects : scene.children, true );
 
-        if (selectedObject) {
-          selectedObject?.material?.emissive?.setHex( 0x000000 );
-          selectedObject = null;
-        }
+        if (intersects.length === 0) return;
 
-        if (intersects.length === 0) {
-          document.getElementById('metadata-card').style.display = 'none';
-          return;
-        }
+        const visibleIntersects = intersects.filter(hit => hit.object.visible);
+        if (visibleIntersects.length === 0) return;
 
-        const visibleIntersects = intersects.filter( hit => hit.object.visible );
+        // --- HANDLE NEW SELECTION ---
+        const intersect = visibleIntersects[ 0 ];
+        pickedObject = intersect.object;
+        selectedObject = pickedObject;
 
-        if (visibleIntersects.length === 0) {
-          document.getElementById('metadata-card').style.display = 'none';
-          return;
-        }
-
-        if (intersects.length > 0) {
-          pickedObject = intersects[ 0 ].object;
-          selectedObject = pickedObject;
-
-          // Check parents if the mesh itself is empty
-
-          if (!pickedObject.userData.metadata && pickedObject.parent) {
-            // Allow showing tileset info card
-            tilesetMetadataOnly = true;
+        // Prepare Material for highlighting
+        if (selectedObject.material && selectedObject.material.emissive) {
+          if (selectedObject.userData.originalEmissive === undefined) {
+            selectedObject.userData.originalEmissive = selectedObject.material.emissive.clone();
           }
 
-          if (selectedObject.material && selectedObject.material.emissive) {
-            selectedObject.material.emissive.copy( HIGHLIGHT_COLOR );
+          // Ensure we only highlight this specific instance
+          if (!selectedObject.userData.hasUniqueMaterial) {
+            selectedObject.material = selectedObject.material.clone();
+            selectedObject.userData.hasUniqueMaterial = true;
           }
 
-          // 3. Get metadata directly from selected object
-
-          const data = pickedObject.userData.metadata;
-
-          if (data || tilesetMetadataOnly) {
-            showUiPanel( data, event, tiles_loader._currentSchema, pickedObject.name, tilesetMetadataOnly );
-          } else {
-            selectedObject?.material?.emissive?.setHex( 0x000000 );
-            selectedObject = null;
-            document.getElementById('metadata-card').style.display = 'none';
-          }
+          selectedObject.material.emissive.copy( HIGHLIGHT_COLOR );
         }
-      }
 
-      async function applyMetadataToLoadedTileset() {
-        if (!tileset_obj || !tileset_obj.userData) return;
+        const extensions = pickedObject.userData.gltfExtensions;
 
-        const registry = tileset_obj.userData.metadataRegistry;
-        if (!registry || registry.length === 0) return;
+        if (extensions?.EXT_mesh_features) {
+          const meshFeatures = extensions.EXT_mesh_features;
 
-        // Traverse the entire 3D hierarchy once
+          // Get ALL attribute-based feature sets
+          const attributeSets = meshFeatures.featureIds?.filter( f => f.attribute !== undefined ) || [];
 
-        tileset_obj.traverse( object => {
-          if (object.isMesh || object.isPoints || object.isLineSegments) {
-            let internalURL = null;
-            let curr = object;
+          if (attributeSets.length > 0 && intersect.face) {
+            // For now, we take the first set.
+            // More advanced viewer could let the user toggle which 'class' they are inspecting.
+            const attributeInfo = attributeSets[ 0 ];
+            const featureIdIndex = attributeInfo.attribute;
+            const attrName = `_feature_id_${ featureIdIndex }`;
+            const featureIdAttr = pickedObject.geometry.getAttribute( attrName );
 
-            // Climb parents until we find the loader's contentURL
+            if (featureIdAttr) {
+              const featureId = featureIdAttr.getX(intersect.face.a);
 
-            while (curr) {
-              if (curr.contentURL?.length > 0) {
-                internalURL = curr.contentURL;
-                break;
+              // 2. Check for nullFeatureId (The "empty" space check)
+              if (featureId === attributeInfo.nullFeatureId) {
+                console.log( 'Hit a null feature area.' );
+                return; // Don't highlight or show UI for 'nothing'
               }
 
-              curr = curr.parent;
-            }
+              // --- Identify the Metadata Class ---
+              let className = 'FeatureId'; // Fallback
+              let schema = tileset_obj.userData.schema;
 
-            if (internalURL) {
-              const cleanURL = internalURL[ 0 ].split( '?' )[ 0 ].toLowerCase();
-
-              // Direct URI matching
-
-              const match = registry.find( entry => 
-                cleanURL.endsWith( entry.uri.toLowerCase() )
-              );
-
-              if (match) {
-                if (!object.userData.metadata) object.userData.metadata = {};
-                object.userData.metadata[ 'tileset' ] = tileset_obj.userData.tileset;
-                object.userData.metadata[ 'schema' ] = tileset_obj.userData.schema;
-
-                object.userData.metadata[ 'content' ] = match.metadataContent;
-                object.userData.metadata[ 'tile' ] = match.metadataTile;
-
-                // Link the Group if it exists
-
-                if (match.groupIndex !== null && tileset_obj.userData.groups?.[ match.groupIndex ]) {
-                  object.userData.metadata[ 'group' ] = tileset_obj.userData.groups?.[ match.groupIndex ];
+              // Check if this feature set points to a property table
+              if (attributeInfo.propertyTable !== undefined) {
+                const tableIndex = attributeInfo.propertyTable;
+        
+                // Metadata usually lives in the gltfExtensions of the model or tileset
+                const structuralMetadata = extensions.EXT_structural_metadata;
+        
+                if (structuralMetadata?.propertyTables?.[ tableIndex ]) {
+                  className = structuralMetadata.propertyTables[ tableIndex ].class;
                 }
               }
+
+              // Restore color
+              if (selectedObject.material?.emissive) {
+                selectedObject.material.emissive.copy(selectedObject.userData.originalEmissive);
+              }
+
+              highlightFeature( featureId, attrName );
+
+              // 3. UI logic
+              showUiPanel(
+                { featureId: { class: className, id: featureId }, ...pickedObject.userData.metadata },
+                event, schema, pickedObject.name, false
+              );
+
+              return;
             }
           }
-        });
+        }
 
-        console.log("Metadata mapping complete for all loaded meshes.");
+        // Fallback to standard metadata
+        let tilesetMetadataOnly = !pickedObject.userData.metadata && !!pickedObject.parent;
+        const data = pickedObject.userData.metadata;
+
+        if ((data && !data.empty) || tilesetMetadataOnly) {
+          showUiPanel(data, event, tileset_obj.userData.schema, pickedObject.name, tilesetMetadataOnly);
+        } else {
+          // If no metadata found, remove highlight
+          if (selectedObject.material?.emissive) {
+            selectedObject.material.emissive.copy(selectedObject.userData.originalEmissive);
+          }
+
+          selectedObject = null;
+        }
       }
 
       function showUiPanel( data, event, schema = null, meshName = '', tilesetMetadataOnly = false ) {
@@ -949,110 +1050,151 @@
         // Enhanced resolver to handle the complex types in your new JSON
 
         const resolveValue = ( className, propName, val ) => {
-          // Convert BigInt to string immediately to avoid math errors or render crashes
-          const sanitize = ( v ) => typeof v === 'bigint' ? v.toString() : v;
+          const sanitize = ( v ) => {
+            if (typeof v === 'bigint') return v.toString();
 
-          if (!schema?.classes?.[ className ]) return sanitize( val );
+            // If it's a number and has a decimal, round it to 3 places
+            if (typeof v === 'number' && !Number.isInteger( v )) {
+              return parseFloat(v.toFixed(3)); 
+            }
+
+            return v;
+          };
+
+          if (!schema?.classes?.[ className ]) {
+            // If no schema, we fallback to unwrapping to show something sensible
+            const fallback = Array.isArray( val ) ? val[ 0 ] : val;
+            return sanitize( fallback );
+          }
 
           const propDef = schema.classes[ className ].properties?.[ propName ];
 
-          // 1. Handle Enums
+          // Identify if this is a Multi-Content wrapper or a legitimate data array
+          // If the schema says it's NOT an array, but we received an array, it's a wrapper.
+          const isArrayType = propDef?.type === 'ARRAY' || propDef?.type === 'VEC2' || propDef?.type === 'VEC3' || propDef?.type === 'VEC4';
+          const actualVal = (!isArrayType && Array.isArray(val)) ? val[0] : val;
 
+          // 1. Handle Enums
           if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
             const enumType = schema.enums[ propDef.enumType ];
-            const match = enumType.values.find( v => sanitize( v.value ) === sanitize( val ) );
-            return match ? match.name : sanitize( val );
-            //const match = enumType.values.find( v => v.value === val || v.name === val );
-            //return match ? match.name : val;
+            const match = enumType.values.find( v => sanitize( v.value ) === sanitize( actualVal ) );
+            return match ? match.name : sanitize( actualVal );
           }
 
-          // 2. Handle Booleans (ensures 'false' is visible)
+          // 2. Handle Booleans
+          const isBoolType = propDef?.type === 'BOOLEAN';
+          const isBoolName = propName.toLowerCase().startsWith( 'is' ) || propName.toLowerCase().startsWith( 'has' );
 
-          if (propDef?.type === 'BOOLEAN') {
-            return val ? 'Yes' : 'No';
+          if (isBoolType || isBoolName) {
+            const isTrue = Array.isArray( actualVal ) ? actualVal[ 0 ] : actualVal;
+            return ( isTrue === 1 || isTrue === true || isTrue === 0xFF ) ? 'Yes' : 'No';
           }
 
-          // 3. Handle Arrays (fixed or variable length)
-
-          if (Array.isArray( val )) {
+          // 3. Handle Actual Arrays (Legitimate VEC, MAT, or ARRAY types)
+          if (Array.isArray( actualVal )) {
             const formatItem = ( item ) => {
-              if (Array.isArray( item )) return `[ ${ item.map( formatItem ).join( ', ' ) } ]`; // Recursive for VEC/MAT
+              if (Array.isArray( item )) return `[ ${ item.map( formatItem ).join( ', ' ) } ]`;
               if (typeof item === 'boolean') return item ? 'Yes' : 'No';
               return sanitize( item );
             };
 
-            return `[ ${ val.map( formatItem ).join( ', ' ) } ]`;
+            return `[ ${ actualVal.map( formatItem ).join( ', ' ) } ]`;
           }
 
-          return sanitize( val );
+          return sanitize( actualVal );
         };
+
+        let html = '';
 
         // 1. Tileset Metadata - Maybe entries like author, date, tile count...
 
         const tileset = tilesetMetadataOnly ? tileset_obj.userData.tileset : data?.tileset;
 
-        let html = `
-          <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
-            <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${tileset?.class || 'Tileset Metadata: None'}</div>
-          </div>`;
+        if (tileset?.class) {
+          html += `
+            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${tileset.class}</div>
+            </div>`;
 
-        if (tileset?.properties) {
-          for ( const [ key, val ] of Object.entries( tileset.properties || {} ) ) {
-            const display = resolveValue( tileset.class, key, val );
-            html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+          if (tileset.properties) {
+            for ( const [ key, val ] of Object.entries( tileset.properties ) ) {
+              const display = resolveValue( tileset.class, key, val );
+              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+           }
           }
         }
 
         if (!tilesetMetadataOnly) {
-          html += `<br>`;
+          if (tileset) html += `<br>`;
 
           // 2. Tile Metadata - Maybe entries like district, population...
 
-          html += `
-            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
-              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.tile?.class || 'Tile Metadata: None'}</div>
-            </div>`;
+          if (data.tile?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.tile.class}</div>
+              </div>`;
 
-          if (data.tile?.properties) {
-            for ( const [ key, val ] of Object.entries( data.tile.properties || {} ) ) {
-              const display = resolveValue( data.tile.class, key, val );
-              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+            if (data.tile.properties) {
+              for ( const [ key, val ] of Object.entries( data.tile.properties ) ) {
+                const display = resolveValue( data.tile.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
             }
-          }
 
-          html += `<br>`;
+            html += `<br>`;
+          }
 
           // 3. Selected Object
 
-          html += `<div style="font-size: 12px; font-weight: bold; color: #fff; line-height: 1.0;">Selected: ${meshName}</div><br>`;
+          if (meshName !== '') {
+            html += `<div style="font-size: 12px; font-weight: bold; color: #fff; line-height: 1.0;">Selected: ${meshName}</div><br>`;
+          }
 
           // 4. Group Metadata - Maybe entries like color, priority...
 
-          html += `
-            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
-              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.group?.class || 'Group Metadata: None'}</div>
-            </div>`;
+          if (data.group?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.group.class}</div>
+              </div>`;
 
-          if (data.group?.properties) {
-            for ( const [ key, val ] of Object.entries( data.group.properties || {} ) ) {
-              const display = resolveValue( data.group.class, key, val );
-              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+            if (data.group.properties) {
+              for ( const [ key, val ] of Object.entries( data.group.properties ) ) {
+                const display = resolveValue( data.group.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
             }
-          }
 
-          html += `<br>`;
+            html += `<br>`;
+          }
 
           // 5. Content Metadata - Maybe entries like vertices, materials...
 
-          html += `
-            <div style="border-bottom: 1px solid #555; margin-bottom: 8px; padding-bottom: 6px;">
-              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.content?.class || 'Content Metadata: None'}</div>
-            </div>`;
+          if (data.content?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 8px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.content.class}</div>
+              </div>`;
 
-          if (data.content?.properties) {
-            for ( const [ key, val ] of Object.entries( data.content.properties || {} ) ) {
-              const display = resolveValue( data.content.class, key, val );
-              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+            if (data.content.properties) {
+              for ( const [ key, val ] of Object.entries( data.content.properties ) ) {
+                const display = resolveValue( data.content.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
+            }
+          }
+
+          // 6. FeatureId - Maybe entries EXT_mesh_features, EXT_structural_metadata...
+
+          if (data.featureId?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 8px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.featureId.class}</div>
+              </div>`;
+
+            if (data.featureId.id !== undefined) {
+                html += `<div class="prop-row"><span class="prop-label">${'ID: '}</span><span class="prop-value">${data.featureId.id}</span></div>`;
             }
           }
         }
@@ -1060,7 +1202,7 @@
         card.innerHTML = html;
         card.style.display = 'block';
 
-        // 6. Position Logic
+        // 7. Position Logic
 
         const cardWidth = 220; 
         let x = event.clientX + 15;
