@@ -48,6 +48,19 @@ class Three3DTilesLoader extends Loader {
 
 		super( manager );
 
+		manager.onStart = ( url, itemsLoaded, itemsTotal ) => {
+			console.log(`Loading: ${ url }`);
+			console.log(`Queue status: ${ itemsLoaded }/${ itemsTotal }`);
+		};
+
+		manager.onLoad = () => {
+			console.log('All assets loaded successfully!');
+		};
+
+		manager.onError = ( url ) => {
+			console.error(`There was an error loading: ${ url }`);
+		};
+
 		this._rootUrl = '';
 		this._keyAPI = '';
 		this._token = '';
@@ -63,12 +76,12 @@ class Three3DTilesLoader extends Loader {
 		this._renderer = null;
 		this._maxCacheSize = 100;
 
-		this._dracoLoader = new DRACOLoader();
+		this._dracoLoader = new DRACOLoader( manager );
 		this._dracoLoader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/libs/draco/" );
 		this._dracoLoader.setDecoderConfig( { type: 'js' } );
 		this._dracoLoader.preload();
 
-		this._ktx2Loader = new KTX2Loader();
+		this._ktx2Loader = new KTX2Loader( manager );
 		this._ktx2Loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/libs/basis/" );
 
 	}
@@ -1315,12 +1328,37 @@ class Three3DTilesLoader extends Loader {
 
 				const byteOffset = view.byteOffset + ( rowIndex * stride );
 
-				metadata.properties[ propName ] = this._readBinaryValue(
+				let value = this._readBinaryValue(
 					binary,
 					byteOffset,
 					type,
 					componentType
 				);
+
+				// --- ENUM RESOLUTION LOGIC ---
+
+				if ( type === 'ENUM' ) {
+
+					const enumType = schemaProp.enumType;
+					const enumDef = schema.enums[ enumType ];
+
+					if ( enumDef ) {
+
+						// Find the name that matches the integer value we just read
+
+						const enumValue = enumDef.values.find( v => v.value === value );
+
+						if ( enumValue ) {
+
+							value = enumValue.name; // Transform 0 into definition like "Solid Geometry"
+
+						}
+
+					}
+
+				}
+
+				metadata.properties[ propName ] = value;
 
 			}
 
@@ -1770,12 +1808,13 @@ class Three3DTilesLoader extends Loader {
 					displayErrors: true,
 					loadOutsideView: true,
 					renderer: scope._renderer,
+					level: scope._maxDepthLevel,
 					geometricErrorMultiplier: 0.5,
 					ktx2Loader: scope._ktx2Loader,
 					dracoLoader: scope._dracoLoader,
 					drawBoundingVolume: isImplicit,
 					maxCacheSize: scope._maxCacheSize,
-					loadingStrategy: isImplicit ? "IMMEDIATE" : "PERLEVEL",
+					loadingStrategy: isImplicit ? "IMMEDIATE" : "INCREMENTAL",
 					queryParams: scope._keyAPI !== '' ? { key: scope._keyAPI } : undefined,
 					headers: scope._token ? { Authorization: `Bearer ${ scope._token }` } : undefined,
 					meshCallback: mesh => {	mesh.material.wireframe = this._wireframeMode || false; },
@@ -1792,6 +1831,7 @@ class Three3DTilesLoader extends Loader {
 
 			});
 
+			ogc3DTile.isTileset = true;
 			ogc3DTile.tilesetVersion = tilesetVersion;
 
 			if ( hasMetadata || scope._metadataLookup.length > 0 ) {
@@ -1989,6 +2029,77 @@ class Three3DTilesLoader extends Loader {
 
 							child.material.size = ogc3DTile._pointTargetSize;
 							child.material.needsUpdate = true;
+
+						}
+
+					}
+
+					// --- METADATA SYNC ---
+					// Only run if the object doesn't have metadata yet
+
+					if ( ogc3DTile.hasMetadata ) {
+
+						if ( ( child.isMesh || child.isPoints ) && !child.userData.metadata ) {
+
+							let internalURL = null;
+							let curr = child;
+
+							// Climb parents to find the URL (which should be present by now)
+
+							while ( curr ) {
+
+								if ( curr.contentURL?.length > 0 ) {
+
+									internalURL = curr.contentURL;
+									break;
+
+								}
+
+								curr = curr.parent;
+
+							}
+
+							if ( internalURL ) {
+
+								const cleanURL = internalURL[ 0 ].split( '?' )[ 0 ].toLowerCase();
+
+								const match = ogc3DTile.userData.metadataRegistry.find( entry =>
+
+									cleanURL.endsWith( entry.uri.toLowerCase() )
+
+								);
+
+								if ( match ) {
+
+									child.userData.metadata = {
+
+										tileset: ogc3DTile.userData.tileset,
+										schema: ogc3DTile.userData.schema,
+										content: match.metadataContent,
+										tile: match.metadataTile
+
+									};
+
+
+									// Link the Group if it exists
+
+									if ( match.groupIndex !== null && ogc3DTile.userData.groups?.[ match.groupIndex ] ) {
+
+										child.userData.metadata[ 'group' ] = ogc3DTile.userData.groups[ match.groupIndex ];
+
+									}
+
+									// console.log( `Mapped metadata to streamed tile: ${ cleanURL }` );
+
+								} else {
+
+									// Flag as processed even if no match found to stop searching every frame
+
+									child.userData.metadata = { empty: true };
+
+								}
+
+							}
 
 						}
 
@@ -2199,6 +2310,9 @@ class Three3DTilesLoader extends Loader {
 					originalLibraryDispose();
 
 				}
+
+				if (this._dracoLoader) this._dracoLoader.dispose();
+				if (this._ktx2Loader) this._ktx2Loader.dispose();
 
 				console.log( 'OGC3DTileset and GPU resources disposed.' );
 
