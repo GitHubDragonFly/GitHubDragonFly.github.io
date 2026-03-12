@@ -397,6 +397,7 @@ Number Type Converter
 - Special notes about `3D Tiles Viewer`:
   - Simple viewer specifically designed to stream 3D Tiles:
     - Supports ImplicitTiling, MultipleContents and Metadata v1.1 by performing conversion to explicit:
+      - Partial support for GLTF EXT_mesh_features FeatureIdAttribute
       - For quick testing maybe try loading official [Cesium](https://github.com/CesiumGS/3d-tiles-samples) examples
     - It is using customized `3DTilesLoader`:
       - Also created with assistance from Microsoft Copilot and Google Gemini
