@@ -714,7 +714,8 @@
           else if (child.isMesh || child.isPoints || child.isLine) {
             if (child.isMesh && child.userData.gltfExtensions) {
               // Currently only EXT_mesh_features with attributes is partially functional
-              const ext = child.userData.gltfExtensions.EXT_mesh_features;
+              const ext = child.userData.gltfExtensions.EXT_mesh_features ||
+                          child.userData.gltfExtensions.EXT_instance_features;
 
               if (ext && ext.featureIds && !ext.featureIds.find( f => f.texture !== undefined )) {
                 tileset_obj.hasGLTFExtensions = true;
@@ -835,6 +836,68 @@
         document.getElementById('btn_load').disabled = false;
       }
 
+      function highlightFeatureInstanced( instanceId ) {
+        // 1. REUSE EVERYTHING
+        // Instead of a new mesh every time, we just reposition the one we have
+        if (!featureHighlightMesh || featureHighlightMesh?.geometry !== pickedObject.geometry) {
+          if (featureHighlightMesh) {
+            // Detach it from the old parent
+            if (featureHighlightMesh.parent) {
+              featureHighlightMesh.parent.remove( featureHighlightMesh );
+            }
+
+            featureHighlightMesh.traverse((child) => {
+              if (child.geometry) child.geometry.dispose();
+              if (child.material) child.material.dispose();
+            });
+
+            featureHighlightMesh = null;
+          }
+
+          const highlightGeo = pickedObject.geometry;
+
+          featureHighlightMesh = new THREE.Mesh(
+            highlightGeo,
+            new THREE.MeshBasicMaterial({
+              color: 0xf08080,
+              transparent: true,
+              opacity: 0.5,
+              depthTest: true,
+              depthWrite: false, 
+              polygonOffset: true,
+              polygonOffsetFactor: -1,
+              polygonOffsetUnits: -1
+            })
+          );
+
+          // Add the wireframe once
+          const wireframe = new THREE.LineSegments(
+            new THREE.EdgesGeometry( highlightGeo, 30 ),
+            new THREE.LineBasicMaterial( { color: 0xffffff } )
+          );
+
+          featureHighlightMesh.add( wireframe );
+        }
+
+        // THE TELEPORTATION
+        // Copy the specific instance's transform from the InstancedMesh
+        const matrix = new THREE.Matrix4();
+        pickedObject.getMatrixAt( instanceId, matrix );
+
+        // SYNC WITH PARENT
+        // If the InstancedMesh itself has a position/rotation, 
+        // we must account for it so the highlight doesn't fly off to space
+        featureHighlightMesh.matrix.copy( matrix );
+        featureHighlightMesh.matrixAutoUpdate = false; // We handle the matrix manually now
+
+        // ATTACH
+        pickedObject.add( featureHighlightMesh );
+
+        featureHighlightMesh.visible = true;
+        featureHighlightMesh.frustumCulled = false;
+        featureHighlightMesh.children.forEach( child => child.frustumCulled = false );
+      }
+
       function highlightFeature( featureId, attrName ) {
         const geometry = pickedObject.geometry;
         const featureIdAttr = geometry.getAttribute( attrName );
@@ -852,8 +915,10 @@
           const c = indexAttr.getX( i + 2 );
 
           // If the first vertex of the triangle matches the ID, we take the whole triangle
-          if (featureIdAttr.getX( a ) === featureId) {
-            activeIndices.push( a, b, c );
+          if ( a < featureIdAttr.count ) {
+            if (featureIdAttr.getX( a ) === featureId) {
+              activeIndices.push( a, b, c );
+            }
           }
         }
 
@@ -881,7 +946,7 @@
         );
 
         // Create the Wireframe Outline (The "Border")
-        const wireframeGeo = new THREE.EdgesGeometry( highlightGeo );
+        const wireframeGeo = new THREE.EdgesGeometry( highlightGeo, 30 );
         const wireframe = new THREE.LineSegments(
           wireframeGeo,
           new THREE.LineBasicMaterial( { color: 0xffffff, linewidth: 3 } ) // White border
@@ -889,6 +954,10 @@
 
         // Add the wireframe to our highlight mesh so they move together
         featureHighlightMesh.add( wireframe );
+
+        featureHighlightMesh.position.set( 0, 0, 0 );
+        featureHighlightMesh.rotation.set( 0, 0, 0 );
+        featureHighlightMesh.scale.set( 1, 1, 1 );
 
         // Sync transformation with the parent object
         pickedObject.add( featureHighlightMesh );
@@ -898,16 +967,23 @@
         document.getElementById('metadata-card').style.display = 'none';
 
         // Clean up previous highlight
-        if (featureHighlightMesh && pickedObject) {
-          pickedObject.remove( featureHighlightMesh );
+        if (featureHighlightMesh) {
+          // Detach it from the old parent
+          if (featureHighlightMesh.parent) {
+            featureHighlightMesh.parent.remove( featureHighlightMesh );
+          }
 
-          // Clean up the children (the wireframe)
-          featureHighlightMesh.traverse((child) => {
-            if (child.geometry) child.geometry.dispose();
-            if (child.material) child.material.dispose();
-          });
+          if (pickedObject?.isInstancedMesh) {
+            featureHighlightMesh.visible = false;
+          } else {
+            // Clean up the children (the wireframe)
+            featureHighlightMesh.traverse( ( child ) => {
+              if (child.geometry) child.geometry.dispose();
+              if (child.material) child.material.dispose();
+            });
 
-          featureHighlightMesh = null;
+            featureHighlightMesh = null;
+          }
         }
 
         // --- RESTORE PREVIOUS SELECTION ---
@@ -969,60 +1045,85 @@
 
         const extensions = pickedObject.userData.gltfExtensions;
 
-        if (extensions?.EXT_mesh_features) {
-          const meshFeatures = extensions.EXT_mesh_features;
+        if (extensions) {
+          const isInstanced = pickedObject.isInstancedMesh;
+          const meshFeatures = extensions.EXT_mesh_features || extensions?.EXT_instance_features;
 
           // Get ALL attribute-based feature sets
           const attributeSets = meshFeatures.featureIds?.filter( f => f.attribute !== undefined ) || [];
 
-          if (attributeSets.length > 0 && intersect.face) {
-            // For now, we take the first set.
-            // More advanced viewer could let the user toggle which 'class' they are inspecting.
-            const attributeInfo = attributeSets[ 0 ];
-            const featureIdIndex = attributeInfo.attribute;
-            const attrName = `_feature_id_${ featureIdIndex }`;
-            const featureIdAttr = pickedObject.geometry.getAttribute( attrName );
+          if (attributeSets.length > 0) {
+            let schema = tileset_obj.userData.schema;
+            let fid_class = [];
 
-            if (featureIdAttr) {
-              const featureId = featureIdAttr.getX(intersect.face.a);
+            for ( let i = 0; i < attributeSets.length; i++ ) {
+              const attributeInfo = attributeSets[ i ];
+              const featureIdIndex = attributeInfo.attribute;
 
-              // 2. Check for nullFeatureId (The "empty" space check)
-              if (featureId === attributeInfo.nullFeatureId) {
-                console.log( 'Hit a null feature area.' );
-                return; // Don't highlight or show UI for 'nothing'
-              }
+              const attrName1 = `_feature_id_${ featureIdIndex }`;
+              const attrName2 = `_FEATURE_ID_${ featureIdIndex }`;
 
-              // --- Identify the Metadata Class ---
-              let className = 'FeatureId'; // Fallback
-              let schema = tileset_obj.userData.schema;
+              const featureIdAttr = pickedObject.geometry.getAttribute( attrName1 ) ||
+                                    pickedObject.geometry.getAttribute( attrName2 );
 
-              // Check if this feature set points to a property table
-              if (attributeInfo.propertyTable !== undefined) {
-                const tableIndex = attributeInfo.propertyTable;
-        
-                // Metadata usually lives in the gltfExtensions of the model or tileset
-                const structuralMetadata = extensions.EXT_structural_metadata;
-        
-                if (structuralMetadata?.propertyTables?.[ tableIndex ]) {
-                  className = structuralMetadata.propertyTables[ tableIndex ].class;
+              if (featureIdAttr && !isInstanced && intersect.face) {
+                const featureId = featureIdAttr.getX( intersect.face.a );
+
+                // Check for nullFeatureId (The "empty" space check)
+                // Important: attributeInfo.nullFeatureId is often undefined
+                const isNull = attributeInfo.nullFeatureId !== undefined && featureId === attributeInfo.nullFeatureId;
+
+                if (!isNull) {
+                  // --- Identify the Metadata Class ---
+                  let className = 'FeatureId ' + featureIdIndex; // Fallback
+
+                  // Check if this feature set points to a property table
+                  if (attributeInfo.propertyTable !== undefined) {
+                    const tableIndex = attributeInfo.propertyTable;
+
+                    // Metadata usually lives in the gltfExtensions of the model or tileset
+                    const structuralMetadata = extensions.EXT_structural_metadata;
+
+                    if (structuralMetadata?.propertyTables?.[ tableIndex ]) {
+                      className = structuralMetadata.propertyTables[ tableIndex ].class;
+                    }
+                  }
+
+                  fid_class.push( { class: className, id: featureId, layerIndex: i } );
+                } else {
+                  if (attributeSets.length === 1) {
+                    console.log( 'Hit a null feature area.' );
+                    return; // Don't highlight or show UI for 'nothing'
+                  }
+                }
+              } else if (featureIdAttr && isInstanced) {
+                const instanceId = intersect.instanceId; // Only exists if it's an InstancedMesh
+
+                if (instanceId !== undefined) {
+                  const featureId = featureIdAttr.getX( instanceId );
+                  fid_class.push( { class: 'Instance Feature', id: featureId, isInstance: true, instanceId: instanceId } );
                 }
               }
+            }
 
+            if (fid_class.length > 0) {
               // Restore color
-              if (selectedObject.material?.emissive) {
-                selectedObject.material.emissive.copy(selectedObject.userData.originalEmissive);
+              if (selectedObject?.material?.emissive) {
+                selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
               }
 
-              highlightFeature( featureId, attrName );
+              // Trigger the geometry-based highlight for the primary ID
+              isInstanced
+                ? highlightFeatureInstanced( fid_class[ 0 ].instanceId )
+                : highlightFeature( fid_class[ 0 ].id, `_feature_id_${ fid_class[ 0 ].layerIndex }` );
 
-              // 3. UI logic
               showUiPanel(
-                { featureId: { class: className, id: featureId }, ...pickedObject.userData.metadata },
+                { featureId: fid_class, ...pickedObject.userData.metadata },
                 event, schema, pickedObject.name, false
               );
-
-              return;
             }
+
+            return;
           }
         }
 
@@ -1071,7 +1172,7 @@
           // Identify if this is a Multi-Content wrapper or a legitimate data array
           // If the schema says it's NOT an array, but we received an array, it's a wrapper.
           const isArrayType = propDef?.type === 'ARRAY' || propDef?.type === 'VEC2' || propDef?.type === 'VEC3' || propDef?.type === 'VEC4';
-          const actualVal = (!isArrayType && Array.isArray(val)) ? val[0] : val;
+          const actualVal = (!isArrayType && Array.isArray( val )) ? val[ 0 ] : val;
 
           // 1. Handle Enums
           if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
@@ -1184,17 +1285,22 @@
             }
           }
 
-          // 6. FeatureId - Maybe entries EXT_mesh_features, EXT_structural_metadata...
+          // 6. FeatureId - Maybe entries from EXT_mesh_features, EXT_structural_metadata...
 
-          if (data.featureId?.class) {
-            html += `
-              <div style="border-bottom: 1px solid #555; margin-bottom: 8px; padding-bottom: 6px;">
-                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.featureId.class}</div>
-              </div>`;
+          if (data.featureId && Array.isArray( data.featureId )) {
+            data.featureId.forEach( ( fid_class, index ) => {
+              // Use the class name if found, otherwise use a readable layer index
+              const label = fid_class.class || `Feature Layer ${index}`;
+              const idValue = fid_class.id !== undefined ? fid_class.id : 'N/A';
 
-            if (data.featureId.id !== undefined) {
-                html += `<div class="prop-row"><span class="prop-label">${'ID: '}</span><span class="prop-value">${data.featureId.id}</span></div>`;
-            }
+              html += `
+                <div class="feature-group" style="margin-top: 10px; border-left: 2px solid #00d4ff; padding-left: 8px;">
+                  <div style="font-size: 10px; color: #aaa; font-weight: bold;">${ label }</div>
+                  <div class="prop-row" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="prop-label" style="color: #00d4ff;">ID:</span><span class="prop-value">${ idValue }</span>
+                  </div>
+                </div>`;
+            });
           }
         }
 
@@ -1377,6 +1483,17 @@
         if (stats && stats.dom && stats.dom.parentNode) {
           stats.dom.parentNode.removeChild( stats.dom );
           stats = null;
+        }
+
+        if (featureHighlightMesh) {
+          if (pickedObject) pickedObject.remove( featureHighlightMesh );
+
+          featureHighlightMesh.traverse( ( child ) => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          });
+
+          featureHighlightMesh = null;
         }
 
         scene.remove( tileset_obj );
