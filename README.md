@@ -426,7 +426,8 @@ Number Type Converter
   - It also has some switchable statistics:
     - FPS / MS / MB stats are using [stats.js](https://github.com/mrdoob/stats.js/) library
   - The viewer allows setting Level Of Detail (LOD):
-    - `Cache` which defines how many tiles are loaded and kept in ready state (affects memory usage and smooth movement)
+    - `Cache` which defines how many tiles are loaded and kept in ready state (default 100, affects memory usage and smooth movement)
+    - `Depth` level defines how many subtrees are processed (default 4)
  - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `USDZ Viewer`:
