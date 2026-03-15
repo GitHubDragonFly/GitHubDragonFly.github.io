@@ -287,8 +287,8 @@ class Three3DTilesLoader extends Loader {
 
 						const cosLat = Math.cos( lat );
 						const x = ( this._R + alt ) * cosLat * Math.cos( lon );
-						const y = ( this._R + alt ) * Math.sin( lat );
-						const z = ( this._R + alt ) * cosLat * Math.sin( lon );
+						const z = ( this._R + alt ) * Math.sin( lat ); // is this y or z
+						const y = ( this._R + alt ) * cosLat * Math.sin( lon ); // is this z or y
 
 						box.expandByPoint( this._v1.set( x, y, z ) );
 
@@ -600,10 +600,10 @@ class Three3DTilesLoader extends Loader {
 	_replaceTemplate( uri, level, x, y, z ) {
 
 		let result = uri
-			.replace( '{level}', level)
-			.replace( '{x}', x )
-			.replace( '{y}', y)
-			.replace( '{z}', z );
+			.replace( /\{level\}/g, level)
+			.replace( /\{x\}/g, x )
+			.replace( /\{y\}/g, y)
+			.replace( /\{z\}/g, z );
 
 		// 2. Ensure no leading slash so it matches the variantLookup keys
 
@@ -902,6 +902,7 @@ class Three3DTilesLoader extends Loader {
 
 			const bufferViewIndex = availability.bitstream;
 			const bv = subtreeJson.bufferViews[ bufferViewIndex ];
+			if ( !bv ) return false;
 
 			// Offset into the binary body
 
@@ -909,7 +910,11 @@ class Three3DTilesLoader extends Loader {
 			const bitIndex = index % 8;
 			const byteIndex = Math.floor( index / 8 );
 
-			const byte = binary.getUint8( byteOffset + byteIndex );
+			// Use DataView for safety, or direct array access if it's a TypedArray
+
+			const byte = ( binary instanceof DataView )
+				? binary.getUint8( byteOffset + byteIndex )
+				: binary[ byteOffset + byteIndex ];
 
 			return ( ( byte >> bitIndex ) & 1 ) === 1;
 
@@ -985,6 +990,15 @@ class Three3DTilesLoader extends Loader {
 
 			});
 
+			// This allows the bracket syntax bits[index] to work
+			// but also provides a fallback for direct access
+			//return {
+			//	isConstant: true,
+			//	value: value,
+			//	// This allows the bracket syntax bits[index] to work
+			//	// but also provides a fallback for direct access
+			//	[Symbol.iterator]: function* () { while(true) yield value; }
+			//};
 		}
 
 		// Handle Bitstream
@@ -1268,7 +1282,10 @@ class Three3DTilesLoader extends Loader {
 	 */
 	_extractPropertyTableMetadata( tableIndex, rowIndex, subtreeJson, binary, schema ) {
 
-		const table = subtreeJson.propertyTables[ tableIndex ];
+		const table = ( typeof tableIndex === 'string' )
+			? subtreeJson[ tableIndex ] // e.g., if you pass 'subtreeMetadata'
+			: subtreeJson.propertyTables?.[ tableIndex ];
+
 		if ( !table || !schema ) return null;
 
 		// Get the class definition from the schema
@@ -1286,11 +1303,22 @@ class Three3DTilesLoader extends Loader {
 			// Look up the actual data types from the schema
 
 			const schemaProp = classDef.properties[ propName ];
+
+			// --- Handle JSON Literals (Constants) ---
+			// If the property is just a value in the JSON, not a buffer reference
+
+			if ( typeof propDef !== 'object' || propDef.values === undefined || Array.isArray( propDef ) ) {
+
+				metadata.properties[ propName ] = propDef; 
+				continue;
+
+			}
+
 			const type = schemaProp.type; // e.g., "SCALAR"
 			const componentType = schemaProp.componentType; // e.g., "UINT32"
 
 			const bufferViewIdx = propDef.values;
-			const view = subtreeJson.bufferViews[ bufferViewIdx ];
+			const view = subtreeJson.bufferViews?.[ bufferViewIdx ];
 
 			// ... String/Variable logic ...
 
@@ -1405,7 +1433,7 @@ class Three3DTilesLoader extends Loader {
 		const childCount = isQuadtree ? 4 : 8;
 		const subtreeLevels = implicit.subtreeLevels;
 
-		// 1. Resolve Subtree URL and Fetch
+		// Resolve Subtree URL and Fetch
 
 		const subtreeRootLevel = Math.floor( level / subtreeLevels ) * subtreeLevels;
 
@@ -1419,19 +1447,51 @@ class Three3DTilesLoader extends Loader {
 
 		);
 
-		const buffer = await fetch( subtreeUrl ).then( r => r.arrayBuffer() );
-		const { subtreeJson, binary, binaryView } = this._parseSubtree( buffer );
+		//const buffer = await fetch( subtreeUrl ).then( r => r.arrayBuffer() );
+		//const { subtreeJson, binary, binaryView } = this._parseSubtree( buffer );
+
+		// Fetch and Parse Subtree (Handle JSON or Binary)
+
+		const response = await fetch( subtreeUrl );
+
+		if ( !response.ok ) {
+
+			console.error( `Could not load subtree: ${ subtreeUrl }` );
+			return json;
+
+		}
+
+		let subtreeJson, subtree_isJson = false, binary, binaryView, tileBits;
+
+		if ( subtreeUrl.endsWith( '.json' ) ) {
+
+			subtreeJson = await response.json();
+			subtree_isJson = true;
+
+			// If binary data is separate or embedded, it would be handled here
+
+		} else {
+
+			const buffer = await response.arrayBuffer();
+			const parsed = this._parseSubtree( buffer );
+			subtreeJson = parsed.subtreeJson;
+			binary = parsed.binary;
+			binaryView = parsed.binaryView;
+
+		}
 
 		if ( subtreeJson.subtreeMetadata !== undefined ) {
 
 			// This is global to all tiles in this subtree
 
 			const subMetadata = this._extractPropertyTableMetadata(
-				subtreeJson.subtreeMetadata,
+
+				subtree_isJson ? 'subtreeMetadata' : subtreeJson.subtreeMetadata,
 				0, // Subtree metadata usually only has one row (index 0)
 				subtreeJson,
 				binary,
 				json.schema
+
 			);
 
 			// Store this or attach it to the root of the subtree
@@ -1442,11 +1502,20 @@ class Three3DTilesLoader extends Loader {
 
 		const propertyTables = subtreeJson.propertyTables || [];
 
-		// 2. Map ALL content availability layers (v1.1 support)
+		// Map ALL content availability layers (v1.1 support)
 
-		const tileBits = this._getAvailability( subtreeJson, subtreeJson.tileAvailability, binary );
+		if ( binary ) tileBits = this._getAvailability( subtreeJson, subtreeJson.tileAvailability, binary );
 
-		const contentBitLayers = ( subtreeJson.contentAvailability || [] ).map( avail => 
+		// Ensure contentAvailability is treated as an array even if it's a single object
+
+		const rawContentAvail = subtreeJson.contentAvailability;
+
+		const contentAvailArray = Array.isArray( rawContentAvail )
+			? rawContentAvail 
+			: ( rawContentAvail ? [ rawContentAvail ] : [] );
+
+
+		const contentBitLayers = contentAvailArray.map( avail => 
 
 			this._getAvailability( subtreeJson, avail, binary )
 
@@ -1478,7 +1547,7 @@ class Three3DTilesLoader extends Loader {
 
 			}
 
-			// 2. Compute the Local Morton Index for 3D Tiles 1.1
+			// Compute the Local Morton Index for 3D Tiles 1.1
 			// We need local coordinates within the subtree (0 to 2^relativeLevel - 1)
 
 			const mask = ( 1 << currentDepthRelativeToStart ) - 1;
@@ -1502,34 +1571,37 @@ class Three3DTilesLoader extends Loader {
 
 			// If the subtree defines metadata for tiles at this index:
 
-			if ( subtreeJson.tileMetadata !== undefined ) {
+			if ( subtreeJson.tileMetadata !== undefined || subtreeJson.subtreeMetadata !== undefined ) {
 
 				// Use helper to extract values from the binary property table 
 				// based on the Morton index
 
 				resolvedTileMetadata = this._extractPropertyTableMetadata(
-					subtreeJson.tileMetadata,
+
+					subtree_isJson ? 'subtreeMetadata' : subtreeJson.tileMetadata,
 					index,
 					subtreeJson,
 					binary,
 					json.schema
+
 				);
 
 			}
 
 			// Tile existence check
 
-			if ( tileBits[ index ] !== 1 ) return null;
+			if ( tileBits && tileBits[ index ] !== 1 ) return null;
 
-			// 3. Process Multiple Contents
+			// Process Multiple Contents
 
 			const validContents = [];
 
 			contentTemplates.forEach( ( template, layerIdx ) => {
 
 				const layerBits = contentBitLayers[ layerIdx ];
+				const contentAvailable = ( rawContentAvail?.constant === 1 ) || ( layerBits && layerBits[ index ] === 1 );
 
-				if ( layerBits && layerBits[ index ] === 1 ) {
+				if ( contentAvailable ) {
 
 					// Apply template to get the actual URI
 
@@ -1540,27 +1612,29 @@ class Three3DTilesLoader extends Loader {
 
 					const lookupKey = template_uri.startsWith( '/' ) ? template_uri.substring( 1 ) : template_uri;
 
-					// 2. Metadata Logic
+					// Metadata Logic
 
 					let specificMetadata = null;
 
-					if ( subtreeJson.tileMetadata !== undefined ) {
+					if ( subtreeJson.tileMetadata !== undefined || subtreeJson.subtreeMetadata !== undefined ) {
 
 						// Mapping: (MortonIndex * TotalLayers) + CurrentLayer
 
 						const metadataIndex = ( index * contentTemplates.length ) + layerIdx;
 
 						specificMetadata = this._extractPropertyTableMetadata(
-							subtreeJson.tileMetadata, 
+
+							subtree_isJson ? 'subtreeMetadata' : subtreeJson.tileMetadata, 
 							metadataIndex, 
 							subtreeJson, 
 							binary,
 							json.schema
+
 						);
 
 					}
 
-					// 3. Populate Lookups
+					// Populate Lookups
 
 					this._variantLookup.set( lookupKey, layerIdx );
 
@@ -1600,7 +1674,7 @@ class Three3DTilesLoader extends Loader {
 
 			};
 
-			// 4. Flattening logic for OGC3DTile compatibility
+			// Flattening logic for OGC3DTile compatibility
 
 			if ( validContents.length > 0 ) {
 
@@ -1647,7 +1721,7 @@ class Three3DTilesLoader extends Loader {
 
 			}
 
-			// 5. Handle Subtree Traversal
+			// Handle Subtree Traversal
 
 			const isSubtreeLeaf = ( lvl + 1 - subtreeRootLevel ) % subtreeLevels === 0;
 			const nextLevel = lvl + 1;
@@ -1674,7 +1748,12 @@ class Three3DTilesLoader extends Loader {
 							? this._morton2D( nx & mask, ny & mask ) 
 							: this._morton3D( nx & mask, ny & mask, nz & mask );
 
-						if ( this._checkAvailability( subtreeJson.childSubtreeAvailability, leafIndex, binaryView, subtreeJson ) ) {
+						// Check availability before recursing
+
+						const subAvailable = ( subtreeJson.childSubtreeAvailability?.constant === 1 ) ||
+							this._checkAvailability( subtreeJson.childSubtreeAvailability, leafIndex, binaryView, subtreeJson);
+
+						if ( subAvailable ) {
 
 							const nextSubtree = await this._resolveImplicit( json, rootPath, nextLevel, nx, ny, nz );
 							node.children.push( nextSubtree.root );
@@ -1698,6 +1777,303 @@ class Three3DTilesLoader extends Loader {
 
 		const rootNode = await buildNode( level, x, y, z );
 
+		return { asset: json.asset, root: rootNode };
+
+	}
+
+	/**
+	 * Adapts 3D Tiles 1.0 JSON with Implicit Tiling extensions 
+	 * into a format compatible with explicit loaders.
+	 */
+	async _resolveV10Implicit( json, rootPath, level = 0, x = 0, y = 0, z = 0 ) {
+
+		const root = json.root;
+		const schema = json.extensions?.[ '3DTILES_metadata' ]?.schema;
+
+		// Support both the official 1.1 path and the 1.0 extension path
+
+		const implicit = root?.extensions?.[ '3DTILES_implicit_tiling' ] || root?.implicitTiling || json.implicitTiling;
+
+		if ( !implicit ) return json;
+
+		const isQuadtree = implicit.subdivisionScheme === "QUADTREE";
+		const childCount = isQuadtree ? 4 : 8;
+		const subtreeLevels = implicit.subtreeLevels;
+
+		// Resolve Subtree URL
+		// We calculate which subtree file manages this specific tile coordinate
+
+		const subtreeRootLevel = Math.floor( level / subtreeLevels ) * subtreeLevels;
+
+		const subtreeUrl = rootPath + this._replaceTemplate(
+
+			implicit.subtrees.uri,
+			subtreeRootLevel,
+			x >> ( level - subtreeRootLevel ),
+			y >> ( level - subtreeRootLevel ),
+			isQuadtree ? 0 : z >> ( level - subtreeRootLevel )
+
+		);
+
+		// Fetch and Parse Subtree (Handle JSON or Binary)
+
+		const response = await fetch( subtreeUrl );
+
+		if ( !response.ok ) {
+
+			console.error( `Could not load subtree: ${ subtreeUrl }` );
+			return json;
+
+		}
+
+		let subtreeJson, binary, binaryView, tileBits;
+
+		if ( subtreeUrl.endsWith( '.json' ) ) {
+
+			subtreeJson = await response.json();
+
+			// If binary data is separate or embedded, it would be handled here
+
+		} else {
+
+			const buffer = await response.arrayBuffer();
+			const parsed = this._parseSubtree( buffer );
+			subtreeJson = parsed.subtreeJson;
+			binaryView = parsed.binaryView;
+			binary = parsed.binary;
+
+		}
+
+		// 3. Get Availability Bitstreams
+
+		if ( binary ) tileBits = this._getAvailability( subtreeJson, subtreeJson.tileAvailability, binary );
+
+		// Ensure contentAvailability is treated as an array even if it's a single object
+
+		const rawContentAvail = subtreeJson.contentAvailability;
+
+		const contentAvailArray = Array.isArray( rawContentAvail )
+			? rawContentAvail 
+			: ( rawContentAvail ? [ rawContentAvail ] : [] );
+
+		const contentBitLayers = contentAvailArray.map( avail =>
+
+			this._getAvailability( subtreeJson, avail, binary )
+
+		);
+
+		// Identify Content Templates (Handle single 'content' or array 'contents')
+
+		let contentTemplates = [];
+
+		if ( root.contents ) {
+
+			contentTemplates = Array.isArray( root.contents ) ? root.contents : [ root.contents ];
+
+		} else if ( root.content ) {
+
+			contentTemplates = [ root.content ];
+
+		}
+
+		const buildNode = async ( lvl, cx, cy, cz ) => {
+
+			const currentDepthInSubtree = lvl - level;
+
+			// If we hit the boundary of the current subtree, jump to the next subtree
+
+			if ( currentDepthInSubtree >= subtreeLevels ) {
+
+				const nextSubtree = await this._resolveV10Implicit( json, rootPath, lvl, cx, cy, cz );
+				return nextSubtree.root;
+
+			}
+
+			// Compute Morton Index for the current tile within the subtree
+
+			const mask = ( 1 << currentDepthInSubtree ) - 1;
+
+			const localX = cx & mask;
+			const localY = cy & mask;
+			const localZ = cz & mask;
+
+			const levelOffset = Math.floor( ( Math.pow( childCount, currentDepthInSubtree ) - 1 ) / ( childCount - 1 ) );
+
+			const mortonCode = isQuadtree 
+				? this._morton2D( localX, localY ) 
+				: this._morton3D( localX, localY, localZ );
+
+			const index = levelOffset + mortonCode;
+
+			const maxAllowedDepth = this._maxDepthLevel;
+
+			// Check if this tile exists in the bitstream
+
+			const isTileAvailable = (subtreeJson.tileAvailability?.constant === 1) || ( tileBits && tileBits[index] === 1 );
+
+			if ( !isTileAvailable ) return null;
+
+			let specificMetadata = null;
+
+			// Resolve Content URIs if they are available at this index
+
+			const validContents = [];
+
+			contentTemplates.forEach( ( template, layerIdx ) => {
+
+				const layerBits = contentBitLayers[ layerIdx ];
+
+				const contentAvailable = ( rawContentAvail?.constant === 1 ) || ( layerBits && layerBits[ index ] === 1 );
+
+				if ( contentAvailable ) {
+
+					// Apply template to get the actual URI
+
+					let template_uri = this._replaceTemplate( template.uri, lvl, cx, cy, isQuadtree ? 0 : cz );
+					const uri = rootPath + template_uri;
+
+					// Clean URI for lookup keys (remove leading slash)
+
+					const lookupKey = template_uri.startsWith( '/' ) ? template_uri.substring( 1 ) : template_uri;
+
+					// 2. Metadata Logic
+
+					if ( subtreeJson.subtreeMetadata !== undefined ) {
+
+						// Mapping: (MortonIndex * TotalLayers) + CurrentLayer
+
+						const metadataIndex = ( index * contentTemplates.length ) + layerIdx;
+
+						specificMetadata = this._extractPropertyTableMetadata(
+
+							'subtreeMetadata', 
+							metadataIndex, 
+							subtreeJson, 
+							binary,
+							schema
+
+						);
+
+					}
+
+					// 3. Populate Lookups
+
+					this._variantLookup.set( lookupKey, layerIdx );
+
+					if ( specificMetadata ) {
+
+						// Push to metadataLookup so the picker can find it by URI
+
+						this._metadataLookup.push({
+
+							uri: lookupKey,
+							metadataContent: null,
+							metadataTile: specificMetadata,
+							groupIndex: null
+
+						});
+
+					}
+
+					validContents.push({
+
+						uri: uri,
+						metadata: specificMetadata
+
+					});
+
+				}
+
+			});
+
+			const node = {
+
+				boundingVolume: this._computeChildBoundingVolume( root.boundingVolume, cx, cy, cz, isQuadtree, lvl ),
+				geometricError: root.geometricError / Math.pow( 2, lvl ),
+				refine: root.refine || "ADD",
+				metadata: specificMetadata,
+				children: []
+
+			};
+
+			if ( validContents.length > 0 ) {
+
+				node.content = validContents[ 0 ];
+
+				// Handle multiple contents as synthetic children (v1.1 feature)
+
+				for ( let i = 1; i < validContents.length; i++ ) {
+
+					node.children.push({
+
+						content: validContents[ i ],
+						boundingVolume: node.boundingVolume,
+						geometricError: 0, // Force same-time loading
+						refine: "ADD",
+						metadata: contentTemplates[ i ].metadata
+
+					});
+
+				}
+
+			}
+
+			// Recursive step: Add children if they exist and we haven't hit the availability limit
+
+			const isSubtreeLeaf = ( lvl + 1 - subtreeRootLevel ) % subtreeLevels === 0;
+			const nextLevel = lvl + 1;
+
+			if ( nextLevel < implicit.availableLevels && currentDepthInSubtree < maxAllowedDepth ) {
+
+				for ( let i = 0; i < childCount; i++ ) {
+
+					const [ dx, dy, dz ] = isQuadtree ? this._decodeMorton2D( i ) : this._decodeMorton3D( i );
+
+					const nx = cx * 2 + dx;
+					const ny = cy * 2 + dy;
+					const nz = isQuadtree ? 0 : cz * 2 + dz;
+
+					if ( isSubtreeLeaf ) {
+
+						// Check if a child subtree exists at this leaf position
+
+						const mask = ( 1 << subtreeLevels ) - 1;
+
+						//const relativeLevel = nextLevel - subtreeRootLevel;
+						//const mask = ( 1 << relativeLevel ) - 1;
+
+						const leafIndex = isQuadtree 
+							? this._morton2D( nx & mask, ny & mask ) 
+							: this._morton3D( nx & mask, ny & mask, nz & mask );
+
+						// Check availability before recursing
+
+						const subAvailable = ( subtreeJson.childSubtreeAvailability?.constant === 1 ) ||
+							this._checkAvailability( subtreeJson.childSubtreeAvailability, leafIndex, binaryView, subtreeJson );
+
+						if ( subAvailable ) {
+
+							const nextSubtree = await this._resolveV10Implicit( json, rootPath, nextLevel, nx, ny, nz );
+							node.children.push( nextSubtree.root );
+
+						}
+
+					} else {
+
+						const child = await buildNode( nextLevel, nx, ny, nz );
+						if ( child ) node.children.push( child );
+
+					}
+
+				}
+
+			}
+
+			return node;
+
+		};
+
+		const rootNode = await buildNode( level, x, y, z );
 		return { asset: json.asset, root: rootNode };
 
 	}
@@ -1770,18 +2146,23 @@ class Three3DTilesLoader extends Loader {
 				json.root?.contents?.some( c => c.metadata )
 			);
 
+			const json_transform = json.root.transform;
+
+			const tilesetVersion = json.asset?.version || null;
+			const isImplicit = json.root.implicitTiling !== undefined;
+			const isV10Implicit = json.root.extensions?.[ '3DTILES_implicit_tiling' ];
+
 			if ( hasMetadata ) {
 
 				scope._currentGroups = json.groups || [];
 				scope._currentSchema = json.schema || null;
 				scope._tilesetMetadata = json.metadata || null;
 
+			} else if ( isV10Implicit ) {
+
+				scope._currentSchema = json.extensions?.[ '3DTILES_metadata' ]?.schema || null;
+
 			}
-
-			const json_transform = json.root.transform;
-
-			const tilesetVersion = json.asset?.version || null;
-			const isImplicit = json.root.implicitTiling !== undefined;
 
 			// Check if the root or any child has multiple contents to set a global flag
 
@@ -1792,7 +2173,11 @@ class Three3DTilesLoader extends Loader {
 			const hasMulti = hasMultiExplicit || hasMultiImplicit;
 
 			// Resolve Implicit Tiling first (last param after 'z' is userMaxDepth = Infinity)
-			if ( isImplicit ) json = await scope._resolveImplicit( json, rootPath, level, x, y, z, hasMulti );
+			if ( isImplicit ) {
+				json = await scope._resolveImplicit( json, rootPath, level, x, y, z, hasMulti );
+			} else if ( isV10Implicit ) {
+				json = await scope._resolveV10Implicit( json, rootPath, level, x, y, z );
+			}
 
 			// Resolve Multiple Contents to make it OGC3DTile compatible
 			await scope._flattenExplicitContents( json.root, hasMetadata );
@@ -1806,6 +2191,7 @@ class Three3DTilesLoader extends Loader {
 					centerModel: false,
 					rootPath: rootPath,
 					displayErrors: true,
+					cleanupDelay: 1000000,
 					loadOutsideView: true,
 					renderer: scope._renderer,
 					level: scope._maxDepthLevel,
@@ -1817,7 +2203,11 @@ class Three3DTilesLoader extends Loader {
 					loadingStrategy: isImplicit ? "IMMEDIATE" : "INCREMENTAL",
 					queryParams: scope._keyAPI !== '' ? { key: scope._keyAPI } : undefined,
 					headers: scope._token ? { Authorization: `Bearer ${ scope._token }` } : undefined,
-					meshCallback: mesh => {	mesh.material.wireframe = this._wireframeMode || false; },
+					meshCallback: mesh => {
+						mesh.updateMatrix();
+						mesh.updateMatrixWorld( true );
+						mesh.material.wireframe = this._wireframeMode || false;
+					},
 					pointsCallback: points => {
 						points.material.size = this._pointTargetSize || 1.0;
 
@@ -1886,7 +2276,7 @@ class Three3DTilesLoader extends Loader {
 			const isECEF = obvCenter.length() > 1000000;
 			ogc3DTile.isECEF = isECEF;
 
-			let correction;
+			let correction, rotatedCenter;
 
 			if ( isECEF && MathUtils.radToDeg( earthTiltAngle ) > 0.1 ) {
 
@@ -1895,7 +2285,7 @@ class Three3DTilesLoader extends Loader {
 
 				// Calculate where the center is after rotation
 
-				const rotatedCenter = obvCenter.clone().applyQuaternion( alignQuat );
+				rotatedCenter = obvCenter.clone().applyQuaternion( alignQuat );
 
 				// Move the tile back to the origin based on that rotated center
 
@@ -2036,6 +2426,7 @@ class Three3DTilesLoader extends Loader {
 
 					// --- METADATA SYNC ---
 					// Only run if the object doesn't have metadata yet
+					// The only identifiable property seems to be contentURL
 
 					if ( ogc3DTile.hasMetadata ) {
 
@@ -2139,6 +2530,7 @@ class Three3DTilesLoader extends Loader {
 				// Force the tileset to update its matrices so we get current world positions
 
 				ogc3DTile.updateMatrixWorld( true );
+				ogc3DTile.updateWorldMatrix( true, true );
 
 				// Use the pre-calculated local bounding box
 
@@ -2327,18 +2719,6 @@ class Three3DTilesLoader extends Loader {
 				ogc3DTile.copyrightVisible = true;
 				ogc3DTile.displayCopyright = true;
 				ogc3DTile.showCopyright();
-
-			}
-
-			// This seems to be needed for IMMEDIATE strategy and v1.1 model with transform
-
-			if ( !!json_transform && tilesetVersion === '1.1' && ogc3DTile.loadingStrategy === 'IMMEDIATE' ) {
-
-				ogc3DTile.translateX( ogc3DTile.position.x * ( - 1 ) );
-				ogc3DTile.translateY( ogc3DTile.position.y * ( - 1 ) );
-				ogc3DTile.translateZ( ogc3DTile.position.z * ( - 1 ) );
-
-				ogc3DTile.position.set( 0, 0, 0 );
 
 			}
 
