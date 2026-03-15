@@ -398,21 +398,25 @@ Number Type Converter
   - Simple viewer specifically designed to stream 3D Tiles:
     - Supports ImplicitTiling, MultipleContents and Metadata v1.1 by performing conversion to explicit:
       - Partial support for GLTF EXT_mesh_features and EXT_instance_features FeatureId Attribute
-      - For quick testing maybe try loading official [Cesium](https://github.com/CesiumGS/3d-tiles-samples) examples
+      - Quick test, try loading some of these examples: [Cesium](https://github.com/CesiumGS/3d-tiles-samples), [bertt](https://github.com/bertt/cesium_3dtiles_samples/tree/master/samples), [NASA-AMMOS](https://github.com/NASA-AMMOS/3DTilesSampleData/tree/master):
+        - Some of these examples might not work if corrupt or using unsupported formats like `i3dm` or `pnts`
     - It is using customized `3DTilesLoader`:
       - Also created with assistance from Microsoft Copilot and Google Gemini
       - Internally using [OGC3DTile](https://github.com/ebeaufay/threedtiles) loader
-    - If bounding box is visible but no content is loading then either:
-      - The model is out-of-sight in a far away land
+    - If 3D tileset is not visible, maybe one of the following applies:
+      - If bounding box is visible maybe only metadata was loaded
+      - The model is out-of-sight in a far away land:
+        - Click quick rotation button multiple times
       - Those features require API Key or token
       - Those features are not implemented in the viewer
       - Those features are not supported by internal loader
         - Only B3DM and GLTF/GLB formats are supported
-      - Check console for any silent errors that didn't bubble up
-  - API Key and / or Token can be entered, that might be required for some data providers:
+      - Check console if possible, for any silent errors that didn't bubble up
+      - Use different LOD settings to see if that changes anything
+  - API Key or Token can be entered, that might be required for some data providers:
     - These features are untested since I don't have either available for testing
     - Once the text box with the key / token is cleared then click the `Set Key` or `Set Token` button to clear it in the loader as well
-  - 3D Tiles are normally loaded via URL (containing a link to `tileset.json` file or some other named json file)
+  - 3D Tiles are normally loaded via URL (containing a link to `tileset.json` file or some other named `.json` file)
   - Local loading is not supported unless files are served by some local HTTP server
   - It has the following live controls presented within [lil-gui](https://lil-gui.georgealways.com/):
     - Brightness
