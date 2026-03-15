@@ -23,7 +23,11 @@
             alert('jQuery failed to load. Limited functionality. Check your internet connection!');
           }
 
-          if (init_running === true) handle_error( 'RESOURCE ERROR' );
+          if (init_running === true) {
+            handle_error( 'RESOURCE ERROR' );
+          } else {
+            document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
+          }
         }
       }, true); // The 'true' here is vital; it enables the "capturing" phase
 
@@ -78,10 +82,10 @@
       var stats, stats_enabled, events_initialized, clock;
       var last_tile, last_level, last_uuid, params, halt_on_error;
       var selected_url_file = '', directionalLight, isMobile;
-      var lod_displayed = false, warning_displayed = false;
+      var lod_displayed = false, warning_displayed = false, wireframe_enabled;
       var extended_render, extended_count = 0, count = 0, selectedObject, pickedObject;
       var variants, variants_available, current_variant, click_listener_added = false;
-      var bounding_box, bbox_enabled, boxHelper, box_helper_added, wireframe_enabled;
+      var bounding_box, bbox_enabled, box, boxHelper, box_helper_added, xAxis;
       var raycaster, mouse, mouseDownPos, raycastableObjects, featureHighlightMesh;
       var url_displayed = false, keyAPI_displayed = false, token_displayed = false;
     </script>
@@ -152,6 +156,8 @@
         <label for="btn_url" title="Get remote model via URL"></label>
         <label for="back_color" title="Background Color">B</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
+        <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
         <button title="Toggle Statistics" id="btn_stats" onclick="set_statistics();" style="min-width: 46px;" disabled>Stats</button>
         <label for="btn_stats" title="Toggle Statistics"></label>
         <button title="Toggle Bounding Box" id="btn_bounding_box" onclick="set_bounding_box();" style="min-width: 28px;" disabled>BB</button>
@@ -216,6 +222,8 @@
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">3D Tiles Viewer</div>
     <div id="metadata-card"></div>
+
+    <div id="metadata_message" style="position: fixed; visibility: hidden; font-family: Monospace, Arial; color: #d1cefc; bottom: calc(env(safe-area-inset-bottom) + 15px); left: 5px; pointer-events: none;">Metadata and Raycasting Enabled</div>
 
     <script>
       function set_tiles_cache( val ) {
@@ -479,6 +487,27 @@
         mouse_wheel = true;
       }
 
+      function quick_x_rotation( angle = null ) {
+        const oldCenter = new THREE.Vector3();
+        tileset_obj.boundingBox.getCenter( oldCenter );
+
+        tileset_obj.rotateOnWorldAxis( xAxis, angle ? angle : -Math.PI / 2.0 );
+        tileset_obj.updateMatrixWorld( true );
+
+        // Get the center AFTER rotation
+        const newBox = new THREE.Box3().setFromObject( tileset_obj );
+        const newCenter = new THREE.Vector3();
+        newBox.getCenter( newCenter );
+
+        // Calculate the 'swing' offset and move it back
+        const offset = new THREE.Vector3().subVectors( oldCenter, newCenter );
+        tileset_obj.position.add( offset );
+        tileset_obj.updateMatrixWorld( true );
+
+        if (boxHelper) box.setFromObject( tileset_obj );
+        mouse_wheel = true;
+      }
+
       async function init() {
         init_running = true;
 
@@ -526,6 +555,7 @@
         bounding_box = new THREE.Box3();
         featureHighlightMesh = null;
         mouseDownPos = { x: 0, y: 0 };
+        xAxis = new THREE.Vector3( 1, 0, 0 );
 
         if (!params) params = { brightness: 2.5, pointSize: 1.0, multiplier: 0.5, bias: 1.0 };
 
@@ -641,7 +671,6 @@
           tileset_obj.frameCamera( camera );
 
           // Start rendering
-          document.getElementById('div_loading').style.display = 'none';
           render_requested = true;
           extended_render = true;
           extended_count = 0;
@@ -652,13 +681,22 @@
       async function finish_loading() {
         if (halt_on_error) return;
 
+        document.getElementById('div_loading').style.display = 'none';
+
+        // BUG: Some ECEF tilesets might not be visible initially
+        // even though they should be oriented properly
+        // so do back and forth rotation to get them on screen.
+        // These rotations should be transparent to user.
+        await quick_x_rotation( Math.PI / 2.0 );
+        await quick_x_rotation( - Math.PI / 2.0 );
+
         // Stop flashing indicator
         document.getElementById('btn_load').disabled = false;
         document.getElementById('status_indicator').style.display = 'none';
 
         if (gui_set === false) {
           // Add Brightness control
-          gui.add( params, 'brightness', 0, 5 ).name( 'Brightness' )
+          gui.add( params, 'brightness', 0, 20 ).name( 'Brightness' )
           .onChange( ( value ) => {
             directionalLight.intensity = value;
             needsRender = true;
@@ -712,18 +750,35 @@
         tileset_obj.traverse( ( child ) => {
           if (child.isLineSegments && ( child.parent.bbox?.uuid === child.uuid )) bbox_found = true;
           else if (child.isMesh || child.isPoints || child.isLine) {
-            if (child.isMesh && child.userData.gltfExtensions) {
-              // Currently only EXT_mesh_features with attributes is partially functional
-              const ext = child.userData.gltfExtensions.EXT_mesh_features ||
-                          child.userData.gltfExtensions.EXT_instance_features;
+            if (child.isMesh) {
+              if (child.userData.gltfExtensions) {
+                // Currently only EXT_mesh_features with attributes is partially functional
+                const ext = child.userData.gltfExtensions.EXT_mesh_features ||
+                            child.userData.gltfExtensions.EXT_instance_features;
 
-              if (ext && ext.featureIds && !ext.featureIds.find( f => f.texture !== undefined )) {
-                tileset_obj.hasGLTFExtensions = true;
+                // Currently metadata texture is not provided by internal OGC3D loader
+                if (ext && ext.featureIds && !ext.featureIds.find( f => f.texture !== undefined )) {
+                  tileset_obj.hasGLTFExtensions = true;
+                }
+              } else if (child.geometry.hasAttribute( '_batchid' )) {
+                tileset_obj.hasHybridImplicit = true;
               }
             }
 
             if (tileset_obj.hasMultipleContents) {
-              let fullURL = child.parent?.contentURL || child.parent?.parent?.contentURL || '';
+              let fullURL;
+              let curr = child;
+
+              // Climb parents to find the contentURL
+
+              while ( curr ) {
+                if ( curr.contentURL?.length > 0 ) {
+                  fullURL = curr.contentURL;
+                  break;
+                }
+
+                curr = curr.parent;
+              }
 
               // If it's an array, take the first element; otherwise, use the string
               if (Array.isArray( fullURL )) fullURL = fullURL[ 0 ] || '';
@@ -746,7 +801,8 @@
         });
 
         if (!bbox_found) {
-          boxHelper = new THREE.Box3Helper( tileset_obj.boundingBox, 0xFFFF00 );
+          box = new THREE.Box3().setFromObject( tileset_obj );
+          boxHelper = new THREE.Box3Helper( box, 0xFFFF00 );
           box_helper_added = true;
           scene.add( boxHelper );
         }
@@ -759,7 +815,9 @@
           document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
         }
 
-        if (tileset_obj.hasMetadata || tileset_obj.hasGLTFExtensions) {
+        if (tileset_obj.hasMetadata || tileset_obj.hasGLTFExtensions || tileset_obj.hasHybridImplicit) {
+          document.getElementById('metadata_message').style.visibility = 'visible';
+
           if (click_listener_added === false) {
             window.addEventListener( 'click', handle_raycast_click );
             click_listener_added = true;
@@ -811,9 +869,16 @@
         if (!isMobile) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
-      function log_info() {
+      async function log_info() {
         console.log( 'Memory: ', renderer.info.memory );
         console.log( 'Render: ', renderer.info.render );
+
+        if (document.getElementById('metadata_message').style.visibility === 'visible')
+          await new Promise( resolve => setTimeout( hide_metadata_message, 3000 ) );
+      }
+
+      function hide_metadata_message() {
+        document.getElementById('metadata_message').style.visibility = 'hidden';
       }
 
       function handle_error( error ) {
@@ -824,8 +889,9 @@
         render_requested = false;
         enable_disable( true );
 
-        // Stop flashing indicator
+        // Stop flashing indicator and hide metadata message
         document.getElementById('status_indicator').style.display = 'none';
+        document.getElementById('metadata_message').style.visibility = 'hidden';
 
         init_running = false;
 
@@ -1045,6 +1111,9 @@
 
         const extensions = pickedObject.userData.gltfExtensions;
 
+        const schema = tileset_obj.userData.schema;
+        const fid_class = [];
+
         if (extensions) {
           const isInstanced = pickedObject.isInstancedMesh;
           const meshFeatures = extensions.EXT_mesh_features || extensions?.EXT_instance_features;
@@ -1053,9 +1122,6 @@
           const attributeSets = meshFeatures.featureIds?.filter( f => f.attribute !== undefined ) || [];
 
           if (attributeSets.length > 0) {
-            let schema = tileset_obj.userData.schema;
-            let fid_class = [];
-
             for ( let i = 0; i < attributeSets.length; i++ ) {
               const attributeInfo = attributeSets[ i ];
               const featureIdIndex = attributeInfo.attribute;
@@ -1125,6 +1191,31 @@
 
             return;
           }
+        } else if (pickedObject.geometry.attributes._batchid) {
+          // Get the index of the vertex that was hit
+          const index = intersect.face.a; 
+
+          // Get the ID for this specific building/feature
+          const batchId = pickedObject.geometry.attributes._batchid.getX( index );
+
+          let className = 'BatchId ' + index; // Fallback
+
+          fid_class.push( { class: className, id: batchId } );
+
+          // Restore color
+          if (selectedObject?.material?.emissive) {
+            selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
+          }
+
+          // Trigger the geometry-based highlight for the primary ID
+          highlightFeature( fid_class[ 0 ].id, '_batchid' );
+
+          showUiPanel(
+            { featureId: fid_class, ...pickedObject.userData.metadata },
+            event, schema, pickedObject.name, false
+          );
+
+          return;
         }
 
         // Fallback to standard metadata
@@ -1132,7 +1223,7 @@
         const data = pickedObject.userData.metadata;
 
         if ((data && !data.empty) || tilesetMetadataOnly) {
-          showUiPanel(data, event, tileset_obj.userData.schema, pickedObject.name, tilesetMetadataOnly);
+          showUiPanel(data, event, tileset_obj.userData.schema, pickedObject.name, tilesetMetadataOnly, pickedObject.type);
         } else {
           // If no metadata found, remove highlight
           if (selectedObject.material?.emissive) {
@@ -1143,7 +1234,7 @@
         }
       }
 
-      function showUiPanel( data, event, schema = null, meshName = '', tilesetMetadataOnly = false ) {
+      function showUiPanel( data, event, schema = null, meshName = '', tilesetMetadataOnly = false, type = '' ) {
         const card = document.getElementById('metadata-card');
         if (!card) return;
 
@@ -1222,6 +1313,13 @@
               html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
            }
           }
+        } else if (tilesetMetadataOnly) {
+          const description = (type === 'Box3Helper') ? 'No Data (turn off bounding box)' : 'No Data';
+
+          html += `
+            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${ description }</div>
+            </div>`;
         }
 
         if (!tilesetMetadataOnly) {
@@ -1408,6 +1506,7 @@
       async function reset_all( reset = false ) {
         if (stats) stats.dom.style.visibility = 'hidden';
         document.getElementById('back_color').value = '#000000';
+        document.getElementById('metadata_message').style.visibility = 'hidden';
         document.getElementById('btn_stats').style.backgroundColor = 'transparent';
         document.getElementById('btn_variants').style.backgroundColor = 'transparent';
         document.getElementById('btn_variants').style.display = 'none';
@@ -1510,7 +1609,7 @@
         }
 
         if (tileset_obj.dispose) tileset_obj.dispose();
-        if (boxHelper) boxHelper.dispose();
+        if (boxHelper?.dispose) boxHelper.dispose();
 
         tileset_obj = null;
 
@@ -1523,6 +1622,7 @@
       function enable_disable( disable = false ) {
         document.getElementById('back_color').disabled = disable;
         document.getElementById('btn_stats').disabled = disable;
+        document.getElementById('btn_quick_x').disabled = disable;
         document.getElementById('btn_wireframe').disabled = disable;
         document.getElementById('btn_bounding_box').disabled = disable;
         disabled_changed();
@@ -1553,7 +1653,7 @@
         document.getElementById('cache_level').selectedIndex = 0;
         document.getElementById('depth_level').selectedIndex = 0;
 
-        alert('After loading some 3D Tiles, if bounding box is visible but no content shows up then:\n- The model might be in a land far far away\n- Its features require API Key or token\n- Its features are not implemented in the viewer\n- Its features are not supported by internal loader\n  - Only B3DM and GLTF/GLB formats are supported\n- Check console for any silent errors\n- Use different LOD settings to see if that changes anything');
+        alert('If 3D tileset is not visible, maybe one of the following applies:\n- If bounding box is visible maybe only metadata was loaded\n- The model might be in a land far far away\n   - Click quick rotation button multiple times\n- Its features require API Key or token\n- Its features are not implemented in the viewer\n- Its features are not supported by internal loader\n   - Only B3DM and GLTF/GLB formats are supported\n- Check console, if possible, for any silent errors\n- Use different LOD settings to see if that changes anything');
       }
 
       function disabled_changed() {
