@@ -406,6 +406,7 @@ Number Type Converter
     - It is using customized `3DTilesLoader`:
       - Also created with assistance from Microsoft Copilot and Google Gemini
       - Internally using [OGC3DTile](https://github.com/ebeaufay/threedtiles) loader
+      - If you are to use it in your own viewer then make sure to check the `MAGIC TRICK` notes from my 3D Tiles Viewer (related to ECEF tilesets and located on top of the `finish_loading` function)
     - If 3D tileset is not visible, maybe one of the following applies:
       - If bounding box is visible maybe only metadata was loaded
       - The model is out-of-sight in a far away land:
