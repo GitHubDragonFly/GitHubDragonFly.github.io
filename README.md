@@ -397,7 +397,8 @@ Number Type Converter
 - Special notes about `3D Tiles Viewer`:
   - Simple viewer specifically designed to stream 3D Tiles:
     - Supports ImplicitTiling, MultipleContents and Metadata v1.1 by performing conversion to explicit:
-      - Partial support for GLTF EXT_mesh_features and EXT_instance_features FeatureId Attribute
+      - Partial support for GLTF `EXT_mesh_features` and `EXT_instance_features` FeatureId Attribute:
+        - OGC3D loader is currently not providing access to metadata textures or property tables
       - Quick test, try loading some of these examples: [Cesium](https://github.com/CesiumGS/3d-tiles-samples), [bertt](https://github.com/bertt/cesium_3dtiles_samples/tree/master/samples), [NASA-AMMOS](https://github.com/NASA-AMMOS/3DTilesSampleData/tree/master):
         - Some of these examples might not work if corrupt or using unsupported formats like `i3dm` or `pnts`
     - It is using customized `3DTilesLoader`:
@@ -428,7 +429,7 @@ Number Type Converter
   - The viewer allows setting Level Of Detail (LOD):
     - `Cache` which defines how many tiles are loaded and kept in ready state (default 100, affects memory usage and smooth movement)
     - `Depth` level defines how many subtrees are processed (default 4)
- - Consider adjusting LOD settings to improve performance and memory usage
+  - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `USDZ Viewer`:
   - Currently, it only supports USDZ files with USDA (ascii model packed in)
