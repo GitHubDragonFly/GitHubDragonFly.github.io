@@ -399,6 +399,8 @@ Number Type Converter
     - Supports ImplicitTiling, MultipleContents and Metadata v1.1 by performing conversion to explicit:
       - Partial support for GLTF `EXT_mesh_features` and `EXT_instance_features` FeatureId Attribute:
         - OGC3D loader is currently not providing access to metadata textures or property tables
+        - OGC3D loader does not seem to be able to fetch `BIN` files associated with certain `GLTF` models:
+          - This might be a bug in the library itself, not adding root path to uri
       - Quick test, try loading some of these examples: [Cesium](https://github.com/CesiumGS/3d-tiles-samples), [bertt](https://github.com/bertt/cesium_3dtiles_samples/tree/master/samples), [NASA-AMMOS](https://github.com/NASA-AMMOS/3DTilesSampleData/tree/master):
         - Some of these examples might not work if corrupt or using unsupported formats like `i3dm` or `pnts`
     - It is using customized `3DTilesLoader`:
