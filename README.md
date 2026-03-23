@@ -395,18 +395,19 @@ Number Type Converter
   - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `3D Tiles Viewer`:
-  - Simple viewer specifically designed to stream 3D Tiles:
-    - Supports ImplicitTiling, MultipleContents and Metadata v1.1 by performing conversion to explicit:
-      - Partial support for GLTF `EXT_mesh_features` and `EXT_instance_features` FeatureId Attribute:
-        - OGC3D loader is currently not providing access to metadata textures or property tables
-        - OGC3D loader does not seem to be able to fetch `BIN` files associated with certain `GLTF` models:
-          - This might be a bug in the library itself, not adding root path to uri
-      - Quick test, try loading some of these examples: [Cesium](https://github.com/CesiumGS/3d-tiles-samples), [bertt](https://github.com/bertt/cesium_3dtiles_samples/tree/master/samples), [NASA-AMMOS](https://github.com/NASA-AMMOS/3DTilesSampleData/tree/master):
-        - Some of these examples might not work if corrupt or using unsupported formats like `i3dm` or `pnts`
-    - It is using customized `3DTilesLoader`:
+  - 2 versions of this viewer exist, one using [threedtiles](https://github.com/ebeaufay/threedtiles) and the other [3d-tiles-renderer](https://github.com/NASA-AMMOS/3DTilesRendererJS) library:
+    - Neither is perfect so use both of them and compare
+  - These viewers are specifically designed to stream 3D Tiles:
+    - Support ImplicitTiling, MultipleContents and Metadata v1.1 by performing conversion to explicit:
+      - `3d-tiles-renderer` seems to provide support for GLTF `EXT_structural_metadata`, `EXT_mesh_features`, `EXT_instance_features` and both FeatureId Attribute and Texture:
+      - `threedtiles` is currently not providing access to some of these features, like metadata textures or property tables:
+        - It also does not provide support for `.i3dm`, `.pnts` or `.cmpt` formats
+        - It also does not seem to be able to fetch `.bin` files associated with certain `GLTF` models
+      - Quick test for both viewers, try loading some of these examples: [Cesium](https://github.com/CesiumGS/3d-tiles-samples), [bertt](https://github.com/bertt/cesium_3dtiles_samples/tree/master/samples), [NASA-AMMOS](https://github.com/NASA-AMMOS/3DTilesSampleData/tree/master):
+        - Some of these examples might not work in one or the other or both viewers
+    - Both viewers are using customized `3DTilesLoader`:
       - Also created with assistance from Microsoft Copilot and Google Gemini
-      - Internally using [OGC3DTile](https://github.com/ebeaufay/threedtiles) loader
-      - If you are to use it in your own viewer then make sure to check the `MAGIC TRICK` notes from my 3D Tiles Viewer (related to ECEF tilesets and located on top of the `finish_loading` function)
+      - Check the code of my viewers to see how this is all implemented
     - If 3D tileset is not visible, maybe one of the following applies:
       - If bounding box is visible maybe only metadata was loaded
       - The model is out-of-sight in a far away land:
@@ -414,22 +415,15 @@ Number Type Converter
       - Those features require API Key or token
       - Those features are not implemented in the viewer
       - Those features are not supported by internal loader
-        - Only B3DM and GLTF/GLB formats are supported
       - Check console if possible, for any silent errors that didn't bubble up
       - Use different LOD settings to see if that changes anything
-  - API Key or Token can be entered, that might be required for some data providers:
+  - API Key and/or Token can be entered, that might be required for some data providers:
     - These features are untested since I don't have either available for testing
     - Once the text box with the key / token is cleared then click the `Set Key` or `Set Token` button to clear it in the loader as well
   - 3D Tiles are normally loaded via URL (containing a link to `tileset.json` file or some other named `.json` file)
   - Local loading is not supported unless files are served by some local HTTP server
-  - It has the following live controls presented within [lil-gui](https://lil-gui.georgealways.com/):
-    - Brightness
-    - LOD Multiplier (Geometric Error Correction)
-    - LOD Distance Bias
-    - LOD Point Size (for when points models are loaded)
-  - It also has some switchable statistics:
-    - FPS / MS / MB stats are using [stats.js](https://github.com/mrdoob/stats.js/) library
-  - The viewer allows setting Level Of Detail (LOD):
+  - Both viewers have some live controls present within [lil-gui](https://lil-gui.georgealways.com/) and switchable statistics
+  - Both viewers allow setting Level Of Detail (LOD):
     - `Cache` which defines how many tiles are loaded and kept in ready state (default 100, affects memory usage and smooth movement)
     - `Depth` level defines how many subtrees are processed (default 4)
   - Consider adjusting LOD settings to improve performance and memory usage
