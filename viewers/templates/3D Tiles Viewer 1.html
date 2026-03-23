@@ -1,0 +1,1772 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="3D Tiles Streaming Viewer - using threedtiles library">
+    <link rel="stylesheet" href="../static/css/mobile-viewers.css">
+    <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
+
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running === true) {
+            handle_error( 'RESOURCE ERROR' );
+          } else {
+            document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE ' + event.reason );
+      });
+    </script>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.183.2/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/",
+          "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
+    <script src="https://mrdoob.github.io/stats.js/build/stats.min.js" defer></script>
+
+    <script>
+      var THREE, manager, tiles_loader, tileset_obj, init_running = false;
+      var scene, renderer, camera, controls, render_requested, needsRender;
+      var gui, gui_container, gui_set = false, gui_pointSize, mouse_down, mouse_wheel;
+      var animations, animation_mixer, current_animation, animation_running;
+      var ww = window.innerWidth, wh = window.innerHeight;
+      var stats, stats_enabled, events_initialized, clock;
+      var last_tile, last_level, last_uuid, params, halt_on_error;
+      var selected_url_file = '', directionalLight, isMobile;
+      var lod_displayed = false, warning_displayed = false, wireframe_enabled;
+      var extended_render, extended_count = 0, count = 0, selectedObject, pickedObject;
+      var variants, variants_available, current_variant, click_listener_added = false;
+      var bounding_box, bbox_enabled, box, boxHelper, box_helper_added, xAxis;
+      var raycaster, mouse, mouseDownPos, raycastableObjects, featureHighlightMesh;
+      var url_displayed = false, keyAPI_displayed = false, token_displayed = false;
+    </script>
+
+    <script type="module">
+      import * as threejs from "three";
+      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
+      import { Three3DTilesLoader } from "../static/jsm/loaders/3DTilesLoader1.min.js";
+
+      THREE = threejs;
+
+      manager = new THREE.LoadingManager();
+      manager.onLoad = function() { mouse_wheel = true; }
+
+      tiles_loader = new Three3DTilesLoader( manager );
+
+      gui_container = document.getElementById('right_gui_position');
+      gui = new GUI( { autoPlace: false, container: gui_container } );
+      set_gui_position();
+    </script>
+
+    <style>
+      #metadata-card {
+        position: absolute;
+        display: none; /* Hidden by default */
+        background: rgba(25, 25, 25, 0.9);
+        color: #fff;
+        padding: 12px;
+        border-radius: 8px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 13px;
+        min-width: 180px;
+        max-width: 90vw;
+        max-height: 70vh;    /* Limits height to 70% of the screen */
+        overflow-y: auto;    /* Enables vertical scroll */
+        border: 1px solid #444;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        pointer-events: auto;
+        z-index: 1000;
+      }
+
+      #metadata-card::-webkit-scrollbar { width: 6px; }
+      #metadata-card::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+      #metadata-card h4 { margin: 0 0 8px 0; color: #00d4ff; text-transform: uppercase; font-size: 11px; }
+      #metadata-card .prop-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+      #metadata-card .prop-label { color: #aaa; margin-right: 15px; }
+      #metadata-card .prop-value { font-weight: bold; color: #fff; }
+    </style>
+
+    <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
+    <!-- Using three.js library: https://github.com/mrdoob/three.js -->
+    <!-- Internally using OGC3DTile loader: https://github.com/ebeaufay/threedtiles -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>3D Tiles Viewer (r183)</title>
+  </head>
+  <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <button title="Enter API key for providers that require it" id="btn_keyAPI" onclick="show_keyAPI();" style="min-width: 34px;">Key</button>
+        <label for="btn_keyAPI" title="Enter API key for providers that require it"></label>
+        <button title="Enter token for providers that require it" id="btn_token" onclick="show_token();" style="min-width: 42px;">Token</button>
+        <label for="btn_token" title="Enter token for providers that require it"></label>
+        <button title="Set Level of Details for Displaying Models" id="btn_lod" onclick="show_lod();" style="min-width: 34px;">LOD</button>
+        <label for="btn_lod" title="Set Level of Details for Displaying Models"></label>
+        <button title="Get remote model via URL" id="btn_url" onclick="show_url()" style="min-width: 34px;">URL</button>
+        <label for="btn_url" title="Get remote model via URL"></label>
+        <label for="back_color" title="Background Color">B</label>
+        <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
+        <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
+        <button title="Toggle Statistics" id="btn_stats" onclick="set_statistics();" style="min-width: 46px;" disabled>Stats</button>
+        <label for="btn_stats" title="Toggle Statistics"></label>
+        <button title="Toggle Bounding Box" id="btn_bounding_box" onclick="set_bounding_box();" style="min-width: 28px;" disabled>BB</button>
+        <label for="btn_bounding_box" title="Toggle Bounding Box"></label>
+        <button title="Toggle Material Wireframe" id="btn_wireframe" onclick="set_wireframe();" style="min-width: 28px;" disabled>W</button>
+        <label for="btn_wireframe" title="Toggle Material Wireframe"></label>
+        <button title="Switch Animation" id="btn_animate" onclick="animate_gltf();" style="display: none;">A</button>
+        <label for="btn_animate" title="Switch Animation"></label>
+        <button title="Switch Variant" id="btn_variants" onclick="switch_variant();" style="display: none; min-width: 36px;">V</button>
+        <label for="btn_variants" title="Switch Variant"></label>
+        <div id="status_indicator" class="indicator"></div>
+      </div>
+      <div class="fm" id="keyAPI" style="display: none;">
+        <label for="keyAPI_entry" title="Enter API key for providers that require it"></label>
+        <input type="text" id="keyAPI_entry" value="" style="width: calc(75% - 12px);" />
+        <button title="Set API Key" id="btn_set_keyAPI" onclick="set_keyAPI();" style="min-width: 8.5%;">Set Key</button>
+        <label for="btn_set_keyAPI" title="Set API Key"></label>
+        <button title="Clear API Key" id="btn_clear_keyAPI" onclick="clear_keyAPI();" style="min-width: 8.5%;">Clear</button>
+        <label for="btn_clear_keyAPI" title="Clear API Key"></label>
+      </div>
+      <div class="fm" id="token" style="display: none;">
+        <label for="token_entry" title="Enter token for providers that require it"></label>
+        <input type="text" id="token_entry" value="" style="width: calc(75% - 12px);" />
+        <button title="Set token" id="btn_set_token" onclick="set_token();" style="min-width: 8.5%;">Set Token</button>
+        <label for="btn_set_token" title="Set token"></label>
+        <button title="Clear token" id="btn_clear_token" onclick="clear_token();" style="min-width: 8.5%;">Clear</button>
+        <label for="btn_clear_token" title="Clear token"></label>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" value="" style="width: calc(75% - 12px);" />
+        <button title="Load" id="btn_load" onclick="load_url_file();" style="min-width: 8.5%;">Load</button>
+        <label for="btn_load" title="Load"></label>
+        <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
+        <label for="btn_clear" title="Clear"></label>
+      </div>
+      <div class="fm" id="lod" title="Set Level Of Details" style="display: none;">
+        <select id="cache_level" title="Set 3D Tiles cache size - affects memory usage and smooth movement" style="min-width: 80px;">
+          <option value="" disabled selected>Cache</option>
+          <option value="100" onclick="set_tiles_cache( 100 );">100</option>
+          <option value="200" onclick="set_tiles_cache( 200 );">200</option>
+          <option value="300" onclick="set_tiles_cache( 300 );">300</option>
+          <option value="400" onclick="set_tiles_cache( 400 );">400</option>
+          <option value="500" onclick="set_tiles_cache( 500 );">500</option>
+          <option value="600" onclick="set_tiles_cache( 600 );">600</option>
+          <option value="700" onclick="set_tiles_cache( 700 );">700</option>
+          <option value="800" onclick="set_tiles_cache( 800 );">800</option>
+          <option value="900" onclick="set_tiles_cache( 900 );">900</option>
+          <option value="1000" onclick="set_tiles_cache( 1000 );">1000</option>
+          <option value="2000" onclick="set_tiles_cache( 2000 );">2000</option>
+          <option value="5000" onclick="set_tiles_cache( 5000 );">5000</option>
+        </select>
+        <select id="depth_level" title="Set 3D Tiles depth level - affects memory usage and smooth movement" style="min-width: 80px;">
+          <option value="" disabled selected>Depth</option>
+          <option value="1" onclick="set_tiles_depth_level( 1 );">1</option>
+          <option value="2" onclick="set_tiles_depth_level( 2 );">2</option>
+          <option value="3" onclick="set_tiles_depth_level( 3 );">3</option>
+          <option value="4" onclick="set_tiles_depth_level( 4 );">4</option>
+          <option value="5" onclick="set_tiles_depth_level( 5 );">5</option>
+          <option value="6" onclick="set_tiles_depth_level( 6 );">6</option>
+          <option value="7" onclick="set_tiles_depth_level( 7 );">7</option>
+          <option value="8" onclick="set_tiles_depth_level( 8 );">8</option>
+          <option value="9" onclick="set_tiles_depth_level( 9 );">9</option>
+          <option value="10" onclick="set_tiles_depth_level( 10 );">10</option>
+          <option value="11" onclick="set_tiles_depth_level( 11 );">11</option>
+          <option value="12" onclick="set_tiles_depth_level( 12 );">12</option>
+          <option value="13" onclick="set_tiles_depth_level( 13 );">13</option>
+          <option value="14" onclick="set_tiles_depth_level( 14 );">14</option>
+          <option value="15" onclick="set_tiles_depth_level( 15 );">15</option>
+          <option value="16" onclick="set_tiles_depth_level( 16 );">16</option>
+          <option value="17" onclick="set_tiles_depth_level( 17 );">17</option>
+          <option value="18" onclick="set_tiles_depth_level( 18 );">18</option>
+          <option value="19" onclick="set_tiles_depth_level( 19 );">19</option>
+          <option value="20" onclick="set_tiles_depth_level( 20 );">20</option>
+          <option value="25" onclick="set_tiles_depth_level( 25 );">25</option>
+          <option value="50" onclick="set_tiles_depth_level( 50 );">50</option>
+          <option value="75" onclick="set_tiles_depth_level( 75 );">75</option>
+          <option value="100" onclick="set_tiles_depth_level( 100 );">100</option>
+        </select>
+      </div>
+    </div>
+    <div id="right_gui_position"></div>
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">3D Tiles Viewer<br>(threedtiles)</div>
+    <div id="metadata-card"></div>
+
+    <div id="metadata_message" style="position: fixed; visibility: hidden; font-family: Monospace, Arial; color: #d1cefc; bottom: calc(env(safe-area-inset-bottom) + 15px); left: 5px; pointer-events: none;">Metadata and Raycasting Enabled</div>
+
+    <script>
+      function set_tiles_cache( val ) {
+        tiles_loader.setMaxCacheSize( parseInt( val ) );
+      }
+
+      function set_tiles_depth( val ) {
+        tiles_loader.setMaxDepthLevel( parseInt( val ) );
+      }
+
+      function show_lod() {
+        if (lod_displayed === true) {
+          document.getElementById('lod').style.display = 'none';
+          document.getElementById('btn_lod').style.backgroundColor = 'transparent';
+          lod_displayed = false;
+        } else {
+          document.getElementById('lod').style.display = 'block';
+          document.getElementById('btn_lod').style.backgroundColor = 'lightgreen';
+          lod_displayed = true;
+
+          if (!warning_displayed) {
+            alert( '3D data could eventually use a lot of memory.\nCache Size defines max number of tiles kept in ready state (default 100).\nDepth Level defines how many subtrees are processed (default 4).\nSet proper cache & depth before loading the model.\nChanging cache & depth does not update already‑loaded model.');
+
+            warning_displayed = true;
+          }
+        }
+
+        resize();
+      }
+
+      function show_keyAPI() {
+        if (keyAPI_displayed === true) {
+          keyAPI_displayed = false;
+          document.getElementById('keyAPI').style.display = 'none';
+          document.getElementById('btn_keyAPI').style.backgroundColor = 'transparent';
+        } else {
+          document.getElementById('btn_keyAPI').style.backgroundColor = 'lightgreen';
+          document.getElementById('keyAPI').style.display = 'block';
+          keyAPI_displayed = true;
+        }
+
+        resize();
+      }
+
+      function set_keyAPI() {
+        let key = document.getElementById('keyAPI_entry').value.trim();
+        tiles_loader.setAPIKey( key );
+      }
+
+      function clear_keyAPI() { document.getElementById('keyAPI_entry').value = ''; }
+
+      function show_token() {
+        if (token_displayed === true) {
+          token_displayed = false;
+          document.getElementById('token').style.display = 'none';
+          document.getElementById('btn_token').style.backgroundColor = 'transparent';
+        } else {
+          document.getElementById('btn_token').style.backgroundColor = 'lightgreen';
+          document.getElementById('token').style.display = 'block';
+          token_displayed = true;
+        }
+
+        resize();
+      }
+
+      function set_token() {
+        let token = document.getElementById('token_entry').value.trim();
+        tiles_loader.setToken( token );
+      }
+
+      function clear_token() { document.getElementById('token_entry').value = ''; }
+
+      function show_url() {
+        if (url_displayed === true) {
+          url_displayed = false;
+          document.getElementById('url').style.display = 'none';
+          document.getElementById('btn_url').style.backgroundColor = 'transparent';
+        } else {
+          document.getElementById('btn_url').style.backgroundColor = 'lightgreen';
+          document.getElementById('url').style.display = 'block';
+          url_displayed = true;
+        }
+
+        resize();
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') {
+          document.getElementById('btn_load').disabled = true;
+          selected_url_file = url;
+          init();
+        }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
+
+        window.addEventListener( 'pointerdown', ( event ) => {
+          mouse_down = true;
+          mouseDownPos.x = event.clientX;
+          mouseDownPos.y = event.clientY;
+        }, false);
+        window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; mouse_wheel = true; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
+        window.addEventListener( 'keydown', ( event ) => {
+          if (event.key === 'Escape') hideUiPanel();
+
+          if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
+            controls.listenToKeyEvents( window );
+            activeKeys.add( event.key ); // Track this key
+            mouse_wheel = true;
+          }
+        }, false);
+        window.addEventListener( 'keyup', ( event ) => {
+          activeKeys.delete( event.key ); // Remove this key
+
+          if (controls && activeKeys.size === 0) {
+            controls.stopListenToKeyEvents();
+            mouse_wheel = false;
+          }
+        }, false);
+      }
+
+      function set_fps_stats() {
+        if (stats) {
+          let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+          stats.dom.style.top = fixed_menu_bottom;
+          stats.dom.style.left = '5px';
+        }
+      }
+
+      function set_statistics() {
+        stats_enabled = !stats_enabled;
+        document.getElementById('btn_stats').style.backgroundColor = stats_enabled ? 'lightgreen' : 'transparent';
+        stats.dom.style.visibility = stats_enabled ? 'visible' : 'hidden';
+        set_fps_stats();
+      }
+
+      function gui_reset() {
+        params.brightness = 2.5;
+        params.multiplier = 0.5;
+        params.pointSize = 1.0;
+        params.bias = 1.0;
+
+        gui.reset();
+
+        gui_container.style.display = 'none';
+      }
+
+      function set_gui_position() {
+        let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+        gui_container.style.marginTop = fixed_menu_bottom;
+      }
+
+      function resize() {
+        if (scene !== undefined) {
+          mouse_wheel = true;
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          renderer.setSize( ww, wh );
+
+          camera.aspect = ww / wh;
+          camera.updateProjectionMatrix();
+
+          if (stats && stats_enabled) set_fps_stats();
+          if (gui) set_gui_position();
+
+          mouse_wheel = true;
+        }
+      }
+
+      function set_back_color() {
+        scene.background = null;
+        document.body.style.backgroundColor = document.getElementById('back_color').value;
+        mouse_wheel = true;
+      }
+
+      function switch_variant() {
+        if (variants_available) {
+          raycastableObjects.forEach( ( obj ) => {
+            if (obj.material) {
+              const mat = Array.isArray( obj.material ) ? obj.material : [ obj.material ];
+              mat.forEach( m => m.dispose() );
+            }
+
+            if (obj.geometry) obj.geometry.dispose();
+          });
+
+          raycastableObjects.length = 0;
+
+          if (current_variant === tileset_obj.userData.variantLookup.size - 1) {
+            current_variant = 0;
+          } else {
+            current_variant ++;
+          }
+
+          document.getElementById('btn_variants').innerText = 'V' + current_variant;
+
+          // Get the root path
+          const rootPath = tileset_obj.userData.rootPath || '';
+
+          let points_present_and_visible = false;
+
+          tileset_obj.traverse( ( child ) => {
+            if (child.isMesh || child.isPoints) {
+              let fullURL = child.parent?.contentURL || child.parent?.parent?.contentURL || '';
+
+              // If it's an array, take the first element; otherwise, use the string
+              if (Array.isArray( fullURL )) fullURL = fullURL[ 0 ] || '';
+
+              const uri = fullURL.replace( rootPath, '' );
+
+              if ( tileset_obj.userData.variantLookup && tileset_obj.userData.variantLookup.has( uri ) ) {
+                const vId = tileset_obj.userData.variantLookup.get( uri );
+                if (vId === current_variant) {
+                  child.visible = true;
+                  raycastableObjects.push( child );
+                } else {
+                  child.visible = false;
+                }
+
+                if (child.isPoints && child.visible)
+                  points_present_and_visible = true;
+              }
+            }
+          });
+
+          if (gui_pointSize !== null) {
+            gui_pointSize.show( points_present_and_visible );
+          }
+
+          mouse_wheel = true;
+        }
+      }
+
+      function animate_gltf() {
+        if (animation_running === true) {
+          animation_mixer.clipAction( animations[ current_animation ] ).stop();
+          animation_mixer.clipAction( animations[ current_animation ] ).reset();
+
+          if (current_animation === animations.length - 1) {
+            document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+            current_animation = 0;
+            animation_running = false;
+          } else {
+            current_animation += 1;
+            animation_mixer.clipAction( animations[ current_animation ] ).play();
+          }
+        } else {
+          animation_mixer.clipAction( animations[ current_animation ] ).play();
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          animation_running = true;
+        }
+
+        mouse_wheel = true;
+      }
+
+      function quick_x_rotation( angle = undefined ) {
+        const oldCenter = new THREE.Vector3();
+        tileset_obj.boundingBox.getCenter( oldCenter );
+
+        tileset_obj.rotateOnWorldAxis( xAxis, angle !== undefined ? angle : -Math.PI / 2.0 );
+        tileset_obj.updateMatrixWorld( true );
+
+        // Get the center AFTER rotation
+        const newBox = new THREE.Box3().setFromObject( tileset_obj );
+        const newCenter = new THREE.Vector3();
+        newBox.getCenter( newCenter );
+
+        // Calculate the 'swing' offset and move it back
+        const offset = new THREE.Vector3().subVectors( oldCenter, newCenter );
+
+        tileset_obj.position.add( offset );
+        tileset_obj.updateMatrixWorld( true );
+
+        if (boxHelper) box.setFromObject( tileset_obj );
+        mouse_wheel = true;
+      }
+
+      async function init() {
+        init_running = true;
+
+        if (scene) {
+          mouse_wheel = true;
+
+          if (tileset_obj) await scene_cleanup();
+
+          await reset_all( true );
+        }
+
+        if (!stats) {
+          stats = new Stats();
+          stats.dom.style.visibility = 'hidden';
+          document.body.appendChild( stats.dom );
+          stats.showPanel( 0 ); // 0: FPS, 1: ms, 2: mb
+          set_fps_stats();
+        }
+
+        enable_disable( true );
+
+        mouse_down = false;
+        mouse_wheel = true;
+        needsRender = false;
+        animations = [];
+        animation_mixer = null;
+        animation_running = false;
+        last_tile = 0;
+        last_uuid = '';
+        last_level = 0;
+        count = 0;
+        gui_pointSize = null;
+        boxHelper = null;
+        bbox_enabled = false;
+        stats_enabled = false;
+        halt_on_error = false;
+        extended_render = false;
+        render_requested = false;
+        raycastableObjects = [];
+        variants = null;
+        current_variant = 0;
+        variants_available = false;
+        wireframe_enabled = false;
+        box_helper_added = false;
+        bounding_box = new THREE.Box3();
+        featureHighlightMesh = null;
+        mouseDownPos = { x: 0, y: 0 };
+        xAxis = new THREE.Vector3( 1, 0, 0 );
+
+        if (!params) params = { brightness: 2.5, pointSize: 1.0, multiplier: 0.5, bias: 1.0 };
+
+        console.time( 'Loading Time' );
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.toneMapping = THREE.NeutralToneMapping;
+          renderer.toneMappingExposure = 1.5;
+          renderer.setSize( ww, wh );
+          renderer.shadowMap.enabled = true;
+          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
+          renderer.autoClear = false;
+
+          // Consider removing this for a production build
+          renderer.debug.onShaderError = ( gl, program, glVertexShader, glFragmentShader ) => {
+            const errorLog = gl.getProgramInfoLog( program );
+            const vertexSource = gl.getShaderSource( glVertexShader );
+            const fragmentSource = gl.getShaderSource( glFragmentShader );
+
+            halt_on_error = true;
+
+            handle_error( 'CRITICAL SHADER ERROR: ' + errorLog );
+          };
+
+          document.body.appendChild( renderer.domElement );
+        }
+
+        if (clock === undefined) {
+          clock = new THREE.Timer();
+          clock.connect( document );
+        }
+
+        if (scene === undefined) scene = new THREE.Scene();
+
+        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+        if (camera === undefined) {
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.01, 1e9 );
+          camera.position.set( 0, 0, 2000 );
+          scene.add( camera );
+        }
+
+        camera.lookAt( 0, 0, 0 );
+
+        // Add DirectionalLight to the camera
+        if (directionalLight === undefined) {
+          directionalLight = new THREE.DirectionalLight( 0xFFFFFF, 2.5 );
+          directionalLight.position.set( 0, 100, 250 );
+          directionalLight.lookAt( new THREE.Vector3( 0, 0, 0 ) );
+          camera.add( directionalLight );
+        }
+
+        if (controls === undefined) {
+          const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
+
+          controls = new OrbitControls( camera, renderer.domElement );
+          controls.enableZoom = true;
+          controls.zoomToCursor = true;
+          controls.zoomSpeed = 0.5;
+          controls.rotateSpeed = 0.5;
+          controls.keyPanSpeed = 0.5; 
+          controls.panSpeed = 0.5;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
+          //controls.enableDamping = true;
+          //controls.dampingFactor = 0.3;
+          //controls.enableKeys = false;
+          //controls.maxPolarAngle = 2.2;
+          //controls.minPolarAngle = 1.1;
+        }
+
+        if (tiles_loader) {
+          tiles_loader.setRenderer( renderer );
+        }
+
+        // Start flashing indicator
+        document.getElementById('status_indicator').style.display = 'inline-block';
+
+        // Load tiles
+        loadURLFile();
+      }
+
+      async function loadURLFile() {
+        if (selected_url_file !== '') {
+          if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+          }
+
+          // URL has to point to tileset.json file
+
+          let url_lc = selected_url_file.toLowerCase();
+
+          if (!(url_lc.startsWith( 'http' )) || !(url_lc.endsWith( '.json' ))) {
+            handle_error( 'Invalid URL!' );
+            return;
+          }
+
+          try {
+            tileset_obj = await tiles_loader.loadAsync( selected_url_file );
+          } catch ( err ) {
+            handle_error( err );
+            return;
+          }
+
+          scene.add( tileset_obj );
+          tileset_obj.frameCamera( camera );
+
+          // Start rendering
+          render_requested = true;
+          extended_render = true;
+          extended_count = 0;
+          render();
+        }
+      }
+
+      async function finish_loading() {
+        if (halt_on_error) return;
+
+        document.getElementById('div_loading').style.display = 'none';
+
+        // >>> MAGIC TRICK <<<
+        // Some ECEF tilesets might not be visible initially
+        // due to the nature of dynamic loading of tilesets.
+        // We force transform updates to get them on screen.
+        // No rotation is supposed to happen with 0.0 angle:
+        await quick_x_rotation( 0.0 );
+
+        // Stop flashing indicator
+        document.getElementById('btn_load').disabled = false;
+        document.getElementById('status_indicator').style.display = 'none';
+
+        if (gui_set === false) {
+          // Add Brightness control
+          gui.add( params, 'brightness', 0, 30 ).name( 'Brightness' )
+          .onChange( ( value ) => {
+            directionalLight.intensity = value;
+            needsRender = true;
+          });
+
+          // Add LOD Multiplier control (Geometric Error Correction)
+          gui.add( params, 'multiplier', 0.5, 20.0, 0.1 ).name( 'LOD Multiplier' )
+          .onChange( ( value ) => {
+            if (tileset_obj) {
+              tileset_obj.setGeometricErrorMultiplier( parseFloat( value ) );
+              needsRender = true;
+            }
+          });
+
+          // Add LOD Distance Bias control
+          gui.add( params, 'bias', 1.0, 5.0, 0.1 ).name( 'LOD Distance Bias' )
+          .onChange( ( value ) => {
+            if (tileset_obj) {
+              tileset_obj.setDistanceBias( parseFloat( value ) );
+              needsRender = true;
+            }
+          });
+
+          // Add LOD Point Size control
+          gui.add( params, 'pointSize', 1.0, 10.0, 0.25 ).name( 'LOD Point Size' )
+          .onChange( ( value ) => {
+            if (tileset_obj) {
+              tileset_obj.setPointSize( parseFloat( value ) );
+              needsRender = true;
+            }
+          });
+
+          set_gui_position();
+
+          gui.open();
+          gui_set = true;
+        }
+
+        gui_pointSize = gui.controllersRecursive().find( c => c.property === 'pointSize' );
+
+        gui_container.style.display = 'block';
+        set_gui_position();
+
+        let points_present_and_visible = false;
+
+        // Get the root path
+        const rootPath = tileset_obj.userData.rootPath || '';
+
+        let bbox_found = false;
+
+        tileset_obj.traverse( ( child ) => {
+          if (child.isLineSegments && ( child.parent.bbox?.uuid === child.uuid )) bbox_found = true;
+          else if (child.isMesh || child.isPoints || child.isLine) {
+            if (child.isMesh) {
+              if (child.userData.gltfExtensions) {
+                // Currently only EXT_mesh_features with attributes is partially functional
+                const ext = child.userData.gltfExtensions.EXT_mesh_features ||
+                            child.userData.gltfExtensions.EXT_instance_features;
+
+                // Currently metadata texture is not provided by internal OGC3D loader
+                if (ext && ext.featureIds && !ext.featureIds.find( f => f.texture !== undefined )) {
+                  tileset_obj.hasGLTFExtensions = true;
+                }
+              } else if (child.geometry.hasAttribute( '_batchid' )) {
+                tileset_obj.hasHybridImplicit = true;
+              }
+            }
+
+            if (tileset_obj.hasMultipleContents) {
+              let fullURL;
+              let curr = child;
+
+              // Climb parents to find the contentURL
+
+              while ( curr ) {
+                if ( curr.contentURL?.length > 0 ) {
+                  fullURL = curr.contentURL;
+                  break;
+                }
+
+                curr = curr.parent;
+              }
+
+              // If it's an array, take the first element; otherwise, use the string
+              if (Array.isArray( fullURL )) fullURL = fullURL[ 0 ] || '';
+
+              const uri = fullURL.replace( rootPath, '' );
+
+              if ( tileset_obj.userData.variantLookup && tileset_obj.userData.variantLookup.has( uri ) ) {
+                const vId = tileset_obj.userData.variantLookup.get( uri );
+                if (vId === 0) {
+                  child.visible = true;
+                  raycastableObjects.push( child );
+                } else {
+                  child.visible = false;
+                }
+              }
+            }
+
+            if (child.isPoints && child.visible) points_present_and_visible = true;
+          }
+        });
+
+        if (!bbox_found) {
+          box = new THREE.Box3().setFromObject( tileset_obj );
+          boxHelper = new THREE.Box3Helper( box, 0xFFFF00 );
+          box_helper_added = true;
+          scene.add( boxHelper );
+        }
+
+        if (tileset_obj.hasMultipleContents) {
+          variants_available = true;
+          variants = tileset_obj.userData.contentsVariants;
+          document.getElementById('btn_variants').innerText = 'V0';
+          document.getElementById('btn_variants').style.display = 'inline-block';
+          document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
+        }
+
+        if (tileset_obj.hasMetadata || tileset_obj.hasGLTFExtensions || tileset_obj.hasHybridImplicit) {
+          document.getElementById('metadata_message').style.visibility = 'visible';
+
+          if (click_listener_added === false) {
+            window.addEventListener( 'click', handle_raycast_click );
+            click_listener_added = true;
+          }
+        } else {
+          if (click_listener_added) {
+            window.removeEventListener( 'click', handle_raycast_click );
+            click_listener_added = false;
+          }
+        }
+
+        document.getElementById('btn_bounding_box').style.backgroundColor = 'lightgreen';
+        bbox_enabled = true;
+
+        animations = tileset_obj.animations;
+
+        if (animations.length > 0) {
+          animation_mixer = new THREE.AnimationMixer( scene );
+          current_animation = 0;
+          animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+          animation_mixer.clipAction( animations[ 0 ] ).play();
+          document.getElementById('btn_animate').style.display = 'inline-block';
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          animation_running = true;
+        }
+
+        if (points_present_and_visible) {
+          if (tileset_obj) tileset_obj.setPointSize( 1.0 );
+
+          if (gui_pointSize !== null) {
+            gui_pointSize.reset();
+            gui_pointSize.show( true );
+          }
+        } else {
+          if (gui_pointSize !== null) gui_pointSize.show( false );
+        }
+
+        if (tileset_obj.copyrightVisible) {
+          tileset_obj.hideCopyright();
+          tileset_obj.displayCopyright = false;
+        }
+
+        enable_disable( false );
+
+        init_running = false;
+
+        console.timeEnd( 'Loading Time' );
+
+        if (!isMobile) {
+          await new Promise( resolve => setTimeout( log_info, 1000 ) );
+        } else {
+          await new Promise( resolve => setTimeout( hide_metadata_message, 3000 ) );
+        }
+      }
+
+      async function log_info() {
+        console.log( 'Memory: ', renderer.info.memory );
+        console.log( 'Render: ', renderer.info.render );
+
+        if (document.getElementById('metadata_message').style.visibility === 'visible')
+          await new Promise( resolve => setTimeout( hide_metadata_message, 3000 ) );
+      }
+
+      function hide_metadata_message() {
+        document.getElementById('metadata_message').style.visibility = 'hidden';
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        mouse_wheel = true;
+        render_requested = false;
+        enable_disable( true );
+
+        // Stop flashing indicator and hide metadata message
+        document.getElementById('status_indicator').style.display = 'none';
+        document.getElementById('metadata_message').style.visibility = 'hidden';
+
+        init_running = false;
+
+        document.getElementById('btn_variants').style.display = 'none';
+        document.getElementById('btn_animate').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+        document.getElementById('btn_load').disabled = false;
+      }
+
+      function highlightFeatureInstanced( instanceId ) {
+        // 1. REUSE EVERYTHING
+        // Instead of a new mesh every time, we just reposition the one we have
+        if (!featureHighlightMesh || featureHighlightMesh?.geometry !== pickedObject.geometry) {
+          if (featureHighlightMesh) {
+            // Detach it from the old parent
+            if (featureHighlightMesh.parent) {
+              featureHighlightMesh.parent.remove( featureHighlightMesh );
+            }
+
+            featureHighlightMesh.traverse((child) => {
+              if (child.geometry) child.geometry.dispose();
+              if (child.material) child.material.dispose();
+            });
+
+            featureHighlightMesh = null;
+          }
+
+          const highlightGeo = pickedObject.geometry;
+
+          featureHighlightMesh = new THREE.Mesh(
+            highlightGeo,
+            new THREE.MeshBasicMaterial({
+              color: 0xf08080,
+              transparent: true,
+              opacity: 0.5,
+              depthTest: true,
+              depthWrite: false, 
+              polygonOffset: true,
+              polygonOffsetFactor: -1,
+              polygonOffsetUnits: -1
+            })
+          );
+
+          // Add the wireframe once
+          const wireframe = new THREE.LineSegments(
+            new THREE.EdgesGeometry( highlightGeo, 30 ),
+            new THREE.LineBasicMaterial( { color: 0xffffff } )
+          );
+
+          featureHighlightMesh.add( wireframe );
+        }
+
+        // THE TELEPORTATION
+        // Copy the specific instance's transform from the InstancedMesh
+        const matrix = new THREE.Matrix4();
+        pickedObject.getMatrixAt( instanceId, matrix );
+
+        // SYNC WITH PARENT
+        // If the InstancedMesh itself has a position/rotation, 
+        // we must account for it so the highlight doesn't fly off to space
+        featureHighlightMesh.matrix.copy( matrix );
+        featureHighlightMesh.matrixAutoUpdate = false; // We handle the matrix manually now
+
+        // ATTACH
+        pickedObject.add( featureHighlightMesh );
+
+        featureHighlightMesh.visible = true;
+        featureHighlightMesh.frustumCulled = false;
+        featureHighlightMesh.children.forEach( child => child.frustumCulled = false );
+      }
+
+      function highlightFeature( featureId, attrName ) {
+        const geometry = pickedObject.geometry;
+        const featureIdAttr = geometry.getAttribute( attrName );
+        const indexAttr = geometry.index;
+        const positionAttr = geometry.getAttribute( 'position' );
+
+        if (!featureIdAttr || !indexAttr || !positionAttr) return;
+
+        // Find all triangles that belong to this featureId
+        const activeIndices = [];
+
+        for ( let i = 0; i < indexAttr.count; i += 3 ) {
+          const a = indexAttr.getX( i );
+          const b = indexAttr.getX( i + 1 );
+          const c = indexAttr.getX( i + 2 );
+
+          // If the first vertex of the triangle matches the ID, we take the whole triangle
+          if ( a < featureIdAttr.count ) {
+            if (featureIdAttr.getX( a ) === featureId) {
+              activeIndices.push( a, b, c );
+            }
+          }
+        }
+
+        if (activeIndices.length === 0) return;
+
+        // Create a new "Slice" geometry
+        const highlightGeo = new THREE.BufferGeometry();
+        highlightGeo.setAttribute( 'position', positionAttr );
+        highlightGeo.setIndex( activeIndices );
+
+        // Create the overlay mesh
+        featureHighlightMesh = new THREE.Mesh(
+          highlightGeo,
+          new THREE.MeshBasicMaterial({
+            color: 0xf08080,
+            transparent: true,
+            opacity: 0.5,
+            side: THREE.DoubleSide,
+            depthTest: true,
+            depthWrite: false,   // Keeps the highlight from messing up the depth buffer for other transparents
+            polygonOffset: true, // Physically pushes the quad slightly toward the camera
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1
+          })
+        );
+
+        // Create the Wireframe Outline (The "Border")
+        const wireframeGeo = new THREE.EdgesGeometry( highlightGeo, 30 );
+        const wireframe = new THREE.LineSegments(
+          wireframeGeo,
+          new THREE.LineBasicMaterial( { color: 0xffffff, linewidth: 3 } ) // White border
+        );
+
+        // Add the wireframe to our highlight mesh so they move together
+        featureHighlightMesh.add( wireframe );
+
+        featureHighlightMesh.position.set( 0, 0, 0 );
+        featureHighlightMesh.rotation.set( 0, 0, 0 );
+        featureHighlightMesh.scale.set( 1, 1, 1 );
+
+        // Sync transformation with the parent object
+        pickedObject.add( featureHighlightMesh );
+      }
+
+      function handle_raycast_click( event ) {
+        document.getElementById('metadata-card').style.display = 'none';
+
+        // Clean up previous highlight
+        if (featureHighlightMesh) {
+          // Detach it from the old parent
+          if (featureHighlightMesh.parent) {
+            featureHighlightMesh.parent.remove( featureHighlightMesh );
+          }
+
+          if (pickedObject?.isInstancedMesh) {
+            featureHighlightMesh.visible = false;
+          } else {
+            // Clean up the children (the wireframe)
+            featureHighlightMesh.traverse( ( child ) => {
+              if (child.geometry) child.geometry.dispose();
+              if (child.material) child.material.dispose();
+            });
+
+            featureHighlightMesh = null;
+          }
+        }
+
+        // --- RESTORE PREVIOUS SELECTION ---
+        if (selectedObject && selectedObject.material && selectedObject.material.emissive) {
+          const oldColor = selectedObject.userData.originalEmissive || new THREE.Color( 0x000000 );
+          selectedObject.material.emissive.copy( oldColor );
+        }
+
+        selectedObject = null;
+
+        if (event.target.closest( '#fixed_menu' )) {
+          return; // Exit the function if pointer is on the fixed menu
+        }
+
+        // Calculate how far the mouse moved
+        const deltaX = Math.abs( event.clientX - mouseDownPos.x );
+        const deltaY = Math.abs( event.clientY - mouseDownPos.y );
+
+        // If moved more than 5 pixels, it was likely a camera drag, not a click
+        if (deltaX > 5 || deltaY > 5) return;
+
+        if (!raycaster) raycaster = new THREE.Raycaster();
+        if (!mouse) mouse = new THREE.Vector2();
+
+        const HIGHLIGHT_COLOR = new THREE.Color( 0xf08080 );
+
+        // Calculate mouse position in normalized device coordinates
+        mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+        mouse.y = -( event.clientY / window.innerHeight ) * 2 + 1;
+
+        // Raycast against raycastableObjects or the scene
+        raycaster.setFromCamera( mouse, camera );
+        const intersects = raycaster.intersectObjects( raycastableObjects.length > 0 ? raycastableObjects : scene.children, true );
+
+        if (intersects.length === 0) return;
+
+        const visibleIntersects = intersects.filter(hit => hit.object.visible);
+        if (visibleIntersects.length === 0) return;
+
+        // --- HANDLE NEW SELECTION ---
+        const intersect = visibleIntersects[ 0 ];
+        pickedObject = intersect.object;
+        selectedObject = pickedObject;
+
+        // Prepare Material for highlighting
+        if (selectedObject.material && selectedObject.material.emissive) {
+          if (selectedObject.userData.originalEmissive === undefined) {
+            selectedObject.userData.originalEmissive = selectedObject.material.emissive.clone();
+          }
+
+          // Ensure we only highlight this specific instance
+          if (!selectedObject.userData.hasUniqueMaterial) {
+            selectedObject.material = selectedObject.material.clone();
+            selectedObject.userData.hasUniqueMaterial = true;
+          }
+
+          selectedObject.material.emissive.copy( HIGHLIGHT_COLOR );
+        }
+
+        const extensions = pickedObject.userData.gltfExtensions;
+
+        const schema = tileset_obj.userData.schema;
+        const fid_class = [];
+
+        if (extensions) {
+          const isInstanced = pickedObject.isInstancedMesh;
+          const meshFeatures = extensions.EXT_mesh_features || extensions?.EXT_instance_features;
+
+          // Get ALL attribute-based feature sets
+          const attributeSets = meshFeatures.featureIds?.filter( f => f.attribute !== undefined ) || [];
+
+          if (attributeSets.length > 0) {
+            for ( let i = 0; i < attributeSets.length; i++ ) {
+              const attributeInfo = attributeSets[ i ];
+              const featureIdIndex = attributeInfo.attribute;
+
+              const attrName1 = `_feature_id_${ featureIdIndex }`;
+              const attrName2 = `_FEATURE_ID_${ featureIdIndex }`;
+
+              const featureIdAttr = pickedObject.geometry.getAttribute( attrName1 ) ||
+                                    pickedObject.geometry.getAttribute( attrName2 );
+
+              if (featureIdAttr && !isInstanced && intersect.face) {
+                const featureId = featureIdAttr.getX( intersect.face.a );
+
+                // Check for nullFeatureId (The "empty" space check)
+                // Important: attributeInfo.nullFeatureId is often undefined
+                const isNull = attributeInfo.nullFeatureId !== undefined && featureId === attributeInfo.nullFeatureId;
+
+                if (!isNull) {
+                  // --- Identify the Metadata Class ---
+                  let className = 'FeatureId ' + featureIdIndex; // Fallback
+
+                  // Check if this feature set points to a property table
+                  if (attributeInfo.propertyTable !== undefined) {
+                    const tableIndex = attributeInfo.propertyTable;
+
+                    // Metadata usually lives in the gltfExtensions of the model or tileset
+                    const structuralMetadata = extensions.EXT_structural_metadata;
+
+                    if (structuralMetadata?.propertyTables?.[ tableIndex ]) {
+                      className = structuralMetadata.propertyTables[ tableIndex ].class;
+                    }
+                  }
+
+                  fid_class.push( { class: className, id: featureId, layerIndex: i } );
+                } else {
+                  if (attributeSets.length === 1) {
+                    console.log( 'Hit a null feature area.' );
+                    return; // Don't highlight or show UI for 'nothing'
+                  }
+                }
+              } else if (featureIdAttr && isInstanced) {
+                const instanceId = intersect.instanceId; // Only exists if it's an InstancedMesh
+
+                if (instanceId !== undefined) {
+                  const featureId = featureIdAttr.getX( instanceId );
+                  fid_class.push( { class: 'Instance Feature', id: featureId, isInstance: true, instanceId: instanceId } );
+                }
+              }
+            }
+
+            if (fid_class.length > 0) {
+              // Restore color
+              if (selectedObject?.material?.emissive) {
+                selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
+              }
+
+              // Trigger the geometry-based highlight for the primary ID
+              isInstanced
+                ? highlightFeatureInstanced( fid_class[ 0 ].instanceId )
+                : highlightFeature( fid_class[ 0 ].id, `_feature_id_${ fid_class[ 0 ].layerIndex }` );
+
+              showUiPanel(
+                { featureId: fid_class, ...pickedObject.userData.metadata },
+                event, schema, pickedObject.name, false
+              );
+            }
+
+            return;
+          }
+        } else if (pickedObject.geometry.attributes._batchid) {
+          // Get the index of the vertex that was hit
+          const index = intersect.face.a; 
+
+          // Get the ID for this specific building/feature
+          const batchId = pickedObject.geometry.attributes._batchid.getX( index );
+
+          let className = 'BatchId ' + index; // Fallback
+
+          fid_class.push( { class: className, id: batchId } );
+
+          // Restore color
+          if (selectedObject?.material?.emissive) {
+            selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
+          }
+
+          // Trigger the geometry-based highlight for the primary ID
+          highlightFeature( fid_class[ 0 ].id, '_batchid' );
+
+          showUiPanel(
+            { featureId: fid_class, ...pickedObject.userData.metadata },
+            event, schema, pickedObject.name, false
+          );
+
+          return;
+        }
+
+        // Fallback to standard metadata
+        let tilesetMetadataOnly = !pickedObject.userData.metadata && !!pickedObject.parent;
+        const data = pickedObject.userData.metadata;
+
+        if ((data && !data.empty) || tilesetMetadataOnly) {
+          showUiPanel(data, event, tileset_obj.userData.schema, pickedObject.name, tilesetMetadataOnly, pickedObject.type);
+        } else {
+          // If no metadata found, remove highlight
+          if (selectedObject.material?.emissive) {
+            selectedObject.material.emissive.copy(selectedObject.userData.originalEmissive);
+          }
+
+          selectedObject = null;
+        }
+      }
+
+      function showUiPanel( data, event, schema = null, meshName = '', tilesetMetadataOnly = false, type = '' ) {
+        const card = document.getElementById('metadata-card');
+        if (!card) return;
+
+        // Enhanced resolver to handle the complex types in new JSON
+
+        function formatArray( arr ) {
+          if (arr.length === 0) return '[]';
+
+          // If it's an array of objects
+          if (typeof arr[ 0 ] === 'object') {
+            return arr.map( ( item, idx ) => {
+              let itemHtml = `<div style="margin: 4px 0 4px 5px; padding-left: 8px; border-left: 2px solid #00d4ff; background: rgba(0,212,255,0.05);">`;
+              itemHtml += `<div style="font-size: 9px; color: #00d4ff; opacity: 0.7;">Part ${idx + 1}</div>`;
+
+              for ( const [ sk, sv ] of Object.entries( item ) ) {
+                const cleanSv = ( typeof sv === 'number' ) ? ( Number.isInteger( sv ) ? sv : sv.toFixed( 2 ) ) : sv;
+                itemHtml += `<div style="font-size: 11px;"><span style="color: #666;">${sk}:</span> ${cleanSv}</div>`;
+              }
+
+              itemHtml += `</div>`;
+              return itemHtml;
+            }).join('');
+          }
+    
+          // If it's a simple array (like [1, 2, 3])
+          return `[ ${arr.map( v => ( typeof v === 'number' ? ( Number.isInteger( v ) ? v : v.toFixed( 2 ) ) : v ) ).join( ', ' )} ]`;
+        }
+
+        const resolveValue = ( className, propName, val ) => {
+          const propDef = schema?.classes?.[ className ]?.properties?.[ propName ];
+
+          // A. Handle "No Data" or nulls
+          if (val === null || val === undefined) return "N/A";
+
+          // B. Handle Arrays of Objects or Numbers
+          if (Array.isArray( val ) && val.length > 0) {
+            return formatArray( val );
+          }
+
+          // C. Handle Nested Objects
+          if (typeof val === 'object' && !Array.isArray( val ) && !val.isVector3) {
+            let subHtml = '<div style="margin-left: 10px; font-size: 0.9em; color: #ccc;">';
+
+            for ( const [ k, v ] of Object.entries( val ) ) {
+              let displayV = v;
+
+              if (Array.isArray( v )) displayV = formatArray( v );
+              else if (typeof v === 'number') displayV = (Number.isInteger( v ) ? v : v.toFixed( 2 ));
+              else if (typeof v === 'object' && v !== null) displayV = JSON.stringify( v );
+
+              subHtml += `<div><span style="color: #888;">${k}:</span> ${displayV}</div>`;
+            }
+
+            subHtml += '</div>';
+            return subHtml;
+          }
+
+          // D. Handle Enums (The most important part of the schema)
+          if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
+            const enumEntry = schema.enums[propDef.enumType].values.find(v => v.value === val);
+            return enumEntry ? enumEntry.name : val;
+          }
+
+          // E. Handle Booleans based on Schema Type
+          if (propDef?.type === 'BOOLEAN') {
+            return val ? 'Yes' : 'No';
+          }
+
+          // F. Handle Math Types (VEC2, VEC3, etc)
+          if (Array.isArray( val )) {
+            // Check if this is an array of Enums by looking at the schema
+            if (propDef?.type === 'ENUM') {
+              return `[ ${ val.map( v => resolveValue( className, propName, v ) ).join( ', ' ) } ]`;
+            }
+
+            return `[ ${ val.map( v => ( typeof v === 'number' ? v.toFixed( 2 ) : v ) ).join( ', ' ) } ]`;
+          }
+
+          // G. Handle BigInt / Numbers
+          if (typeof val === 'bigint') return val.toString();
+          if (typeof val === 'number' && Number.isInteger( val )) return val;
+          if (typeof val === 'number') return val.toFixed( 3 );
+
+          return val;
+        };
+
+        let html = '';
+
+        // 1. Tileset Metadata - Maybe entries like author, date, tile count...
+
+        const tileset = tilesetMetadataOnly ? tileset_obj.userData.tileset : data?.tileset;
+
+        if (tileset?.class) {
+          html += `
+            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${tileset.class}</div>
+            </div>`;
+
+          if (tileset.properties) {
+            for ( const [ key, val ] of Object.entries( tileset.properties ) ) {
+              const display = resolveValue( tileset.class, key, val );
+              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+           }
+          }
+        } else if (tilesetMetadataOnly) {
+          const description = (type === 'Box3Helper') ? 'No Data (turn off bounding box)' : 'No Data';
+
+          html += `
+            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${ description }</div>
+            </div>`;
+        }
+
+        if (!tilesetMetadataOnly) {
+          if (tileset) html += `<br>`;
+
+          // 2. Tile Metadata - Maybe entries like district, population...
+
+          if (data.tile?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.tile.class}</div>
+              </div>`;
+
+            if (data.tile.properties) {
+              for ( const [ key, val ] of Object.entries( data.tile.properties ) ) {
+                const display = resolveValue( data.tile.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
+            }
+
+            html += `<br>`;
+          }
+
+          // 3. Selected Object
+
+          if (meshName !== '') {
+            html += `<div style="font-size: 12px; font-weight: bold; color: #fff; line-height: 1.0;">Selected: ${meshName}</div><br>`;
+          }
+
+          // 4. Group Metadata - Maybe entries like color, priority...
+
+          if (data.group?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.group.class}</div>
+              </div>`;
+
+            if (data.group.properties) {
+              for ( const [ key, val ] of Object.entries( data.group.properties ) ) {
+                const display = resolveValue( data.group.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
+            }
+
+            html += `<br>`;
+          }
+
+          // 5. Content Metadata - Maybe entries like vertices, materials...
+
+          if (data.content?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 8px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.content.class}</div>
+              </div>`;
+
+            if (data.content.properties) {
+              for ( const [ key, val ] of Object.entries( data.content.properties ) ) {
+                const display = resolveValue( data.content.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
+            }
+          }
+
+          // 5.5 Feature-Specific Metadata (EXT_structural_metadata)
+
+          if (data.featureMetadata?.class) {
+            const fm = data.featureMetadata;
+
+            html += `
+              <div style="border-bottom: 1px solid #00d4ff; margin-bottom: 6px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; font-weight: bold;">${ fm.class }</div>
+              </div>`;
+
+            if (fm.properties) {
+              for ( const [ key, val ] of Object.entries( fm.properties ) ) {
+                const display = resolveValue( fm.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${ key }:</span><span class="prop-value">${ display }</span></div>`;
+              }
+            }
+
+            html += `<br>`;
+          }
+
+          // 6. FeatureId - Maybe entries from EXT_mesh_features, EXT_structural_metadata...
+
+          if (data.featureId && Array.isArray( data.featureId )) {
+            data.featureId.forEach( ( fid_class, index ) => {
+              // Use the class name if found, otherwise use a readable layer index
+              const label = fid_class.class || `Feature Layer ${index}`;
+              const idValue = fid_class.id !== undefined ? fid_class.id : 'N/A';
+
+              html += `
+                <div class="feature-group" style="margin-top: 10px; border-left: 2px solid #00d4ff; padding-left: 8px;">
+                  <div style="font-size: 10px; color: #aaa; font-weight: bold;">${ label }</div>
+                  <div class="prop-row" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="prop-label" style="color: #00d4ff;">ID:</span><span class="prop-value">${ idValue }</span>
+                  </div>
+                </div>`;
+            });
+          }
+        }
+
+        card.innerHTML = html;
+        card.style.display = 'block';
+
+        // 7. Position Logic
+
+        const cardWidth = 220; 
+        let x = event.clientX + 15;
+        let y = event.clientY + 15;
+        if (x + cardWidth > window.innerWidth) x = event.clientX - cardWidth - 15;
+
+        card.style.left = x + 'px';
+        card.style.top = y + 'px';
+      }
+
+      function hideUiPanel() {
+        const card = document.getElementById('metadata-card');
+        if (card) card.style.display = 'none';
+      }
+
+      function set_bounding_box() {
+          if (!tileset_obj) return;
+          bbox_enabled = !bbox_enabled;
+
+          if (box_helper_added) {
+            bbox_enabled ? scene.add( boxHelper ) : scene.remove( boxHelper );
+          } else {
+            tileset_obj.traverse( ( child ) => {
+              if (child.isLineSegments && ( child.parent.bbox?.uuid === child.uuid )) child.visible = bbox_enabled;
+            });
+          }
+
+          const bbox_color = bbox_enabled ? 'lightgreen' : 'transparent';
+          document.getElementById('btn_bounding_box').style.backgroundColor = bbox_color;
+          needsRender = true;
+      }
+
+      function set_wireframe() {
+          if (!tileset_obj) return;
+          wireframe_enabled = !wireframe_enabled;
+
+          tileset_obj.setWireframe( wireframe_enabled );
+
+          const w_color = wireframe_enabled ? 'lightgreen' : 'transparent';
+          document.getElementById('btn_wireframe').style.backgroundColor = w_color;
+          needsRender = true;
+      }
+
+      function render( timestamp ) {
+        if (tileset_obj) {
+          // Check if the tileset is still streaming data
+          const is_loading = tileset_obj.getStreamingInfo();
+
+          if (animation_running || mouse_down || mouse_wheel || needsRender || extended_render || is_loading) {
+            if (stats_enabled) stats.begin();
+
+            if (animation_running) {
+              clock.update( timestamp );
+              animation_mixer.update( clock.getDelta() );
+            }
+
+            controls.update();
+
+            if (tileset_obj.update) tileset_obj.update( camera );
+            if (tileset_obj.tileLoader) tileset_obj.tileLoader.update();
+
+            renderer.clear();
+            renderer.render( scene, camera );
+
+            if (stats_enabled) stats.end();
+
+            // Reset animation flag AFTER rendering
+            needsRender = false;
+
+            if (is_loading) {
+              // Keep extended render in check
+              extended_count = -1;
+              count = -1;
+            } else {
+              if (extended_render) {
+                if (extended_count > 20) {
+                  extended_render = false;
+                  extended_count = 0;
+                  mouse_wheel = true;
+                  count = 0;
+                  finish_loading();
+                } else {
+                  extended_count ++;
+                }
+              } else if (mouse_wheel) {
+                if (count > 20) {
+                  mouse_wheel = false;
+                  count = 0;
+                } else {
+                  count ++;
+                }
+              }
+            }
+          }
+        }
+
+        if (render_requested) requestAnimationFrame( render );
+      }
+
+      async function reset_all( reset = false ) {
+        if (stats) stats.dom.style.visibility = 'hidden';
+        document.getElementById('back_color').value = '#000000';
+        document.getElementById('metadata_message').style.visibility = 'hidden';
+        document.getElementById('btn_stats').style.backgroundColor = 'transparent';
+        document.getElementById('btn_variants').style.backgroundColor = 'transparent';
+        document.getElementById('btn_variants').style.display = 'none';
+
+        init_running = false;
+
+        if (gui_set) gui_reset();
+
+        // Reset the view
+        if (reset === true) {
+          if (scene) {
+            controls.reset();
+            set_back_color();
+          }
+        } else {
+          // Page (re)loading
+          document.getElementById('btn_load').disabled = false;
+          document.getElementById('btn_url').style.backgroundColor = 'transparent';
+          document.getElementById('btn_lod').style.backgroundColor = 'transparent';
+          document.getElementById('btn_token').style.backgroundColor = 'transparent';
+          document.getElementById('btn_keyAPI').style.backgroundColor = 'transparent';
+          document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+
+          if (scene) {
+            if (tileset_obj) await scene_cleanup();
+
+            if (gui) gui.dispose();
+
+            while (scene.children.length > 0) {
+              scene.remove( scene.children[ 0 ] );
+            }
+
+            renderer.clear();
+            renderer.dispose();
+          }
+
+          document.getElementById('btn_animate').style.display = 'none';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('keyAPI_entry').value = '';
+          document.getElementById('token_entry').value = '';
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+
+          enable_disable( true );
+        }
+
+        mouse_wheel = true;
+      }
+
+      async function scene_cleanup() {
+        if (!tileset_obj) return;
+
+        mouse_wheel = true;
+
+        hideUiPanel();
+
+        if (bbox_enabled) await set_bounding_box();
+        if (wireframe_enabled) await set_wireframe();
+
+        if (animation_mixer) {
+          animation_mixer.stopAllAction();
+
+          for ( let i = 0; i < animations.length; i++ ) {
+            animation_mixer.uncacheAction( animations[ i ] );
+            animation_mixer.uncacheClip( animations[ i ] );
+          }
+
+          animation_mixer.uncacheRoot( animation_mixer.getRoot() );
+        }
+
+        if (stats_enabled) set_statistics();
+
+        if (stats && stats.dom && stats.dom.parentNode) {
+          stats.dom.parentNode.removeChild( stats.dom );
+          stats = null;
+        }
+
+        if (featureHighlightMesh) {
+          if (featureHighlightMesh.parent) {
+            featureHighlightMesh.parent.remove( featureHighlightMesh );
+          }
+
+          featureHighlightMesh.traverse( ( child ) => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          });
+
+          featureHighlightMesh = null;
+        }
+
+        scene.remove( tileset_obj );
+
+        renderer.clear();
+        render_requested = false;
+
+        if (clock) {
+          clock.disconnect();
+          clock.dispose();
+          clock = undefined;
+        }
+
+        if (tileset_obj.dispose) tileset_obj.dispose();
+        if (boxHelper?.dispose) boxHelper.dispose();
+
+        tileset_obj = null;
+
+        if (isMobile === false) {
+          renderer.info.reset();
+          renderer.resetState();
+        }
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('back_color').disabled = disable;
+        document.getElementById('btn_stats').disabled = disable;
+        document.getElementById('btn_quick_x').disabled = disable;
+        document.getElementById('btn_wireframe').disabled = disable;
+        document.getElementById('btn_bounding_box').disabled = disable;
+        disabled_changed();
+
+        mouse_wheel = true;
+      }
+    </script>
+
+    <script>
+      function document_ready() {
+        isNewiPad = (/iPad/.test( navigator.platform ) && (/Mac OS X/i.test( navigator.userAgent ))) ||
+          (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        isMobile = (isNewiPad === false) && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
+
+        $('#cache_level').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#depth_level').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#keyAPI_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_set_keyAPI').click(); });
+        $('#token_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_set_token').click(); });
+        $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
+
+        if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile) {
+          $('#cache_level').change( function() { $(this).children(':selected').click(); });
+          $('#depth_level').change( function() { $(this).children(':selected').click(); });
+        }
+
+        document.getElementById('cache_level').selectedIndex = 0;
+        document.getElementById('depth_level').selectedIndex = 0;
+
+        alert('If 3D tileset is not visible, maybe one of the following applies:\n- If bounding box is visible maybe only metadata was loaded\n- The model might be in a land far far away:\n   - Click quick rotation button multiple times\n- Its features require API Key or token\n- Its features are not implemented in the viewer\n- Its features are not supported by internal loader:\n   - Only B3DM and GLTF/GLB formats are supported\n- Check console, if possible, for any silent errors\n- Use different LOD settings to see if that changes anything');
+      }
+
+      function disabled_changed() {
+        $('button').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+
+        $('select').each( function() {
+          if (this.disabled === false) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+
+        $('input[type=color]').each( function() {
+          if (this.disabled === false ) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+      }
+    </script>
+  </body>
+</html>
