@@ -402,6 +402,7 @@ Number Type Converter
       - `3d-tiles-renderer` seems to provide support for GLTF `EXT_structural_metadata`, `EXT_mesh_features`, `EXT_instance_features` and both FeatureId Attribute and Texture:
         - 3D Tiles Viewer 2 has a popup card to show metadata, which for certain tilesets is a world of its own:
           - This popup card also provides `Copy To Clipboard` feature
+          - Make sure to check its and raycasting code in the viewer to see how all data is retrieved
       - `threedtiles` is currently not providing access to some of these features, like metadata textures or property tables:
         - It also does not provide support for `.i3dm`, `.pnts` or `.cmpt` formats
         - It also does not seem to be able to fetch `.bin` files associated with certain `GLTF` models
