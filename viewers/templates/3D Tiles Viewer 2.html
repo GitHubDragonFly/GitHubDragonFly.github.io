@@ -81,7 +81,7 @@
       var ww = window.innerWidth, wh = window.innerHeight, mouse_down, mouse_wheel;
       var stats, stats_enabled, events_initialized, clock;
       var last_tile, last_level, last_uuid, params, halt_on_error;
-      var selected_url_file = '', directionalLight, isMobile;
+      var selected_url_file = '', directionalLight, isMobile, safeJson;
       var lod_displayed = false, warning_displayed = false, wireframe_enabled;
       var extended_render, extended_count = 0, count = 0, selectedObject, pickedObject;
       var variants, variants_available, current_variant, click_listener_added = false;
@@ -824,12 +824,10 @@
 
         tileset_obj.traverse( ( child ) => {
           if (child.isMesh || child.isPoints || child.isLine) {
-            if (child.isMesh) {
-              if (child.userData?.meshFeatures || child.userData?.structuralMetadata || child.userData?.gltfExtensions) {
-                  tileset_obj.hasGLTFExtensions = true;
-              } else if (child.geometry.hasAttribute( '_batchid' )) {
-                tileset_obj.hasHybridImplicit = true;
-              }
+            if (child.userData?.meshFeatures || child.userData?.structuralMetadata || child.userData?.gltfExtensions) {
+              tileset_obj.hasExtensions = true;
+            } else if (child.geometry.hasAttribute( '_batchid' )) {
+              tileset_obj.hasHybridImplicit = true;
             }
 
             if (tileset_obj.hasMultipleContents) {
@@ -875,7 +873,7 @@
           document.getElementById('btn_variants').style.backgroundColor = 'lightgreen';
         }
 
-        if (tileset_obj.hasMetadata || tileset_obj.hasGLTFExtensions || tileset_obj.hasHybridImplicit) {
+        if (tileset_obj.hasMetadata || tileset_obj.hasExtensions || tileset_obj.hasHybridImplicit) {
           document.getElementById('metadata_message').style.visibility = 'visible';
 
           if (click_listener_added === false) {
@@ -1097,9 +1095,108 @@
         pickedObject.updateWorldMatrix( true, true );
       }
 
+      function highlightPoint( pointIndex ) {
+        const geometry = pickedObject.geometry;
+        const positionAttr = geometry.getAttribute( 'position' );
+
+        if (!positionAttr || pointIndex === -1) return;
+
+        // 1. Get the local position of the clicked point
+        const x = positionAttr.getX( pointIndex );
+        const y = positionAttr.getY( pointIndex );
+        const z = positionAttr.getZ( pointIndex );
+
+        // 2. Create a small Cube (Box) to represent the highlight
+        // Adjust the size (0.05) based on your tileset scale
+        const boxSize = 0.05; 
+        const highlightGeo = new THREE.BoxGeometry( boxSize, boxSize, boxSize );
+
+        const highlightMat = new THREE.MeshBasicMaterial({
+          color: 0xf08080,
+          transparent: true,
+          opacity: 0.8,
+          depthTest: false // Makes it visible even if partially buried in other points
+        });
+
+        featureHighlightMesh = new THREE.Mesh( highlightGeo, highlightMat );
+
+        // 3. Position the cube at the point's coordinates
+        featureHighlightMesh.position.set( x, y, z );
+
+        // 4. Add a white wireframe outline for better visibility
+        const wireframeGeo = new THREE.EdgesGeometry( highlightGeo );
+
+        const wireframe = new THREE.LineSegments(
+          wireframeGeo,
+          new THREE.LineBasicMaterial( { color: 0xffffff } )
+        );
+
+        featureHighlightMesh.add( wireframe );
+        featureHighlightMesh.updateWorldMatrix( true, true );
+
+        // 5. Attach it to the picked object so it moves with the tileset
+        pickedObject.add( featureHighlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
+      }
+
+      function highlightLine( lineIndex ) {
+        const geometry = pickedObject.geometry;
+        const positionAttr = geometry.getAttribute( 'position' );
+        const indexAttr = geometry.index;
+
+        if (!positionAttr || lineIndex === undefined) return;
+
+        const activePositions = [];
+
+        // 1. Identify the segment vertices
+        // If the geometry is indexed (common in 3D Tiles), we use the index buffer
+        if (indexAttr) {
+          // For LineSegments, a segment is [ i, i + 1 ]
+          // We find the start of the segment based on the click index
+          const startIdx = Math.floor( lineIndex / 2.0 ) * 2;
+          const idxA = indexAttr.getX( startIdx );
+          const idxB = indexAttr.getX( startIdx + 1 );
+
+          const vA = new THREE.Vector3().fromBufferAttribute( positionAttr, idxA );
+          const vB = new THREE.Vector3().fromBufferAttribute( positionAttr, idxB );
+
+          activePositions.push( vA.x, vA.y, vA.z, vB.x, vB.y, vB.z );
+        } else {
+          // Non-indexed: the click index is the vertex itself
+          const startIdx = Math.floor( lineIndex / 2.0 ) * 2;
+
+          activePositions.push(
+            positionAttr.getX( startIdx ), positionAttr.getY( startIdx ), positionAttr.getZ( startIdx ),
+            positionAttr.getX( startIdx + 1 ), positionAttr.getY( startIdx + 1 ), positionAttr.getZ( startIdx + 1 )
+          );
+        }
+
+        // 2. Create the highlight geometry
+        const highlightGeo = new THREE.BufferGeometry();
+        highlightGeo.setAttribute( 'position', new THREE.Float32BufferAttribute( activePositions, 3 ) );
+
+        // 3. Create a thick, glowing Line material
+        // Note: Standard LineBasicMaterial doesn't support 'linewidth' > 1 in many browsers (WebGL limitation)
+        // But we'll use a bright color and depthTest: false to make it pop.
+        const highlightMat = new THREE.LineBasicMaterial({
+          color: 0xf08080,
+          linewidth: 5, // Works on some systems, ignored on others
+          transparent: true,
+          opacity: 1.0,
+          depthTest: false 
+        });
+
+        featureHighlightMesh = new THREE.LineSegments( highlightGeo, highlightMat );
+        featureHighlightMesh.updateWorldMatrix( true, true );
+
+        // 4. Attach to the parent
+        pickedObject.add( featureHighlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
+      }
+
       let _pickCanvas, _pickCtx, _readTarget, _pixelPicker;
 
-      function handle_raycast_click( event ) {
+      function popup_card_cleanup() {
         document.getElementById('metadata-card').style.display = 'none';
 
         // Clean up previous highlight
@@ -1129,6 +1226,12 @@
         }
 
         selectedObject = null;
+        mouse_wheel = true;
+        return;
+      }
+
+      function handle_raycast_click( event ) {
+        popup_card_cleanup();
 
         if (event.target.closest( '#fixed_menu' )) {
           return; // Exit the function if pointer is on the fixed menu
@@ -1141,7 +1244,11 @@
         // If moved more than 5 pixels, it was likely a camera drag, not a click
         if (deltaX > 5 || deltaY > 5) return;
 
-        if (!raycaster) raycaster = new THREE.Raycaster();
+        if (!raycaster) {
+          raycaster = new THREE.Raycaster();
+          raycaster.params.Points.threshold = 0.1;
+        }
+
         if (!mouse) mouse = new THREE.Vector2();
 
         const HIGHLIGHT_COLOR = new THREE.Color( 0xf08080 );
@@ -1191,14 +1298,22 @@
         const structuralMetadata = userData.structuralMetadata;
         const schema = structuralMetadata?.schema || tileset_obj.userData?.schema;
 
-        let displayData = {}, highlightId = null;
+        let featureId, featureIdAttr;
+        let featureMetadataList = [];
+        let highlightId = null;
+        let vertexIndex = -1;
+
+        if (pickedObject.isPoints || pickedObject.isLine) {
+          vertexIndex = intersect.index;
+        } else if (intersect.face) {
+          vertexIndex = intersect.face.a;
+        }
 
         if (meshFeatures && ( meshFeatures.featureIds || meshFeatures.data?.featureIds )) {
           const featureIds = meshFeatures.featureIds || meshFeatures.data?.featureIds;
-          let featureId, featureIdAttr;
 
           for (let i = 0; i < featureIds.length; i++) {
-            const info = featureIds[i];
+            const info = featureIds[ i ];
             featureId = -1;
 
             const attrName1 = `_feature_id_${ info.attribute }`;
@@ -1259,6 +1374,7 @@
               if (info.propertyTable !== null && structuralMetadata?.getPropertyTableData) {
                 // 1. Get the actual Data Row
                 metadataRow = structuralMetadata.getPropertyTableData( info.propertyTable, featureId );
+
                 if (metadataRow) {
                   for ( const [ key, value ] of Object.entries( metadataRow ) ) {
                     let displayValue = value;
@@ -1269,7 +1385,7 @@
                       try {
                         // Parse it so we can iterate its properties in the UI
                         displayValue = JSON.parse( value );
-                      } catch (e) {
+                      } catch ( e ) {
                         displayValue = value; // Fallback to raw string if parse fails
                       }
                     } else if (value && typeof value === 'object') {
@@ -1278,14 +1394,20 @@
                         displayValue = `(${ value.x.toFixed( 2 ) }, ${ value.y.toFixed( 2 ) }, ${ value.z.toFixed( 2 ) })`;
                       } else if (Array.isArray( value ) || value.buffer) {
                         // It's a raw array or TypedArray
-                        displayValue = `[${Array.from( value ).map( v => v.toFixed( 2 ) ).join( ', ' ) }]`;
+                        displayValue = `[${Array.from( value ).map( v => {
+                          if (typeof v === 'number') {
+                            return ( Number.isInteger( v ) ? v : v.toFixed( 2 ) )
+                          }
+
+                          return String( v );
+                        }).join( ', ' ) }]`;
                       } else if (value instanceof Uint8Array) {
                         const decoded = new TextDecoder().decode(value).trim();
                         // Check if it looks like JSON or a String
                         if (decoded.startsWith('{') || decoded.startsWith('[')) {
                           try {
-                            const parsed = JSON.parse(decoded);
-                            displayValue = JSON.stringify(parsed, null, 2); // Pretty print JSON
+                            const parsed = JSON.parse( decoded );
+                            displayValue = JSON.stringify( parsed, null, 2 ); // Pretty print JSON
                           } catch (e) {
                             displayValue = decoded;
                           }
@@ -1312,35 +1434,78 @@
               }
 
               // Put the data into a structure showUiPanel expects
-              displayData = {
-                featureMetadata: {
-                  class: className,
-                  properties: metadataRow
-                }
-              };
-
-              break; // Exit after first valid hit
+              featureMetadataList.push({
+                class: className,
+                properties: metadataRow
+              });
             }
           }
 
-          if (!highlightId) highlightId = featureId;
+          if (highlightId === null || highlightId === undefined) highlightId = featureId;
+        }
 
-          if (displayData) {
-            // Restore color
-            if (selectedObject?.material?.emissive) {
-              selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
+        if (vertexIndex !== -1 && structuralMetadata?.attributeAccessors?.length > 0) {
+          // Loop through Attribute Accessors (Classes defined per vertex)
+          structuralMetadata.attributeAccessors.forEach( accessor => {
+            const className = accessor.className;
+            let properties = {};
+
+            // 3. Each property in this class points to a vertex attribute
+            for ( const [ propName, propertyAccessor ] of Object.entries( accessor.properties ) ) {
+              // The loader usually provides a .get(index) method on the propertyAccessor
+              if (propertyAccessor.get) {
+                properties[ propName ] = propertyAccessor.get( vertexIndex );
+              } else {
+                // Fallback: look at the attribute directly if the accessor is raw
+                const attrName = propertyAccessor.attribute?.toLowerCase();
+                const attr = pickedObject.geometry.getAttribute( attrName );
+                if (attr) properties[ propName ] = attr.getX( vertexIndex );
+              }
             }
 
-            // Trigger the geometry-based highlight for the primary ID
-            isInstanced
-              ? highlightFeatureInstanced( highlightId )
-              : highlightFeature( highlightId , featureIdAttr );
+            // Check if meshFeatures already added a table-row for this class
+            let existingEntry = featureMetadataList.find( item => item.class === className );
 
-            showUiPanel( displayData, event, schema, pickedObject.name, false );
+            if (existingEntry) {
+              // Append/Overwrite with vertex-specific metadata
+              Object.assign( existingEntry.properties, properties );
+
+              // Update the ID to show the vertex index if it was a general feature ID before
+              existingEntry.properties[ 'Vertex ID' ] = vertexIndex;
+            } else {
+              properties[ 'Vertex ID' ] = vertexIndex;
+
+              featureMetadataList.push({
+                class: className,
+                properties: properties
+              });
+            }
+
+            highlightId = vertexIndex;
+          });
+        }
+
+        if (featureMetadataList.length > 0) {
+          // Restore color
+          if (selectedObject?.material?.emissive) {
+            selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
           }
+
+          // Trigger the geometry-based highlight for the primary ID
+          isInstanced
+            ? highlightFeatureInstanced( highlightId )
+            : pickedObject.isMesh
+              ? highlightFeature( highlightId , featureIdAttr )
+              : pickedObject.isPoints
+                ? highlightPoint( highlightId )
+                : highlightLine( highlightId );
+
+          showUiPanel( { featureMetadata: featureMetadataList }, event, schema, pickedObject.name, false );
 
           return;
-        } else if (pickedObject.geometry.attributes._batchid) {
+        }
+
+        if (pickedObject.geometry.hasAttribute( '_batchid' )) {
           // Get the index of the vertex that was hit
           const index = intersect.face.a; 
 
@@ -1348,8 +1513,6 @@
           const batchId = pickedObject.geometry.attributes._batchid.getX( index );
 
           let className = 'BatchId ' + index; // Fallback
-
-          displayData = { featureId: [ { class: className, id: batchId } ] };
 
           // Restore color
           if (selectedObject?.material?.emissive) {
@@ -1359,7 +1522,7 @@
           // Trigger the geometry-based highlight for the primary ID
           highlightFeature( batchId, '_batchid' );
 
-          showUiPanel( displayData, event, schema, pickedObject.name, false );
+          showUiPanel( { featureId: [ { class: className, id: batchId } ] }, event, schema, pickedObject.name, false );
 
           return;
         }
@@ -1390,13 +1553,16 @@
           if (arr.length === 0) return '[]';
 
           // If it's an array of objects
-          if (typeof arr[ 0 ] === 'object') {
+          if (typeof arr[ 0 ] === 'object' && arr[ 0 ] !== null) {
             return arr.map( ( item, idx ) => {
               let itemHtml = `<div style="margin: 4px 0 4px 5px; padding-left: 8px; border-left: 2px solid #00d4ff; background: rgba(0,212,255,0.05);">`;
               itemHtml += `<div style="font-size: 9px; color: #00d4ff; opacity: 0.7;">Part ${idx + 1}</div>`;
 
               for ( const [ sk, sv ] of Object.entries( item ) ) {
-                const cleanSv = ( typeof sv === 'number' ) ? ( Number.isInteger( sv ) ? sv : sv.toFixed( 2 ) ) : sv;
+                const cleanSv = ( typeof sv === 'number' )
+                  ? ( Number.isInteger( sv ) ? sv : sv.toFixed( 2 ) )
+                  : sv;
+
                 itemHtml += `<div style="font-size: 11px;"><span style="color: #666;">${sk}:</span> ${cleanSv}</div>`;
               }
 
@@ -1406,30 +1572,81 @@
           }
     
           // If it's a simple array (like [1, 2, 3])
-          return `[ ${arr.map( v => ( typeof v === 'number' ? ( Number.isInteger( v ) ? v : v.toFixed( 2 ) ) : v ) ).join( ', ' )} ]`;
+          return `[ ${arr.map( v => {
+            if ( typeof v === 'number' ) {
+              return ( Number.isInteger( v ) ? v : v.toFixed( 2 ) );
+            }
+
+            return String( v );
+          }).join( ', ' )} ]`;
         }
 
         const resolveValue = ( className, propName, val ) => {
+          let processedVal = val;
           const propDef = schema?.classes?.[ className ]?.properties?.[ propName ];
 
-          // A. Handle "No Data" or nulls
-          if (val === null || val === undefined) return "N/A";
-
-          // B. Handle Arrays of Objects or Numbers
-          if (Array.isArray( val ) && val.length > 0) {
-            return formatArray( val );
+          // Pre-check: If it's a string that looks like an array but isn't parsed
+          // This handles the "[One, Two]" or "[true, false]" strings
+          if (typeof processedVal === 'string' && processedVal.startsWith( '[' ) && processedVal.endsWith( ']' )) {
+            try {
+              // Try JSON parse first (handles ["One", "Two"])
+              processedVal = JSON.parse( processedVal );
+            } catch ( e ) {
+              // Manual fallback for unquoted strings like [One, Two]
+              processedVal = processedVal.slice( 1, -1 ).split( ',' ).map( s => s.trim() );
+            }
           }
 
-          // C. Handle Nested Objects
-          if (typeof val === 'object' && !Array.isArray( val ) && !val.isVector3) {
+          if (processedVal === null || processedVal === undefined) return 'N/A';
+
+          // A. Handle Arrays (The core of EXT_structural_metadata)
+          if (Array.isArray( processedVal )) {
+            if (processedVal.length === 0) return '[]';
+
+            // Handle ENUM Arrays
+            if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
+              const enumValues = schema.enums[ propDef.enumType ].values;
+              return `[ ${processedVal.map( v => {
+                // Look up by integer value (0, 1, 2) or by string name
+                const entry = enumValues.find( e => e.value == v || e.name === v );
+                return entry ? entry.name : v;
+              }).join(', ')} ]`;
+            }
+
+            // General Array (Booleans, Strings, etc.)
+            return formatArray( processedVal );
+          }
+
+          // B. Handle Nested Objects
+          if (typeof processedVal === 'object' && !Array.isArray( processedVal ) && !processedVal.isVector3) {
             let subHtml = '<div style="margin-left: 10px; font-size: 0.9em; color: #ccc;">';
 
-            for ( const [ k, v ] of Object.entries( val ) ) {
+            for ( const [ k, v ] of Object.entries( processedVal ) ) {
               let displayV = v;
 
-              if (Array.isArray( v )) displayV = formatArray( v );
-              else if (typeof v === 'number') displayV = (Number.isInteger( v ) ? v : v.toFixed( 2 ));
-              else if (typeof v === 'object' && v !== null) displayV = JSON.stringify( v );
+              // 1. If it's a string, try to "un-stringify" it first
+              if (typeof displayV === 'string' && ( displayV.startsWith( '[' ) || displayV.startsWith( '{' ) )) {
+                try {
+                  displayV = JSON.parse( displayV );
+                } catch ( e ) {
+                  // If it's the unquoted Cesium style [One, Two], manual split
+                  if (displayV.startsWith( '[' ) && displayV.endsWith( ']' )) {
+                    displayV = displayV.slice( 1, -1 ).split( ',' ).map( s => s.trim() );
+                  }
+                }
+              }
+
+              // 2. Now that we have the "truest" form of the data, format it for the UI
+              if (Array.isArray( displayV )) {
+                displayV = formatArray( displayV );
+              } else if (typeof displayV === 'object' && displayV !== null) {
+                // If it's still an object (deep nesting), stringify it as a fallback
+                displayV = JSON.stringify( displayV );
+              } else if (typeof displayV === 'number') {
+                displayV = ( Number.isInteger( displayV ) ? displayV : displayV.toFixed( 2 ) );
+              } else if (typeof displayV === 'boolean') {
+                displayV = displayV ? 'Yes' : 'No';
+              }
 
               subHtml += `<div><span style="color: #888;">${k}:</span> ${displayV}</div>`;
             }
@@ -1438,33 +1655,30 @@
             return subHtml;
           }
 
-          // D. Handle Enums (The most important part of the schema)
+          // C. Handle Single Values (Non-Arrays)
+
+          // Single Enums
           if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
-            const enumEntry = schema.enums[propDef.enumType].values.find(v => v.value === val);
-            return enumEntry ? enumEntry.name : val;
+            const entry = schema.enums[ propDef.enumType ].values.find( v => v.value == processedVal || v.name === processedVal );
+            return entry ? entry.name : processedVal;
           }
 
-          // E. Handle Booleans based on Schema Type
+          // Single Booleans
           if (propDef?.type === 'BOOLEAN') {
-            return val ? 'Yes' : 'No';
+            // Treat "true", true, or non-zero numbers as "Yes"
+            const isTrue = (processedVal === true || processedVal === 'true' || processedVal === 1);
+            return isTrue ? 'Yes' : 'No';
           }
 
-          // F. Handle Math Types (VEC2, VEC3, etc)
-          if (Array.isArray( val )) {
-            // Check if this is an array of Enums by looking at the schema
-            if (propDef?.type === 'ENUM') {
-              return `[ ${ val.map( v => resolveValue( className, propName, v ) ).join( ', ' ) } ]`;
-            }
-
-            return `[ ${ val.map( v => ( typeof v === 'number' ? v.toFixed( 2 ) : v ) ).join( ', ' ) } ]`;
+          // Single Numbers
+          if (typeof processedVal === 'number') {
+            return Number.isInteger( processedVal ) ? processedVal : processedVal.toFixed( 2 );
           }
 
-          // G. Handle BigInt / Numbers
-          if (typeof val === 'bigint') return val.toString();
-          if (typeof val === 'number' && Number.isInteger( val )) return val;
-          if (typeof val === 'number') return val.toFixed( 3 );
+          // Handle BigInt / Numbers
+          if (typeof processedVal === 'bigint') return processedVal.toString();
 
-          return val;
+          return processedVal;
         };
 
         let html = '';
@@ -1557,27 +1771,37 @@
 
           // 5.5 Feature-Specific Metadata (EXT_structural_metadata)
 
-          if (data.featureMetadata?.class) {
-            const fm = data.featureMetadata;
+          if (data.featureMetadata) {
+            const fms = Array.isArray( data.featureMetadata ) ? data.featureMetadata : [ data.featureMetadata ];
 
-            html += `
-              <div style="border-bottom: 1px solid #00d4ff; margin-bottom: 6px; padding-bottom: 6px;">
-                <div style="font-size: 10px; color: #00d4ff; font-weight: bold;">${ fm.class }</div>
-              </div>`;
+            fms.forEach( ( fm ) => {
+              html += `
+                <div style="border-bottom: 1px solid #00d4ff; margin-top: 10px; padding-bottom: 4px;">
+                  <div style="font-size: 10px; color: #00d4ff; font-weight: bold;">${fm.class}</div>
+                </div>`;
 
-            if (fm.properties) {
-              for ( const [ key, val ] of Object.entries( fm.properties ) ) {
-                const display = resolveValue( fm.class, key, val );
-                html += `<div class="prop-row"><span class="prop-label">${ key }:</span><span class="prop-value">${ display }</span></div>`;
+              if (fm.properties) {
+                // Sort keys so ID is always at the top if it exists
+                const keys = Object.keys( fm.properties ).sort( ( a, b ) => {
+                  if (a === 'ID' || a === 'Vertex ID') return -1;
+                  if (b === 'ID' || b === 'Vertex ID') return 1;
+                  return 0;
+                });
+
+                for ( const [ key, val ] of Object.entries( fm.properties ) ) {
+                  const display = resolveValue( fm.class, key, val );
+                  html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+                }
               }
-            }
 
-            html += `<br>`;
+              html += `<br>`;
+            });
           }
 
           // 6. FeatureId - Maybe entries from EXT_mesh_features, EXT_structural_metadata...
+          // Only show if not already merged into metadata
 
-          if (data.featureId && Array.isArray( data.featureId )) {
+          if (data.featureId && Array.isArray( data.featureId ) && !data.featureMetadata) {
             data.featureId.forEach( ( fid_class, index ) => {
               // Use the class name if found, otherwise use a readable layer index
               const label = fid_class.class || `Feature Layer ${index}`;
@@ -1593,6 +1817,36 @@
             });
           }
         }
+
+        // Create a shallow copy so we don't accidentally delete the real schema from the viewer
+        const dataForClipboard = { ...data };
+
+        // Remove the heavy schema part
+        delete dataForClipboard.schema;
+
+        // Add selected mesh name
+        if (meshName) dataForClipboard[ 'Selected' ] = meshName;
+
+        // A helper to make JSON.stringify handle BigInt
+        const bigintReplacer = ( key, value ) => typeof value === 'bigint' ? value.toString() : value;
+
+        const rawJson = JSON.stringify( dataForClipboard, bigintReplacer, 2 );
+        if (!rawJson) return;
+
+        // Escape it for use inside an HTML attribute
+        // We replace backslashes first, then single quotes
+        safeJson = rawJson
+          .replace(/\\/g, '\\\\')   // Escape backslashes
+          .replace(/'/g, "\\'")     // Escape single quotes
+
+        html += `
+          <div style="padding: 3px; border-top: 1px solid #444; text-align: center;">
+            <button
+              style="vertical-align: middle; background: #111; color: white; border: 1px solid #00d4ff; padding: 2px; cursor: pointer; font-size: 11px; border-radius: 4px; width: 100%;"
+              onclick="navigator.clipboard.writeText( safeJson ).then( () => alert( 'Metadata copied!' ) );">
+              📋 Copy To Clipboard
+            </button>
+          </div>`;
 
         card.innerHTML = html;
         card.style.display = 'block';
@@ -1614,9 +1868,19 @@
         card.style.top = y + 'px';
       }
 
-      function hideUiPanel() {
+      async function hideUiPanel() {
         const card = document.getElementById('metadata-card');
-        if (card) card.style.display = 'none';
+
+        if (card) {
+          // Restore color
+          if (selectedObject?.material?.emissive) {
+            selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
+          }
+
+          pickedObject = null;
+          await popup_card_cleanup();
+          card.style.display = 'none';
+        }
       }
 
       function set_bounding_box() {
