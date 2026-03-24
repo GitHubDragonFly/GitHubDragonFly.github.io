@@ -2384,10 +2384,11 @@ class Three3DTilesLoader extends Loader {
                         tilesRenderer.workingPath = rootPath;
 
 			tilesRenderer.autoDisableRendererCulling = true;
-			tilesRenderer.maxDepth = scope._maxDepthLevel;
 			tilesRenderer.maxTilesProcessed = scope._maxCacheSize;
+			tilesRenderer.maxDepth = scope._maxDepthLevel;
 			tilesRenderer.errorTarget = scope._errorTarget;
 			tilesRenderer._errorThreshold = 1.0;
+			tilesRenderer._optimizeRaycast = false;
 			tilesRenderer.loadSiblings = true;
 
 			// Tell the manager to use our configured gltfLoader
@@ -2777,7 +2778,7 @@ class Three3DTilesLoader extends Loader {
 			};
 
 			/**
-			 * Custom dispose that cleans up Three.js resources AND the OGC library state.
+			 * Custom dispose that cleans up Three.js resources AND the library state.
 			 */
 			threedTile.dispose = function() {
 
