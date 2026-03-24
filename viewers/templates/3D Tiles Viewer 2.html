@@ -111,7 +111,7 @@
       #metadata-card {
         position: absolute;
         display: none; /* Hidden by default */
-        background: rgba(25, 25, 25, 0.9);
+        background: rgba( 25, 25, 25, 0.9 );
         color: #fff;
         padding: 12px;
         border-radius: 8px;
@@ -120,16 +120,17 @@
         min-width: 180px;
         max-width: 80vw;
         max-height: 70vh;    /* Limits height to 70% of the screen */
+        overflow-x: auto;    /* Enables horizontal scroll */
         overflow-y: auto;    /* Enables vertical scroll */
         border: 1px solid #444;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.5);
+        box-shadow: 0 4px 15px rgba( 0, 0, 0, 0.5 );
         pointer-events: auto;
         z-index: 1000;
       }
 
       #metadata-card::-webkit-scrollbar { width: 6px; }
       #metadata-card::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
-      #metadata-card h4 { margin: 0 0 8px 0; color: #00d4ff; text-transform: uppercase; font-size: 11px; }
+      #metadata-card h4 { margin: 0 0 8px 0; color: #00d4ff; font-size: 11px; }
       #metadata-card .prop-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
       #metadata-card .prop-label { color: #aaa; margin-right: 15px; }
       #metadata-card .prop-value { font-weight: bold; color: #fff; }
@@ -694,6 +695,32 @@
         loadURLFile();
       }
 
+      function add_pickable_ghost_volume() {
+        if (!tileset_obj) return;
+
+        // Create geometry that matches the screen dimensions
+        const ghostGeo = new THREE.BoxGeometry( ww, wh, ww );
+
+        // Create an invisible material
+        const ghostMat = new THREE.MeshBasicMaterial({
+          side: THREE.DoubleSide, // Pickable from either side
+          transparent: true,
+          opacity: 0,             // Invisible to the user
+          color: 0xffffff,
+          depthTest: true,
+          depthWrite: false       // Don't block other objects from rendering
+        });
+
+        const ghostMesh = new THREE.Mesh( ghostGeo, ghostMat );
+        ghostMesh.raycast = THREE.Mesh.prototype.raycast;
+        ghostMesh.name = "metadata_proxy_mesh";
+
+        // Position it at the center of tileset bounding box
+        tileset_obj.boundingBox.getCenter( ghostMesh.position );
+
+        tileset_obj.add( ghostMesh );
+      }
+
       async function loadURLFile() {
         if (selected_url_file !== '') {
           if (selected_url_file.startsWith('https://github.com') === true) {
@@ -913,6 +940,10 @@
             gui_pointSizeFine.show( false );
             gui_pointSizeCoarse.show( false );
           }
+        }
+
+        if (tileset_obj.hasMetadata && tileset_obj.children.length === 0) {
+          add_pickable_ghost_volume();
         }
 
         resize();
@@ -1197,7 +1228,14 @@
       let _pickCanvas, _pickCtx, _readTarget, _pixelPicker;
 
       function popup_card_cleanup() {
-        document.getElementById('metadata-card').style.display = 'none';
+        const card = document.getElementById('metadata-card');
+
+        if (card) {
+          card.scrollTop = 0;
+          card.scrollLeft = 0;
+          card.innerHTML = '';
+          card.style.display = 'none';
+        }
 
         // Clean up previous highlight
         if (featureHighlightMesh) {
@@ -1233,8 +1271,9 @@
       function handle_raycast_click( event ) {
         popup_card_cleanup();
 
-        if (event.target.closest( '#fixed_menu' )) {
-          return; // Exit the function if pointer is on the fixed menu
+        // Exit the function if pointer is on the fixed menu or gui
+        if (event.target.closest( '#fixed_menu' ) || event.target.closest( '#right_gui_position' )) {
+          return;
         }
 
         // Calculate how far the mouse moved
@@ -1825,13 +1864,17 @@
 
         if (show_copy_to_clipboard) {
           // Create a shallow copy so we don't accidentally delete the real schema from the viewer
-          const dataForClipboard = { ...data };
+          const dataForClipboard = data
+            ? { ...data }
+            : tileset_obj.userData?.tileset
+              ? { ...tileset_obj.userData.tileset }
+              : {};
 
           // Remove the heavy schema part
           delete dataForClipboard.schema;
 
           // Add selected mesh name
-          if (meshName) dataForClipboard[ 'Selected' ] = meshName;
+          if (data && meshName) dataForClipboard[ 'Selected' ] = meshName;
 
           // A helper to make JSON.stringify handle BigInt
           const bigintReplacer = ( key, value ) => typeof value === 'bigint' ? value.toString() : value;
@@ -1875,19 +1918,14 @@
         card.style.top = y + 'px';
       }
 
-      async function hideUiPanel() {
-        const card = document.getElementById('metadata-card');
-
-        if (card) {
-          // Restore color
-          if (selectedObject?.material?.emissive) {
-            selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
-          }
-
-          pickedObject = null;
-          await popup_card_cleanup();
-          card.style.display = 'none';
+      function hideUiPanel() {
+        // Restore color
+        if (selectedObject?.material?.emissive) {
+          selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
         }
+
+        pickedObject = null;
+        popup_card_cleanup();
       }
 
       function set_bounding_box() {
