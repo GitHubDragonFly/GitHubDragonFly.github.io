@@ -58,10 +58,10 @@ class Three3DTilesLoader extends Loader {
 		this._token = '';
 		this._assetId = '1';
 
-		this._maxDepthLevel = 6;
-		this._maxCacheSize = 300;
+		this._maxDepthLevel = 4;
+		this._maxCacheSize = 100;
 		this._materialSide = -1;
-		this._errorTarget = 0;
+		this._errorTarget = 0.5;
 
 		this._variantLookup = new Map();
 		this._metadataLookup = [];
@@ -2330,9 +2330,9 @@ class Three3DTilesLoader extends Loader {
 
 			// Check if the root or any child has multiple contents to set a global flag
 
-			const hasMultiExplicit = json.root.contents?.length > 1;
+			const hasMultiExplicit = json.root?.contents?.length > 1;
 			const hasMultiImplicit = ( isImplicit || isV10Implicit ) && 
-				( json.root.implicitTiling.contentAvailability?.length > 1 || json.root.implicitTiling.multipleContents );
+				( json.root?.implicitTiling?.contentAvailability?.length > 1 || json.root?.implicitTiling?.multipleContents );
 
 			const hasMulti = hasMultiExplicit || hasMultiImplicit;
 
@@ -2380,16 +2380,15 @@ class Three3DTilesLoader extends Loader {
 
 			tilesRenderer.setCamera( scope._camera );
 			tilesRenderer.setResolutionFromRenderer( scope._camera, scope._renderer );
-
                         tilesRenderer.workingPath = rootPath;
 
+			//tilesRenderer.maxTilesProcessed = scope._maxCacheSize;
 			tilesRenderer.autoDisableRendererCulling = true;
-			tilesRenderer.maxTilesProcessed = scope._maxCacheSize;
-			tilesRenderer.maxDepth = scope._maxDepthLevel;
 			tilesRenderer.errorTarget = scope._errorTarget;
-			tilesRenderer._errorThreshold = 1.0;
+			tilesRenderer.maxDepth = scope._maxDepthLevel;
 			tilesRenderer._optimizeRaycast = false;
-			tilesRenderer.loadSiblings = true;
+			tilesRenderer._errorThreshold = 1.0;
+			tilesRenderer.loadSiblings = false;
 
 			// Tell the manager to use our configured gltfLoader
 
@@ -2401,9 +2400,11 @@ class Three3DTilesLoader extends Loader {
 				const cleanAssetId = String( scope._assetId || '1' ).trim();
 
 				const authPlugin = new ThreeDTilesPlugins.CesiumIonAuthPlugin( {
+
 					apiToken: cleanToken,
 					assetId: cleanAssetId,
 					autoRefreshToken: true
+
 				} );
 
 				tilesRenderer.registerPlugin( authPlugin );
