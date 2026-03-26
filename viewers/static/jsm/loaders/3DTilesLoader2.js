@@ -86,6 +86,7 @@ class Three3DTilesLoader extends Loader {
 		this._gltfLoader.setDRACOLoader( this._dracoLoader );
 		this._gltfLoader.setMeshoptDecoder( MeshoptDecoder );
 
+		this._gltfLoader.register( ( parser ) => new ThreeDTilesPlugins.GLTFCesiumRTCExtension( parser ) );
 		this._gltfLoader.register( ( parser ) => new ThreeDTilesPlugins.GLTFMeshFeaturesExtension( parser ) );
 		this._gltfLoader.register( ( parser ) => new ThreeDTilesPlugins.GLTFStructuralMetadataExtension( parser ) );
 
@@ -149,12 +150,12 @@ class Three3DTilesLoader extends Loader {
 
 	/**
 	 * Sets the error target for tiles renderer.
-	 * Clamped between 0.1 and 20.
+	 * Clamped between 0.1 and 30.
 	 * @param { number } target
 	 */
 	setErrorTarget( target ) {
 
-		this._errorTarget = Math.max( 0.1, Math.min( 20.0, target ) );
+		this._errorTarget = Math.max( 0.1, Math.min( 30.0, target ) );
 		return this;
 
 	}
@@ -1149,7 +1150,10 @@ class Three3DTilesLoader extends Loader {
 		// Extract Binary Chunk
 		// The binary chunk starts immediately after the JSON chunk
 
-		const binaryStart = jsonStart + jsonByteLength;
+		// Round up to the next 8-byte boundary
+		const binaryStart = Math.ceil( ( jsonStart + jsonByteLength ) / 8 ) * 8;
+
+		//const binaryStart = jsonStart + jsonByteLength;
 		const binary = new Uint8Array( buffer, binaryStart, binaryByteLength );
 		const binaryView = new DataView( buffer, binaryStart, binaryByteLength );
 
@@ -2382,7 +2386,7 @@ class Three3DTilesLoader extends Loader {
 			tilesRenderer.setResolutionFromRenderer( scope._camera, scope._renderer );
                         tilesRenderer.workingPath = rootPath;
 
-			//tilesRenderer.maxTilesProcessed = scope._maxCacheSize;
+			tilesRenderer.maxTilesProcessed = scope._maxCacheSize;
 			tilesRenderer.autoDisableRendererCulling = true;
 			tilesRenderer.errorTarget = scope._errorTarget;
 			tilesRenderer.maxDepth = scope._maxDepthLevel;
@@ -2478,6 +2482,7 @@ class Three3DTilesLoader extends Loader {
 				// We move it 'distance' units away from the center along the Z axis
 
 				scope._camera.position.set( center.x, center.y, center.z + distance );
+				scope._camera.updateProjectionMatrix();
 
 				// 5. Point the camera at the center
 
@@ -2566,6 +2571,8 @@ class Three3DTilesLoader extends Loader {
 				const r = sphere.radius;
 				tilesRenderer.group.boundingBox.min.set( -r, -r, -r );
 				tilesRenderer.group.boundingBox.max.set( r, r, r );
+
+				tilesRenderer.group.updateWorldMatrix( true, true );
 
 				// Call camera fit function
 
