@@ -93,7 +93,7 @@
     <script type="module">
       import * as threejs from "three";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { Three3DTilesLoader } from "../static/jsm/loaders/3DTilesLoader2.js";
+      import { Three3DTilesLoader } from "../static/jsm/loaders/3DTilesLoader2.min.js";
 
       THREE = threejs;
 
@@ -120,7 +120,7 @@
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         font-size: 13px;
         min-width: 180px;
-        max-width: 80vw;
+        max-width: 70vw;     /* Limits width to 70% of the screen */
         max-height: 70vh;    /* Limits height to 70% of the screen */
         overflow-x: auto;    /* Enables horizontal scroll */
         overflow-y: auto;    /* Enables vertical scroll */
@@ -840,7 +840,7 @@
           });
 
           // Add LOD Error Target control
-          gui.add( params, 'errorTarget', 0.1, 20.0, 0.1 ).name( 'Error Target' )
+          gui.add( params, 'errorTarget', 0.1, 30.0, 0.1 ).name( 'Error Target' )
           .onChange( ( value ) => {
             set_tiles_error_target( value );
 
@@ -1386,10 +1386,12 @@
         const structuralMetadata = userData.structuralMetadata;
         const schema = structuralMetadata?.schema || tileset_obj.userData?.schema;
 
-        let featureId, featureIdAttr;
+        let primaryFeatureId = null;
+        let primaryAttributeName = '';
         let featureMetadataList = [];
         let highlightId = null;
         let vertexIndex = -1;
+        let barycoord;
 
         if (pickedObject.isPoints || pickedObject.isLine) {
           vertexIndex = intersect.index;
@@ -1401,6 +1403,7 @@
           const featureIds = meshFeatures.featureIds || meshFeatures.data?.featureIds;
 
           for (let i = 0; i < featureIds.length; i++) {
+            let featureId, featureIdAttr;
             const info = featureIds[ i ];
             featureId = -1;
 
@@ -1416,11 +1419,11 @@
             // 1. STRATEGY: ATTRIBUTE and/or TEXTURE
             if (meshFeatures && !isInstanced) {
               if (intersect.faceIndex !== undefined) {
-                // 1. Get the Barycentric coordinates of the hit
+                barycoord = new THREE.Vector3();
+
+                // Get the Barycentric coordinates of the hit
 
                 const posAttr = intersect.object.geometry.attributes.position;
-
-                const barycoord = new THREE.Vector3();
 
                 const vA = new THREE.Vector3();
                 const vB = new THREE.Vector3();
@@ -1434,14 +1437,15 @@
 
                 THREE.Triangle.getBarycoord( localPoint, vA, vB, vC, barycoord );
 
-                // 2. Call getFeatures (synchronous)
+                // Call getFeatures (synchronous)
 
-                const featureIds = meshFeatures.getFeatures( intersect.faceIndex, barycoord );
-                featureId = featureIds[ 0 ]; // Get the ID from the first feature set
+                // Get the ID from the current feature set
+                const mesh_featureIds = meshFeatures.getFeatures( intersect.faceIndex, barycoord );
+                featureId = mesh_featureIds[ info.attribute ];
 
                 // MANUAL FALLBACK: If getFeatures failed but we have a raw attribute, grab it.
 
-                if ((featureId === null || featureId === -1) && featureIdAttr && intersect.face) {
+                if ((featureId === null || featureId === undefined || featureId === -1) && featureIdAttr && intersect.face) {
                   const attr = pickedObject.geometry.getAttribute( featureIdAttr );
                   if (attr) featureId = attr.getX( intersect.face.a );
                 }
@@ -1458,6 +1462,12 @@
             if (featureId !== -1 && featureId !== null && featureId !== info.nullFeatureId) {
               let metadataRow = {};
               let className = info.label || `Feature ${ i }`;
+
+              // Only set the primary highlight data ONCE (the first valid set)
+              if (primaryFeatureId === null) {
+                primaryFeatureId = featureId;
+                primaryAttributeName = featureIdAttr; 
+              }
 
               if (info.propertyTable !== null && structuralMetadata?.getPropertyTableData) {
                 // 1. Get the actual Data Row
@@ -1512,6 +1522,7 @@
                   }
 
                   metadataRow[ 'Attribute' ] = i;
+                  metadataRow[ 'VertexId' ] = vertexIndex;
                   metadataRow[ 'ID' ] = featureId;
                 }
 
@@ -1519,7 +1530,7 @@
                 className = structuralMetadata.tableAccessors[ info.propertyTable ].className;
               } else {
                 // Fallback for "Blind" IDs
-                metadataRow = { 'ID': featureId };
+                metadataRow = { 'VertexId': vertexIndex, 'ID': featureId };
               }
 
               // Put the data into a structure showUiPanel expects
@@ -1529,8 +1540,6 @@
               });
             }
           }
-
-          if (highlightId === null || highlightId === undefined) highlightId = featureId;
         }
 
         if (vertexIndex !== -1 && structuralMetadata?.attributeAccessors?.length > 0) {
@@ -1539,17 +1548,50 @@
             const className = accessor.className;
             let properties = {};
 
+            const _vA = new THREE.Vector3();
+            const _vB = new THREE.Vector3();
+            const _vC = new THREE.Vector3();
+            const _interp = new THREE.Vector3();
+
             // 3. Each property in this class points to a vertex attribute
             for ( const [ propName, propertyAccessor ] of Object.entries( accessor.properties ) ) {
-              // The loader usually provides a .get(index) method on the propertyAccessor
-              if (propertyAccessor.get) {
-                properties[ propName ] = propertyAccessor.get( vertexIndex );
-              } else {
-                // Fallback: look at the attribute directly if the accessor is raw
-                const attrName = propertyAccessor.attribute?.toLowerCase();
-                const attr = pickedObject.geometry.getAttribute( attrName );
-                if (attr) properties[ propName ] = attr.getX( vertexIndex );
+              let finalValue = null;
+
+              if (barycoord && propertyAccessor.isAttribute) {
+                const attr = pickedObject.geometry.getAttribute( propertyAccessor.attribute );
+
+                if (attr) {
+                  // Get values for all three vertices of the face
+                  _vA.fromBufferAttribute( attr, intersect.face.a );
+                  _vB.fromBufferAttribute( attr, intersect.face.b);
+                  _vC.fromBufferAttribute( attr, intersect.face.c);
+
+                  // Weighted sum based on barycentric coordinates
+                  _interp.set( 0, 0, 0 )
+                  .addScaledVector( _vA, barycoord.x )
+                  .addScaledVector( _vB, barycoord.y )
+                  .addScaledVector( _vC, barycoord.z );
+
+                  finalValue = (propertyAccessor.type === 'SCALAR') ? _interp.x : _interp.clone();
+                }
               }
+
+              if (finalValue === null) {
+                if (propertyAccessor.isTexture && intersect.uv) {
+                  // 2026 Spec: Read metadata from a pixel at the UV coordinate
+                  finalValue = propertyAccessor.sample( intersect.uv );
+                } else if (propertyAccessor.get) {
+                  // The loader usually provides a .get(index) method on the propertyAccessor
+                  finalValue = propertyAccessor.get( vertexIndex );
+                } else {
+                  // Fallback: look at the attribute directly if the accessor is raw
+                  const attrName = propertyAccessor.attribute?.toLowerCase();
+                  const attrib = pickedObject.geometry.getAttribute( attrName );
+                  if (attrib) finalValue = attrib.getX( vertexIndex );
+                }
+              }
+
+              properties[ propName ] = finalValue;
             }
 
             // Check if meshFeatures already added a table-row for this class
@@ -1584,7 +1626,7 @@
           isInstanced
             ? highlightFeatureInstanced( highlightId )
             : pickedObject.isMesh
-              ? highlightFeature( highlightId , featureIdAttr )
+              ? highlightFeature( primaryFeatureId , primaryAttributeName )
               : pickedObject.isPoints
                 ? highlightPoint( highlightId )
                 : highlightLine( highlightId );
@@ -1718,6 +1760,22 @@
 
         const resolveValue = ( className, propName, val ) => {
           let processedVal = val;
+
+          // Handle Three.js math objects (from interpolation)
+          if (processedVal && typeof processedVal === 'object') {
+            if (processedVal.isVector3) {
+              return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )}, ${processedVal.z.toFixed( 2 )})`;
+            }
+
+            if (processedVal.isVector2) {
+              return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )})`;
+            }
+
+            if (processedVal.isColor) {
+              return `RGB(${processedVal.r.toFixed( 2 )}, ${processedVal.g.toFixed( 2 )}, ${processedVal.b.toFixed( 2 )})`;
+            }
+          }
+
           const propDef = schema?.classes?.[ className ]?.properties?.[ propName ];
 
           // Pre-check: If it's a string that looks like an array but isn't parsed
