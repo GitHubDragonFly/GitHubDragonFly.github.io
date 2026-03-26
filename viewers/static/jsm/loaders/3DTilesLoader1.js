@@ -697,7 +697,7 @@ class Three3DTilesLoader extends Loader {
 
 		const offsetX = dx ? 0.5 : -0.5;
 		const offsetY = dy ? 0.5 : -0.5;
-		const offsetZ = isQuadtree ? 0 : (dz ? 0.5 : -0.5);
+		const offsetZ = isQuadtree ? 0 : ( dz ? 0.5 : -0.5 );
 
 		childBox[ 0 ] = p[ 0 ] + ( p[ 3 ] * offsetX ) + ( p[ 6 ] * offsetY ) + ( p[ 9 ] * offsetZ );
 		childBox[ 1 ] = p[ 1 ] + ( p[ 4 ] * offsetX ) + ( p[ 7 ] * offsetY ) + ( p[ 10 ] * offsetZ );
@@ -913,8 +913,8 @@ class Three3DTilesLoader extends Loader {
 			// Offset into the binary body
 
 			const byteOffset = ( bv.byteOffset || 0 );
-			const bitIndex = index % 8;
 			const byteIndex = Math.floor( index / 8 );
+			const bitIndex = index % 8;
 
 			// Use DataView for safety, or direct array access if it's a TypedArray
 
@@ -2184,6 +2184,9 @@ class Three3DTilesLoader extends Loader {
 			if ( !scope._renderer ) scope._renderer = new WebGLRenderer( { antialias: false } );
 			scope._ktx2Loader.detectSupport( scope._renderer );
 
+			let isSupportedFormat = false;
+			let isUnsupportedFormat = false;
+
 			function _scrubTileset( tile ) {
 
 				if ( !tile ) return;
@@ -2192,13 +2195,8 @@ class Three3DTilesLoader extends Loader {
 
 					const uri = tile.content.uri || tile.content.url;
 
-					if ( uri && /\.(i3dm|cmpt|pnts)(\?.*)?$/i.test( uri ) ) {
-
-						// Throw error immediately to halt further execution
-
-						throw new Error( `Unsupported 3D Tile content format detected: ${ uri }` );
-
-					}
+					if ( !isSupportedFormat ) isSupportedFormat = /\.(b3dm|gltf|glb)(\?.*)?$/i.test( uri );
+					if ( !isUnsupportedFormat ) isUnsupportedFormat = /\.(i3dm|cmpt|pnts)(\?.*)?$/i.test( uri );
 
 				}
 
@@ -2210,13 +2208,8 @@ class Three3DTilesLoader extends Loader {
 
 						const uri = c.uri || c.url;
 
-						if ( uri && /\.(i3dm|cmpt|pnts)(\?.*)?$/i.test( uri ) ) {
-
-							// Throw error immediately to halt further execution
-
-							throw new Error( `Unsupported 3D Tile content format detected: ${ uri }` );
-
-						}
+						if ( !isSupportedFormat ) isSupportedFormat = /\.(b3dm|gltf|glb)(\?.*)?$/i.test( uri );
+						if ( !isUnsupportedFormat ) isUnsupportedFormat = /\.(i3dm|cmpt|pnts)(\?.*)?$/i.test( uri );
 
 					});
 
@@ -2235,6 +2228,20 @@ class Three3DTilesLoader extends Loader {
 			let json = await fetch( url ).then( r => r.json() );
 
 			_scrubTileset( json.root );
+
+			if ( !isSupportedFormat && isUnsupportedFormat ) {
+
+				// Only unsupported format present, throw error immediately to halt further execution
+
+				throw new Error( 'Only unsupported 3D Tile content format detected!' );
+
+			} else if ( isUnsupportedFormat ) {
+
+				// Allow mixed contents
+
+				console.warn( 'Some unsupported 3D Tile content format detected!' );
+
+			}
 
 			const tilesetVersion = json.asset?.version || null;
 
@@ -2274,7 +2281,7 @@ class Three3DTilesLoader extends Loader {
 
 			const hasMultiExplicit = json.root.contents?.length > 1;
 			const hasMultiImplicit = ( isImplicit || isV10Implicit ) && 
-				( json.root.implicitTiling.contentAvailability?.length > 1 || json.root.implicitTiling.multipleContents );
+				( json.root?.implicitTiling?.contentAvailability?.length > 1 || json.root?.implicitTiling?.multipleContents );
 
 			const hasMulti = hasMultiExplicit || hasMultiImplicit;
 

@@ -61,7 +61,7 @@ class Three3DTilesLoader extends Loader {
 		this._maxDepthLevel = 4;
 		this._maxCacheSize = 100;
 		this._materialSide = -1;
-		this._errorTarget = 0.5;
+		this._errorTarget = 5;
 
 		this._variantLookup = new Map();
 		this._metadataLookup = [];
@@ -149,12 +149,12 @@ class Three3DTilesLoader extends Loader {
 
 	/**
 	 * Sets the error target for tiles renderer.
-	 * Clamped between 0 and 10.
+	 * Clamped between 0.1 and 20.
 	 * @param { number } target
 	 */
 	setErrorTarget( target ) {
 
-		this._errorTarget = Math.max( 0, Math.min( 10.0, target ) );
+		this._errorTarget = Math.max( 0.1, Math.min( 20.0, target ) );
 		return this;
 
 	}
