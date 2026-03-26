@@ -398,15 +398,17 @@ Number Type Converter
   - 2 versions of this viewer exist, `3D Tiles Viewer 1` using [threedtiles](https://github.com/ebeaufay/threedtiles) and `3D Tiles Viewer 2` using [3d-tiles-renderer](https://github.com/NASA-AMMOS/3DTilesRendererJS) library:
     - Neither is perfect so use both of them and compare
   - These viewers are specifically designed to stream 3D Tiles:
-    - Support ImplicitTiling, MultipleContents and Metadata v1.1 by performing conversion to explicit:
+    - Support for v1.0 Batch Table and v1.1 ImplicitTiling, MultipleContents and all kinds of Metadata, by performing conversion to explicit:
       - `3d-tiles-renderer` seems to provide support for GLTF `EXT_structural_metadata`, `EXT_mesh_features`, `EXT_instance_features` and both FeatureId Attribute and Texture:
         - 3D Tiles Viewer 2 has a popup card to show metadata, which for certain tilesets is a world of its own:
-          - This popup card also provides `Copy To Clipboard` feature
+          - This popup card also provides `Copy To Clipboard` feature mainly intended for troubleshooting purposes:
+            - Schema, if present, will not be visible on the card but will be included for clipboard
           - Make sure to check its and raycasting code in the viewer to see how all data is retrieved
       - `threedtiles` is currently not providing access to some of these features, like metadata textures or property tables:
         - It also does not provide support for `.i3dm`, `.pnts` or `.cmpt` formats
         - It also does not seem to be able to fetch `.bin` files associated with certain `GLTF` models
-        - 3D Tiles Viewer 1 has a popup card to show metadata, which is limited to available features
+        - 3D Tiles Viewer 1 has a popup card to show metadata, which is limited to available features:
+          - This popup card also provides `Copy To Clipboard` feature mainly intended for troubleshooting purposes
       - Quick test for both viewers, try loading some of these examples: [Cesium](https://github.com/CesiumGS/3d-tiles-samples), [bertt](https://github.com/bertt/cesium_3dtiles_samples/tree/master/samples), [NASA-AMMOS](https://github.com/NASA-AMMOS/3DTilesSampleData/tree/master):
         - Some of these examples might not work in one or the other or both viewers
     - Both viewers are using customized `3DTilesLoader`:
