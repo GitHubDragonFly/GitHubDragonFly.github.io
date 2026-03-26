@@ -81,7 +81,7 @@
       var ww = window.innerWidth, wh = window.innerHeight, mouse_down, mouse_wheel;
       var stats, stats_enabled, events_initialized, clock;
       var last_tile, last_level, last_uuid, params, halt_on_error;
-      var selected_url_file = '', directionalLight, isMobile, safeJson;
+      var selected_url_file = '', directionalLight, isMobile, safeJson, ghostMesh;
       var lod_displayed = false, warning_displayed = false, wireframe_enabled;
       var extended_render, extended_count = 0, count = 0, selectedObject, pickedObject;
       var variants, variants_available, current_variant, click_listener_added = false;
@@ -93,7 +93,7 @@
     <script type="module">
       import * as threejs from "three";
       import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { Three3DTilesLoader } from "../static/jsm/loaders/3DTilesLoader2.min.js";
+      import { Three3DTilesLoader } from "../static/jsm/loaders/3DTilesLoader2.js";
 
       THREE = threejs;
 
@@ -402,7 +402,7 @@
         params.pointSizeCoarse = 1.0;
         params.pointSizeFine = 1.0;
         params.materialSide = -1;
-        params.errorTarget = 0.5;
+        params.errorTarget = isMobile ? 5.0 : 0.5;
         params.cacheSize = 100;
         params.depthLevel = 4;
         params.brightness = 2.5;
@@ -601,7 +601,7 @@
           brightness: 2.5,
           cacheSize: 100,
           depthLevel: 4,
-          errorTarget: 0.5,
+          errorTarget: isMobile ? 5.0 : 0.5,
           materialSide: -1,
           pointSizeFine: 1.0,
           pointSizeCoarse: 1.0
@@ -686,6 +686,7 @@
           tiles_loader.setCamera( camera );
           tiles_loader.setControls( controls );
           tiles_loader.setRenderer( renderer );
+          tiles_loader.setErrorTarget( isMobile ? 5.0 : 0.5 );
         }
 
         // Start flashing indicator
@@ -711,7 +712,7 @@
           depthWrite: false       // Don't block other objects from rendering
         });
 
-        const ghostMesh = new THREE.Mesh( ghostGeo, ghostMat );
+        ghostMesh = new THREE.Mesh( ghostGeo, ghostMat );
         ghostMesh.raycast = THREE.Mesh.prototype.raycast;
         ghostMesh.name = "metadata_proxy_mesh";
 
@@ -791,7 +792,7 @@
           });
 
           // Add LOD Error Target control
-          gui.add( params, 'errorTarget', 0.0, 10.0, 0.1 ).name( 'Error Target' )
+          gui.add( params, 'errorTarget', 0.1, 20.0, 0.1 ).name( 'Error Target' )
           .onChange( ( value ) => {
             set_tiles_error_target( value );
 
@@ -1511,9 +1512,9 @@
               Object.assign( existingEntry.properties, properties );
 
               // Update the ID to show the vertex index if it was a general feature ID before
-              existingEntry.properties[ 'Vertex ID' ] = vertexIndex;
+              existingEntry.properties[ 'VertexId' ] = vertexIndex;
             } else {
-              properties[ 'Vertex ID' ] = vertexIndex;
+              properties[ 'VertexId' ] = vertexIndex;
 
               featureMetadataList.push({
                 class: className,
@@ -1540,19 +1541,65 @@
                 ? highlightPoint( highlightId )
                 : highlightLine( highlightId );
 
-          showUiPanel( { featureMetadata: featureMetadataList }, event, schema, pickedObject.name, false );
+          showUiPanel( { ...pickedObject.userData.metadata, featureMetadata: featureMetadataList }, event, schema, pickedObject.name, false );
 
           return;
         }
 
-        if (pickedObject.geometry.hasAttribute( '_batchid' )) {
-          // Get the index of the vertex that was hit
-          const index = intersect.face.a; 
-
+        if (vertexIndex !== -1 && pickedObject.geometry.hasAttribute( '_batchid' )) {
           // Get the ID for this specific building/feature
-          const batchId = pickedObject.geometry.attributes._batchid.getX( index );
+          const batchId = pickedObject.geometry.attributes._batchid.getX( vertexIndex );
 
-          let className = 'BatchId ' + index; // Fallback
+          let className = 'BatchId'; // Fallback
+
+          let properties = {};
+          properties.VertexId = vertexIndex;
+
+          let batchTable;
+          let curr = pickedObject;
+
+          // Climb parents to find the batch table
+
+          while ( curr ) {
+            if ( curr.batchTable !== undefined ) {
+              batchTable = curr.batchTable;
+              break;
+            }
+
+            curr = curr.parent;
+          }
+
+          if (batchTable !== undefined) {
+            className = 'Batch Table';
+
+            if (batchTable.header) { // B3DM
+              // Iterate through all keys in the header (Height, Latitude, Longitude, etc.)
+              for ( const key in batchTable.header ) {
+                const attributeArray = batchTable.header[ key ];
+
+                // Check if it's an array and has a value for our batchId
+                if (Array.isArray( attributeArray ) && attributeArray.length > batchId) {
+                  properties[ key ] = attributeArray[ batchId ];
+                }
+              }
+            } else if (typeof batchTable.getPropertyNames === 'function') {
+              // Extract all available properties from the batch table for this specific ID
+              const keys = batchTable.getPropertyNames(); 
+
+              keys.forEach( key => {
+                const val = batchTable.getProperty( batchId, key );
+                if (val !== undefined && val !== null) {
+                  properties[ key ] = val;
+                }
+              });
+            }
+          }
+
+          // Wrap in the format showUiPanel expects
+          featureMetadataList.push({
+            class: className,
+            properties: properties
+          });
 
           // Restore color
           if (selectedObject?.material?.emissive) {
@@ -1562,7 +1609,7 @@
           // Trigger the geometry-based highlight for the primary ID
           highlightFeature( batchId, '_batchid' );
 
-          showUiPanel( { featureId: [ { class: className, id: batchId } ] }, event, schema, pickedObject.name, false );
+          showUiPanel( { ...pickedObject.userData.metadata, featureMetadata: featureMetadataList }, event, schema, pickedObject.name, false );
 
           return;
         }
@@ -1572,11 +1619,11 @@
         const data = pickedObject.userData.metadata;
 
         if ((data && !data.empty) || tilesetMetadataOnly) {
-          showUiPanel(data, event, schema, pickedObject.name, tilesetMetadataOnly, pickedObject.type);
+          showUiPanel( data, event, schema, pickedObject.name, tilesetMetadataOnly, pickedObject.type );
         } else {
           // If no metadata found, remove highlight
           if (selectedObject.material?.emissive) {
-            selectedObject.material.emissive.copy(selectedObject.userData.originalEmissive);
+            selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
           }
 
           selectedObject = null;
@@ -1727,7 +1774,7 @@
 
         // 1. Tileset Metadata - Maybe entries like author, date, tile count...
 
-        const tileset = tilesetMetadataOnly ? tileset_obj.userData.tileset : data?.tileset;
+        const tileset = tilesetMetadataOnly ? tileset_obj.userData?.tileset : data?.tileset;
 
         if (tileset?.class) {
           html += `
@@ -1752,7 +1799,7 @@
             </div>`;
         }
 
-        if (!tilesetMetadataOnly) {
+        if (data && !tilesetMetadataOnly) {
           if (tileset) html += `<br>`;
 
           // 2. Tile Metadata - Maybe entries like district, population...
@@ -1827,8 +1874,8 @@
               if (fm.properties) {
                 // Sort keys so ID is always at the top if it exists
                 const keys = Object.keys( fm.properties ).sort( ( a, b ) => {
-                  if (a === 'ID' || a === 'Vertex ID') return -1;
-                  if (b === 'ID' || b === 'Vertex ID') return 1;
+                  if (a === 'ID' || a === 'id' || a === 'VertexId') return -1;
+                  if (b === 'ID' || b === 'id' || b === 'VertexId') return 1;
                   return 0;
                 });
 
@@ -1870,7 +1917,7 @@
               ? { ...tileset_obj.userData.tileset }
               : {};
 
-          // Remove the heavy schema part
+          // Remove the heavy schema part for popup card, it will be included for clipboard
           delete dataForClipboard.schema;
 
           // Add selected mesh name
@@ -1879,7 +1926,7 @@
           // A helper to make JSON.stringify handle BigInt
           const bigintReplacer = ( key, value ) => typeof value === 'bigint' ? value.toString() : value;
 
-          const rawJson = JSON.stringify( dataForClipboard, bigintReplacer, 2 );
+          const rawJson = JSON.stringify( data ? data : dataForClipboard, bigintReplacer, 2 );
           if (!rawJson) return;
 
           // Escape it for use inside an HTML attribute
@@ -2098,6 +2145,19 @@
           });
 
           featureHighlightMesh = null;
+        }
+
+        if (ghostMesh) {
+          if (ghostMesh.parent) {
+            ghostMesh.parent.remove( ghostMesh );
+          }
+
+          ghostMesh.traverse( ( child ) => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          });
+
+          ghostMesh = null;
         }
 
         scene.remove( tileset_obj );

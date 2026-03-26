@@ -81,7 +81,7 @@
       var ww = window.innerWidth, wh = window.innerHeight;
       var stats, stats_enabled, events_initialized, clock;
       var last_tile, last_level, last_uuid, params, halt_on_error;
-      var selected_url_file = '', directionalLight, isMobile;
+      var selected_url_file = '', directionalLight, isMobile, safeJson, ghostMesh;
       var lod_displayed = false, warning_displayed = false, wireframe_enabled;
       var extended_render, extended_count = 0, count = 0, selectedObject, pickedObject;
       var variants, variants_available, current_variant, click_listener_added = false;
@@ -667,6 +667,32 @@
         loadURLFile();
       }
 
+      function add_pickable_ghost_volume() {
+        if (!tileset_obj) return;
+
+        // Create geometry that matches the screen dimensions
+        const ghostGeo = new THREE.BoxGeometry( ww, wh, ww );
+
+        // Create an invisible material
+        const ghostMat = new THREE.MeshBasicMaterial({
+          side: THREE.DoubleSide, // Pickable from either side
+          transparent: true,
+          opacity: 0,             // Invisible to the user
+          color: 0xffffff,
+          depthTest: true,
+          depthWrite: false       // Don't block other objects from rendering
+        });
+
+        ghostMesh = new THREE.Mesh( ghostGeo, ghostMat );
+        ghostMesh.raycast = THREE.Mesh.prototype.raycast;
+        ghostMesh.name = "metadata_proxy_mesh";
+
+        // Position it at the center of tileset bounding box
+        tileset_obj.boundingBox.getCenter( ghostMesh.position );
+
+        tileset_obj.add( ghostMesh );
+      }
+
       async function loadURLFile() {
         if (selected_url_file !== '') {
           if (selected_url_file.startsWith('https://github.com') === true) {
@@ -882,6 +908,12 @@
           tileset_obj.displayCopyright = false;
         }
 
+        if (tileset_obj.hasMetadata && tileset_obj.children.length === 0) {
+          add_pickable_ghost_volume();
+        }
+
+        resize();
+
         enable_disable( false );
 
         init_running = false;
@@ -1055,8 +1087,15 @@
         pickedObject.add( featureHighlightMesh );
       }
 
-      function handle_raycast_click( event ) {
-        document.getElementById('metadata-card').style.display = 'none';
+      function popup_card_cleanup() {
+        const card = document.getElementById('metadata-card');
+
+        if (card) {
+          card.scrollTop = 0;
+          card.scrollLeft = 0;
+          card.innerHTML = '';
+          card.style.display = 'none';
+        }
 
         // Clean up previous highlight
         if (featureHighlightMesh) {
@@ -1085,9 +1124,16 @@
         }
 
         selectedObject = null;
+        mouse_wheel = true;
+        return;
+      }
 
-        if (event.target.closest( '#fixed_menu' )) {
-          return; // Exit the function if pointer is on the fixed menu
+      function handle_raycast_click( event ) {
+        popup_card_cleanup();
+
+        // Exit the function if pointer is on the fixed menu or gui
+        if (event.target.closest( '#fixed_menu' ) || event.target.closest( '#right_gui_position' )) {
+          return;
         }
 
         // Calculate how far the mouse moved
@@ -1097,7 +1143,11 @@
         // If moved more than 5 pixels, it was likely a camera drag, not a click
         if (deltaX > 5 || deltaY > 5) return;
 
-        if (!raycaster) raycaster = new THREE.Raycaster();
+        if (!raycaster) {
+          raycaster = new THREE.Raycaster();
+          raycaster.params.Points.threshold = 0.1;
+        }
+
         if (!mouse) mouse = new THREE.Vector2();
 
         const HIGHLIGHT_COLOR = new THREE.Color( 0xf08080 );
@@ -1112,13 +1162,16 @@
 
         if (intersects.length === 0) return;
 
-        const visibleIntersects = intersects.filter(hit => hit.object.visible);
+        const visibleIntersects = intersects.filter( hit => hit.object.visible );
         if (visibleIntersects.length === 0) return;
 
         // --- HANDLE NEW SELECTION ---
         const intersect = visibleIntersects[ 0 ];
         pickedObject = intersect.object;
         selectedObject = pickedObject;
+
+        // QUICK GUARD: Ensure geometry and attributes exist before we dig in
+        if (!pickedObject.geometry) return;
 
         // Prepare Material for highlighting
         if (selectedObject.material && selectedObject.material.emissive) {
@@ -1138,7 +1191,14 @@
         const extensions = pickedObject.userData.gltfExtensions;
 
         const schema = tileset_obj.userData.schema;
-        const fid_class = [];
+        const featureMetadataList = [];
+        let vertexIndex = -1;
+
+        if (pickedObject.isPoints || pickedObject.isLine) {
+          vertexIndex = intersect.index;
+        } else if (intersect.face) {
+          vertexIndex = intersect.face.a;
+        }
 
         if (extensions) {
           const isInstanced = pickedObject.isInstancedMesh;
@@ -1181,7 +1241,7 @@
                     }
                   }
 
-                  fid_class.push( { class: className, id: featureId, layerIndex: i } );
+                  featureMetadataList.push( { class: className, id: featureId, layerIndex: i } );
                 } else {
                   if (attributeSets.length === 1) {
                     console.log( 'Hit a null feature area.' );
@@ -1193,12 +1253,12 @@
 
                 if (instanceId !== undefined) {
                   const featureId = featureIdAttr.getX( instanceId );
-                  fid_class.push( { class: 'Instance Feature', id: featureId, isInstance: true, instanceId: instanceId } );
+                  featureMetadataList.push( { class: 'Instance Feature', id: featureId, isInstance: true, instanceId: instanceId } );
                 }
               }
             }
 
-            if (fid_class.length > 0) {
+            if (featureMetadataList.length > 0) {
               // Restore color
               if (selectedObject?.material?.emissive) {
                 selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
@@ -1206,27 +1266,75 @@
 
               // Trigger the geometry-based highlight for the primary ID
               isInstanced
-                ? highlightFeatureInstanced( fid_class[ 0 ].instanceId )
-                : highlightFeature( fid_class[ 0 ].id, `_feature_id_${ fid_class[ 0 ].layerIndex }` );
+                ? highlightFeatureInstanced( featureMetadataList[ 0 ].instanceId )
+                : highlightFeature( featureMetadataList[ 0 ].id, `_feature_id_${ featureMetadataList[ 0 ].layerIndex }` );
 
               showUiPanel(
-                { featureId: fid_class, ...pickedObject.userData.metadata },
+                { ...pickedObject.userData.metadata, featureId: featureMetadataList },
                 event, schema, pickedObject.name, false
               );
             }
 
             return;
           }
-        } else if (pickedObject.geometry.attributes._batchid) {
-          // Get the index of the vertex that was hit
-          const index = intersect.face.a; 
+        }
 
+        if (vertexIndex !== -1 && pickedObject.geometry.hasAttribute( '_batchid' )) {
           // Get the ID for this specific building/feature
-          const batchId = pickedObject.geometry.attributes._batchid.getX( index );
+          const batchId = pickedObject.geometry.attributes._batchid.getX( vertexIndex );
 
-          let className = 'BatchId ' + index; // Fallback
+          let className = 'BatchId'; // Fallback
 
-          fid_class.push( { class: className, id: batchId } );
+          let properties = {};
+          properties.VertexId = vertexIndex;
+          properties.ID = batchId;
+
+          let batchTable;
+          let curr = pickedObject;
+
+          // Climb parents to find the batch table
+
+          while ( curr ) {
+            if ( curr.batchTable !== undefined ) {
+              batchTable = curr.batchTable;
+              break;
+            }
+
+            curr = curr.parent;
+          }
+
+          if (batchTable !== undefined) {
+            className = 'Batch Table';
+
+            if (batchTable.header) { // B3DM
+              // Iterate through all keys in the header (Height, Latitude, Longitude, etc.)
+              for ( const key in batchTable.header ) {
+                const attributeArray = batchTable.header[ key ];
+
+                // Check if it's an array and has a value for our batchId
+                if (Array.isArray( attributeArray ) && attributeArray.length > batchId) {
+                  properties[ key ] = attributeArray[ batchId ];
+                }
+              }
+            } else if (typeof batchTable.getPropertyNames === 'function') {
+              // Extract all available properties from the batch table for this specific ID
+              const keys = batchTable.getPropertyNames(); 
+
+              keys.forEach( key => {
+                const val = batchTable.getProperty( batchId, key );
+
+                if (val !== undefined && val !== null) {
+                  properties[ key ] = val;
+                }
+              });
+            }
+          }
+
+          // Wrap in the format showUiPanel expects
+          featureMetadataList.push({
+            class: className,
+            properties: properties
+          });
 
           // Restore color
           if (selectedObject?.material?.emissive) {
@@ -1234,12 +1342,9 @@
           }
 
           // Trigger the geometry-based highlight for the primary ID
-          highlightFeature( fid_class[ 0 ].id, '_batchid' );
+          highlightFeature( batchId, '_batchid' );
 
-          showUiPanel(
-            { featureId: fid_class, ...pickedObject.userData.metadata },
-            event, schema, pickedObject.name, false
-          );
+          showUiPanel( { ...pickedObject.userData.metadata, featureMetadata: featureMetadataList }, event, schema, pickedObject.name, false );
 
           return;
         }
@@ -1248,12 +1353,12 @@
         let tilesetMetadataOnly = !pickedObject.userData.metadata && !!pickedObject.parent;
         const data = pickedObject.userData.metadata;
 
-        if ((data && !data.empty) || tilesetMetadataOnly) {
-          showUiPanel(data, event, tileset_obj.userData.schema, pickedObject.name, tilesetMetadataOnly, pickedObject.type);
+        if (( data && !data.empty ) || tilesetMetadataOnly) {
+          showUiPanel( data, event, schema, pickedObject.name, tilesetMetadataOnly, pickedObject.type );
         } else {
           // If no metadata found, remove highlight
           if (selectedObject.material?.emissive) {
-            selectedObject.material.emissive.copy(selectedObject.userData.originalEmissive);
+            selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
           }
 
           selectedObject = null;
@@ -1270,13 +1375,16 @@
           if (arr.length === 0) return '[]';
 
           // If it's an array of objects
-          if (typeof arr[ 0 ] === 'object') {
+          if (typeof arr[ 0 ] === 'object' && arr[ 0 ] !== null) {
             return arr.map( ( item, idx ) => {
               let itemHtml = `<div style="margin: 4px 0 4px 5px; padding-left: 8px; border-left: 2px solid #00d4ff; background: rgba(0,212,255,0.05);">`;
               itemHtml += `<div style="font-size: 9px; color: #00d4ff; opacity: 0.7;">Part ${idx + 1}</div>`;
 
               for ( const [ sk, sv ] of Object.entries( item ) ) {
-                const cleanSv = ( typeof sv === 'number' ) ? ( Number.isInteger( sv ) ? sv : sv.toFixed( 2 ) ) : sv;
+                const cleanSv = ( typeof sv === 'number' )
+                  ? ( Number.isInteger( sv ) ? sv : sv.toFixed( 2 ) )
+                  : sv;
+
                 itemHtml += `<div style="font-size: 11px;"><span style="color: #666;">${sk}:</span> ${cleanSv}</div>`;
               }
 
@@ -1286,30 +1394,81 @@
           }
     
           // If it's a simple array (like [1, 2, 3])
-          return `[ ${arr.map( v => ( typeof v === 'number' ? ( Number.isInteger( v ) ? v : v.toFixed( 2 ) ) : v ) ).join( ', ' )} ]`;
+          return `[ ${arr.map( v => {
+            if ( typeof v === 'number' ) {
+              return ( Number.isInteger( v ) ? v : v.toFixed( 2 ) );
+            }
+
+            return String( v );
+          }).join( ', ' )} ]`;
         }
 
         const resolveValue = ( className, propName, val ) => {
+          let processedVal = val;
           const propDef = schema?.classes?.[ className ]?.properties?.[ propName ];
 
-          // A. Handle "No Data" or nulls
-          if (val === null || val === undefined) return "N/A";
-
-          // B. Handle Arrays of Objects or Numbers
-          if (Array.isArray( val ) && val.length > 0) {
-            return formatArray( val );
+          // Pre-check: If it's a string that looks like an array but isn't parsed
+          // This handles the "[One, Two]" or "[true, false]" strings
+          if (typeof processedVal === 'string' && processedVal.startsWith( '[' ) && processedVal.endsWith( ']' )) {
+            try {
+              // Try JSON parse first (handles ["One", "Two"])
+              processedVal = JSON.parse( processedVal );
+            } catch ( e ) {
+              // Manual fallback for unquoted strings like [One, Two]
+              processedVal = processedVal.slice( 1, -1 ).split( ',' ).map( s => s.trim() );
+            }
           }
 
-          // C. Handle Nested Objects
-          if (typeof val === 'object' && !Array.isArray( val ) && !val.isVector3) {
+          if (processedVal === null || processedVal === undefined) return 'N/A';
+
+          // A. Handle Arrays (The core of EXT_structural_metadata)
+          if (Array.isArray( processedVal )) {
+            if (processedVal.length === 0) return '[]';
+
+            // Handle ENUM Arrays
+            if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
+              const enumValues = schema.enums[ propDef.enumType ].values;
+              return `[ ${processedVal.map( v => {
+                // Look up by integer value (0, 1, 2) or by string name
+                const entry = enumValues.find( e => e.value == v || e.name === v );
+                return entry ? entry.name : v;
+              }).join(', ')} ]`;
+            }
+
+            // General Array (Booleans, Strings, etc.)
+            return formatArray( processedVal );
+          }
+
+          // B. Handle Nested Objects
+          if (typeof processedVal === 'object' && !Array.isArray( processedVal ) && !processedVal.isVector3) {
             let subHtml = '<div style="margin-left: 10px; font-size: 0.9em; color: #ccc;">';
 
-            for ( const [ k, v ] of Object.entries( val ) ) {
+            for ( const [ k, v ] of Object.entries( processedVal ) ) {
               let displayV = v;
 
-              if (Array.isArray( v )) displayV = formatArray( v );
-              else if (typeof v === 'number') displayV = (Number.isInteger( v ) ? v : v.toFixed( 2 ));
-              else if (typeof v === 'object' && v !== null) displayV = JSON.stringify( v );
+              // 1. If it's a string, try to "un-stringify" it first
+              if (typeof displayV === 'string' && ( displayV.startsWith( '[' ) || displayV.startsWith( '{' ) )) {
+                try {
+                  displayV = JSON.parse( displayV );
+                } catch ( e ) {
+                  // If it's the unquoted Cesium style [One, Two], manual split
+                  if (displayV.startsWith( '[' ) && displayV.endsWith( ']' )) {
+                    displayV = displayV.slice( 1, -1 ).split( ',' ).map( s => s.trim() );
+                  }
+                }
+              }
+
+              // 2. Now that we have the "truest" form of the data, format it for the UI
+              if (Array.isArray( displayV )) {
+                displayV = formatArray( displayV );
+              } else if (typeof displayV === 'object' && displayV !== null) {
+                // If it's still an object (deep nesting), stringify it as a fallback
+                displayV = JSON.stringify( displayV );
+              } else if (typeof displayV === 'number') {
+                displayV = ( Number.isInteger( displayV ) ? displayV : displayV.toFixed( 2 ) );
+              } else if (typeof displayV === 'boolean') {
+                displayV = displayV ? 'Yes' : 'No';
+              }
 
               subHtml += `<div><span style="color: #888;">${k}:</span> ${displayV}</div>`;
             }
@@ -1318,40 +1477,39 @@
             return subHtml;
           }
 
-          // D. Handle Enums (The most important part of the schema)
+          // C. Handle Single Values (Non-Arrays)
+
+          // Single Enums
           if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
-            const enumEntry = schema.enums[propDef.enumType].values.find(v => v.value === val);
-            return enumEntry ? enumEntry.name : val;
+            const entry = schema.enums[ propDef.enumType ].values.find( v => v.value == processedVal || v.name === processedVal );
+            return entry ? entry.name : processedVal;
           }
 
-          // E. Handle Booleans based on Schema Type
+          // Single Booleans
           if (propDef?.type === 'BOOLEAN') {
-            return val ? 'Yes' : 'No';
+            // Treat "true", true, or non-zero numbers as "Yes"
+            const isTrue = (processedVal === true || processedVal === 'true' || processedVal === 1);
+            return isTrue ? 'Yes' : 'No';
           }
 
-          // F. Handle Math Types (VEC2, VEC3, etc)
-          if (Array.isArray( val )) {
-            // Check if this is an array of Enums by looking at the schema
-            if (propDef?.type === 'ENUM') {
-              return `[ ${ val.map( v => resolveValue( className, propName, v ) ).join( ', ' ) } ]`;
-            }
-
-            return `[ ${ val.map( v => ( typeof v === 'number' ? v.toFixed( 2 ) : v ) ).join( ', ' ) } ]`;
+          // Single Numbers
+          if (typeof processedVal === 'number') {
+            return Number.isInteger( processedVal ) ? processedVal : processedVal.toFixed( 2 );
           }
 
-          // G. Handle BigInt / Numbers
-          if (typeof val === 'bigint') return val.toString();
-          if (typeof val === 'number' && Number.isInteger( val )) return val;
-          if (typeof val === 'number') return val.toFixed( 3 );
+          // Handle BigInt / Numbers
+          if (typeof processedVal === 'bigint') return processedVal.toString();
 
-          return val;
+          return processedVal;
         };
+
+        let show_copy_to_clipboard = true;
 
         let html = '';
 
         // 1. Tileset Metadata - Maybe entries like author, date, tile count...
 
-        const tileset = tilesetMetadataOnly ? tileset_obj.userData.tileset : data?.tileset;
+        const tileset = tilesetMetadataOnly ? tileset_obj.userData?.tileset : data?.tileset;
 
         if (tileset?.class) {
           html += `
@@ -1366,6 +1524,8 @@
            }
           }
         } else if (tilesetMetadataOnly) {
+          show_copy_to_clipboard = false;
+
           const description = (type === 'Box3Helper') ? 'No Data (turn off bounding box)' : 'No Data';
 
           html += `
@@ -1374,7 +1534,7 @@
             </div>`;
         }
 
-        if (!tilesetMetadataOnly) {
+        if (data && !tilesetMetadataOnly) {
           if (tileset) html += `<br>`;
 
           // 2. Tile Metadata - Maybe entries like district, population...
@@ -1437,31 +1597,41 @@
 
           // 5.5 Feature-Specific Metadata (EXT_structural_metadata)
 
-          if (data.featureMetadata?.class) {
-            const fm = data.featureMetadata;
+          if (data.featureMetadata) {
+            const fms = Array.isArray( data.featureMetadata ) ? data.featureMetadata : [ data.featureMetadata ];
 
-            html += `
-              <div style="border-bottom: 1px solid #00d4ff; margin-bottom: 6px; padding-bottom: 6px;">
-                <div style="font-size: 10px; color: #00d4ff; font-weight: bold;">${ fm.class }</div>
-              </div>`;
+            fms.forEach( ( fm ) => {
+              html += `
+                <div style="border-bottom: 1px solid #00d4ff; margin-top: 10px; padding-bottom: 4px;">
+                  <div style="font-size: 10px; color: #00d4ff; font-weight: bold;">${fm.class}</div>
+                </div>`;
 
-            if (fm.properties) {
-              for ( const [ key, val ] of Object.entries( fm.properties ) ) {
-                const display = resolveValue( fm.class, key, val );
-                html += `<div class="prop-row"><span class="prop-label">${ key }:</span><span class="prop-value">${ display }</span></div>`;
+              if (fm.properties) {
+                // Sort keys so ID is always at the top if it exists
+                const keys = Object.keys( fm.properties ).sort( ( a, b ) => {
+                  if (a === 'ID' || a === 'id' || a === 'VertexId') return -1;
+                  if (b === 'ID' || b === 'id' || b === 'VertexId') return 1;
+                  return 0;
+                });
+
+                for ( const [ key, val ] of Object.entries( fm.properties ) ) {
+                  const display = resolveValue( fm.class, key, val );
+                  html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+                }
               }
-            }
 
-            html += `<br>`;
+              html += `<br>`;
+            });
           }
 
           // 6. FeatureId - Maybe entries from EXT_mesh_features, EXT_structural_metadata...
+          // Only show if not already merged into metadata
 
-          if (data.featureId && Array.isArray( data.featureId )) {
-            data.featureId.forEach( ( fid_class, index ) => {
+          if (data.featureId && Array.isArray( data.featureId ) && !data.featureMetadata) {
+            data.featureId.forEach( ( featureMetadataList, index ) => {
               // Use the class name if found, otherwise use a readable layer index
-              const label = fid_class.class || `Feature Layer ${index}`;
-              const idValue = fid_class.id !== undefined ? fid_class.id : 'N/A';
+              const label = featureMetadataList.class || `Feature Layer ${index}`;
+              const idValue = featureMetadataList.id !== undefined ? featureMetadataList.id : 'N/A';
 
               html += `
                 <div class="feature-group" style="margin-top: 10px; border-left: 2px solid #00d4ff; padding-left: 8px;">
@@ -1474,6 +1644,42 @@
           }
         }
 
+        if (show_copy_to_clipboard) {
+          // Create a shallow copy so we don't accidentally delete the real schema from the viewer
+          const dataForClipboard = data
+            ? { ...data }
+            : tileset_obj.userData?.tileset
+              ? { ...tileset_obj.userData.tileset }
+              : {};
+
+          // Remove the heavy schema for popup card, it will be included for clipboard
+          delete dataForClipboard.schema;
+
+          // Add selected mesh name
+          if (data && meshName) dataForClipboard[ 'Selected' ] = meshName;
+
+          // A helper to make JSON.stringify handle BigInt
+          const bigintReplacer = ( key, value ) => typeof value === 'bigint' ? value.toString() : value;
+
+          const rawJson = JSON.stringify( data ? data : dataForClipboard, bigintReplacer, 2 );
+          if (!rawJson) return;
+
+          // Escape it for use inside an HTML attribute
+          // We replace backslashes first, then single quotes
+          safeJson = rawJson
+            .replace(/\\/g, '\\\\')   // Escape backslashes
+            .replace(/'/g, "\\'")     // Escape single quotes
+
+          html += `
+            <div style="padding: 3px; border-top: 1px solid #444; text-align: center;">
+              <button
+                style="vertical-align: middle; background: #111; color: white; border: 1px solid #00d4ff; padding: 2px; cursor: pointer; font-size: 11px; border-radius: 4px; width: 100%;"
+                onclick="navigator.clipboard.writeText( safeJson ).then( () => alert( 'Metadata copied!' ) );">
+                📋 Copy To Clipboard
+              </button>
+            </div>`;
+        }
+
         card.innerHTML = html;
         card.style.display = 'block';
 
@@ -1482,15 +1688,26 @@
         const cardWidth = 220; 
         let x = event.clientX + 15;
         let y = event.clientY + 15;
+
         if (x + cardWidth > window.innerWidth) x = event.clientX - cardWidth - 15;
+
+        // If the card goes off the bottom of the screen
+        if (y + card.offsetHeight > window.innerHeight) {
+          y = window.innerHeight - card.offsetHeight - 15;
+        }
 
         card.style.left = x + 'px';
         card.style.top = y + 'px';
       }
 
       function hideUiPanel() {
-        const card = document.getElementById('metadata-card');
-        if (card) card.style.display = 'none';
+        // Restore color
+        if (selectedObject?.material?.emissive) {
+          selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
+        }
+
+        pickedObject = null;
+        popup_card_cleanup();
       }
 
       function set_bounding_box() {
@@ -1669,6 +1886,19 @@
           });
 
           featureHighlightMesh = null;
+        }
+
+        if (ghostMesh) {
+          if (ghostMesh.parent) {
+            ghostMesh.parent.remove( ghostMesh );
+          }
+
+          ghostMesh.traverse( ( child ) => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          });
+
+          ghostMesh = null;
         }
 
         scene.remove( tileset_obj );
