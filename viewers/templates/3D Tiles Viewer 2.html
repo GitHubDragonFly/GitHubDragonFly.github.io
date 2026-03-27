@@ -776,7 +776,7 @@
             selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          // URL has to point to tileset.json file
+          // URL has to point to some json file (tileset.json or other)
 
           let url_lc = selected_url_file.toLowerCase();
 
@@ -1426,7 +1426,7 @@
 
                 // Get the Barycentric coordinates of the hit
 
-                const posAttr = intersect.object.geometry.attributes.position;
+                const posAttr = intersect.object.geometry.getAttribute( 'position' );
 
                 const vA = new THREE.Vector3();
                 const vB = new THREE.Vector3();
@@ -1545,6 +1545,7 @@
           }
         }
 
+        // --- STRUCTURAL METADATA ATTRIBUTE ACCESSORS ---
         if (vertexIndex !== -1 && structuralMetadata?.attributeAccessors?.length > 0) {
           // Loop through Attribute Accessors (Classes defined per vertex)
           structuralMetadata.attributeAccessors.forEach( accessor => {
@@ -1619,6 +1620,68 @@
           });
         }
 
+        // --- STRUCTURAL METADATA TEXTURE ACCESSORS ---
+        if (structuralMetadata?.textureAccessors?.length > 0 && intersect.uv) {
+          // Loop through Property Textures (Classes defined via textures)
+          structuralMetadata.textureAccessors.forEach( accessor => {
+            const className = accessor.className;
+            const propNames = Object.keys( accessor.properties );
+
+            if (!barycoord && intersect.face) {
+              barycoord = new THREE.Vector3();
+              const _vA = new THREE.Vector3();
+              const _vB = new THREE.Vector3();
+              const _vC = new THREE.Vector3();
+
+              const attrPos = pickedObject.geometry.getAttribute( 'position' );
+
+              _vA.fromBufferAttribute( attrPos, intersect.face.a );
+              _vB.fromBufferAttribute( attrPos, intersect.face.b );
+              _vC.fromBufferAttribute( attrPos, intersect.face.c );
+
+              const localPoint = intersect.object.worldToLocal( intersect.point.clone() );
+
+              THREE.Triangle.getBarycoord( localPoint, _vA, _vB, _vC, barycoord );
+            }
+
+            // Sample the texture at the intersection UV
+            // getPropertyValuesAtTexel(properties, uv, geometry, targetArray)
+            // Note: We pass the uv and the geometry of the picked object
+            const values = accessor.getPropertyValuesAtTexel(
+              propNames, 
+              intersect.faceIndex,
+              barycoord, 
+              pickedObject.geometry
+            );
+
+            let properties = {};
+
+            propNames.forEach( ( name, index ) => {
+              // Map the array of values back to their property names
+              properties[ name ] = values[ index ];
+            });
+
+            // Check if entry already exists to avoid duplicates
+            let existingEntry = featureMetadataList.find( item => item.class === className );
+
+            if (existingEntry) {
+              Object.assign( existingEntry.properties, properties );
+            } else {
+              // Since textures vary per-pixel, UV is our unique identifier here
+              properties[ 'UV_Coord' ] = new THREE.Vector2( intersect.uv.x, intersect.uv.y );
+
+              featureMetadataList.push({
+                class: className,
+                properties: properties
+              });
+            }
+          });
+
+          // For highlighting logic: since there is no single feature ID, 
+          // we can use the face index or a unique hash if needed.
+          highlightId = intersect.faceIndex;
+        }
+
         if (featureMetadataList.length > 0) {
           // Restore color
           if (selectedObject?.material?.emissive) {
@@ -1632,7 +1695,9 @@
               ? highlightPoint( highlightId )
               : pickedObject.isLine
                 ? highlightLine( highlightId )
-                : highlightFeature( primaryFeatureId , primaryAttributeName );
+                : highlightId
+                  ? highlightPoint( highlightId )
+                  : highlightFeature( primaryFeatureId, primaryAttributeName );
 
           showUiPanel( { ...pickedObject.userData.metadata, featureMetadata: featureMetadataList }, event, schema, pickedObject.name, false );
 
