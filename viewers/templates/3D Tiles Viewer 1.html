@@ -88,6 +88,55 @@
       var bounding_box, bbox_enabled, box, boxHelper, box_helper_added, xAxis;
       var raycaster, mouse, mouseDownPos, raycastableObjects, featureHighlightMesh;
       var url_displayed = false, keyAPI_displayed = false, token_displayed = false;
+
+      const TYPE_COUNT_MAP = {
+        'SCALAR': 1,
+        'VEC2': 2,
+        'VEC3': 3,
+        'VEC4': 4,
+        'MAT2': 4,
+        'MAT3': 9,
+        'MAT4': 16
+      };
+
+      const COMPONENT_COUNT_MAP = {
+        'INT8': 1,
+        'UINT8': 1,
+        'INT16': 2,
+        'UINT16': 2,
+        'INT32': 4,
+        'UINT32': 4,
+        'INT64': 8,
+        'UINT64': 8,
+        'FLOAT32': 4,
+        'FLOAT64': 8
+      };
+
+      const COMPONENT_TYPE_MAP = {
+        'INT8': Int8Array,
+        'UINT8': Uint8Array,
+        'INT16': Int16Array,
+        'UINT16': Uint16Array,
+        'INT32': Int32Array,
+        'UINT32': Uint32Array,
+        'INT64': BigInt64Array,
+        'UINT64': BigUint64Array,
+        'FLOAT32': Float32Array,
+        'FLOAT64': Float64Array
+      };
+
+      const DATAVIEW_GETTER_MAP = {
+        INT8: 'getInt8',
+        UINT8: 'getUint8',
+        INT16: 'getInt16',
+        UINT16: 'getUint16',
+        INT32: 'getInt32',
+        UINT32: 'getUint32',
+        INT64: 'getBigInt64',
+        UINT64: 'getBigUint64',
+        FLOAT32: 'getFloat32',
+        FLOAT64: 'getFloat64'
+      };
     </script>
 
     <script type="module">
@@ -203,18 +252,18 @@
       <div class="fm" id="lod" title="Set Level Of Details" style="display: none;">
         <select id="cache_level" title="Set 3D Tiles cache size - affects memory usage and smooth movement" style="min-width: 80px;">
           <option value="" disabled selected>Cache</option>
-          <option value="100" onclick="set_tiles_cache( 100 );">100</option>
-          <option value="200" onclick="set_tiles_cache( 200 );">200</option>
-          <option value="300" onclick="set_tiles_cache( 300 );">300</option>
-          <option value="400" onclick="set_tiles_cache( 400 );">400</option>
-          <option value="500" onclick="set_tiles_cache( 500 );">500</option>
-          <option value="600" onclick="set_tiles_cache( 600 );">600</option>
-          <option value="700" onclick="set_tiles_cache( 700 );">700</option>
-          <option value="800" onclick="set_tiles_cache( 800 );">800</option>
-          <option value="900" onclick="set_tiles_cache( 900 );">900</option>
-          <option value="1000" onclick="set_tiles_cache( 1000 );">1000</option>
-          <option value="2000" onclick="set_tiles_cache( 2000 );">2000</option>
-          <option value="5000" onclick="set_tiles_cache( 5000 );">5000</option>
+          <option value="100" onclick="set_tiles_cache_size( 100 );">100</option>
+          <option value="200" onclick="set_tiles_cache_size( 200 );">200</option>
+          <option value="300" onclick="set_tiles_cache_size( 300 );">300</option>
+          <option value="400" onclick="set_tiles_cache_size( 400 );">400</option>
+          <option value="500" onclick="set_tiles_cache_size( 500 );">500</option>
+          <option value="600" onclick="set_tiles_cache_size( 600 );">600</option>
+          <option value="700" onclick="set_tiles_cache_size( 700 );">700</option>
+          <option value="800" onclick="set_tiles_cache_size( 800 );">800</option>
+          <option value="900" onclick="set_tiles_cache_size( 900 );">900</option>
+          <option value="1000" onclick="set_tiles_cache_size( 1000 );">1000</option>
+          <option value="2000" onclick="set_tiles_cache_size( 2000 );">2000</option>
+          <option value="5000" onclick="set_tiles_cache_size( 5000 );">5000</option>
         </select>
         <select id="depth_level" title="Set 3D Tiles depth level - affects memory usage and smooth movement" style="min-width: 80px;">
           <option value="" disabled selected>Depth</option>
@@ -250,14 +299,14 @@
     <div id="div_loading" class="loading_msg">3D Tiles Viewer<br>(threedtiles)</div>
     <div id="metadata-card"></div>
 
-    <div id="metadata_message" style="position: fixed; visibility: hidden; font-family: Monospace, Arial; color: #d1cefc; bottom: calc(env(safe-area-inset-bottom) + 15px); left: 5px; pointer-events: none;">Metadata and Raycasting Enabled</div>
+    <div id="metadata_message" style="position: fixed; visibility: hidden; font-family: Monospace, Arial; color: #d1cefc; bottom: calc(env(safe-area-inset-bottom) + 15px); left: 5px; pointer-events: none;">Metadata Raycasting Enabled</div>
 
     <script>
-      function set_tiles_cache( val ) {
+      function set_tiles_cache_size( val ) {
         tiles_loader.setMaxCacheSize( parseInt( val ) );
       }
 
-      function set_tiles_depth( val ) {
+      function set_tiles_depth_level( val ) {
         tiles_loader.setMaxDepthLevel( parseInt( val ) );
       }
 
@@ -847,16 +896,13 @@
         tileset_obj.traverse( ( child ) => {
           if (child.isLineSegments && ( child.parent.bbox?.uuid === child.uuid )) bbox_found = true;
           else if (child.isMesh || child.isPoints || child.isLine) {
-            if (child.isMesh) {
+            if (child.isMesh || child.isPoints || child.isLine) {
               if (child.userData.gltfExtensions) {
-                // Currently only EXT_mesh_features with attributes is partially functional
-                const ext = child.userData.gltfExtensions.EXT_mesh_features ||
+                const ext = child.userData.structuralMetadata ||
+                            child.userData.gltfExtensions.EXT_mesh_features ||
                             child.userData.gltfExtensions.EXT_instance_features;
 
-                // Currently metadata texture is not provided by internal OGC3D loader
-                if (ext && ext.featureIds && !ext.featureIds.find( f => f.texture !== undefined )) {
-                  tileset_obj.hasGLTFExtensions = true;
-                }
+                if (ext) tileset_obj.hasGLTFExtensions = true;
               } else if (child.geometry.hasAttribute( '_batchid' )) {
                 tileset_obj.hasHybridImplicit = true;
               }
@@ -1062,24 +1108,29 @@
         // we must account for it so the highlight doesn't fly off to space
         featureHighlightMesh.matrix.copy( matrix );
         featureHighlightMesh.matrixAutoUpdate = false; // We handle the matrix manually now
+        featureHighlightMesh.updateWorldMatrix( true, true );
 
         // ATTACH
         pickedObject.add( featureHighlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
 
         featureHighlightMesh.visible = true;
         featureHighlightMesh.frustumCulled = false;
         featureHighlightMesh.children.forEach( child => child.frustumCulled = false );
       }
 
-      function highlightFeature( featureId, attrName ) {
+      function highlightFeature( highlight_id, attrName ) {
+        if (!attrName) return;
+
         const geometry = pickedObject.geometry;
-        const featureIdAttr = geometry.getAttribute( attrName );
+
         const indexAttr = geometry.index;
+        const featureAttr = geometry.getAttribute( attrName );
         const positionAttr = geometry.getAttribute( 'position' );
 
-        if (!featureIdAttr || !indexAttr || !positionAttr) return;
+        if (!featureAttr || !indexAttr || !positionAttr) return;
 
-        // Find all triangles that belong to this featureId
+        // Find all triangles that belong to this highlight id
         const activeIndices = [];
 
         for ( let i = 0; i < indexAttr.count; i += 3 ) {
@@ -1088,8 +1139,8 @@
           const c = indexAttr.getX( i + 2 );
 
           // If the first vertex of the triangle matches the ID, we take the whole triangle
-          if ( a < featureIdAttr.count ) {
-            if (featureIdAttr.getX( a ) === featureId) {
+          if ( a < featureAttr.count ) {
+            if (featureAttr.getX( a ) === highlight_id) {
               activeIndices.push( a, b, c );
             }
           }
@@ -1131,9 +1182,110 @@
         featureHighlightMesh.position.set( 0, 0, 0 );
         featureHighlightMesh.rotation.set( 0, 0, 0 );
         featureHighlightMesh.scale.set( 1, 1, 1 );
+        featureHighlightMesh.updateWorldMatrix( true, true );
 
         // Sync transformation with the parent object
         pickedObject.add( featureHighlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
+      }
+
+      function highlightPoint( pointIndex ) {
+        const geometry = pickedObject.geometry;
+        const positionAttr = geometry.getAttribute( 'position' );
+
+        if (!positionAttr || pointIndex === -1) return;
+
+        // 1. Get the local position of the clicked point
+        const x = positionAttr.getX( pointIndex );
+        const y = positionAttr.getY( pointIndex );
+        const z = positionAttr.getZ( pointIndex );
+
+        // 2. Create a small Cube (Box) to represent the highlight
+        // Adjust the size (0.05) based on your tileset scale
+        const boxSize = 0.05; 
+        const highlightGeo = new THREE.BoxGeometry( boxSize, boxSize, boxSize );
+
+        const highlightMat = new THREE.MeshBasicMaterial({
+          color: 0xf08080,
+          transparent: true,
+          opacity: 0.8,
+          depthTest: false // Makes it visible even if partially buried in other points
+        });
+
+        featureHighlightMesh = new THREE.Mesh( highlightGeo, highlightMat );
+
+        // 3. Position the cube at the point's coordinates
+        featureHighlightMesh.position.set( x, y, z );
+
+        // 4. Add a white wireframe outline for better visibility
+        const wireframeGeo = new THREE.EdgesGeometry( highlightGeo );
+
+        const wireframe = new THREE.LineSegments(
+          wireframeGeo,
+          new THREE.LineBasicMaterial( { color: 0xffffff } )
+        );
+
+        featureHighlightMesh.add( wireframe );
+        featureHighlightMesh.updateWorldMatrix( true, true );
+
+        // 5. Attach it to the picked object so it moves with the tileset
+        pickedObject.add( featureHighlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
+      }
+
+      function highlightLine( lineIndex ) {
+        const geometry = pickedObject.geometry;
+        const positionAttr = geometry.getAttribute( 'position' );
+        const indexAttr = geometry.index;
+
+        if (!positionAttr || lineIndex === undefined) return;
+
+        const activePositions = [];
+
+        // 1. Identify the segment vertices
+        // If the geometry is indexed (common in 3D Tiles), we use the index buffer
+        if (indexAttr) {
+          // For LineSegments, a segment is [ i, i + 1 ]
+          // We find the start of the segment based on the click index
+          const startIdx = Math.floor( lineIndex / 2.0 ) * 2;
+          const idxA = indexAttr.getX( startIdx );
+          const idxB = indexAttr.getX( startIdx + 1 );
+
+          const vA = new THREE.Vector3().fromBufferAttribute( positionAttr, idxA );
+          const vB = new THREE.Vector3().fromBufferAttribute( positionAttr, idxB );
+
+          activePositions.push( vA.x, vA.y, vA.z, vB.x, vB.y, vB.z );
+        } else {
+          // Non-indexed: the click index is the vertex itself
+          const startIdx = Math.floor( lineIndex / 2.0 ) * 2;
+
+          activePositions.push(
+            positionAttr.getX( startIdx ), positionAttr.getY( startIdx ), positionAttr.getZ( startIdx ),
+            positionAttr.getX( startIdx + 1 ), positionAttr.getY( startIdx + 1 ), positionAttr.getZ( startIdx + 1 )
+          );
+        }
+
+        // 2. Create the highlight geometry
+        const highlightGeo = new THREE.BufferGeometry();
+        highlightGeo.setAttribute( 'position', new THREE.Float32BufferAttribute( activePositions, 3 ) );
+
+        // 3. Create a thick, glowing Line material
+        // Note: Standard LineBasicMaterial doesn't support 'linewidth' > 1 in many browsers (WebGL limitation)
+        // But we'll use a bright color and depthTest: false to make it pop.
+        const highlightMat = new THREE.LineBasicMaterial({
+          color: 0xf08080,
+          linewidth: 5, // Works on some systems, ignored on others
+          transparent: true,
+          opacity: 1.0,
+          depthTest: false 
+        });
+
+        featureHighlightMesh = new THREE.LineSegments( highlightGeo, highlightMat );
+        featureHighlightMesh.updateWorldMatrix( true, true );
+
+        // 4. Attach to the parent
+        pickedObject.add( featureHighlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
       }
 
       function popup_card_cleanup() {
@@ -1167,7 +1319,7 @@
         }
 
         // --- RESTORE PREVIOUS SELECTION ---
-        if (selectedObject && selectedObject.material && selectedObject.material.emissive) {
+        if (selectedObject?.material?.emissive !== undefined) {
           const oldColor = selectedObject.userData.originalEmissive || new THREE.Color( 0x000000 );
           selectedObject.material.emissive.copy( oldColor );
         }
@@ -1180,16 +1332,12 @@
       function handle_raycast_click( event ) {
         popup_card_cleanup();
 
-        // Exit the function if pointer is on the fixed menu or gui
         if (event.target.closest( '#fixed_menu' ) || event.target.closest( '#right_gui_position' )) {
           return;
         }
 
-        // Calculate how far the mouse moved
         const deltaX = Math.abs( event.clientX - mouseDownPos.x );
         const deltaY = Math.abs( event.clientY - mouseDownPos.y );
-
-        // If moved more than 5 pixels, it was likely a camera drag, not a click
         if (deltaX > 5 || deltaY > 5) return;
 
         if (!raycaster) {
@@ -1201,20 +1349,19 @@
 
         const HIGHLIGHT_COLOR = new THREE.Color( 0xf08080 );
 
-        // Calculate mouse position in normalized device coordinates
         mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
         mouse.y = -( event.clientY / window.innerHeight ) * 2 + 1;
 
-        // Raycast against raycastableObjects or the scene
         raycaster.setFromCamera( mouse, camera );
-        const intersects = raycaster.intersectObjects( raycastableObjects.length > 0 ? raycastableObjects : scene.children, true );
+
+        const targets = raycastableObjects.length > 0 ? raycastableObjects : scene.children;
+        const intersects = raycaster.intersectObjects( targets, true );
 
         if (intersects.length === 0) return;
 
         const visibleIntersects = intersects.filter( hit => hit.object.visible );
         if (visibleIntersects.length === 0) return;
 
-        // --- HANDLE NEW SELECTION ---
         const intersect = visibleIntersects[ 0 ];
         pickedObject = intersect.object;
         selectedObject = pickedObject;
@@ -1237,12 +1384,18 @@
           selectedObject.material.emissive.copy( HIGHLIGHT_COLOR );
         }
 
-        const extensions = pickedObject.userData.gltfExtensions;
+        const isInstanced = pickedObject.isInstancedMesh;
 
-        const schema = tileset_obj.userData.schema;
-        let primaryFeatureId = null;
-        let primaryAttributeName = '';
+        const userData = pickedObject.userData || {};
+        const extensions = userData.gltfExtensions || {};
+        const structuralMetadata = userData.structuralMetadata;
+
+        const schema = tileset_obj.userData.schema || structuralMetadata?.schema;
+
         const featureMetadataList = [];
+        let highlightId = null;
+        let highlightAttributeName = null;
+
         let vertexIndex = -1;
 
         if (pickedObject.isPoints || pickedObject.isLine) {
@@ -1251,174 +1404,490 @@
           vertexIndex = intersect.face.a;
         }
 
-        if (extensions) {
-          const isInstanced = pickedObject.isInstancedMesh;
-          const meshFeatures = extensions.EXT_mesh_features || extensions?.EXT_instance_features;
+        function getMetadataString( prop, featureId ) {
+          if ( !prop.hydratedArray || !prop.hydratedStringOffsets ) return 'No Data';
 
-          // Get ALL attribute-based feature sets
-          const attributeSets = meshFeatures.featureIds?.filter( f => f.attribute !== undefined ) || [];
+          const data    = prop.hydratedArray;
+          const offsets = prop.hydratedStringOffsets;
 
-          if (attributeSets.length > 0) {
-            for ( let i = 0; i < attributeSets.length; i++ ) {
-              const attributeInfo = attributeSets[ i ];
-              const featureIdIndex = attributeInfo.attribute;
+          // 1. Interpret offsets as UINT32
+          const offset32  = new Uint32Array( offsets );
 
-              const attrName1 = `_feature_id_${ featureIdIndex }`;
-              const attrName2 = `_FEATURE_ID_${ featureIdIndex }`;
-
-              const featureIdAttr = pickedObject.geometry.getAttribute( attrName1 ) ||
-                                    pickedObject.geometry.getAttribute( attrName2 );
-
-              if (featureIdAttr && !isInstanced && intersect.face) {
-                const featureId = featureIdAttr.getX( intersect.face.a );
-
-                // Check for nullFeatureId (The "empty" space check)
-                // Important: attributeInfo.nullFeatureId is often undefined
-                const isNull = attributeInfo.nullFeatureId !== undefined && featureId === attributeInfo.nullFeatureId;
-
-                if (!isNull) {
-                  // --- Identify the Metadata Class ---
-                  let className = 'FeatureId ' + featureIdIndex; // Fallback
-
-                  // Check if this feature set points to a property table
-                  if (attributeInfo.propertyTable !== undefined) {
-                    const tableIndex = attributeInfo.propertyTable;
-
-                    // Metadata usually lives in the gltfExtensions of the model or tileset
-                    const structuralMetadata = extensions.EXT_structural_metadata;
-
-                    if (structuralMetadata?.propertyTables?.[ tableIndex ]) {
-                      className = structuralMetadata.propertyTables[ tableIndex ].class;
-                    }
-                  }
-
-                  featureMetadataList.push( { class: className, id: featureId } );
-                } else {
-                  if (attributeSets.length === 1) {
-                    console.log( 'Hit a null feature area.' );
-                    return; // Don't highlight or show UI for 'nothing'
-                  }
-                }
-
-                // Only set the primary highlight data ONCE (the first valid set)
-                if (primaryFeatureId === null) {
-                  primaryFeatureId = featureId;
-                  primaryAttributeName = featureIdAttr; 
-                }
-              } else if (featureIdAttr && isInstanced) {
-                const instanceId = intersect.instanceId; // Only exists if it's an InstancedMesh
-
-                if (instanceId !== undefined) {
-                  const featureId = featureIdAttr.getX( instanceId );
-                  featureMetadataList.push( { class: 'Instance Feature', id: featureId, isInstance: true, instanceId: instanceId } );
-                }
-              }
-            }
-
-            if (featureMetadataList.length > 0) {
-              // Restore color
-              if (selectedObject?.material?.emissive) {
-                selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
-              }
-
-              // Trigger the geometry-based highlight for the primary ID
-              isInstanced
-                ? highlightFeatureInstanced( featureMetadataList[ 0 ].instanceId )
-                : highlightFeature( primaryFeatureId, primaryAttributeName );
-
-              showUiPanel(
-                { ...pickedObject.userData.metadata, featureId: featureMetadataList },
-                event, schema, pickedObject.name, false
-              );
-            }
-
-            return;
+          if ( featureId < 0 || featureId >= offset32.length - 1 ) {
+            return 'No Data';
           }
+
+          const start = offset32[ featureId ];
+          const end   = offset32[ featureId + 1 ];
+
+          if ( start === end || start < 0 || end > data.byteLength ) {
+            return 'No Data';
+          }
+
+          // 2. Slice data[ start:end ] as UTF‑8
+          const stringBuffer = new Uint8Array( data, start, end - start );
+          return new TextDecoder().decode( stringBuffer );
         }
 
-        if (vertexIndex !== -1 && pickedObject.geometry.hasAttribute( '_batchid' )) {
-          // Get the ID for this specific building/feature
-          const batchId = pickedObject.geometry.attributes._batchid.getX( vertexIndex );
+        function getStride( type, componentType ) {
+          const numComponents = TYPE_COUNT_MAP[ type ] || 1;
+          const bytesPerComponent = COMPONENT_COUNT_MAP[ componentType ] || 1;
+          return numComponents * bytesPerComponent;
+	}
 
-          let className = 'BatchId'; // Fallback
+        function readBinaryValue( binary, offset, type, componentType, rowIndex = 0 ) {
+          // 1. Ensure we use the sliced buffer view correctly
+          const view = new DataView( binary.buffer, binary.byteOffset, binary.byteLength );
 
-          let properties = {};
-          properties.VertexId = vertexIndex;
-          properties.ID = batchId;
-
-          let batchTable;
-          let curr = pickedObject;
-
-          // Climb parents to find the batch table
-
-          while ( curr ) {
-            if ( curr.batchTable !== undefined ) {
-              batchTable = curr.batchTable;
-              break;
-            }
-
-            curr = curr.parent;
+          // 2. Handle Booleans (Bitstream)
+          if ( type === 'BOOLEAN' ) {
+            const byteOffset = offset + Math.floor( rowIndex / 8 );
+            const bitIndex = rowIndex % 8;
+            return ( ( view.getUint8( byteOffset ) >> bitIndex ) & 1 ) === 1;
           }
 
-          if (batchTable !== undefined) {
-            className = 'Batch Table';
+          // 3. Lookup mapping
+          const cType = componentType.toUpperCase();
+          const bytesPerComponent = COMPONENT_COUNT_MAP[ cType ] || 1;
+          const numComponents = TYPE_COUNT_MAP[ type ] || 1;
+          const stride = bytesPerComponent * numComponents;
+          const method = DATAVIEW_GETTER_MAP[ cType ];
 
-            if (batchTable.header) { // B3DM
-              // Iterate through all keys in the header (Height, Latitude, Longitude, etc.)
-              for ( const key in batchTable.header ) {
-                const attributeArray = batchTable.header[ key ];
+          if ( !method ) return null;
 
-                // Check if it's an array and has a value for our batchId
-                if (Array.isArray( attributeArray ) && attributeArray.length > batchId) {
-                  properties[ key ] = attributeArray[ batchId ];
+          // 4. Calculate absolute byte position in the slice
+          const rowStart = offset + ( rowIndex * stride );
+          const results = [];
+
+          for ( let i = 0; i < numComponents; i++ ) {
+            const currentOffset = rowStart + ( i * bytesPerComponent );
+
+            // Safety check for buffer overflow
+            if ( currentOffset + bytesPerComponent > view.byteLength ) {
+              results.push( 0 );
+              continue;
+            }
+
+            // Use the map to call the DataView method
+            results.push( view[ method ]( currentOffset, true ) ); // true = Little Endian
+          }
+
+          return type === 'SCALAR' ? results[ 0 ] : results;
+        }
+
+        function readArrayProperty( propDef, propData, featureId ) {
+          const rawBuffer = propData.hydratedArray;
+          if (!rawBuffer) return 'N/A';
+
+          const rawBytes = rawBuffer instanceof ArrayBuffer
+            ? new Uint8Array( rawBuffer )
+            : rawBuffer;
+
+          const view = new DataView( rawBytes.buffer, 0, rawBytes.length );
+          const stride = getStride( propDef.type, propDef.componentType );
+
+          let numElements = 0;
+          let startElement = 0;
+
+          // 1. Variable-length arrays: element‑index offsets
+          if (propData.hydratedArrayOffsets) {
+            const offsetBytes = new Uint8Array( propData.hydratedArrayOffsets );
+            const offset32 = new Uint32Array( offsetBytes.buffer, 0, 5 );
+
+            if (featureId < 0 || featureId >= offset32.length - 1) return 'N/A';
+
+            const start = offset32[ featureId ];
+            const end   = offset32[ featureId + 1 ];
+            startElement = start;
+            numElements = end - start;
+          }
+          // 2. Fixed-length arrays
+          else if (propDef.array && propDef.count !== undefined) {
+            numElements = propDef.count;
+            startElement = featureId * numElements;
+          }
+
+          if (numElements <= 0) return [];
+
+          const values = [];
+
+          // 4. STRING array
+          if (propDef.type === 'STRING' && propData.hydratedStringOffsets) {
+            const stringBytes = new Uint8Array( propData.hydratedStringOffsets );
+            const stringOffset32 = new Uint32Array( stringBytes.buffer, 0 );
+
+            for ( let i = 0; i < numElements; i++ ) {
+              const idx = startElement + i;
+              const s = stringOffset32[ idx ];
+              const e = stringOffset32[ idx + 1 ] || rawBytes.length;
+
+              if (s >= rawBytes.length || e > rawBytes.length) continue;
+
+              const stringBuffer = new Uint8Array( rawBytes.buffer, s, e - s );
+              values.push( new TextDecoder().decode( stringBuffer ) );
+            }
+
+            return values;
+          }
+
+          // 5. BOOLEAN array
+          if (propDef.type === 'BOOLEAN') {
+            for ( let i = 0; i < numElements; i++ ) {
+              const elementIndex = startElement + i;
+              const val = readBinaryValue( rawBytes, 0, propDef.type, 'UINT8', elementIndex );
+              values.push( val );
+            }
+
+            return values;
+          }
+
+          // 6. ENUM array
+          if (propDef.type === 'ENUM') {
+            const enumDef = schema.enums?.[ propDef.enumType ];
+
+            // If componentType is missing default to UINT8 or UINT16
+            const cType = propDef.componentType || (rawBytes.byteLength >= (numFeatures * numElements * 2) ? 'UINT16' : 'UINT8');
+
+            for ( let i = 0; i < numElements; i++ ) {
+              const elementIndex = startElement + i;
+              const enumIndex = readBinaryValue( rawBytes, 0, 'SCALAR', cType, elementIndex );
+
+              // Map the index to the Name string
+              const entry = enumDef?.values.find( v => v.value === enumIndex );
+              values.push( entry ? entry.name : `Unknown(${ enumIndex })` );
+            }
+
+            return values; 
+          }
+
+          // 7. Generic numeric array (SCALAR / VEC / MAT)
+          for ( let i = 0; i < numElements; i++ ) {
+            const elementIndex = startElement + i;
+            const val = readBinaryValue( rawBytes, 0, propDef.type, propDef.componentType, elementIndex );
+
+            // Normalize if needed
+            if (propDef.componentType === 'UINT8' && propDef.normalized) {
+              const normalized = Array.isArray( val )
+                ? val.map( v => Math.round( ( v / 255.0 ) * 100 ) / 100 )
+                : Math.round( ( val / 255.0 ) * 100 ) / 100;
+
+              values.push( normalized );
+            } else {
+              values.push( val );
+            }
+          }
+
+          return values;
+        }
+
+        function readBinaryPropertyValue( propDef, propData, featureId, propName ) {
+          const rawBuffer = propData.hydratedArray;
+          if (!rawBuffer) return 'N/A';
+
+          // STRING PROPERTIES
+          if (propDef?.type === 'STRING' || propData.stringOffsets !== undefined) {
+            return getMetadataString( propData, featureId );
+          }
+
+          // NUMERIC PROPERTIES
+          const elementCount = TYPE_COUNT_MAP[ propDef?.type ] || 1;
+          let bytesPerElement = 4; // Float32 default
+
+          if (propDef?.componentType) {
+            bytesPerElement = COMPONENT_TYPE_MAP[ propDef.componentType ].BYTES_PER_ELEMENT;
+          }
+
+          const view = new DataView( rawBuffer );
+          const byteOffset = featureId * bytesPerElement * elementCount;
+
+          if (byteOffset + ( bytesPerElement * elementCount ) > view.byteLength) {
+            console.warn( `Overflow: ${ propName } offset=${ byteOffset }, len=${ view.byteLength }` );
+            return 'N/A';
+          }
+
+          const method = propDef?.componentType ? DATAVIEW_GETTER_MAP[ propDef.componentType ] : 'getFloat32';
+          if (!method) return 'N/A';
+
+          const values = [];
+
+          for ( let i = 0; i < elementCount; i++ ) {
+            const offset = byteOffset + ( i * bytesPerElement );
+            values.push( view[ method ]( offset, true ) );
+          }
+
+          return propDef?.type === 'SCALAR' ? values[ 0 ] : values;
+        }
+
+        function getFeatureIdFromTexture( texture, uv, channel ) {
+          const buffer = texture.userData.rawBuffer;
+          if (!buffer) return 0;
+
+          const w = texture.image.width;
+          const h = texture.image.height;
+
+          const x = Math.floor( uv.x * ( w - 0.001 ) );
+          const y = Math.floor( uv.y * ( h - 0.001 ) );
+
+          // RGBA = 4 bytes per pixel
+          const index = ( y * w + x ) * 4;
+
+          const rawValue = buffer[ index + channel ];
+
+          return rawValue; // Apply scale/offset here if needed
+        }
+
+        function getPropertyFromTexture( metadata, propertyName, uv ) {
+          if (!metadata.structuralMetadata) return 0;
+          if (!metadata.structuralMetadata.textures) return 0;
+          if (!metadata.structuralMetadata.propertyTextures) return 0;
+
+          const propertyTextures = metadata.structuralMetadata.propertyTextures;
+          const propTex = propertyTextures.find( pt => pt.properties[ propertyName ] );
+
+          const textures = metadata.structuralMetadata.textures;
+          const texture = textures[ propTex.properties[ propertyName ].index ];
+
+          const buffer = texture.userData.rawBuffer;
+          if (!buffer) return 0;
+
+          const w = texture.image.width;
+          const h = texture.image.height;
+
+          const x = Math.floor( uv.x * ( w - 0.001 ) );
+          const y = Math.floor( uv.y * ( h - 0.001 ) );
+
+          // RGBA = 4 bytes per pixel
+          const index = ( y * w + x ) * 4;
+
+          const channels = propTex.properties[ propertyName ].channels || [ 0 ];
+          const rawValue = buffer[ index + channels[ 0 ] ];
+
+          return rawValue; // Apply scale/offset here if needed
+        }
+
+        function addPropertyTableMetadata( tableIndex, attributeIndex = null, featureId ) {
+          const table = structuralMetadata?.propertyTables?.[ tableIndex ];
+          if (!table || featureId === undefined || featureId === null) return;
+
+          // BOUNDS CHECK - prevent reading past table.count
+          if (featureId < 0 || featureId >= table.count) {
+            console.warn( `Feature ID ${ featureId } out of bounds for table ${ tableIndex } (count: ${ table.count })` );
+            return;
+          }
+
+          const className = table.class || `PropertyTable ${ tableIndex }`;
+          const properties = {};
+
+          if (table.properties && schema?.classes?.[ table.class ]) {
+            const classDef = schema.classes[ table.class ];
+
+            for ( const [ key, propData ] of Object.entries( table.properties ) ) {
+              const propDef = classDef.properties?.[ key ];
+              if (!propDef) continue;
+
+              // Safe read with bounds check
+              try {
+                if (propDef.array) {
+                  properties[ key ] = readArrayProperty( propDef, propData, featureId );
+                } else if (propDef.type === 'STRING' || propData.stringOffsets !== undefined) {
+                  properties[ key ] = getMetadataString( propData, featureId );
+                } else {
+                  properties[ key ] = readBinaryPropertyValue( propDef, propData, featureId, key );
                 }
+              } catch ( err ) {
+                console.warn( `Failed to read property ${ key } for feature ${ featureId }: `, err.message );
+                properties[ key ] = 'N/A';
               }
-            } else if (typeof batchTable.getPropertyNames === 'function') {
-              // Extract all available properties from the batch table for this specific ID
-              const keys = batchTable.getPropertyNames(); 
+            }
 
-              keys.forEach( key => {
-                const val = batchTable.getProperty( batchId, key );
+            if (attributeIndex !== null) properties.Attribute = attributeIndex;
+            properties.VertexId = vertexIndex;
+            properties.ID = featureId;
+          }
 
-                if (val !== undefined && val !== null) {
-                  properties[ key ] = val;
-                }
+          featureMetadataList.push( { class: className, properties } );
+        }
+
+        const meshFeatures = extensions.EXT_mesh_features || extensions.EXT_instance_features;
+
+        if (meshFeatures?.featureIds?.length > 0) {
+          for ( let i = 0; i < meshFeatures.featureIds.length; i++ ) {
+            const info = meshFeatures.featureIds[ i ];
+            const featureIdIndex = info.attribute;
+            let featureId, attributeName;
+
+            const attrName1 = `_feature_id_${ featureIdIndex }`;
+            const attrName2 = `_FEATURE_ID_${ featureIdIndex }`;
+
+            attributeName = pickedObject.geometry.hasAttribute( attrName1 )
+              ? attrName1
+              : pickedObject.geometry.hasAttribute( attrName2 )
+                ? attrName2
+                : '';
+
+            const featureIdAttr = pickedObject.geometry.getAttribute( attributeName );
+
+            if (info.texture !== undefined) {
+              const texInfo = info.texture;
+              const idTexture = userData.textures?.[ texInfo.index ];
+
+              if (idTexture && intersect.uv) {
+                featureId = getFeatureIdFromTexture( idTexture, intersect.uv, texInfo.channels?.[ 0 ] || 0 );
+              }
+            } else if (featureIdAttr) {
+              if (isInstanced && intersect.instanceId !== undefined) {
+                featureId = featureIdAttr.getX( intersect.instanceId );
+              } else if (intersect.face) {
+                featureId = featureIdAttr.getX( intersect.face.a );
+              } else if (intersect.index !== undefined) {
+                featureId = featureIdAttr.getX( intersect.index );
+              }
+            }
+
+            const featureId_ok = (featureId !== null && featureId !== undefined && featureId !== info.nullFeatureId);
+
+            if (!highlightAttributeName && attributeName && featureId_ok) {
+              highlightAttributeName = attributeName;
+              if (highlightId === null || highlightId === undefined) highlightId = featureId;
+            }
+
+            if (info.propertyTable !== undefined) {
+              addPropertyTableMetadata( info.propertyTable, featureIdIndex, featureId );
+            } else {
+              const className = info.label || `Feature ${ featureIdIndex }`;
+              const properties = { Attribute: featureIdIndex, VertexId: vertexIndex, ID: featureId };
+
+              featureMetadataList.push({
+                class: className,
+                properties
               });
             }
           }
+        }
 
-          // Wrap in the format showUiPanel expects
-          featureMetadataList.push({
-            class: className,
-            properties: properties
-          });
+        if (structuralMetadata) {
+          if (vertexIndex !== -1 && structuralMetadata.propertyAttributes?.length > 0) {
+            structuralMetadata.propertyAttributes.forEach( attrib => {
+              const className = attrib.class || 'PropertyAttribute';
+              const pa_properties = {};
 
+              for ( const [ key, value ] of Object.entries( attrib.properties || {} ) ) {
+                const attrName = value.attribute;
+                if (!attrName) continue;
+
+                const attr =
+                  pickedObject.geometry.getAttribute( attrName.toLowerCase() ) ||
+                  pickedObject.geometry.getAttribute( attrName.toUpperCase() );
+
+                if (attr) {
+                  pa_properties[ key ] = attr.getX( vertexIndex );
+                }
+              }
+
+              if (Object.keys( pa_properties).length > 0) {
+                pa_properties.VertexId = vertexIndex;
+                featureMetadataList.push( { class: className, pa_properties } );
+              }
+
+              if (highlightId === null || highlightId === undefined) highlightId = vertexIndex;
+            });
+          }
+
+          if (vertexIndex !== -1 && structuralMetadata.propertyTextures?.length > 0 && intersect.uv) {
+            structuralMetadata.propertyTextures.forEach( texture => {
+              const className = texture.class || 'PropertyTexture';
+              const pt_properties = {};
+
+              for ( const propName of Object.keys( texture.properties || {} ) ) {
+                const val = getPropertyFromTexture( pickedObject.userData, propName, intersect.uv );
+                if (val !== undefined) pt_properties[ propName ] = val;
+              }
+
+              if (Object.keys( pt_properties ).length > 0) {
+                pt_properties.UV_Coord = new THREE.Vector2( intersect.uv.x, intersect.uv.y );
+                featureMetadataList.push( { class: className, pt_properties } );
+              }
+            });
+          }
+        }
+
+        if (featureMetadataList.length > 0) {
           // Restore color
           if (selectedObject?.material?.emissive) {
             selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
           }
 
-          // Trigger the geometry-based highlight for the primary ID
-          highlightFeature( batchId, '_batchid' );
+          if (pickedObject.isInstancedMesh) {
+            highlightFeatureInstanced( highlightId );
+          } else if (pickedObject.isPoints) {
+            highlightPoint( highlightId );
+          } else if (pickedObject.isLine) {
+            highlightLine( highlightId );
+          } else if (pickedObject.isMesh && highlightAttributeName) {
+            highlightFeature( highlightId, highlightAttributeName );
+          }
 
-          showUiPanel( { ...pickedObject.userData.metadata, featureMetadata: featureMetadataList }, event, schema, pickedObject.name, false );
+          showUiPanel(
+            { ...pickedObject.userData.metadata, featureMetadata: featureMetadataList },
+            event,
+            schema,
+            pickedObject.name,
+            false
+          );
 
           return;
         }
 
-        // Fallback to standard metadata
-        let tilesetMetadataOnly = !pickedObject.userData.metadata && !!pickedObject.parent;
+        if (pickedObject.geometry.hasAttribute( '_batchid' )) {
+          if (vertexIndex === undefined || vertexIndex === null) return;
+
+          const batchId = pickedObject.geometry.attributes._batchid.getX( vertexIndex );
+          const batchTable = pickedObject.batchTable || pickedObject.parent?.batchTable;
+
+          const properties = { VertexId: vertexIndex, ID: batchId };
+          let className = 'BatchId';
+
+          if (batchTable) {
+            className = 'Batch Table';
+
+            if (batchTable.header) {
+              for ( const key in batchTable.header ) {
+                const attributeArray = batchTable.header[ key ];
+
+                if (Array.isArray( attributeArray ) && attributeArray.length > batchId) {
+                  properties[ key ] = attributeArray[ batchId ];
+                }
+              }
+            } else if (typeof batchTable.getPropertyNames === 'function') {
+              for ( const key of batchTable.getPropertyNames() ) {
+                const val = batchTable.getProperty( batchId, key );
+
+                if (val !== undefined && val !== null) {
+                  properties[ key ] = val;
+                }
+              }
+            }
+          }
+
+          featureMetadataList.push( { class: className, properties } );
+          highlightFeature( batchId, '_batchid' );
+
+          showUiPanel(
+            { ...pickedObject.userData.metadata, featureMetadata: featureMetadataList },
+            event,
+            schema,
+            pickedObject.name,
+            false
+          );
+
+          return;
+        }
+
         const data = pickedObject.userData.metadata;
+        const tilesetMetadataOnly = !data && !!pickedObject.parent;
 
         if (( data && !data.empty ) || tilesetMetadataOnly) {
           showUiPanel( data, event, schema, pickedObject.name, tilesetMetadataOnly, pickedObject.type );
-        } else {
-          // If no metadata found, remove highlight
-          if (selectedObject.material?.emissive) {
-            selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
-          }
-
-          selectedObject = null;
         }
       }
 
@@ -1462,6 +1931,22 @@
 
         const resolveValue = ( className, propName, val ) => {
           let processedVal = val;
+
+          // Handle Three.js math objects (from interpolation)
+          if (processedVal && typeof processedVal === 'object') {
+            if (processedVal.isVector3) {
+              return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )}, ${processedVal.z.toFixed( 2 )})`;
+            }
+
+            if (processedVal.isVector2) {
+              return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )})`;
+            }
+
+            if (processedVal.isColor) {
+              return `RGB(${processedVal.r.toFixed( 2 )}, ${processedVal.g.toFixed( 2 )}, ${processedVal.b.toFixed( 2 )})`;
+            }
+          }
+
           const propDef = schema?.classes?.[ className ]?.properties?.[ propName ];
 
           // Pre-check: If it's a string that looks like an array but isn't parsed
