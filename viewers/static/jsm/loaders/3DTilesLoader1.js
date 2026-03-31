@@ -1,14 +1,281 @@
-import { Box3, Loader, MathUtils, Matrix4, Quaternion, Sphere, Vector3, WebGLRenderer } from 'three';
+import { Box3, DataTexture, Loader, MathUtils, Matrix4, Quaternion, RGBAFormat, Sphere, Vector3, WebGLRenderer } from 'three';
+import * as OGC3D from 'https://cdn.jsdelivr.net/npm/@jdultra/threedtiles@14.0.26/dist/threedtiles.es.min.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.min.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.min.js';
-import * as OGC3D from 'https://cdn.jsdelivr.net/npm/@jdultra/threedtiles@14.0.26/dist/threedtiles.es.min.js';
+import { decode } from 'https://esm.sh/fast-png@8.0.0';
+
+class NoopStructuralMetadataExtension {
+
+	constructor( parser, rootPath = null, userData = null ) {
+
+		this.parser = parser;
+		this.rootPath = rootPath;
+		this.userData = userData;
+		this.name = 'NoopStructuralMetadataExtension';
+
+	}
+
+	// Helper to decode Base64 to a pixel array
+
+	async decodeBase64ToPixels( uri ) {
+
+		const response = await fetch( uri );
+		const buff = await response.arrayBuffer();
+		const imgData = await decode( buff );  // imported fast-png decoder
+
+		return {
+			data: imgData.data,
+			width: imgData.width,
+			height: imgData.height
+		};
+
+	}
+
+	async beforeRoot() {
+
+		const json = this.parser.json;
+		const images = json.images;
+
+		let texture_indexes = [];
+
+		if ( json.meshes?.length > 0 ) {
+
+			json.meshes.forEach( mesh => {
+
+				if ( mesh.primitives?.length > 0 ) {
+
+					mesh.primitives.forEach( prim => {
+
+						if ( prim.extensions?.EXT_mesh_features?.featureIds?.length > 0 ) {
+
+							prim.extensions.EXT_mesh_features.featureIds.forEach( fid => {
+
+								if ( fid.texture?.index !== undefined ) texture_indexes.push( fid.texture.index );
+
+							});
+
+						}
+
+					});
+
+				}
+
+			});
+
+		}
+
+		if ( texture_indexes.length > 0 && this.userData && !this.userData.textures ) {
+
+			const cleanSorted = texture_indexes.length === 1
+				? texture_indexes
+				: [ ...new Set( texture_indexes ) ].sort( ( a, b ) => a - b );
+
+			this.userData[ 'textures' ] = [];
+
+			for ( const indx of cleanSorted ) {
+
+				if ( images[ indx ] !== undefined && !this.userData.textures[ indx ] ) {
+
+					for ( let j = 0; j < indx + 1; j++ ) {
+
+						if ( j === indx ) {
+
+							const pixelData = await this.decodeBase64ToPixels( images[ indx ].uri );
+
+							const tex = new DataTexture(
+
+								pixelData.data, 
+								pixelData.width, 
+								pixelData.height, 
+								RGBAFormat
+
+							);
+
+							tex.needsUpdate = true;
+
+							// Attach the raw data to the texture object
+							// so we can read it instantly later
+
+							tex.userData.rawBuffer = pixelData.data;
+
+							this.userData.textures.push( tex );
+
+						} else {
+
+							this.userData.textures.push( null );
+
+						}
+
+					}
+
+				}
+
+			}
+
+
+		}
+
+		if ( this.userData && json.extensions?.EXT_structural_metadata ) {
+
+			const ext = json.extensions.EXT_structural_metadata;
+
+			if ( !ext.schema && ext.schemaUri !== undefined && ext.schemaUri.endsWith( '.json' ) ) {
+
+				try {
+
+					const response = await fetch( this.rootPath ? this.rootPath + ext.schemaUri : ext.schemaUri );
+					if ( !response.ok ) console.warn( 'Could not fetch schema!' );
+
+					const schema = await response.json();
+					ext[ 'schema' ] = schema;
+					delete ext.schemaUri;
+
+				} catch ( err ) {
+
+					console.warn( 'Error fetching schema: ' + err.message );
+
+				}
+
+			}
+
+			if ( ext.propertyTables?.length > 0 ) {
+
+				for ( const table of ext.propertyTables ) {
+
+					// ATTACH DATA
+
+					for ( const [ propName, prop ] of Object.entries( table.properties ) ) {
+
+						// Hydrate Array Offsets
+
+						if ( typeof prop.arrayOffsets === 'number' ) {
+
+							const offsetIndex = prop.arrayOffsets;
+							const offsetView = json.bufferViews[ offsetIndex ];
+							prop.hydratedArrayOffsets = await this.parser.getDependency( 'bufferView', offsetIndex );
+
+						}
+
+						// Hydrate String Offsets
+
+						if ( typeof prop.stringOffsets === 'number' ) {
+
+							const offsetIndex = prop.stringOffsets;
+							const offsetView = json.bufferViews[ offsetIndex ];
+							prop.hydratedStringOffsets = await this.parser.getDependency( 'bufferView', offsetIndex );
+
+						}
+
+						// Hydrate the Values
+
+						if ( typeof prop.values === 'number' ) {
+
+							const bufferViewIndex = prop.values;
+							const bufferView = json.bufferViews[ bufferViewIndex ];
+							const bufferData = await this.parser.getDependency( 'bufferView', bufferViewIndex );
+							prop.hydratedArray = bufferData;
+
+						}
+
+					}
+
+				}
+
+			}
+
+			if ( ext.propertyTextures?.length > 0 && !ext.textures ) {
+
+				ext[ 'textures' ] = [];
+
+				for ( const tex of ext.propertyTextures ) {
+
+					if ( tex.properties && Object.entries( tex.properties ).length > 0 ) {
+
+						for ( const value of Object.values( tex.properties ) ) {
+
+							if ( value.index !== undefined && images[ value.index ] !== undefined && !ext.textures[ value.index ] ) {
+
+								for ( let i = 0; i < value.index + 1; i++ ) {
+
+									if ( i === value.index ) {
+
+										const pixelData = await this.decodeBase64ToPixels( images[ value.index ].uri );
+
+										const tex = new DataTexture(
+
+											pixelData.data, 
+											pixelData.width, 
+											pixelData.height, 
+											RGBAFormat
+
+										);
+
+										tex.needsUpdate = true;
+
+										// Attach the raw data to the texture object
+										// so we can read it instantly later
+
+										tex.userData.rawBuffer = pixelData.data;
+
+										ext.textures.push( tex );
+
+									} else {
+
+										ext.textures.push( null );
+
+									}
+
+								}
+
+							}
+
+						}
+
+					}
+
+				}
+
+			}
+
+			this.userData[ 'structuralMetadata' ] = ext;
+
+		}
+
+		return Promise.resolve();
+
+	}
+
+}
+
+class PatchedTileLoader extends OGC3D.TileLoader {
+
+	constructor( options ) {
+
+		super( options );
+
+		// Register EXT_structural_metadata on the internal loader
+
+		this.gltfLoader.register( ( parser ) => new NoopStructuralMetadataExtension( parser, options.rootPath, options.userData ) );
+
+		if ( options.rootPath ) {
+
+			this.gltfLoader.path = options.rootPath;
+			this.gltfLoader.resourcePath = options.rootPath;
+
+		}
+
+	}
+
+}
 
 /**
  * A loader for 3D Tilesets - normally loaded via URL pointing to tileset.json file.
  *
- * Created with assistance from Microsoft Copilot and Google Gemini
+ * Created with AI assistance: Microsoft Copilot, Google Gemini and Perplexity
  *
- * Internally using OGC3DTile loader from @jdultra/threedtiles
+ * Internally using:
+ * 	- OGC3DTile loader (https://github.com/ebeaufay/threedtiles)
+ * 	- fast-png decoder (https://github.com/image-js/fast-png)
  *
  * ```js
  * const loader = new Three3DTilesLoader();
@@ -63,6 +330,7 @@ class Three3DTilesLoader extends Loader {
 			console.error(`There was an error loading: ${ url }`);
 		};
 
+		this._userData = {};
 		this._rootUrl = '';
 		this._keyAPI = '';
 		this._token = '';
@@ -2237,7 +2505,7 @@ class Three3DTilesLoader extends Loader {
 
 			} else if ( isUnsupportedFormat ) {
 
-				// Allow mixed contents
+				// Allow mixed formats
 
 				console.warn( 'Some unsupported 3D Tile content format detected!' );
 
@@ -2300,6 +2568,44 @@ class Three3DTilesLoader extends Loader {
 			// Resolve Multiple Contents to make it OGC3DTile compatible
 			await scope._flattenExplicitContents( json.root, hasMetadata );
 
+			const tileLoader = new PatchedTileLoader({
+
+				rootPath: rootPath,
+				userData: scope._userData,
+				ktx2Loader: scope._ktx2Loader,
+				dracoLoader: scope._dracoLoader,
+				maxCachedItems: scope._maxCacheSize,
+				meshCallback: ( mesh, geometricError ) => {
+					// Attach structural metadata from the loader
+					const sm = mesh.userData?.structuralMetadata || scope._userData?.structuralMetadata;
+					if ( sm ) mesh.userData.structuralMetadata = sm;
+
+					// Attach textures from the loader
+					const tx = mesh.userData?.textures || scope._userData?.textures;
+					if ( tx ) mesh.userData.textures = tx;
+
+					mesh.updateMatrix();
+					mesh.updateMatrixWorld( true );
+					mesh.material.wireframe = this._wireframeMode || false;
+				},
+				pointsCallback: ( points, geometricError ) => {
+					// Attach structural metadata from the loader
+					const sm = points.userData?.structuralMetadata || scope._userData?.structuralMetadata;
+					if ( sm ) points.userData.structuralMetadata = sm;
+
+					// Attach textures from the loader
+					const tx = points.userData?.textures || scope._userData?.textures;
+					if ( tx ) points.userData.textures = tx;
+
+					points.material.size = this._pointTargetSize || 1.0;
+
+					if ( points.name.startsWith( 'mesh_' ) ) {
+						points.name = points.name.replace( 'mesh', 'points' );
+					}
+				}
+
+			});
+
 			const ogc3DTile = await new Promise( resolve => {
 
 				const tileset = new OGC3D.OGC3DTile({
@@ -2310,28 +2616,14 @@ class Three3DTilesLoader extends Loader {
 					rootPath: rootPath,
 					displayErrors: true,
 					loadOutsideView: true,
-					renderer: scope._renderer,
+					tileLoader: tileLoader,
 					level: scope._maxDepthLevel,
 					geometricErrorMultiplier: 0.5,
-					ktx2Loader: scope._ktx2Loader,
-					dracoLoader: scope._dracoLoader,
 					drawBoundingVolume: isImplicit,
 					maxCacheSize: scope._maxCacheSize,
 					loadingStrategy: isImplicit ? "IMMEDIATE" : "INCREMENTAL",
 					queryParams: scope._keyAPI !== '' ? { key: scope._keyAPI } : undefined,
 					headers: scope._token ? { Authorization: `Bearer ${ scope._token }` } : undefined,
-					meshCallback: mesh => {
-						mesh.updateMatrix();
-						mesh.updateMatrixWorld( true );
-						mesh.material.wireframe = this._wireframeMode || false;
-					},
-					pointsCallback: points => {
-						points.material.size = this._pointTargetSize || 1.0;
-
-						if ( points.name.startsWith( 'mesh_' ) ) {
-							points.name = points.name.replace( 'mesh', 'points' );
-						}
-					},
 					onLoadCallback: tileset => { resolve( tileset ); }
 
 				});
