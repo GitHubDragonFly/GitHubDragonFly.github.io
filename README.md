@@ -399,7 +399,9 @@ Number Type Converter
     - Neither is perfect so use both of them and compare
   - These viewers are specifically designed to stream 3D Tiles:
     - Support for v1.1 ImplicitTiling, MultipleContents, Property Tables and all kinds of Metadata, by performing conversion to explicit:
-      - Both viewers support GLTF `EXT_structural_metadata`, `EXT_mesh_features`, `EXT_instance_features` and both FeatureId Attribute and Texture
+      - Both viewers will indicate detection of metadata presence by displaying `Metadata Raycasting Enabled` message
+      - Both viewers support most of v1.0 features as well as:
+        - GLTF `EXT_structural_metadata`, `EXT_mesh_features`, `EXT_instance_features` and both FeatureId Attribute and Texture
       - Both viewers have a popup card to show metadata, which for certain tilesets is a world of its own:
         - Make sure to check its and raycasting code in the viewer to see how all data is retrieved
         - This popup card also provides `Copy To Clipboard` feature mainly intended for troubleshooting purposes:
@@ -409,10 +411,10 @@ Number Type Converter
       - Quick test for both viewers, try loading some of these examples: [Cesium](https://github.com/CesiumGS/3d-tiles-samples), [bertt](https://github.com/bertt/cesium_3dtiles_samples/tree/master/samples), [NASA-AMMOS](https://github.com/NASA-AMMOS/3DTilesSampleData/tree/master):
         - Some of these examples might not work in one or the other or both viewers
     - Both viewers are using customized `3DTilesLoader`:
-      - Also created with assistance from Microsoft Copilot and Google Gemini
-      - Check the code of my viewers to see how this is all implemented
+      - Created with AI assistance: Microsoft Copilot, Google Gemini and Perplexity
+      - Check the code of my viewers to see how this is all implemented since they differ due to use of different libraries
     - If 3D tileset is not visible, maybe one of the following applies:
-      - If bounding box is visible maybe only metadata was loaded
+      - If bounding box is visible maybe only metadata was loaded:
       - The model is out-of-sight in a far away land:
         - Click quick rotation button multiple times
       - Those features require API Key or token
