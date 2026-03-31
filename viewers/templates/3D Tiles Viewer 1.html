@@ -1961,6 +1961,353 @@
 
           // Pre-check: If it's a string that looks like an array but isn't parsed
           // This handles the "[One, Two]" or "[true, false]" strings
+          if (typeof processedVal === 'string' &&
+            ((processedVal.startsWith( '{' ) && processedVal.endsWith( '}' )) ||
+             (processedVal.startsWith( '[' ) && processedVal.endsWith( ']' )))) {
+
+            try {
+              // Try JSON parse first (handles ["One", "Two"])
+              processedVal = JSON.parse( processedVal );
+            } catch ( e ) {
+              // Manual fallback for unquoted strings like [One, Two]
+              processedVal = processedVal.slice( 1, -1 ).split( ',' ).map( s => s.trim() );
+            }
+          }
+
+          if (processedVal === null || processedVal === undefined) return 'N/A';
+
+          // A. Handle Arrays (The core of EXT_structural_metadata)
+          if (Array.isArray( processedVal )) {
+            if (processedVal.length === 0) return '[]';
+
+            // Handle ENUM Arrays
+            if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
+              const enumValues = schema.enums[ propDef.enumType ].values;
+              return `[ ${processedVal.map( v => {
+                // Look up by integer value (0, 1, 2) or by string name
+                const entry = enumValues.find( e => e.value == v || e.name === v );
+                return entry ? entry.name : v;
+              }).join(', ')} ]`;
+            }
+
+            // General Array (Booleans, Strings, etc.)
+            return formatArray( processedVal );
+          }
+
+          // B. Handle Nested Objects
+          if (typeof processedVal === 'object' && !Array.isArray( processedVal ) && !processedVal.isVector3) {
+            let subHtml = '<div style="margin-left: 10px; font-size: 0.9em; color: #ccc;">';
+
+            for ( const [ k, v ] of Object.entries( processedVal ) ) {
+              let displayV = v;
+
+              // 1. If it's a string, try to "un-stringify" it first
+              if (typeof displayV === 'string' && ( displayV.startsWith( '[' ) || displayV.startsWith( '{' ) )) {
+                try {
+                  displayV = JSON.parse( displayV );
+                } catch ( e ) {
+                  // If it's the unquoted Cesium style [One, Two], manual split
+                  if (displayV.startsWith( '[' ) && displayV.endsWith( ']' )) {
+                    displayV = displayV.slice( 1, -1 ).split( ',' ).map( s => s.trim() );
+                  }
+                }
+              }
+
+              // 2. Now that we have the "truest" form of the data, format it for the UI
+              if (Array.isArray( displayV )) {
+                displayV = formatArray( displayV );
+              } else if (typeof displayV === 'object' && displayV !== null) {
+                // If it's still an object (deep nesting), stringify it as a fallback
+                displayV = JSON.stringify( displayV );
+              } else if (typeof displayV === 'number') {
+                displayV = ( Number.isInteger( displayV ) ? displayV : displayV.toFixed( 2 ) );
+              } else if (typeof displayV === 'boolean') {
+                displayV = displayV ? 'Yes' : 'No';
+              }
+
+              subHtml += `<div><span style="color: #888;">${k}:</span> ${displayV}</div>`;
+            }
+
+            subHtml += '</div>';
+            return subHtml;
+          }
+
+          // C. Handle Single Values (Non-Arrays)
+
+          // Single Enums
+          if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
+            const entry = schema.enums[ propDef.enumType ].values.find( v => v.value == processedVal || v.name === processedVal );
+            return entry ? entry.name : processedVal;
+          }
+
+          // Single Booleans
+          if (propDef?.type === 'BOOLEAN') {
+            // Treat "true", true, or non-zero numbers as "Yes"
+            const isTrue = (processedVal === true || processedVal === 'true' || processedVal === 1);
+            return isTrue ? 'Yes' : 'No';
+          }
+
+          // Single Numbers
+          if (typeof processedVal === 'number') {
+            return Number.isInteger( processedVal ) ? processedVal : processedVal.toFixed( 2 );
+          }
+
+          // Handle BigInt / Numbers
+          if (typeof processedVal === 'bigint') return processedVal.toString();
+
+          return processedVal;
+        };
+
+        let show_copy_to_clipboard = true;
+
+        let html = '';
+
+        // 1. Tileset Metadata - Maybe entries like author, date, tile count...
+
+        const tileset = tilesetMetadataOnly ? tileset_obj.userData?.tileset : data?.tileset;
+
+        if (tileset?.class) {
+          html += `
+            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${tileset.class}</div>
+            </div>`;
+
+          if (tileset.properties) {
+            for ( const [ key, val ] of Object.entries( tileset.properties ) ) {
+              const display = resolveValue( tileset.class, key, val );
+              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+           }
+          }
+        } else if (tilesetMetadataOnly) {
+          show_copy_to_clipboard = false;
+
+          const description = (type === 'Box3Helper') ? 'No Data (turn off bounding box)' : 'No Data';
+
+          html += `
+            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${ description }</div>
+            </div>`;
+        }
+
+        if (data && !tilesetMetadataOnly) {
+          if (tileset) html += `<br>`;
+
+          // 2. Tile Metadata - Maybe entries like district, population...
+
+          if (data.tile?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.tile.class}</div>
+              </div>`;
+
+            if (data.tile.properties) {
+              for ( const [ key, val ] of Object.entries( data.tile.properties ) ) {
+                const display = resolveValue( data.tile.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
+            }
+
+            html += `<br>`;
+          }
+
+          // 3. Selected Object
+
+          if (meshName !== '') {
+            html += `<div style="font-size: 12px; font-weight: bold; color: #fff; line-height: 1.0;">Selected: ${meshName}</div><br>`;
+          }
+
+          // 4. Group Metadata - Maybe entries like color, priority...
+
+          if (data.group?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.group.class}</div>
+              </div>`;
+
+            if (data.group.properties) {
+              for ( const [ key, val ] of Object.entries( data.group.properties ) ) {
+                const display = resolveValue( data.group.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
+            }
+
+            html += `<br>`;
+          }
+
+          // 5. Content Metadata - Maybe entries like vertices, materials...
+
+          if (data.content?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 8px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.content.class}</div>
+              </div>`;
+
+            if (data.content.properties) {
+              for ( const [ key, val ] of Object.entries( data.content.properties ) ) {
+                const display = resolveValue( data.content.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
+            }
+          }
+
+          // 5.5 Feature-Specific Metadata (EXT_structural_metadata)
+
+          if (data.featureMetadata) {
+            const fms = Array.isArray( data.featureMetadata ) ? data.featureMetadata : [ data.featureMetadata ];
+
+            fms.forEach( ( fm ) => {
+              html += `
+                <div style="border-bottom: 1px solid #00d4ff; margin-top: 10px; padding-bottom: 4px;">
+                  <div style="font-size: 10px; color: #00d4ff; font-weight: bold;">${fm.class}</div>
+                </div>`;
+
+              if (fm.properties) {
+                for ( const [ key, val ] of Object.entries( fm.properties ) ) {
+                  const display = resolveValue( fm.class, key, val );
+                  html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+                }
+              }
+
+              html += `<br>`;
+            });
+          }
+
+          // 6. FeatureId - Maybe entries from EXT_mesh_features, EXT_structural_metadata...
+          // Only show if not already merged into metadata
+
+          if (data.featureId && Array.isArray( data.featureId ) && !data.featureMetadata) {
+            data.featureId.forEach( ( fid_class, index ) => {
+              // Use the class name if found, otherwise use a readable layer index
+              const label = fid_class.class || `Feature Layer ${index}`;
+              const idValue = fid_class.id !== undefined ? fid_class.id : 'N/A';
+
+              html += `
+                <div class="feature-group" style="margin-top: 10px; border-left: 2px solid #00d4ff; padding-left: 8px;">
+                  <div style="font-size: 10px; color: #aaa; font-weight: bold;">${ label }</div>
+                  <div class="prop-row" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="prop-label" style="color: #00d4ff;">ID:</span><span class="prop-value">${ idValue }</span>
+                  </div>
+                </div>`;
+            });
+          }
+        }
+
+        if (show_copy_to_clipboard) {
+          // Create a shallow copy so we don't accidentally delete the real schema from the viewer
+          const dataForClipboard = data
+            ? { ...data }
+            : tileset_obj.userData?.tileset
+              ? { ...tileset_obj.userData.tileset }
+              : {};
+
+          // Remove the heavy schema part for popup card, it will be included for clipboard
+          delete dataForClipboard.schema;
+
+          // Add selected mesh name
+          if (data && meshName) data[ 'Selected' ] = meshName;
+
+          // A helper to make JSON.stringify handle BigInt
+          const bigintReplacer = ( key, value ) => typeof value === 'bigint' ? value.toString() : value;
+
+          const rawJson = JSON.stringify( data ? data : dataForClipboard, bigintReplacer, 2 );
+          if (!rawJson) return;
+
+          // Escape it for use inside an HTML attribute
+          // We replace backslashes first, then single quotes
+          safeJson = rawJson
+            .replace(/\\/g, '\\\\')   // Escape backslashes
+            .replace(/'/g, "\\'")     // Escape single quotes
+
+          html += `
+            <div style="padding: 3px; border-top: 1px solid #444; text-align: center;">
+              <button
+                style="vertical-align: middle; background: #111; color: white; border: 1px solid #00d4ff; padding: 2px; cursor: pointer; font-size: 11px; border-radius: 4px; width: 100%;"
+                onclick="navigator.clipboard.writeText( safeJson ).then( () => alert( 'Metadata copied!' ) );">
+                📋 Copy To Clipboard
+              </button>
+            </div>`;
+        }
+
+        card.innerHTML = html;
+        card.style.display = 'block';
+
+        // 7. Position Logic
+
+        const cardWidth = 220; 
+        let x = event.clientX + 15;
+        let y = event.clientY + 15;
+
+        if (x + cardWidth > window.innerWidth) x = event.clientX - cardWidth - 15;
+
+        // If the card goes off the bottom of the screen
+        if (y + card.offsetHeight > window.innerHeight) {
+          y = window.innerHeight - card.offsetHeight - 15;
+        }
+
+        card.style.left = x + 'px';
+        card.style.top = y + 'px';
+      }
+
+      function showUiPanel_OLD( data, event, schema = null, meshName = '', tilesetMetadataOnly = false, type = '' ) {
+        const card = document.getElementById('metadata-card');
+        if (!card) return;
+
+        // Enhanced resolver to handle the complex types in new JSON
+
+        function formatArray( arr ) {
+          if (arr.length === 0) return '[]';
+
+          // If it's an array of objects
+          if (typeof arr[ 0 ] === 'object' && arr[ 0 ] !== null) {
+            return arr.map( ( item, idx ) => {
+              let itemHtml = `<div style="margin: 4px 0 4px 5px; padding-left: 8px; border-left: 2px solid #00d4ff; background: rgba(0,212,255,0.05);">`;
+              itemHtml += `<div style="font-size: 9px; color: #00d4ff; opacity: 0.7;">Part ${idx + 1}</div>`;
+
+              for ( const [ sk, sv ] of Object.entries( item ) ) {
+                const cleanSv = ( typeof sv === 'number' )
+                  ? ( Number.isInteger( sv ) ? sv : sv.toFixed( 2 ) )
+                  : sv;
+
+                itemHtml += `<div style="font-size: 11px;"><span style="color: #666;">${sk}:</span> ${cleanSv}</div>`;
+              }
+
+              itemHtml += `</div>`;
+              return itemHtml;
+            }).join('');
+          }
+    
+          // If it's a simple array (like [1, 2, 3])
+          return `[ ${arr.map( v => {
+            if ( typeof v === 'number' ) {
+              return ( Number.isInteger( v ) ? v : v.toFixed( 2 ) );
+            }
+
+            return String( v );
+          }).join( ', ' )} ]`;
+        }
+
+        const resolveValue = ( className, propName, val ) => {
+          let processedVal = val;
+
+          // Handle Three.js math objects (from interpolation)
+          if (processedVal && typeof processedVal === 'object') {
+            if (processedVal.isVector3) {
+              return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )}, ${processedVal.z.toFixed( 2 )})`;
+            }
+
+            if (processedVal.isVector2) {
+              return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )})`;
+            }
+
+            if (processedVal.isColor) {
+              return `RGB(${processedVal.r.toFixed( 2 )}, ${processedVal.g.toFixed( 2 )}, ${processedVal.b.toFixed( 2 )})`;
+            }
+          }
+
+          const propDef = schema?.classes?.[ className ]?.properties?.[ propName ];
+
+          // Pre-check: If it's a string that looks like an array but isn't parsed
+          // This handles the "[One, Two]" or "[true, false]" strings
           if (typeof processedVal === 'string' && processedVal.startsWith( '[' ) && processedVal.endsWith( ']' )) {
             try {
               // Try JSON parse first (handles ["One", "Two"])
