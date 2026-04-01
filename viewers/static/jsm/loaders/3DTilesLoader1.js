@@ -124,11 +124,18 @@ class NoopStructuralMetadataExtension {
 				try {
 
 					const response = await fetch( this.rootPath ? this.rootPath + ext.schemaUri : ext.schemaUri );
-					if ( !response.ok ) console.warn( 'Could not fetch schema!' );
 
-					const schema = await response.json();
-					ext[ 'schema' ] = schema;
-					delete ext.schemaUri;
+					if ( !response.ok ) {
+
+						console.warn( 'Could not fetch schema!' );
+
+					} else {
+
+						const schema = await response.json();
+						ext[ 'schema' ] = schema;
+						delete ext.schemaUri;
+
+					}
 
 				} catch ( err ) {
 
@@ -2336,6 +2343,7 @@ class Three3DTilesLoader extends Loader {
 
 				let tile_uri = contentObj.uri;
 				if ( tile_uri && tile_uri.startsWith( '/' ) ) tile_uri = tile_uri.substring( 1 );
+				else if ( tile_uri && tile_uri.startsWith( './' ) ) tile_uri = tile_uri.substring( 2 );
 
 				if ( hasMetadata ) {
 
@@ -2567,6 +2575,8 @@ class Three3DTilesLoader extends Loader {
 
 			// Resolve Multiple Contents to make it OGC3DTile compatible
 			await scope._flattenExplicitContents( json.root, hasMetadata );
+
+			console.log('json ', json);
 
 			const tileLoader = new PatchedTileLoader({
 
