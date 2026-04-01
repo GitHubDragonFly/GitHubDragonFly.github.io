@@ -2576,8 +2576,6 @@ class Three3DTilesLoader extends Loader {
 			// Resolve Multiple Contents to make it OGC3DTile compatible
 			await scope._flattenExplicitContents( json.root, hasMetadata );
 
-			console.log('json ', json);
-
 			const tileLoader = new PatchedTileLoader({
 
 				rootPath: rootPath,
