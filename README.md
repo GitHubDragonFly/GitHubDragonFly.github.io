@@ -292,6 +292,7 @@ Number Type Converter
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js:
     - supports obsolete `pbrSpecularGlossiness`
     - does not support either `Anisotropy` or currently arbitrary `KHR_animation_pointer`
+  - Some of the above viewers also support metadata picking
   - `GLTF Legacy` viewer is for v1.0 glTF files and is purely experimental and rather limited (see notes further below)
 
 - Special notes about `ASSIMP Viewer` which is using [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and [ASSIMP](https://github.com/assimp/assimp) library:
