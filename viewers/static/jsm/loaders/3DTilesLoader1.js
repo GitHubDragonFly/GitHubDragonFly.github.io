@@ -20,14 +20,24 @@ class NoopStructuralMetadataExtension {
 	async decodeBase64ToPixels( uri ) {
 
 		const response = await fetch( uri );
-		const buff = await response.arrayBuffer();
-		const imgData = await decode( buff );  // imported fast-png decoder
 
-		return {
-			data: imgData.data,
-			width: imgData.width,
-			height: imgData.height
-		};
+		if ( !response.ok ) {
+
+			console.warn( 'Could not fetch url: ' + uri );
+			return null;
+
+		} else {
+
+			const buff = await response.arrayBuffer();
+			const imgData = await decode( buff );  // imported fast-png decoder
+
+			return {
+				data: imgData.data,
+				width: imgData.width,
+				height: imgData.height
+			};
+
+		}
 
 	}
 
@@ -82,23 +92,31 @@ class NoopStructuralMetadataExtension {
 
 							const pixelData = await this.decodeBase64ToPixels( images[ indx ].uri );
 
-							const tex = new DataTexture(
+							if ( !pixelData ) {
 
-								pixelData.data, 
-								pixelData.width, 
-								pixelData.height, 
-								RGBAFormat
+								this.userData.textures.push( null );
 
-							);
+							} else {
 
-							tex.needsUpdate = true;
+								const tex = new DataTexture(
 
-							// Attach the raw data to the texture object
-							// so we can read it instantly later
+									pixelData.data, 
+									pixelData.width, 
+									pixelData.height, 
+									RGBAFormat
 
-							tex.userData.rawBuffer = pixelData.data;
+								);
 
-							this.userData.textures.push( tex );
+								tex.needsUpdate = true;
+
+								// Attach the raw data to the texture object
+								// so we can read it instantly later
+
+								tex.userData.rawBuffer = pixelData.data;
+
+								this.userData.textures.push( tex );
+
+							}
 
 						} else {
 
@@ -208,23 +226,31 @@ class NoopStructuralMetadataExtension {
 
 										const pixelData = await this.decodeBase64ToPixels( images[ value.index ].uri );
 
-										const tex = new DataTexture(
+										if ( !pixelData ) {
 
-											pixelData.data, 
-											pixelData.width, 
-											pixelData.height, 
-											RGBAFormat
+											ext.textures.push( null );
 
-										);
+										} else {
 
-										tex.needsUpdate = true;
+											const tex = new DataTexture(
 
-										// Attach the raw data to the texture object
-										// so we can read it instantly later
+												pixelData.data, 
+												pixelData.width, 
+												pixelData.height, 
+												RGBAFormat
 
-										tex.userData.rawBuffer = pixelData.data;
+											);
 
-										ext.textures.push( tex );
+											tex.needsUpdate = true;
+
+											// Attach the raw data to the texture object
+											// so we can read it instantly later
+
+											tex.userData.rawBuffer = pixelData.data;
+
+											ext.textures.push( tex );
+
+										}
 
 									} else {
 
