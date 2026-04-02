@@ -1153,7 +1153,6 @@ class Three3DTilesLoader extends Loader {
 		// Round up to the next 8-byte boundary
 		const binaryStart = Math.ceil( ( jsonStart + jsonByteLength ) / 8 ) * 8;
 
-		//const binaryStart = jsonStart + jsonByteLength;
 		const binary = new Uint8Array( buffer, binaryStart, binaryByteLength );
 		const binaryView = new DataView( buffer, binaryStart, binaryByteLength );
 
@@ -2294,7 +2293,42 @@ class Three3DTilesLoader extends Loader {
 
 			scope._gltfLoader.setKTX2Loader( scope._ktx2Loader );
 
+			// 1. Quick URL detection
+
+			const isLayerJson = url.toLowerCase().endsWith( 'layer.json' );
+
 			let json = await fetch( url ).then( r => r.json() );
+
+			if ( isLayerJson ) {
+
+				console.log( 'Legacy layer.json detected. Converting to 3D Tiles structure...' );
+
+				// We need to make the JSON "look" like a 3D Tileset for existing logic
+
+				json.asset = { version: '1.0' };
+
+				json.root = {
+
+					boundingVolume: {
+						// layer.json usually provides [minX, minY, maxX, maxY]
+						// We may need to map these to a Box or Region here
+
+						region: [ ...json.bounds, 0, 10000 ]
+					},
+					geometricError: 4096,
+					refine: 'REPLACE',
+					content: { uri: url } // Point back to itself; the plugin will handle the quadtree
+
+				};
+
+			}
+
+			const hasTerrain = isLayerJson ||
+				json.extensionsUsed?.includes( 'quantized_mesh' ) || 
+				json.extensionsUsed?.includes( 'quantized-mesh' ) || 
+				json.root?.content?.uri?.toLowerCase().includes( '.terrain' );
+
+			const isQuantizedMesh = isLayerJson || hasTerrain;
 
 			const tilesetVersion = json.asset?.version || null;
 
@@ -2391,7 +2425,7 @@ class Three3DTilesLoader extends Loader {
 			tilesRenderer.errorTarget = scope._errorTarget;
 			tilesRenderer.maxDepth = scope._maxDepthLevel;
 			tilesRenderer._optimizeRaycast = false;
-			tilesRenderer._errorThreshold = 1.0;
+			tilesRenderer._errorThreshold = 0.5;
 			tilesRenderer.loadSiblings = false;
 
 			// Tell the manager to use our configured gltfLoader
@@ -2415,7 +2449,19 @@ class Three3DTilesLoader extends Loader {
 
 			}
 
-			// Register Performance Plugins (Cesium 2024 Enhancements)
+			// Register Performance Plugins
+
+			if ( isQuantizedMesh ) {
+
+				console.log( 'Terrain detected: Registering Quantized Mesh Plugin' );
+
+				const terrainPlugin = new ThreeDTilesPlugins.QuantizedMeshPlugin();
+
+				terrainPlugin.solid = true;
+				terrainPlugin.generateSkirts = true;
+				tilesRenderer.registerPlugin( terrainPlugin );
+
+			}
 
 			const fadePlugin = new ThreeDTilesPlugins.TilesFadePlugin();
 			const compressionPlugin = new ThreeDTilesPlugins.TileCompressionPlugin();
@@ -2457,7 +2503,7 @@ class Three3DTilesLoader extends Loader {
 
 			}
 
-			function fitCameraToBox3( offset = 1.5 ) {
+			function fitCameraToBox3() {
 
 				const center = new Vector3();
 				const size = new Vector3();
@@ -2475,8 +2521,7 @@ class Three3DTilesLoader extends Loader {
 				// 3. Calculate how far back the camera needs to be
 				// This uses the tangent of the half-FOV to ensure the box fits vertically
 
-				let distance = Math.abs( maxDim / 2.0 / Math.tan( fov / 2.0 ) );
-				distance *= offset; // Apply padding
+				let distance = maxDim + Math.abs( maxDim / 2.0 / Math.tan( fov / 2.0 ) );
 
 				// 4. Position the camera 
 				// We move it 'distance' units away from the center along the Z axis
@@ -2501,7 +2546,7 @@ class Three3DTilesLoader extends Loader {
 
 			// The "sledgehammer" fix for vanishing models (until this bug gets resolved)
 
-			if ( isImplicit || isV10Implicit ) {
+			if ( isImplicit || isV10Implicit || isQuantizedMesh ) {
 
 				tilesRenderer.displayActiveTiles = true;
 				const originalSetTileVisible = tilesRenderer.setTileVisible;
@@ -2548,7 +2593,7 @@ class Three3DTilesLoader extends Loader {
 
 				}
 
-				// 4. Center the model exactly at 0,0,0
+				// 4. Center the model exactly at 0, 0, 0
 				// We rotate the center point first so the translation accounts for the tilt
 
 				const offset = sphere.center.clone();
@@ -2670,10 +2715,33 @@ class Three3DTilesLoader extends Loader {
 
 					if ( child.isMesh ) {
 
+						if ( !child.material.userData.originalMaterialSide ) {
+
+							// Force a visible material
+							child.material = new THREE.MeshStandardMaterial( {
+								color: 0x888888,
+								roughness: 0.8,
+								metalness: 0.3,
+								wireframe: false,
+								side: THREE.DoubleSide,
+								flatShading: false
+							} );
+
+							child.material.needsUpdate = true;
+
+							// Ensure the renderer knows this mesh has positions and normals
+							child.castShadow = true;
+							child.receiveShadow = true;
+
+							child.material.userData.originalMaterialSide = 2;
+
+						}
+
+
 						const mats = Array.isArray( child.material ) ? child.material : [ child.material ];
 
 						mats.forEach( m => {
-
+/*
 							if ( !m.userData.originalMaterialSide ) m.userData.originalMaterialSide = m.side;
 
 							if ( materialSideChanged ) {
@@ -2693,7 +2761,7 @@ class Three3DTilesLoader extends Loader {
 									m.side = scope._materialSide;
 
 							}
-
+*/
 							if ( m && m.wireframe !== threedTile._wireframeMode ) {
 
 								m.wireframe = threedTile._wireframeMode;

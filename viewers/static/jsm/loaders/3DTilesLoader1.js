@@ -2655,7 +2655,7 @@ class Three3DTilesLoader extends Loader {
 					geometricErrorMultiplier: 0.5,
 					drawBoundingVolume: isImplicit,
 					maxCacheSize: scope._maxCacheSize,
-					loadingStrategy: isImplicit ? "IMMEDIATE" : "INCREMENTAL",
+					loadingStrategy: isImplicit ? "INCREMENTAL" : "PERLEVEL",
 					queryParams: scope._keyAPI !== '' ? { key: scope._keyAPI } : undefined,
 					headers: scope._token ? { Authorization: `Bearer ${ scope._token }` } : undefined,
 					onLoadCallback: tileset => { resolve( tileset ); }
