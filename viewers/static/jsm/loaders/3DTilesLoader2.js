@@ -2741,7 +2741,7 @@ class Three3DTilesLoader extends Loader {
 						const mats = Array.isArray( child.material ) ? child.material : [ child.material ];
 
 						mats.forEach( m => {
-/*
+
 							if ( !m.userData.originalMaterialSide ) m.userData.originalMaterialSide = m.side;
 
 							if ( materialSideChanged ) {
@@ -2761,7 +2761,7 @@ class Three3DTilesLoader extends Loader {
 									m.side = scope._materialSide;
 
 							}
-*/
+
 							if ( m && m.wireframe !== threedTile._wireframeMode ) {
 
 								m.wireframe = threedTile._wireframeMode;
