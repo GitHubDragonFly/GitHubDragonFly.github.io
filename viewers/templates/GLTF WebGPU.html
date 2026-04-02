@@ -102,15 +102,15 @@
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
       var tsl_texture, tsl_uv, tsl_equirectUV, texture_maps;
       var render_requested, flat_shading_enabled, filename;
-      var initial_opacity, initial_opacity_array, enable_opacity, png_decode;
-      var initial_transparency, initial_transparency_array, userData, rootPath;
+      var initial_opacity, initial_opacity_array, enable_opacity;
+      var initial_transparency, initial_transparency_array;
       var original_side, original_side_array, bgnd_linear_gradient, slider_height = 0;
       var lines_present, lines_visible, bounding_box, zip, outline_material;
       var local_files, local_files_indexes, zip_file, unzipped_files, filesMap;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
       var selected_gltf_file, selected_draco_file, selected_url_file = '';
-      var raycaster, mouse, mouseDownPos, raycastableObjects, featureHighlightMesh;
-      var pickedObject, selectedObject, hasMetadata, click_listener_added, png_decode;
+      var raycaster, mouse, mouseDownPos, raycastableObjects, featureHighlightMesh, rootPath;
+      var pickedObject, selectedObject, hasMetadata, click_listener_added, png_decode, userData;
       var vertex_colors_enabled, vertex_colors_present, original_vertex_colors, original_vertex_color_array;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
@@ -2447,57 +2447,25 @@
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it hopefully comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( gltf_obj );
-        let size = bounding_box.getSize( new THREE.Vector3() );
-        let center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        // Move to the center
+        default_camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        default_camera.lookAt( center );
 
-        if (center.x !== 0) gltf_obj.translateX( center.x );
-        if (center.y !== 0) gltf_obj.translateY( center.y );
-        if (center.z !== 0) gltf_obj.translateZ( center.z );
+        // Center root
+        gltf_obj.position.sub( center );
 
-        // Scale according to window width / height, whichever is greater
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        default_camera.position.set( 0, 0, dist );
+        default_camera.lookAt( 0, 0, 0 );
 
-        if (ww > wh) {
-          gltf_obj.scale.multiplyScalar( ( wh / size.y ) * 0.15 );
-        } else {
-          gltf_obj.scale.multiplyScalar( ( ww / size.x ) * 0.15 );
-        }
-
-        // Get center coordinates and move to the center again
-
-        bounding_box.setFromObject( gltf_obj );
-        size = bounding_box.getSize( new THREE.Vector3() );
-        center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
-
-        if (center.x !== 0) gltf_obj.translateX( center.x );
-        if (center.y !== 0) gltf_obj.translateY( center.y );
-        if (center.z !== 0) gltf_obj.translateZ( center.z );
-
-        // Scale again and re-center if the model's width / height is greater than the screen's width / height
-
-        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
-          gltf_obj.scale.multiplyScalar( ww / (ww > wh ? size.x : size.y) );
-
-          bounding_box.setFromObject( gltf_obj );
-          size = bounding_box.getSize( new THREE.Vector3() );
-          center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
-
-          if (center.x !== 0) gltf_obj.translateX( center.x );
-          if (center.y !== 0) gltf_obj.translateY( center.y );
-          if (center.z !== 0) gltf_obj.translateZ( center.z );
-        }
-
-        // Set the default camera's z distance
-
-        default_camera.position.z = bounding_box.max.z + 250;
-        default_camera.updateProjectionMatrix();
-
-        mouse_wheel = true;
+        resize();
       }
 
       function set_model_scale( scale ) {
@@ -2936,7 +2904,7 @@
             }
             else if (fn_uc.endsWith('.ZIP') && zip_file === null) { zip_file = i; }
             else {
-              if (local_files_indexes.length === 0 && img_extensions.some( ext => fn_uc.endsWith( ext ) )) {
+              if (img_extensions.some( ext => fn_uc.endsWith( ext ) )) {
                 local_files_indexes.push( i );
               }
 
@@ -2966,10 +2934,12 @@
 
         if (renderer === undefined) {
           try {
+            console.log( 'Creating main renderer...' );
             renderer = new THREE.WebGPURenderer( { antialias: true, alpha: true, outputType: isFirefoxNightly === true ? THREE.UnsignedByteType : THREE.HalfFloatType } );
             await renderer.init();
 
             // Renderer for decompress function
+            console.log( 'Creating decompression renderer...' );
             _renderer = new THREE.WebGPURenderer( { antialias: true, outputType: isFirefoxNightly === true ? THREE.UnsignedByteType : THREE.HalfFloatType } );
             await _renderer.init();
           } catch ( error ) {
@@ -3088,6 +3058,12 @@
 
       async function decodeBase64ToPixels( uri ) {
         const response = await fetch( uri );
+
+        if (!response.ok) {
+          console.warn( 'Failed to fetch url: ' + uri );
+          return null;
+        }
+
         const buff = await response.arrayBuffer();
         const imgData = await png_decode( buff );  // imported fast-png decoder
 
@@ -3130,20 +3106,24 @@
                 if (j === indx) {
                   const pixelData = await decodeBase64ToPixels( images[ indx ].uri );
 
-                  const tex = new THREE.DataTexture(
-                    pixelData.data,
-                    pixelData.width,
-                    pixelData.height,
-                    THREE.RGBAFormat
-                  );
+                  if (!pixelData) {
+                    userData.textures.push( null );
+                  } else {
+                    const tex = new THREE.DataTexture(
+                      pixelData.data,
+                      pixelData.width,
+                      pixelData.height,
+                      THREE.RGBAFormat
+                    );
 
-                  tex.needsUpdate = true;
+                    tex.needsUpdate = true;
 
-                  // Attach the raw data to the texture object
-                  // so we can read it instantly later
+                    // Attach the raw data to the texture object
+                    // so we can read it instantly later
 
-                  tex.userData.rawBuffer = pixelData.data;
-                  userData.textures.push( tex );
+                    tex.userData.rawBuffer = pixelData.data;
+                    userData.textures.push( tex );
+                  }
                 } else {
                   userData.textures.push( null );
                 }
@@ -3211,20 +3191,24 @@
                       if (i === value.index) {
                         const pixelData = await decodeBase64ToPixels( images[ value.index ].uri );
 
-                        const tex = new THREE.DataTexture(
-                          pixelData.data, 
-                          pixelData.width, 
-                          pixelData.height, 
-                          THREE.RGBAFormat
-                        );
+                        if (!pixelData) {
+                          ext.textures.push( null );
+                        } else {
+                          const tex = new THREE.DataTexture(
+                            pixelData.data, 
+                            pixelData.width, 
+                            pixelData.height, 
+                            THREE.RGBAFormat
+                          );
 
-                        tex.needsUpdate = true;
+                          tex.needsUpdate = true;
 
-                        // Attach the raw data to the texture object
-                        // so we can read it instantly later
+                          // Attach the raw data to the texture object
+                          // so we can read it instantly later
 
-                        tex.userData.rawBuffer = pixelData.data;
-                        ext.textures.push( tex );
+                          tex.userData.rawBuffer = pixelData.data;
+                          ext.textures.push( tex );
+                        }
                       } else {
                         ext.textures.push( null );
                       }
@@ -3754,10 +3738,9 @@
       }
 
       async function finish_loading() {
-        enable_disable( false );
+        frame_camera();
 
-        set_initial_scale();
-        resize();
+        enable_disable( false );
 
         let object_is_mesh = false;
         let hasGltfExtensions = false;
