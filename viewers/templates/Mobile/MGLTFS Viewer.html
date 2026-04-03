@@ -7,14 +7,62 @@
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
-    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running === true) handle_error( 'RESOURCE ERROR' );
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE: ' + event.reason );
+      });
+    </script>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.150.0/build/three.module.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/",
-          "meshoptimizer_decoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.24.0/meshopt_decoder.module.min.js"
+          "meshoptimizer_decoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_decoder.module.min.js",
+          "fast-png": "https://esm.sh/fast-png@8.0.0"
         }
       }
     </script>
@@ -28,26 +76,79 @@
       var variants, current_variant, variants_available, draco_material, isMobile;
       var gltfMaterialsVariantsExtension, gltfVideoTextureExtension;
       var manager, renderer, scene, clock, render_requested;
-      var default_camera, camera, cameras, cam_id;
+      var default_camera, camera, cameras, cam_id, init_running = false;
       var url_displayed = false, url_loading = false, texture_maps;
       var directionalLight, ww = window.innerWidth, wh = window.innerHeight;
-      var mouse_down, mouse_wheel, events_initialized, count = 0;
+      var mouse_down, mouse_wheel, events_initialized, count = 0, userData;
       var selected_gltf_file, selected_draco_file, selected_url_file = '';
-      var local_files, local_files_indexes, local_bin_files;
+      var local_files, local_files_indexes, local_bin_files, filesMap, rootPath;
+      var raycaster, mouse, mouseDownPos, raycastableObjects, featureHighlightMesh;
+      var pickedObject, selectedObject, hasMetadata, click_listener_added, png_decode;
+
+      const TYPE_COUNT_MAP = {
+        'SCALAR': 1,
+        'VEC2': 2,
+        'VEC3': 3,
+        'VEC4': 4,
+        'MAT2': 4,
+        'MAT3': 9,
+        'MAT4': 16
+      };
+
+      const COMPONENT_COUNT_MAP = {
+        'INT8': 1,
+        'UINT8': 1,
+        'INT16': 2,
+        'UINT16': 2,
+        'INT32': 4,
+        'UINT32': 4,
+        'INT64': 8,
+        'UINT64': 8,
+        'FLOAT32': 4,
+        'FLOAT64': 8
+      };
+
+      const COMPONENT_TYPE_MAP = {
+        'INT8': Int8Array,
+        'UINT8': Uint8Array,
+        'INT16': Int16Array,
+        'UINT16': Uint16Array,
+        'INT32': Int32Array,
+        'UINT32': Uint32Array,
+        'INT64': BigInt64Array,
+        'UINT64': BigUint64Array,
+        'FLOAT32': Float32Array,
+        'FLOAT64': Float64Array
+      };
+
+      const DATAVIEW_GETTER_MAP = {
+        INT8: 'getInt8',
+        UINT8: 'getUint8',
+        INT16: 'getInt16',
+        UINT16: 'getUint16',
+        INT32: 'getInt32',
+        UINT32: 'getUint32',
+        INT64: 'getBigInt64',
+        UINT64: 'getBigUint64',
+        FLOAT32: 'getFloat32',
+        FLOAT64: 'getFloat64'
+      };
     </script>
 
     <script type="module">
-      import * as three_js from "three";
-      import * as fflate_js from "three/addons/libs/fflate.module.min.js";
-      import { KTX2Loader } from "three/addons/loaders/KTX2Loader.min.js";
-      import { DRACOLoader } from "three/addons/loaders/DRACOLoader.min.js";
-      import { GLTFLoader } from "../../static/jsm/loaders/GLTFSLoader.min.js";
-      import { OrbitControls } from "../../static/jsm/controls/OrbitControls.min.js";
-      import GLTFVideoTextureExtension from "../../static/jsm/extensions/loaders/EXT_texture_video/EXT_texture_video.min.js";
-      import GLTFMaterialsVariantsExtension from "../../static/jsm/extensions/loaders/KHR_materials_variants/KHR_materials_variants.min.js";
+      import * as threejs from 'three';
+      import { decode } from 'fast-png';
+      import * as fflatejs from 'three/addons/libs/fflate.module.min.js';
+      import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.min.js';
+      import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.min.js';
+      import { GLTFLoader } from '../../static/jsm/loaders/GLTFSLoader.min.js';
+      import { OrbitControls } from '../../static/jsm/controls/OrbitControls.min.js';
+      import GLTFVideoTextureExtension from '../../static/jsm/extensions/loaders/EXT_texture_video/EXT_texture_video.min.js';
+      import GLTFMaterialsVariantsExtension from '../../static/jsm/extensions/loaders/KHR_materials_variants/KHR_materials_variants.min.js';
 
-      THREE = three_js;
-      fflate = fflate_js;
+      THREE = threejs;
+      fflate = fflatejs;
+      png_decode = decode;
 
       default_camera = new THREE.Object3D();
 
@@ -58,12 +159,12 @@
       gltfMaterialsVariantsExtension = GLTFMaterialsVariantsExtension;
 
       ktx2_loader = new KTX2Loader( manager );
-      ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/libs/basis/" );
+      ktx2_loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/libs/basis/' );
 
       manager.addHandler( /\.ktx2$/i, ktx2_loader );
 
       draco_loader = new DRACOLoader( manager );
-      draco_loader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/libs/draco/" );
+      draco_loader.setDecoderPath( 'https://cdn.jsdelivr.net/npm/three@0.150.0/examples/jsm/libs/draco/' );
       draco_loader.setDecoderConfig( { type: 'js' } );
       draco_loader.preload();
 
@@ -74,9 +175,39 @@
       orb_controls = OrbitControls;
     </script>
 
+    <style>
+      #metadata-card {
+        position: absolute;
+        display: none; /* Hidden by default */
+        background: rgba( 25, 25, 25, 0.9 );
+        color: #fff;
+        padding: 12px;
+        border-radius: 8px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 13px;
+        min-width: 180px;
+        max-width: 70vw;     /* Limits width to 70% of the screen */
+        max-height: 70vh;    /* Limits height to 70% of the screen */
+        overflow-x: auto;    /* Enables horizontal scroll */
+        overflow-y: auto;    /* Enables vertical scroll */
+        border: 1px solid #444;
+        box-shadow: 0 4px 15px rgba( 0, 0, 0, 0.5 );
+        pointer-events: auto;
+        z-index: 1000;
+      }
+
+      #metadata-card::-webkit-scrollbar { width: 6px; }
+      #metadata-card::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+      #metadata-card h4 { margin: 0 0 8px 0; color: #00d4ff; font-size: 11px; }
+      #metadata-card .prop-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+      #metadata-card .prop-label { color: #aaa; margin-right: 15px; }
+      #metadata-card .prop-value { font-weight: bold; color: #fff; }
+    </style>
+
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
     <!-- Using jQuery: https://github.com/jquery/jquery -->
+    <!-- When applicable, using fast-png decode function: https://github.com/image-js/fast-png -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
@@ -91,7 +222,7 @@
         <label for="btn_url" title="Get remote model via URL"></label>
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="btn_file_input" title="Browse Local Files"></label>
-        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".glb, .gltf, .vrm, .drc, .bin, .dds, .ktx2, .tga, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" multiple />
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".json, .glb, .gltf, .vrm, .drc, .bin, .dds, .ktx2, .tga, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" multiple />
         <label for="back_color" title="Background Color">B</label>
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
@@ -109,7 +240,7 @@
         <label for="btn_wireframe" title="Wireframe"></label>
         <button title="Switch Camera" id="btn_cameras" onclick="switch_camera();" style="min-width: 28px;" disabled>C0</button>
         <label for="btn_cameras" title="Switch Camera"></label>
-        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="min-width: 15px;" disabled>&#x2191</button>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
         <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
       </div>
       <div class="fm" id="url" style="display: none;">
@@ -124,6 +255,9 @@
 
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">GLTFS Viewer</div>
+    <div id="metadata-card"></div>
+
+    <div id="metadata_message" style="position: fixed; visibility: hidden; font-family: Monospace, Arial; color: #d1cefc; bottom: calc(env(safe-area-inset-bottom) + 15px); left: 5px; pointer-events: none;">Metadata Raycasting Enabled</div>
 
     <script>
       function hide_dropdown_dli() { $('#dc_dli').fadeOut(); mouse_wheel = true; }
@@ -172,18 +306,28 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
-        window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
+        window.addEventListener( 'pointerdown', (event) => {
+          mouse_down = true;
+          mouseDownPos.x = event.clientX;
+          mouseDownPos.y = event.clientY;
+        }, false);
         window.addEventListener( 'pointerup', (event) => { mouse_down = false; }, false);
         window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; }, false);
         window.addEventListener( 'keydown', ( event ) => {
+          if (event.key === 'Escape') hideUiPanel();
+
           if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
             controls.listenToKeyEvents( window );
+            activeKeys.add( event.key ); // Track this key
             mouse_wheel = true;
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
-          if (arrow_keys.some( k => k === event.key )) {
+          activeKeys.delete( event.key ); // Remove this key
+
+          if (controls && activeKeys.size === 0) {
             controls.stopListenToKeyEvents();
             mouse_wheel = false;
           }
@@ -222,57 +366,25 @@
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it hopefully comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( gltf_obj );
-        let size = bounding_box.getSize( new THREE.Vector3() );
-        let center = bounding_box.getCenter( new THREE.Vector3() );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        // Move to the center
+        default_camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        default_camera.lookAt( center );
 
-        if (center.x !== 0) gltf_obj.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) gltf_obj.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) gltf_obj.translateZ( center.z * ( - 1 ) );
+        // Center root
+        gltf_obj.position.sub( center );
 
-        // Scale according to window width / height, whichever is greater
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        default_camera.position.set( 0, 0, dist );
+        default_camera.lookAt( 0, 0, 0 );
 
-        if (ww > wh) {
-          gltf_obj.scale.multiplyScalar( ( wh / size.y ) * ( size.y < 0.018 ? 0.0005 : 1.0 ) );
-        } else {
-          gltf_obj.scale.multiplyScalar( ( ww / size.x ) * ( size.x < 0.018 ? 0.0005 : 1.0 ) );
-        }
-
-        // Get center coordinates and move to the center again
-
-        bounding_box.setFromObject( gltf_obj );
-        size = bounding_box.getSize( new THREE.Vector3() );
-        center = bounding_box.getCenter( new THREE.Vector3() );
-
-        if (center.x !== 0) gltf_obj.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) gltf_obj.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) gltf_obj.translateZ( center.z * ( - 1 ) );
-
-        // Scale again and re-center if the model's width / height is greater than the screen's width / height
-
-        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
-          gltf_obj.scale.multiplyScalar( ww / (ww > wh ? size.x : size.y) );
-
-          bounding_box.setFromObject( gltf_obj );
-          size = bounding_box.getSize( new THREE.Vector3() );
-          center = bounding_box.getCenter( new THREE.Vector3() );
-
-          if (center.x !== 0) gltf_obj.translateX( center.x * ( - 1 ) );
-          if (center.y !== 0) gltf_obj.translateY( center.y * ( - 1 ) );
-          if (center.z !== 0) gltf_obj.translateZ( center.z * ( - 1 ) );
-        }
-
-        // Set the default camera's z distance
-
-        default_camera.position.z = bounding_box.max.z + 1500;
-        default_camera.updateProjectionMatrix();
-
-        mouse_wheel = true;
+        resize();
       }
 
       function switch_camera() {
@@ -338,6 +450,8 @@
       async function init() {
         if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
 
+        init_running = true;
+
         if (scene) {
           mouse_wheel = true;
 
@@ -364,6 +478,10 @@
         selected_draco_file = null;
         mouse_down = false;
         mouse_wheel = true;
+        rootPath = '';
+        filesMap = {};
+        userData = {};
+        hasMetadata = false;
         local_files = null;
         local_bin_files = [];
         local_files_indexes = [];
@@ -375,7 +493,11 @@
         animation_mixer = null;
         animation_running = false;
         wireframe_enabled = false;
+        raycastableObjects = [];
         render_requested = false;
+        featureHighlightMesh = null;
+        click_listener_added = false;
+        mouseDownPos = { x: 0, y: 0 };
         bounding_box = new THREE.Box3();
 
         document.getElementById('btn_animate').disabled = true;
@@ -388,6 +510,12 @@
         document.getElementById('div_error').style.display = 'none';
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        manager.setURLModifier( function( url ) {
+          const file = filesMap[ url ];
+          if ( file ) return file;
+          return url;
+        });
 
         if (url_loading === false) {
           let image_extensions = [ '.AVIF', '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF', '.KTX2',
@@ -402,7 +530,20 @@
             if (fn_uc.endsWith('.GLB') || fn_uc.endsWith('.GLTF') || fn_uc.endsWith('.VRM')) { selected_gltf_file = i; }
             else if (fn_uc.endsWith('.DRC')) { selected_draco_file = i; }
             else if (fn_uc.endsWith('.BIN')) { local_bin_files.push( i ); }
-            else if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) { local_files_indexes.push( i ); }
+            else {
+              if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) {
+                local_files_indexes.push( i );
+              }
+
+              let url = URL.createObjectURL( local_files[ i ] );
+              URL.revokeObjectURL( local_files[ i ] );
+
+              let base = THREE.LoaderUtils.extractUrlBase( url );
+
+              fn_uc.endsWith('.JSON')
+               ? filesMap[ local_files[ i ].name ] = url
+               : filesMap[ base + local_files[ i ].name ] = url;
+            }
           };
 
           if (selected_gltf_file === null && selected_draco_file === null) {
@@ -511,27 +652,194 @@
         }
 
         if (scene.environment === null) {
-          let url = 'https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/textures/water.avif';
+          let url = 'https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/textures/equirectangular.png';
 
-          texture_loader.load( url, async function( texture ) {
-            texture.mapping = THREE.EquirectangularReflectionMapping;
-            texture.needsUpdate = true;
+          const tex = await texture_loader.loadAsync( url );
 
-            scene.environment = texture.clone();
-            scene.environmentIntensity = 0.15;
+          if (tex) {
+            tex.mapping = THREE.EquirectangularReflectionMapping;
+            tex.needsUpdate = true;
+
+            scene.environment = tex;
+            scene.environmentIntensity = 0.25;
 
             mouse_wheel = true;
 
-            texture.dispose();
-          }, function ( xhr ) {
-          }, function ( error ) {
-            console.log( 'Error Loading Scene Environment Image File!' );
-            console.log( error );
-          });
+            tex.dispose();
+          }
         }
 
         // Load DRACO or GLTF file
         (selected_gltf_file !== null) ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : loadURLFile() );
+      }
+
+      async function decodeBase64ToPixels( uri ) {
+        const response = await fetch( uri );
+
+        if (!response.ok) {
+          console.warn( 'Failed to fetch url: ' + uri );
+          return null;
+        }
+
+        const buff = await response.arrayBuffer();
+        const imgData = await png_decode( buff );  // imported fast-png decoder
+
+        return {
+          data: imgData.data,
+          width: imgData.width,
+          height: imgData.height
+        };
+      }
+
+      async function process_gltf_metadata( parser ) {
+        const json = parser.json;
+        const images = json.images;
+        let texture_indexes = [];
+
+        if (json.meshes?.length > 0) {
+          json.meshes.forEach( mesh => {
+            if (mesh.primitives?.length > 0) {
+              mesh.primitives.forEach( prim => {
+                if (prim.extensions?.EXT_mesh_features?.featureIds?.length > 0) {
+                  prim.extensions.EXT_mesh_features.featureIds.forEach( fid => {
+                    if (fid.texture?.index !== undefined) texture_indexes.push( fid.texture.index );
+                  });
+                }
+              });
+            }
+          });
+        }
+
+        if (texture_indexes.length > 0 && !userData.textures) {
+          const cleanSorted = texture_indexes.length === 1
+            ? texture_indexes
+            : [ ...new Set( texture_indexes ) ].sort( ( a, b ) => a - b );
+
+          userData[ 'textures' ] = [];
+
+          for ( const indx of cleanSorted ) {
+            if (images[ indx ] !== undefined && !userData.textures[ indx ]) {
+              for ( let j = 0; j < indx + 1; j++ ) {
+                if (j === indx) {
+                  const pixelData = await decodeBase64ToPixels( images[ indx ].uri );
+
+                  if (!pixelData) {
+                    userData.textures.push( null );
+                  } else {
+                    const tex = new THREE.DataTexture(
+                      pixelData.data,
+                      pixelData.width,
+                      pixelData.height,
+                      THREE.RGBAFormat
+                    );
+
+                    tex.needsUpdate = true;
+
+                    // Attach the raw data to the texture object
+                    // so we can read it instantly later
+
+                    tex.userData.rawBuffer = pixelData.data;
+                    userData.textures.push( tex );
+                  }
+                } else {
+                  userData.textures.push( null );
+                }
+              }
+            }
+          }
+        }
+
+        if (json.extensions?.EXT_structural_metadata) {
+          const ext = json.extensions.EXT_structural_metadata;
+
+          if (!ext.schema && ext.schemaUri !== undefined && ext.schemaUri.endsWith( '.json' )) {
+            try {
+              const response = await fetch( filesMap[ ext.schemaUri ] ? filesMap[ ext.schemaUri ] : rootPath + ext.schemaUri );
+
+              if (!response.ok) {
+                console.warn( 'Could not fetch schema!' );
+              } else {
+                const schema = await response.json();
+                ext[ 'schema' ] = schema;
+                delete ext.schemaUri;
+              }
+            } catch ( err ) {
+              console.warn( 'Error fetching schema: ' + err.message );
+            }
+          }
+
+          if (ext.propertyTables?.length > 0) {
+            for ( const table of ext.propertyTables ) {
+              // ATTACH DATA
+              for ( const [ propName, prop ] of Object.entries( table.properties ) ) {
+                // Hydrate Array Offsets
+                if (typeof prop.arrayOffsets === 'number') {
+                  const offsetIndex = prop.arrayOffsets;
+                  const offsetView = json.bufferViews[ offsetIndex ];
+                  prop.hydratedArrayOffsets = await parser.getDependency( 'bufferView', offsetIndex );
+                }
+
+                // Hydrate String Offsets
+                if (typeof prop.stringOffsets === 'number') {
+                  const offsetIndex = prop.stringOffsets;
+                  const offsetView = json.bufferViews[ offsetIndex ];
+                  prop.hydratedStringOffsets = await parser.getDependency( 'bufferView', offsetIndex );
+                }
+
+                // Hydrate the Values
+                if (typeof prop.values === 'number') {
+                  const bufferViewIndex = prop.values;
+                  const bufferView = json.bufferViews[ bufferViewIndex ];
+                  const bufferData = await parser.getDependency( 'bufferView', bufferViewIndex );
+                  prop.hydratedArray = bufferData;
+                }
+              }
+            }
+          }
+
+          if (ext.propertyTextures?.length > 0 && !ext.textures) {
+            ext[ 'textures' ] = [];
+
+            for ( const tex of ext.propertyTextures ) {
+              if (tex.properties && Object.entries( tex.properties ).length > 0) {
+                for ( const value of Object.values( tex.properties ) ) {
+                  if (value.index !== undefined && images[ value.index ] !== undefined && !ext.textures[ value.index ]) {
+                    for ( let i = 0; i < value.index + 1; i++ ) {
+                      if (i === value.index) {
+                        const pixelData = await decodeBase64ToPixels( images[ value.index ].uri );
+
+                        if (!pixelData) {
+                          ext.textures.push( null );
+                        } else {
+                          const tex = new THREE.DataTexture(
+                            pixelData.data, 
+                            pixelData.width, 
+                            pixelData.height, 
+                            THREE.RGBAFormat
+                          );
+
+                          tex.needsUpdate = true;
+
+                          // Attach the raw data to the texture object
+                          // so we can read it instantly later
+
+                          tex.userData.rawBuffer = pixelData.data;
+                          ext.textures.push( tex );
+                        }
+                      } else {
+                        ext.textures.push( null );
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+
+          userData[ 'structuralMetadata' ] = ext;
+        }
+
+        return Promise.resolve();
       }
 
       function loadFile() {
@@ -539,6 +847,8 @@
           URL.revokeObjectURL( local_files[ selected_gltf_file ] );
 
           cameras = gltf.cameras;
+
+          await process_gltf_metadata( gltf.parser );
 
           if (cameras && cameras.length > 0) {
             document.getElementById('btn_cameras').disabled = false;
@@ -777,12 +1087,16 @@
             selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
+          rootPath = selected_url_file.substring( 0, selected_url_file.lastIndexOf( '/' ) + 1 );
+
           // No extension checking for URL so it has to point to GLTF or GLB or DRC model
 
           console.log( 'Trying GLTF Loader...' );
 
           gltf_loader.load( selected_url_file, async gltf => {
             cameras = gltf.cameras;
+
+            await process_gltf_metadata( gltf.parser );
 
             if (cameras && cameras.length > 0) {
               document.getElementById('btn_cameras').disabled = false;
@@ -902,20 +1216,36 @@
       }
 
       async function finish_loading() {
+        frame_camera();
+
         enable_disable( false );
 
-        set_initial_scale();
-        resize();
-
         let object_is_mesh = false;
+        let hasGltfExtensions = false;
 
         gltf_obj.traverse( function( child ) {
           if (child.type === 'PointLight' || child.type === 'SpotLight') {
             child.intensity /= 10;
-          } else if (child.isMesh) {
-            object_is_mesh = true;
+          } else if (child.isMesh || child.isPoints || child.isLineSegments) {
+            if (child.userData?.gltfExtensions?.EXT_mesh_features || child.userData?.gltfExtensions?.EXT_instance_features) {
+              hasGltfExtensions = true;
+            }
+
+            if (userData.structuralMetadata !== undefined) {
+              child.userData.structuralMetadata = userData.structuralMetadata;
+            }
+
+            if (userData.textures?.length > 0) {
+              child.userData.textures = userData.textures;
+            }
+
+            if (child.isMesh) object_is_mesh = true;
           }
         });
+
+        if (userData.structuralMetadata !== undefined || hasGltfExtensions) {
+          hasMetadata = true;
+        }
 
         if (object_is_mesh === false) {
           document.getElementById('btn_wireframe').disabled = true;
@@ -930,19 +1260,48 @@
           disabled_changed();
         }
 
+        if (hasMetadata) {
+          document.getElementById('metadata_message').style.visibility = 'visible';
+          console.log( 'Metadata Raycasting Enabled' );
+
+          if (click_listener_added === false) {
+            window.addEventListener( 'click', handle_raycast_click );
+            click_listener_added = true;
+          }
+        } else {
+          if (click_listener_added) {
+            window.removeEventListener( 'click', handle_raycast_click );
+            click_listener_added = false;
+          }
+        }
+
         console.timeEnd( 'Loading Time' );
+
+        init_running = false;
+
         document.getElementById('div_loading').style.display = 'none';
 
         render_requested = true;
         mouse_wheel = true;
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+        if (!isMobile) {
+          await new Promise( resolve => setTimeout( log_info, 1000 ) );
+        } else {
+          await new Promise( resolve => setTimeout( hide_metadata_message, 3000 ) );
+        }
       }
 
-      function log_info() {
+      async function log_info() {
         console.log( 'Memory: ', renderer.info.memory );
         console.log( 'Render: ', renderer.info.render );
+
+        if (document.getElementById('metadata_message').style.visibility === 'visible')
+          await new Promise( resolve => setTimeout( hide_metadata_message, 3000 ) );
+      }
+
+      function hide_metadata_message() {
+        document.getElementById('metadata_message').style.visibility = 'hidden';
       }
 
       function handle_error( error ) {
@@ -953,14 +1312,1231 @@
         render_requested = false;
         enable_disable( true );
 
+        init_running = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
       }
 
-      function quick_x_rotation( angle ) {
-        gltf_obj.rotateX( Math.PI * parseFloat( angle ) );
+      function quick_x_rotation() {
+        gltf_obj.rotateX( - Math.PI / 2.0 );
 
         mouse_wheel = true;
+      }
+
+      function highlightFeatureInstanced( instanceId ) {
+        // 1. REUSE EVERYTHING
+        // Instead of a new mesh every time, we just reposition the one we have
+        if (!featureHighlightMesh || featureHighlightMesh?.geometry !== pickedObject.geometry) {
+          if (featureHighlightMesh) {
+            // Detach it from the old parent
+            if (featureHighlightMesh.parent) {
+              featureHighlightMesh.parent.remove( featureHighlightMesh );
+            }
+
+            featureHighlightMesh.traverse((child) => {
+              if (child.geometry) child.geometry.dispose();
+              if (child.material) child.material.dispose();
+            });
+
+            featureHighlightMesh = null;
+          }
+
+          const highlightGeo = pickedObject.geometry;
+
+          featureHighlightMesh = new THREE.Mesh(
+            highlightGeo,
+            new THREE.MeshBasicMaterial({
+              color: 0xf08080,
+              transparent: true,
+              opacity: 0.5,
+              depthTest: true,
+              depthWrite: false, 
+              polygonOffset: true,
+              polygonOffsetFactor: -1,
+              polygonOffsetUnits: -1
+            })
+          );
+
+          // Add the wireframe once
+          const wireframe = new THREE.LineSegments(
+            new THREE.EdgesGeometry( highlightGeo, 30 ),
+            new THREE.LineBasicMaterial( { color: 0xffffff } )
+          );
+
+          featureHighlightMesh.add( wireframe );
+        }
+
+        // THE TELEPORTATION
+        // Copy the specific instance's transform from the InstancedMesh
+        const matrix = new THREE.Matrix4();
+        pickedObject.getMatrixAt( instanceId, matrix );
+
+        // SYNC WITH PARENT
+        // If the InstancedMesh itself has a position/rotation, 
+        // we must account for it so the highlight doesn't fly off to space
+        featureHighlightMesh.matrix.copy( matrix );
+        featureHighlightMesh.matrixAutoUpdate = false; // We handle the matrix manually now
+        featureHighlightMesh.updateWorldMatrix( true, true );
+
+        // ATTACH
+        pickedObject.add( featureHighlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
+
+        featureHighlightMesh.visible = true;
+        featureHighlightMesh.frustumCulled = false;
+        featureHighlightMesh.children.forEach( child => child.frustumCulled = false );
+      }
+
+      function highlightFeature( highlight_id, attrName ) {
+        if (!attrName) return;
+
+        const geometry = pickedObject.geometry;
+
+        const indexAttr = geometry.index;
+        const featureAttr = geometry.getAttribute( attrName );
+        const positionAttr = geometry.getAttribute( 'position' );
+
+        if (!featureAttr || !indexAttr || !positionAttr) return;
+
+        // Find all triangles that belong to this highlight id
+        const activeIndices = [];
+
+        for ( let i = 0; i < indexAttr.count; i += 3 ) {
+          const a = indexAttr.getX( i );
+          const b = indexAttr.getX( i + 1 );
+          const c = indexAttr.getX( i + 2 );
+
+          // If the first vertex of the triangle matches the ID, we take the whole triangle
+          if ( a < featureAttr.count ) {
+            if (featureAttr.getX( a ) === highlight_id) {
+              activeIndices.push( a, b, c );
+            }
+          }
+        }
+
+        if (activeIndices.length === 0) return;
+
+        // Create a new "Slice" geometry
+        const highlightGeo = new THREE.BufferGeometry();
+        highlightGeo.setAttribute( 'position', positionAttr );
+        highlightGeo.setIndex( activeIndices );
+
+        // Create the overlay mesh
+        featureHighlightMesh = new THREE.Mesh(
+          highlightGeo,
+          new THREE.MeshBasicMaterial({
+            color: 0xf08080,
+            transparent: true,
+            opacity: 0.5,
+            side: THREE.DoubleSide,
+            depthTest: true,
+            depthWrite: false,   // Keeps the highlight from messing up the depth buffer for other transparents
+            polygonOffset: true, // Physically pushes the quad slightly toward the camera
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1
+          })
+        );
+
+        // Create the Wireframe Outline (The "Border")
+        const wireframeGeo = new THREE.EdgesGeometry( highlightGeo, 30 );
+        const wireframe = new THREE.LineSegments(
+          wireframeGeo,
+          new THREE.LineBasicMaterial( { color: 0xffffff, linewidth: 3 } ) // White border
+        );
+
+        // Add the wireframe to our highlight mesh so they move together
+        featureHighlightMesh.add( wireframe );
+
+        featureHighlightMesh.position.set( 0, 0, 0 );
+        featureHighlightMesh.rotation.set( 0, 0, 0 );
+        featureHighlightMesh.scale.set( 1, 1, 1 );
+        featureHighlightMesh.updateWorldMatrix( true, true );
+
+        // Sync transformation with the parent object
+        pickedObject.add( featureHighlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
+      }
+
+      function highlightPoint( pointIndex ) {
+        const geometry = pickedObject.geometry;
+        const positionAttr = geometry.getAttribute( 'position' );
+
+        if (!positionAttr || pointIndex === -1) return;
+
+        // 1. Get the local position of the clicked point
+        const x = positionAttr.getX( pointIndex );
+        const y = positionAttr.getY( pointIndex );
+        const z = positionAttr.getZ( pointIndex );
+
+        // 2. Create a small Cube (Box) to represent the highlight
+        // Adjust the size (0.05) based on your tileset scale
+        const boxSize = 0.05; 
+        const highlightGeo = new THREE.BoxGeometry( boxSize, boxSize, boxSize );
+
+        const highlightMat = new THREE.MeshBasicMaterial({
+          color: 0xf08080,
+          transparent: true,
+          opacity: 0.8,
+          depthTest: false // Makes it visible even if partially buried in other points
+        });
+
+        featureHighlightMesh = new THREE.Mesh( highlightGeo, highlightMat );
+
+        // 3. Position the cube at the point's coordinates
+        featureHighlightMesh.position.set( x, y, z );
+
+        // 4. Add a white wireframe outline for better visibility
+        const wireframeGeo = new THREE.EdgesGeometry( highlightGeo );
+
+        const wireframe = new THREE.LineSegments(
+          wireframeGeo,
+          new THREE.LineBasicMaterial( { color: 0xffffff } )
+        );
+
+        featureHighlightMesh.add( wireframe );
+        featureHighlightMesh.updateWorldMatrix( true, true );
+
+        // 5. Attach it to the picked object so it moves with the tileset
+        pickedObject.add( featureHighlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
+      }
+
+      function highlightLine( lineIndex ) {
+        const geometry = pickedObject.geometry;
+        const positionAttr = geometry.getAttribute( 'position' );
+        const indexAttr = geometry.index;
+
+        if (!positionAttr || lineIndex === undefined) return;
+
+        const activePositions = [];
+
+        // 1. Identify the segment vertices
+        // If the geometry is indexed (common in 3D Tiles), we use the index buffer
+        if (indexAttr) {
+          // For LineSegments, a segment is [ i, i + 1 ]
+          // We find the start of the segment based on the click index
+          const startIdx = Math.floor( lineIndex / 2.0 ) * 2;
+          const idxA = indexAttr.getX( startIdx );
+          const idxB = indexAttr.getX( startIdx + 1 );
+
+          const vA = new THREE.Vector3().fromBufferAttribute( positionAttr, idxA );
+          const vB = new THREE.Vector3().fromBufferAttribute( positionAttr, idxB );
+
+          activePositions.push( vA.x, vA.y, vA.z, vB.x, vB.y, vB.z );
+        } else {
+          // Non-indexed: the click index is the vertex itself
+          const startIdx = Math.floor( lineIndex / 2.0 ) * 2;
+
+          activePositions.push(
+            positionAttr.getX( startIdx ), positionAttr.getY( startIdx ), positionAttr.getZ( startIdx ),
+            positionAttr.getX( startIdx + 1 ), positionAttr.getY( startIdx + 1 ), positionAttr.getZ( startIdx + 1 )
+          );
+        }
+
+        // 2. Create the highlight geometry
+        const highlightGeo = new THREE.BufferGeometry();
+        highlightGeo.setAttribute( 'position', new THREE.Float32BufferAttribute( activePositions, 3 ) );
+
+        // 3. Create a thick, glowing Line material
+        // Note: Standard LineBasicMaterial doesn't support 'linewidth' > 1 in many browsers (WebGL limitation)
+        // But we'll use a bright color and depthTest: false to make it pop.
+        const highlightMat = new THREE.LineBasicMaterial({
+          color: 0xf08080,
+          linewidth: 5, // Works on some systems, ignored on others
+          transparent: true,
+          opacity: 1.0,
+          depthTest: false 
+        });
+
+        featureHighlightMesh = new THREE.LineSegments( highlightGeo, highlightMat );
+        featureHighlightMesh.updateWorldMatrix( true, true );
+
+        // 4. Attach to the parent
+        pickedObject.add( featureHighlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
+      }
+
+      function popup_card_cleanup() {
+        const card = document.getElementById('metadata-card');
+
+        if (card) {
+          card.scrollTop = 0;
+          card.scrollLeft = 0;
+          card.innerHTML = '';
+          card.style.display = 'none';
+        }
+
+        // Clean up previous highlight
+        if (featureHighlightMesh) {
+          // Detach it from the old parent
+          if (featureHighlightMesh.parent) {
+            featureHighlightMesh.parent.remove( featureHighlightMesh );
+          }
+
+          if (pickedObject?.isInstancedMesh) {
+            featureHighlightMesh.visible = false;
+          } else {
+            // Clean up the children (the wireframe)
+            featureHighlightMesh.traverse( ( child ) => {
+              if (child.geometry) child.geometry.dispose();
+              if (child.material) child.material.dispose();
+            });
+
+            featureHighlightMesh = null;
+          }
+        }
+
+        // --- RESTORE PREVIOUS SELECTION ---
+        if (selectedObject?.material?.emissive !== undefined) {
+          const oldColor = selectedObject.userData.originalEmissive || new THREE.Color( 0x000000 );
+          selectedObject.material.emissive.copy( oldColor );
+        }
+
+        selectedObject = null;
+        mouse_wheel = true;
+        return;
+      }
+
+      function handle_raycast_click( event ) {
+        popup_card_cleanup();
+
+        if (event.target.closest( '#fixed_menu' ) || event.target.closest( '#right_gui_position' )) {
+          return;
+        }
+
+        const deltaX = Math.abs( event.clientX - mouseDownPos.x );
+        const deltaY = Math.abs( event.clientY - mouseDownPos.y );
+        if (deltaX > 5 || deltaY > 5) return;
+
+        if (!raycaster) {
+          raycaster = new THREE.Raycaster();
+          raycaster.params.Points.threshold = 0.05;
+        }
+
+        if (!mouse) mouse = new THREE.Vector2();
+
+        const HIGHLIGHT_COLOR = new THREE.Color( 0xf08080 );
+
+        mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+        mouse.y = -( event.clientY / window.innerHeight ) * 2 + 1;
+
+        raycaster.setFromCamera( mouse, default_camera );
+
+        const targets = raycastableObjects.length > 0 ? raycastableObjects : scene.children;
+        const intersects = raycaster.intersectObjects( targets, true );
+
+        if (intersects.length === 0) return;
+
+        const visibleIntersects = intersects.filter( hit => hit.object.visible );
+        if (visibleIntersects.length === 0) return;
+
+        const intersect = visibleIntersects[ 0 ];
+        pickedObject = intersect.object;
+        selectedObject = pickedObject;
+
+        // QUICK GUARD: Ensure geometry and attributes exist before we dig in
+        if (!pickedObject.geometry) return;
+
+        // Prepare Material for highlighting
+        if (selectedObject.material && selectedObject.material.emissive) {
+          if (selectedObject.userData.originalEmissive === undefined) {
+            selectedObject.userData.originalEmissive = selectedObject.material.emissive.clone();
+          }
+
+          // Ensure we only highlight this specific instance
+          if (!selectedObject.userData.hasUniqueMaterial) {
+            selectedObject.material = selectedObject.material.clone();
+            selectedObject.userData.hasUniqueMaterial = true;
+          }
+
+          selectedObject.material.emissive.copy( HIGHLIGHT_COLOR );
+        }
+
+        const isInstanced = pickedObject.isInstancedMesh;
+
+        const object_userData = pickedObject.userData || {};
+        const extensions = object_userData.gltfExtensions || {};
+        const structuralMetadata = object_userData.structuralMetadata;
+
+        const schema = object_userData.schema || structuralMetadata?.schema;
+
+        const meshFeatures = extensions.EXT_mesh_features || extensions.EXT_instance_features;
+
+        const featureMetadataList = [];
+        let highlightId = null;
+        let highlightAttributeName = null;
+
+        let vertexIndex = -1;
+
+        if (pickedObject.isPoints || pickedObject.isLine) {
+          vertexIndex = intersect.index;
+        } else if (isInstanced) {
+          vertexIndex = intersect.instanceId;
+        } else if (intersect.face) {
+          vertexIndex = intersect.face.a;
+        }
+
+        function getMetadataString( prop, featureId ) {
+          if ( !prop.hydratedArray || !prop.hydratedStringOffsets ) return 'No Data';
+
+          const data    = prop.hydratedArray;
+          const offsets = prop.hydratedStringOffsets;
+
+          // 1. Interpret offsets as UINT32
+          const offset32  = new Uint32Array( offsets );
+
+          if ( featureId < 0 || featureId >= offset32.length - 1 ) {
+            return 'No Data';
+          }
+
+          const start = offset32[ featureId ];
+          const end   = offset32[ featureId + 1 ];
+
+          if ( start === end || start < 0 || end > data.byteLength ) {
+            return 'No Data';
+          }
+
+          // 2. Slice data[ start:end ] as UTF‑8
+          const stringBuffer = new Uint8Array( data, start, end - start );
+          return new TextDecoder().decode( stringBuffer );
+        }
+
+        function getStride( type, componentType ) {
+          const numComponents = TYPE_COUNT_MAP[ type ] || 1;
+          const bytesPerComponent = COMPONENT_COUNT_MAP[ componentType ] || 1;
+          return numComponents * bytesPerComponent;
+	}
+
+        function readBinaryValue( binary, offset, type, componentType, rowIndex = 0 ) {
+          // 1. Ensure we use the sliced buffer view correctly
+          const view = new DataView( binary.buffer, binary.byteOffset, binary.byteLength );
+
+          // 2. Handle Booleans (Bitstream)
+          if ( type === 'BOOLEAN' ) {
+            const byteOffset = offset + Math.floor( rowIndex / 8 );
+            const bitIndex = rowIndex % 8;
+            return ( ( view.getUint8( byteOffset ) >> bitIndex ) & 1 ) === 1;
+          }
+
+          // 3. Lookup mapping
+          const cType = componentType.toUpperCase();
+          const bytesPerComponent = COMPONENT_COUNT_MAP[ cType ] || 1;
+          const numComponents = TYPE_COUNT_MAP[ type ] || 1;
+          const stride = bytesPerComponent * numComponents;
+          const method = DATAVIEW_GETTER_MAP[ cType ];
+
+          if ( !method ) return null;
+
+          // 4. Calculate absolute byte position in the slice
+          const rowStart = offset + ( rowIndex * stride );
+          const results = [];
+
+          for ( let i = 0; i < numComponents; i++ ) {
+            const currentOffset = rowStart + ( i * bytesPerComponent );
+
+            // Safety check for buffer overflow
+            if ( currentOffset + bytesPerComponent > view.byteLength ) {
+              results.push( 0 );
+              continue;
+            }
+
+            // Use the map to call the DataView method
+            results.push( view[ method ]( currentOffset, true ) ); // true = Little Endian
+          }
+
+          return type === 'SCALAR' ? results[ 0 ] : results;
+        }
+
+        function readArrayProperty( propDef, propData, featureId, numFeatures ) {
+          const rawBuffer = propData.hydratedArray;
+          if (!rawBuffer) return 'N/A';
+
+          const rawBytes = rawBuffer instanceof ArrayBuffer
+            ? new Uint8Array( rawBuffer )
+            : rawBuffer;
+
+          const view = new DataView( rawBytes.buffer, 0, rawBytes.length );
+          const stride = getStride( propDef.type, propDef.componentType );
+
+          let numElements = 0;
+          let startElement = 0;
+
+          // 1. Variable-length arrays: element‑index offsets
+          if (propData.hydratedArrayOffsets) {
+            const offsetBytes = new Uint8Array( propData.hydratedArrayOffsets );
+            const offset32 = new Uint32Array( offsetBytes.buffer, 0, 5 );
+
+            if (featureId < 0 || featureId >= offset32.length - 1) return 'N/A';
+
+            const start = offset32[ featureId ];
+            const end   = offset32[ featureId + 1 ];
+            startElement = start;
+            numElements = end - start;
+          }
+          // 2. Fixed-length arrays
+          else if (propDef.array && propDef.count !== undefined) {
+            numElements = propDef.count;
+            startElement = featureId * numElements;
+          }
+
+          if (numElements <= 0) return [];
+
+          const values = [];
+
+          // 4. STRING array
+          if (propDef.type === 'STRING' && propData.hydratedStringOffsets) {
+            const stringBytes = new Uint8Array( propData.hydratedStringOffsets );
+            const stringOffset32 = new Uint32Array( stringBytes.buffer, 0 );
+
+            for ( let i = 0; i < numElements; i++ ) {
+              const idx = startElement + i;
+              const s = stringOffset32[ idx ];
+              const e = stringOffset32[ idx + 1 ] || rawBytes.length;
+
+              if (s >= rawBytes.length || e > rawBytes.length) continue;
+
+              const stringBuffer = new Uint8Array( rawBytes.buffer, s, e - s );
+              values.push( new TextDecoder().decode( stringBuffer ) );
+            }
+
+            return values;
+          }
+
+          // 5. BOOLEAN array
+          if (propDef.type === 'BOOLEAN') {
+            for ( let i = 0; i < numElements; i++ ) {
+              const elementIndex = startElement + i;
+              const val = readBinaryValue( rawBytes, 0, propDef.type, 'UINT8', elementIndex );
+              values.push( val );
+            }
+
+            return values;
+          }
+
+          // 6. ENUM array
+          if (propDef.type === 'ENUM') {
+            const enumDef = schema.enums?.[ propDef.enumType ];
+
+            // If componentType is missing default to UINT8 or UINT16
+            const cType = propDef.componentType || (rawBytes.byteLength >= (numFeatures * numElements * 2) ? 'UINT16' : 'UINT8');
+
+            for ( let i = 0; i < numElements; i++ ) {
+              const elementIndex = startElement + i;
+              const enumIndex = readBinaryValue( rawBytes, 0, 'SCALAR', cType, elementIndex );
+
+              // Map the index to the Name string
+              const entry = enumDef?.values.find( v => v.value === enumIndex );
+              values.push( entry ? entry.name : `Unknown(${ enumIndex })` );
+            }
+
+            return values; 
+          }
+
+          // 7. Generic numeric array (SCALAR / VEC / MAT)
+          for ( let i = 0; i < numElements; i++ ) {
+            const elementIndex = startElement + i;
+            const val = readBinaryValue( rawBytes, 0, propDef.type, propDef.componentType, elementIndex );
+
+            // Normalize if needed
+            if (propDef.componentType === 'UINT8' && propDef.normalized) {
+              const normalized = Array.isArray( val )
+                ? val.map( v => Math.round( ( v / 255.0 ) * 100 ) / 100 )
+                : Math.round( ( val / 255.0 ) * 100 ) / 100;
+
+              values.push( normalized );
+            } else {
+              values.push( val );
+            }
+          }
+
+          return values;
+        }
+
+        function readBinaryPropertyValue( propDef, propData, featureId, propName ) {
+          const rawBuffer = propData.hydratedArray;
+          if (!rawBuffer) return 'N/A';
+
+          // STRING PROPERTIES
+          if (propDef?.type === 'STRING' || propData.stringOffsets !== undefined) {
+            return getMetadataString( propData, featureId );
+          }
+
+          // NUMERIC PROPERTIES
+          const elementCount = TYPE_COUNT_MAP[ propDef?.type ] || 1;
+          let bytesPerElement = 4; // Float32 default
+
+          if (propDef?.componentType) {
+            bytesPerElement = COMPONENT_TYPE_MAP[ propDef.componentType ].BYTES_PER_ELEMENT;
+          }
+
+          const view = new DataView( rawBuffer );
+          const byteOffset = featureId * bytesPerElement * elementCount;
+
+          if (byteOffset + ( bytesPerElement * elementCount ) > view.byteLength) {
+            console.warn( `Overflow: ${ propName } offset=${ byteOffset }, len=${ view.byteLength }` );
+            return 'N/A';
+          }
+
+          const method = propDef?.componentType ? DATAVIEW_GETTER_MAP[ propDef.componentType ] : 'getFloat32';
+          if (!method) return 'N/A';
+
+          const values = [];
+
+          for ( let i = 0; i < elementCount; i++ ) {
+            const offset = byteOffset + ( i * bytesPerElement );
+            values.push( view[ method ]( offset, true ) );
+          }
+
+          return propDef?.type === 'SCALAR' ? values[ 0 ] : values;
+        }
+
+        function getFeatureIdFromTexture( texture, uv, channel ) {
+          const buffer = texture.userData.rawBuffer;
+          if (!buffer) return 0;
+
+          const w = texture.image.width;
+          const h = texture.image.height;
+
+          const x = Math.floor( uv.x * ( w - 0.001 ) );
+          const y = Math.floor( uv.y * ( h - 0.001 ) );
+
+          // RGBA = 4 bytes per pixel
+          const index = ( y * w + x ) * 4;
+
+          const rawValue = buffer[ index + channel ];
+
+          return rawValue;
+        }
+
+        function getPropertyFromTexture( metadata, propertyName, uv, className ) {
+          if (!metadata.structuralMetadata) return 0;
+          if (!metadata.structuralMetadata.textures) return 0;
+          if (!metadata.structuralMetadata.propertyTextures) return 0;
+
+          const propertyTextures = metadata.structuralMetadata.propertyTextures;
+          const propTex = propertyTextures.find( pt => pt.properties[ propertyName ] );
+
+          const textures = metadata.structuralMetadata.textures;
+          const texture = textures[ propTex.properties[ propertyName ].index ];
+
+          const buffer = texture.userData.rawBuffer;
+          if (!buffer) return 0;
+
+          const w = texture.image.width;
+          const h = texture.image.height;
+
+          const x = Math.floor( uv.x * ( w - 0.001 ) );
+          const y = Math.floor( uv.y * ( h - 0.001 ) );
+
+          // RGBA = 4 bytes per pixel
+          const index = ( y * w + x ) * 4;
+
+          const channels = propTex.properties[ propertyName ].channels || [ 0 ];
+          let rawValue = buffer[ index + channels[ 0 ] ];
+
+          // Normalize if needed
+          const propDef = schema?.classes?.[ className ]?.properties?.[ propertyName ];
+
+          if (propDef?.normalized) {
+            rawValue = Array.isArray( rawValue )
+              ? rawValue.map( v => Math.round( ( v / 255.0 ) * 100 ) / 100 )
+              : Math.round( ( rawValue / 255.0 ) * 100 ) / 100;
+          }
+
+          return rawValue * (propDef?.scale ?? 1) + (propDef?.offset ?? 0);
+        }
+
+        function addPropertyTableMetadata( tableIndex, attributeIndex = null, featureId, numFeatures ) {
+          const table = structuralMetadata?.propertyTables?.[ tableIndex ];
+          if (!table || featureId === undefined || featureId === null) return;
+
+          // BOUNDS CHECK - prevent reading past table.count
+          if (featureId < 0 || featureId >= table.count) {
+            console.warn( `Feature ID ${ featureId } out of bounds for table ${ tableIndex } (count: ${ table.count })` );
+            return;
+          }
+
+          const className = table.class || `PropertyTable ${ tableIndex }`;
+          const properties = {};
+
+          if (table.properties && schema?.classes?.[ table.class ]) {
+            const classDef = schema.classes[ table.class ];
+
+            for ( const [ key, propData ] of Object.entries( table.properties ) ) {
+              const propDef = classDef.properties?.[ key ];
+              if (!propDef) continue;
+
+              // Safe read with bounds check
+              try {
+                if (propDef.array) {
+                  properties[ key ] = readArrayProperty( propDef, propData, featureId, numFeatures );
+                } else if (propDef.type === 'STRING' || propData.stringOffsets !== undefined) {
+                  properties[ key ] = getMetadataString( propData, featureId );
+                } else {
+                  properties[ key ] = readBinaryPropertyValue( propDef, propData, featureId, key );
+                }
+              } catch ( err ) {
+                console.warn( `Failed to read property ${ key } for feature ${ featureId }: `, err.message );
+                properties[ key ] = 'N/A';
+              }
+            }
+
+            if (attributeIndex !== null) properties.Attribute = attributeIndex;
+            isInstanced ? properties.InstanceId = vertexIndex : properties.VertexId = vertexIndex;
+            properties.ID = featureId;
+          }
+
+          featureMetadataList.push( { class: className, properties } );
+        }
+
+        let featureId, attributeName;
+
+        if (meshFeatures?.featureIds?.length > 0) {
+          for ( let i = 0; i < meshFeatures.featureIds.length; i++ ) {
+            const info = meshFeatures.featureIds[ i ];
+            const numFeatures = info.featureCount;
+            const featureIdIndex = info.attribute;
+            const className = info.label || (featureIdIndex ? `Feature ${ featureIdIndex }` : 'Feature');
+
+            const attrName1 = `_feature_id_${ featureIdIndex }`;
+            const attrName2 = `_FEATURE_ID_${ featureIdIndex }`;
+
+            attributeName = pickedObject.geometry.hasAttribute( attrName1 )
+              ? attrName1
+              : pickedObject.geometry.hasAttribute( attrName2 )
+                ? attrName2
+                : '';
+
+            const featureIdAttr = pickedObject.geometry.getAttribute( attributeName );
+
+            if (info.texture !== undefined) {
+              const texInfo = info.texture;
+              const idTexture = object_userData.textures?.[ texInfo.index ];
+
+              if (idTexture && intersect.uv) {
+                featureId = getFeatureIdFromTexture( idTexture, intersect.uv, texInfo.channels?.[ 0 ] || 0 );
+              }
+            } else if (featureIdAttr) {
+              if (isInstanced && intersect.instanceId !== undefined) {
+                featureId = featureIdAttr.getX( intersect.instanceId );
+              } else if (intersect.face) {
+                featureId = featureIdAttr.getX( intersect.face.a );
+              } else if (intersect.index !== undefined) {
+                featureId = featureIdAttr.getX( intersect.index );
+              }
+            }
+
+            const featureId_ok = (featureId !== null && featureId !== undefined && featureId !== info.nullFeatureId);
+
+            if (!highlightAttributeName && attributeName && featureId_ok) {
+              highlightAttributeName = attributeName;
+              if (highlightId === null || highlightId === undefined) highlightId = isInstanced ? vertexIndex : featureId;
+            }
+
+            if (info.propertyTable !== undefined) {
+              addPropertyTableMetadata( info.propertyTable, featureIdIndex, featureId, numFeatures );
+            } else {
+              const fid_properties = {};
+              if (featureIdIndex) fid_properties.Attribute = featureIdIndex;
+              isInstanced ? fid_properties.InstanceId = vertexIndex : fid_properties.VertexId = vertexIndex;
+              fid_properties.ID = featureId;
+
+              if (info.texture !== undefined && intersect.uv) {
+                fid_properties.UV_Coord = new THREE.Vector2( intersect.uv.x, intersect.uv.y );
+              }
+
+              featureMetadataList.push({
+                class: className,
+                properties: fid_properties
+              });
+            }
+          }
+        }
+
+        if (structuralMetadata) {
+          if (vertexIndex !== -1 && structuralMetadata.propertyAttributes?.length > 0) {
+            structuralMetadata.propertyAttributes.forEach( attrib => {
+              const className = attrib.class || 'PropertyAttribute';
+              const pa_properties = {};
+
+              for ( const [ key, value ] of Object.entries( attrib.properties || {} ) ) {
+                const attrName = value.attribute;
+                if (!attrName) continue;
+
+                const attr =
+                  pickedObject.geometry.getAttribute( attrName.toLowerCase() ) ||
+                  pickedObject.geometry.getAttribute( attrName.toUpperCase() );
+
+                if (attr) {
+                  pa_properties[ key ] = attr.getX( vertexIndex );
+                }
+              }
+
+              if (Object.keys( pa_properties).length > 0) {
+                pa_properties.VertexId = vertexIndex;
+                if (featureId) pa_properties.ID = featureId;
+                featureMetadataList.push( { class: className, properties: pa_properties } );
+              }
+
+              if (highlightId === null || highlightId === undefined) highlightId = vertexIndex;
+            });
+          }
+
+          if (vertexIndex !== -1 && structuralMetadata.propertyTextures?.length > 0 && intersect.uv) {
+            structuralMetadata.propertyTextures.forEach( texture => {
+              const className = texture.class || 'PropertyTexture';
+              const pt_properties = {};
+
+              for ( const propName of Object.keys( texture.properties || {} ) ) {
+                const val = getPropertyFromTexture( object_userData, propName, intersect.uv, className );
+                if (val !== undefined) pt_properties[ propName ] = val;
+              }
+
+              if (Object.keys( pt_properties ).length > 0) {
+                pt_properties.UV_Coord = new THREE.Vector2( intersect.uv.x, intersect.uv.y );
+                if (featureId) pt_properties.ID = featureId;
+                featureMetadataList.push( { class: className, properties: pt_properties } );
+              }
+            });
+          }
+        }
+
+        if (featureMetadataList.length > 0) {
+          // Restore color
+          if (selectedObject?.material?.emissive) {
+            selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
+          }
+
+          if (pickedObject.isInstancedMesh) {
+            highlightFeatureInstanced( highlightId );
+          } else if (pickedObject.isPoints) {
+            highlightPoint( highlightId );
+          } else if (pickedObject.isLine) {
+            highlightLine( highlightId );
+          } else if (pickedObject.isMesh && highlightAttributeName) {
+            highlightFeature( highlightId, highlightAttributeName );
+          }
+
+          showUiPanel(
+            { ...pickedObject.userData.metadata, featureMetadata: featureMetadataList },
+            event,
+            schema,
+            pickedObject.name,
+            false
+          );
+
+          return;
+        }
+
+        if (pickedObject.geometry.hasAttribute( '_batchid' )) {
+          if (vertexIndex === undefined || vertexIndex === null) return;
+
+          const batchId = pickedObject.geometry.attributes._batchid.getX( vertexIndex );
+          const batchTable = pickedObject.batchTable || pickedObject.parent?.batchTable;
+
+          const properties = { VertexId: vertexIndex, ID: batchId };
+          let className = 'BatchId';
+
+          if (batchTable) {
+            className = 'Batch Table';
+
+            if (batchTable.header) {
+              for ( const key in batchTable.header ) {
+                const attributeArray = batchTable.header[ key ];
+
+                if (Array.isArray( attributeArray ) && attributeArray.length > batchId) {
+                  properties[ key ] = attributeArray[ batchId ];
+                }
+              }
+            } else if (typeof batchTable.getPropertyNames === 'function') {
+              for ( const key of batchTable.getPropertyNames() ) {
+                const val = batchTable.getProperty( batchId, key );
+
+                if (val !== undefined && val !== null) {
+                  properties[ key ] = val;
+                }
+              }
+            }
+          }
+
+          featureMetadataList.push( { class: className, properties } );
+          highlightFeature( batchId, '_batchid' );
+
+          showUiPanel(
+            { ...pickedObject.userData.metadata, featureMetadata: featureMetadataList },
+            event,
+            schema,
+            pickedObject.name,
+            false
+          );
+
+          return;
+        }
+
+        const data = object_userData.metadata;
+        const tilesetMetadataOnly = !data && !!pickedObject.parent;
+
+        if (( data && !data.empty ) || tilesetMetadataOnly) {
+          showUiPanel( data, event, schema, pickedObject.name, tilesetMetadataOnly, pickedObject.type );
+        }
+      }
+
+      function showUiPanel( data, event, schema = null, meshName = '', tilesetMetadataOnly = false, type = '' ) {
+        const card = document.getElementById('metadata-card');
+        if (!card) return;
+
+        // Enhanced resolver to handle the complex types in new JSON
+
+        function formatArray( arr ) {
+          if (arr.length === 0) return '[]';
+
+          // If it's an array of objects
+          if (typeof arr[ 0 ] === 'object' && arr[ 0 ] !== null) {
+            return arr.map( ( item, idx ) => {
+              let itemHtml = `<div style="margin: 4px 0 4px 5px; padding-left: 8px; border-left: 2px solid #00d4ff; background: rgba(0,212,255,0.05);">`;
+              itemHtml += `<div style="font-size: 9px; color: #00d4ff; opacity: 0.7;">Part ${idx + 1}</div>`;
+
+              for ( const [ sk, sv ] of Object.entries( item ) ) {
+                const cleanSv = ( typeof sv === 'number' )
+                  ? ( Number.isInteger( sv ) ? sv : sv.toFixed( 2 ) )
+                  : sv;
+
+                itemHtml += `<div style="font-size: 11px;"><span style="color: #666;">${sk}:</span> ${cleanSv}</div>`;
+              }
+
+              itemHtml += `</div>`;
+              return itemHtml;
+            }).join('');
+          }
+    
+          // If it's a simple array (like [1, 2, 3])
+          return `[ ${arr.map( v => {
+            if ( typeof v === 'number' ) {
+              return ( Number.isInteger( v ) ? v : v.toFixed( 2 ) );
+            }
+
+            return String( v );
+          }).join( ', ' )} ]`;
+        }
+
+        const resolveValue = ( className, propName, val ) => {
+          let processedVal = val;
+
+          // Handle Three.js math objects (from interpolation)
+          if (processedVal && typeof processedVal === 'object') {
+            if (processedVal.isVector3) {
+              return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )}, ${processedVal.z.toFixed( 2 )})`;
+            }
+
+            if (processedVal.isVector2) {
+              return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )})`;
+            }
+
+            if (processedVal.isColor) {
+              return `RGB(${processedVal.r.toFixed( 2 )}, ${processedVal.g.toFixed( 2 )}, ${processedVal.b.toFixed( 2 )})`;
+            }
+          }
+
+          const propDef = schema?.classes?.[ className ]?.properties?.[ propName ];
+
+          // Pre-check: If it's a string that looks like an array but isn't parsed
+          // This handles the "[One, Two]" or "[true, false]" strings
+          if (typeof processedVal === 'string' &&
+            ((processedVal.startsWith( '{' ) && processedVal.endsWith( '}' )) ||
+             (processedVal.startsWith( '[' ) && processedVal.endsWith( ']' )))) {
+
+            try {
+              // Try JSON parse first (handles ["One", "Two"])
+              processedVal = JSON.parse( processedVal );
+            } catch ( e ) {
+              // Manual fallback for unquoted strings like [One, Two]
+              processedVal = processedVal.slice( 1, -1 ).split( ',' ).map( s => s.trim() );
+            }
+          }
+
+          if (processedVal === null || processedVal === undefined) return 'N/A';
+
+          // A. Handle Arrays (The core of EXT_structural_metadata)
+          if (Array.isArray( processedVal )) {
+            if (processedVal.length === 0) return '[]';
+
+            // Handle ENUM Arrays
+            if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
+              const enumValues = schema.enums[ propDef.enumType ].values;
+              return `[ ${processedVal.map( v => {
+                // Look up by integer value (0, 1, 2) or by string name
+                const entry = enumValues.find( e => e.value == v || e.name === v );
+                return entry ? entry.name : v;
+              }).join(', ')} ]`;
+            }
+
+            // General Array (Booleans, Strings, etc.)
+            return formatArray( processedVal );
+          }
+
+          // B. Handle Nested Objects
+          if (typeof processedVal === 'object' && !Array.isArray( processedVal ) && !processedVal.isVector3) {
+            let subHtml = '<div style="margin-left: 10px; font-size: 0.9em; color: #ccc;">';
+
+            for ( const [ k, v ] of Object.entries( processedVal ) ) {
+              let displayV = v;
+
+              // 1. If it's a string, try to "un-stringify" it first
+              if (typeof displayV === 'string' && ( displayV.startsWith( '[' ) || displayV.startsWith( '{' ) )) {
+                try {
+                  displayV = JSON.parse( displayV );
+                } catch ( e ) {
+                  // If it's the unquoted Cesium style [One, Two], manual split
+                  if (displayV.startsWith( '[' ) && displayV.endsWith( ']' )) {
+                    displayV = displayV.slice( 1, -1 ).split( ',' ).map( s => s.trim() );
+                  }
+                }
+              }
+
+              // 2. Now that we have the "truest" form of the data, format it for the UI
+              if (Array.isArray( displayV )) {
+                displayV = formatArray( displayV );
+              } else if (typeof displayV === 'object' && displayV !== null) {
+                // If it's still an object (deep nesting), stringify it as a fallback
+                displayV = JSON.stringify( displayV );
+              } else if (typeof displayV === 'number') {
+                displayV = ( Number.isInteger( displayV ) ? displayV : displayV.toFixed( 2 ) );
+              } else if (typeof displayV === 'boolean') {
+                displayV = displayV ? 'Yes' : 'No';
+              }
+
+              subHtml += `<div><span style="color: #888;">${k}:</span> ${displayV}</div>`;
+            }
+
+            subHtml += '</div>';
+            return subHtml;
+          }
+
+          // C. Handle Single Values (Non-Arrays)
+
+          // Single Enums
+          if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
+            const entry = schema.enums[ propDef.enumType ].values.find( v => v.value == processedVal || v.name === processedVal );
+            return entry ? entry.name : processedVal;
+          }
+
+          // Single Booleans
+          if (propDef?.type === 'BOOLEAN') {
+            // Treat "true", true, or non-zero numbers as "Yes"
+            const isTrue = (processedVal === true || processedVal === 'true' || processedVal === 1);
+            return isTrue ? 'Yes' : 'No';
+          }
+
+          // Single Numbers
+          if (typeof processedVal === 'number') {
+            return Number.isInteger( processedVal ) ? processedVal : processedVal.toFixed( 2 );
+          }
+
+          // Handle BigInt / Numbers
+          if (typeof processedVal === 'bigint') return processedVal.toString();
+
+          return processedVal;
+        };
+
+        let show_copy_to_clipboard = true;
+
+        let html = '';
+
+        // 1. Tileset Metadata - Maybe entries like author, date, tile count...
+
+        const tileset = tilesetMetadataOnly ? pickedObject.userData?.tileset : data?.tileset;
+
+        if (tileset?.class) {
+          html += `
+            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${tileset.class}</div>
+            </div>`;
+
+          if (tileset.properties) {
+            for ( const [ key, val ] of Object.entries( tileset.properties ) ) {
+              const display = resolveValue( tileset.class, key, val );
+              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+           }
+          }
+        } else if (tilesetMetadataOnly) {
+          show_copy_to_clipboard = false;
+
+          const description = (type === 'Box3Helper') ? 'No Data (turn off bounding box)' : 'No Data';
+
+          html += `
+            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${ description }</div>
+            </div>`;
+        }
+
+        if (data && !tilesetMetadataOnly) {
+          if (tileset) html += `<br>`;
+
+          // 2. Tile Metadata - Maybe entries like district, population...
+
+          if (data.tile?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.tile.class}</div>
+              </div>`;
+
+            if (data.tile.properties) {
+              for ( const [ key, val ] of Object.entries( data.tile.properties ) ) {
+                const display = resolveValue( data.tile.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
+            }
+
+            html += `<br>`;
+          }
+
+          // 3. Selected Object
+
+          if (meshName !== '') {
+            html += `<div style="font-size: 12px; font-weight: bold; color: #fff; line-height: 1.0;">Selected: ${meshName}</div><br>`;
+          }
+
+          // 4. Group Metadata - Maybe entries like color, priority...
+
+          if (data.group?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.group.class}</div>
+              </div>`;
+
+            if (data.group.properties) {
+              for ( const [ key, val ] of Object.entries( data.group.properties ) ) {
+                const display = resolveValue( data.group.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
+            }
+
+            html += `<br>`;
+          }
+
+          // 5. Content Metadata - Maybe entries like vertices, materials...
+
+          if (data.content?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 8px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.content.class}</div>
+              </div>`;
+
+            if (data.content.properties) {
+              for ( const [ key, val ] of Object.entries( data.content.properties ) ) {
+                const display = resolveValue( data.content.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
+            }
+          }
+
+          // 5.5 Feature-Specific Metadata (EXT_structural_metadata)
+
+          if (data.featureMetadata) {
+            const fms = Array.isArray( data.featureMetadata ) ? data.featureMetadata : [ data.featureMetadata ];
+
+            fms.forEach( ( fm ) => {
+              html += `
+                <div style="border-bottom: 1px solid #00d4ff; margin-top: 10px; padding-bottom: 4px;">
+                  <div style="font-size: 10px; color: #00d4ff; font-weight: bold;">${fm.class}</div>
+                </div>`;
+
+              if (fm.properties) {
+                for ( const [ key, val ] of Object.entries( fm.properties ) ) {
+                  const display = resolveValue( fm.class, key, val );
+                  html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+                }
+              }
+
+              html += `<br>`;
+            });
+          }
+
+          // 6. FeatureId - Maybe entries from EXT_mesh_features, EXT_structural_metadata...
+          // Only show if not already merged into metadata
+
+          if (data.featureId && Array.isArray( data.featureId ) && !data.featureMetadata) {
+            data.featureId.forEach( ( fid_class, index ) => {
+              // Use the class name if found, otherwise use a readable layer index
+              const label = fid_class.class || `Feature Layer ${index}`;
+              const idValue = fid_class.id !== undefined ? fid_class.id : 'N/A';
+
+              html += `
+                <div class="feature-group" style="margin-top: 10px; border-left: 2px solid #00d4ff; padding-left: 8px;">
+                  <div style="font-size: 10px; color: #aaa; font-weight: bold;">${ label }</div>
+                  <div class="prop-row" style="display: flex; justify-content: space-between; align-items: center;">
+                    <span class="prop-label" style="color: #00d4ff;">ID:</span><span class="prop-value">${ idValue }</span>
+                  </div>
+                </div>`;
+            });
+          }
+        }
+
+        if (show_copy_to_clipboard) {
+          // Create a shallow copy so we don't accidentally delete the real schema from the viewer
+          const dataForClipboard = data
+            ? { ...data }
+            : object_userData?.tileset
+              ? { ...object_userData.tileset }
+              : {};
+
+          // Remove the heavy schema part for popup card, it will be included for clipboard
+          delete dataForClipboard.schema;
+
+          // Add selected mesh name
+          if (data && meshName) data[ 'Selected' ] = meshName;
+
+          // A helper to make JSON.stringify handle BigInt
+          const bigintReplacer = ( key, value ) => typeof value === 'bigint' ? value.toString() : value;
+
+          const rawJson = JSON.stringify( data ? data : dataForClipboard, bigintReplacer, 2 );
+          if (!rawJson) return;
+
+          // Escape it for use inside an HTML attribute
+          // We replace backslashes first, then single quotes
+          safeJson = rawJson
+            .replace(/\\/g, '\\\\')   // Escape backslashes
+            .replace(/'/g, "\\'")     // Escape single quotes
+
+          html += `
+            <div style="padding: 3px; border-top: 1px solid #444; text-align: center;">
+              <button
+                style="vertical-align: middle; background: #111; color: white; border: 1px solid #00d4ff; padding: 2px; cursor: pointer; font-size: 11px; border-radius: 4px; width: 100%;"
+                onclick="navigator.clipboard.writeText( safeJson ).then( () => alert( 'Metadata copied!' ) );">
+                📋 Copy To Clipboard
+              </button>
+            </div>`;
+        }
+
+        card.innerHTML = html;
+        card.style.display = 'block';
+
+        // 7. Position Logic
+
+        const cardWidth = 220; 
+        let x = event.clientX + 15;
+        let y = event.clientY + 15;
+
+        if (x + cardWidth > window.innerWidth) x = event.clientX - cardWidth - 15;
+
+        // If the card goes off the bottom of the screen
+        if (y + card.offsetHeight > window.innerHeight) {
+          y = window.innerHeight - card.offsetHeight - 15;
+        }
+
+        card.style.left = x + 'px';
+        card.style.top = y + 'px';
+      }
+
+      function hideUiPanel() {
+        // Restore color
+        if (selectedObject?.material?.emissive) {
+          selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
+        }
+
+        pickedObject = null;
+        popup_card_cleanup();
       }
 
       function show_wireframe() {
@@ -991,15 +2567,15 @@
 
       async function render() {
         if (gltf_obj) {
-          if (animation_running === true || mouse_down === true || mouse_wheel === true) {
-            if (animation_running === true) animation_mixer.update( clock.getDelta() );
+          if (animation_running || mouse_down || mouse_wheel) {
+            if (animation_running) animation_mixer.update( clock.getDelta() );
 
             controls.update();
 
             renderer.clear();
             renderer.render( scene, default_camera );
 
-            if (mouse_wheel === true) {
+            if (mouse_wheel) {
               if (count > 5) {
                 mouse_wheel = false;
                 count = 0;
@@ -1023,6 +2599,8 @@
         document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
         document.getElementById('btn_cameras').style.backgroundColor = 'transparent';
         document.getElementById('btn_cameras').innerText = 'C0';
+
+        init_running = false;
 
         if (scene) {
           if (directionalLight) {
@@ -1085,6 +2663,23 @@
       }
 
       async function scene_cleanup() {
+        mouse_wheel = true;
+
+        hideUiPanel();
+
+        if (featureHighlightMesh) {
+          if (featureHighlightMesh.parent) {
+            featureHighlightMesh.parent.remove( featureHighlightMesh );
+          }
+
+          featureHighlightMesh.traverse( ( child ) => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          });
+
+          featureHighlightMesh = null;
+        }
+
         scene.remove( gltf_obj );
 
         renderer.clear();
@@ -1107,6 +2702,12 @@
 
         gltf_obj.traverse( function( child ) {
           if (child.isMesh || child.isPoints || child.isLine) {
+            if (child.userData?.textures) child.userData.textures.forEach( tex => { if (tex?.isTexture) tex.dispose(); } );
+
+            if (child.userData?.structuralMetadata?.textures) {
+              child.userData.structuralMetadata.textures.forEach( tex => { if (tex?.isTexture) tex.dispose(); } );
+            }
+
             if (child.skeleton && child.skeleton.boneTexture)
                 child.skeleton.boneTexture.dispose();
 
@@ -1181,6 +2782,8 @@
           draco_material.dispose();
           draco_material = null;
         }
+
+        THREE.Cache.clear();
 
         if (isMobile === false) {
           renderer.info.reset();
