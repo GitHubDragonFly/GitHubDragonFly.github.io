@@ -1,4 +1,4 @@
-import { Box3, Loader, MathUtils, Matrix4, PerspectiveCamera, Quaternion, Sphere, Vector3, WebGLRenderer } from 'three';
+import { Box3, Loader, PerspectiveCamera, Quaternion, Sphere, Vector3, WebGLRenderer } from 'three';
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.min.js";
 import { KTX2Loader } from "three/addons/loaders/KTX2Loader.min.js";
@@ -211,7 +211,7 @@ class Three3DTilesLoader extends Loader {
 	}
 
 	/**
-	 * Converts an Oriented Bounding Box (OBB) to an Axis-Aligned Bounding Box (Box3).
+	 * Converts an Oriented Bounding Box (OBB) to an Axis-Aligned Bounding Box ( Box3 ).
 	 * @param { Object } obb - The OBB object with center and e1, e2, e3 vectors.
 	 * @returns { Box3 }
 	 * @private
@@ -2422,11 +2422,21 @@ class Three3DTilesLoader extends Loader {
 
 			tilesRenderer.maxTilesProcessed = scope._maxCacheSize;
 			tilesRenderer.autoDisableRendererCulling = true;
-			tilesRenderer.errorTarget = scope._errorTarget;
 			tilesRenderer.maxDepth = scope._maxDepthLevel;
 			tilesRenderer._optimizeRaycast = false;
-			tilesRenderer._errorThreshold = 0.5;
 			tilesRenderer.loadSiblings = false;
+
+			if ( isImplicit || isV10Implicit || tilesetVersion === '1.1' ) {
+
+				tilesRenderer.errorTarget = scope._errorTarget;
+				tilesRenderer._errorThreshold = 0.5;
+
+			} else {
+
+				tilesRenderer.lruCache.minBytesSize = 0;
+				tilesRenderer.lruCache.maxBytesSize = Infinity;
+
+			}
 
 			// Tell the manager to use our configured gltfLoader
 
@@ -2717,23 +2727,11 @@ class Three3DTilesLoader extends Loader {
 
 						if ( !child.material.userData.originalMaterialSide ) {
 
-							// Force a visible material
-							child.material = new THREE.MeshStandardMaterial( {
-								color: 0x888888,
-								roughness: 0.8,
-								metalness: 0.3,
-								wireframe: false,
-								side: THREE.DoubleSide,
-								flatShading: false
-							} );
-
-							child.material.needsUpdate = true;
-
 							// Ensure the renderer knows this mesh has positions and normals
+
 							child.castShadow = true;
 							child.receiveShadow = true;
-
-							child.material.userData.originalMaterialSide = 2;
+							child.material.userData.originalMaterialSide = child.material.side;
 
 						}
 
@@ -2785,7 +2783,7 @@ class Three3DTilesLoader extends Loader {
 
 					// --- METADATA SYNC ---
 					// Only run if the object doesn't have metadata yet
-					// The only identifiable property seems to be contentURL
+					// The only identifiable property should be contentURL
 
 					if ( threedTile.hasMetadata ) {
 
@@ -2921,7 +2919,7 @@ class Three3DTilesLoader extends Loader {
 				if (this._dracoLoader) this._dracoLoader.dispose();
 				if (this._ktx2Loader) this._ktx2Loader.dispose();
 
-				console.log( 'threedTileset and GPU resources disposed.' );
+				console.log( 'Tileset and GPU resources disposed.' );
 
 				return true;
 
