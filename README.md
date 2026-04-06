@@ -286,13 +286,14 @@ Number Type Converter
     - Supports both local (blob) and remote URL loading
     - Local loading supports self-contained models (embedded GLTF or binary GLB) as well as GLTF + BIN + Textures
     - The viewer supports loading of multiple models at once, which will be switchable with the viewer's `M` button
-  - `GLTF Viewer` is for v2.0 glTF files and is currently using r178 of three.js:
+  - `GLTF Viewer` is for v2.0 glTF files and is currently using r183 of three.js:
     - does not support obsolete `pbrSpecularGlossiness`
     - supports currently arbitrary `KHR_animation_pointer`
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js:
     - supports obsolete `pbrSpecularGlossiness`
     - does not support either `Anisotropy` or currently arbitrary `KHR_animation_pointer`
-  - Some of the above viewers also support metadata picking
+  - All of the above viewers also support metadata picking when metadata is present in the model:
+    - Maybe try some of GLB files available in [Cesium GLTF](https://github.com/CesiumGS/3d-tiles-samples/tree/main/glTF) folder
   - `GLTF Legacy` viewer is for v1.0 glTF files and is purely experimental and rather limited (see notes further below)
 
 - Special notes about `ASSIMP Viewer` which is using [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and [ASSIMP](https://github.com/assimp/assimp) library:
