@@ -133,6 +133,15 @@
         FLOAT32: 'getFloat32',
         FLOAT64: 'getFloat64'
       };
+
+      const NORMALIZATION_DIVISORS = {
+        'INT8': 127.0,
+        'UINT8': 255.0,
+        'INT16': 32767.0,
+        'UINT16': 65535.0,
+        'INT32': 2147483647.0,
+        'UINT32': 4294967295.0
+      };
     </script>
 
     <script type="module">
@@ -619,7 +628,7 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
+          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 1e9 );
           camera.position.set( 0, 0, 250 );
         }
 
@@ -719,31 +728,24 @@
 
           for ( const indx of cleanSorted ) {
             if (images[ indx ] !== undefined && !userData.textures[ indx ]) {
-              for ( let j = 0; j < indx + 1; j++ ) {
-                if (j === indx) {
-                  const pixelData = await decodeBase64ToPixels( images[ indx ].uri );
+              const pixelData = await decodeBase64ToPixels( images[ indx ].uri );
 
-                  if (!pixelData) {
-                    userData.textures.push( null );
-                  } else {
-                    const tex = new THREE.DataTexture(
-                      pixelData.data,
-                      pixelData.width,
-                      pixelData.height,
-                      THREE.RGBAFormat
-                    );
+              userData.textures[ indx ] = pixelData
+                ? new THREE.DataTexture(
+                    pixelData.data,
+                    pixelData.width,
+                    pixelData.height,
+                    THREE.RGBAFormat
+                  )
+                : null;
 
-                    tex.needsUpdate = true;
+              if (userData.textures[ indx ]?.isTexture) {
+                userData.textures[ indx ].needsUpdate = true;
 
-                    // Attach the raw data to the texture object
-                    // so we can read it instantly later
+                // Attach the raw data to the texture object
+                // so we can read it instantly later
 
-                    tex.userData.rawBuffer = pixelData.data;
-                    userData.textures.push( tex );
-                  }
-                } else {
-                  userData.textures.push( null );
-                }
+                userData.textures[ indx ].userData.rawBuffer = pixelData.data;
               }
             }
           }
@@ -804,31 +806,24 @@
               if (tex.properties && Object.entries( tex.properties ).length > 0) {
                 for ( const value of Object.values( tex.properties ) ) {
                   if (value.index !== undefined && images[ value.index ] !== undefined && !ext.textures[ value.index ]) {
-                    for ( let i = 0; i < value.index + 1; i++ ) {
-                      if (i === value.index) {
-                        const pixelData = await decodeBase64ToPixels( images[ value.index ].uri );
+                    const pixelData = await decodeBase64ToPixels( images[ value.index ].uri );
 
-                        if (!pixelData) {
-                          ext.textures.push( null );
-                        } else {
-                          const tex = new THREE.DataTexture(
-                            pixelData.data, 
-                            pixelData.width, 
-                            pixelData.height, 
-                            THREE.RGBAFormat
-                          );
+                    ext.textures[ value.index ] = pixelData
+                      ? new THREE.DataTexture(
+                          pixelData.data,
+                          pixelData.width,
+                          pixelData.height,
+                          THREE.RGBAFormat
+                        )
+                      : null;
 
-                          tex.needsUpdate = true;
+                    if (ext.textures[ value.index ]?.isTexture) {
+                      ext.textures[ value.index ].needsUpdate = true;
 
-                          // Attach the raw data to the texture object
-                          // so we can read it instantly later
+                      // Attach the raw data to the texture object
+                      // so we can read it instantly later
 
-                          tex.userData.rawBuffer = pixelData.data;
-                          ext.textures.push( tex );
-                        }
-                      } else {
-                        ext.textures.push( null );
-                      }
+                      ext.textures[ value.index ].userData.rawBuffer = pixelData.data;
                     }
                   }
                 }
@@ -1839,10 +1834,12 @@
             const val = readBinaryValue( rawBytes, 0, propDef.type, propDef.componentType, elementIndex );
 
             // Normalize if needed
-            if (propDef.componentType === 'UINT8' && propDef.normalized) {
+            if (propDef.normalized) {
+              const divisor = NORMALIZATION_DIVISORS[ propDef.componentType ] || 255.0;
+
               const normalized = Array.isArray( val )
-                ? val.map( v => Math.round( ( v / 255.0 ) * 100 ) / 100 )
-                : Math.round( ( val / 255.0 ) * 100 ) / 100;
+                ? val.map( v => Math.round( ( v / divisor ) * 100 ) / 100 )
+                : Math.round( ( val / divisor ) * 100 ) / 100;
 
               values.push( normalized );
             } else {
@@ -1939,9 +1936,11 @@
           const propDef = schema?.classes?.[ className ]?.properties?.[ propertyName ];
 
           if (propDef?.normalized) {
+            const divisor = NORMALIZATION_DIVISORS[ propDef.componentType ] || 255.0;
+
             rawValue = Array.isArray( rawValue )
-              ? rawValue.map( v => Math.round( ( v / 255.0 ) * 100 ) / 100 )
-              : Math.round( ( rawValue / 255.0 ) * 100 ) / 100;
+              ? rawValue.map( v => Math.round( ( v / divisor ) * 100 ) / 100 )
+              : Math.round( ( rawValue / divisor ) * 100 ) / 100;
           }
 
           return rawValue * (propDef?.scale ?? 1) + (propDef?.offset ?? 0);
@@ -1990,14 +1989,14 @@
           featureMetadataList.push( { class: className, properties } );
         }
 
-        let featureId, attributeName;
+        let featureId, attributeName, featureId_ok = false;
 
         if (meshFeatures?.featureIds?.length > 0) {
           for ( let i = 0; i < meshFeatures.featureIds.length; i++ ) {
             const info = meshFeatures.featureIds[ i ];
             const numFeatures = info.featureCount;
             const featureIdIndex = info.attribute;
-            const className = info.label || (featureIdIndex ? `Feature ${ featureIdIndex }` : 'Feature');
+            const className = info.label || ((featureIdIndex !== undefined && featureIdIndex !== null) ? `Feature ${ featureIdIndex }` : 'Feature');
 
             const attrName1 = `_feature_id_${ featureIdIndex }`;
             const attrName2 = `_FEATURE_ID_${ featureIdIndex }`;
@@ -2027,7 +2026,7 @@
               }
             }
 
-            const featureId_ok = (featureId !== null && featureId !== undefined && featureId !== info.nullFeatureId);
+            featureId_ok = (featureId !== null && featureId !== undefined && featureId !== info.nullFeatureId);
 
             if (!highlightAttributeName && attributeName && featureId_ok) {
               highlightAttributeName = attributeName;
@@ -2038,9 +2037,9 @@
               addPropertyTableMetadata( info.propertyTable, featureIdIndex, featureId, numFeatures );
             } else {
               const fid_properties = {};
-              if (featureIdIndex) fid_properties.Attribute = featureIdIndex;
+              if (featureIdIndex !== undefined && featureIdIndex !== null) fid_properties.Attribute = featureIdIndex;
               isInstanced ? fid_properties.InstanceId = vertexIndex : fid_properties.VertexId = vertexIndex;
-              fid_properties.ID = featureId;
+              if (featureId_ok) fid_properties.ID = featureId;
 
               if (info.texture !== undefined && intersect.uv) {
                 fid_properties.UV_Coord = new THREE.Vector2( intersect.uv.x, intersect.uv.y );
@@ -2075,7 +2074,7 @@
 
               if (Object.keys( pa_properties).length > 0) {
                 pa_properties.VertexId = vertexIndex;
-                if (featureId) pa_properties.ID = featureId;
+                if (featureId_ok) pa_properties.ID = featureId;
                 featureMetadataList.push( { class: className, properties: pa_properties } );
               }
 
@@ -2094,8 +2093,8 @@
               }
 
               if (Object.keys( pt_properties ).length > 0) {
+                if (featureId_ok) pt_properties.ID = featureId;
                 pt_properties.UV_Coord = new THREE.Vector2( intersect.uv.x, intersect.uv.y );
-                if (featureId) pt_properties.ID = featureId;
                 featureMetadataList.push( { class: className, properties: pt_properties } );
               }
             });
