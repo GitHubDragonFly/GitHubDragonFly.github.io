@@ -1,4 +1,4 @@
-import { Box3, DataTexture, Loader, MathUtils, Matrix4, Quaternion, RGBAFormat, Sphere, Vector3, WebGLRenderer } from 'three';
+import { Box3, Loader, MathUtils, Matrix4, Quaternion, RGBAFormat, Sphere, Vector3, WebGLRenderer } from 'three';
 import * as OGC3D from 'https://cdn.jsdelivr.net/npm/@jdultra/threedtiles@14.0.26/dist/threedtiles.es.min.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.min.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.min.js';
@@ -90,27 +90,15 @@ class NoopStructuralMetadataExtension {
 
 					this.userData.textures[ indx ] = pixelData
 
-						? new DataTexture(
+						? {
 
-							pixelData.data, 
-							pixelData.width, 
-							pixelData.height, 
-							RGBAFormat
+							data: pixelData.data,
+							width: pixelData.width,
+							height: pixelData.height
 
-						  )
+						  }
 
 						: null;
-
-					if ( this.userData.textures[ indx ]?.isTexture ) {
-
-						this.userData.textures[ indx ].needsUpdate = true;
-
-						// Attach the raw data to the texture object
-						// so we can read it instantly later
-
-						this.userData.textures[ indx ].userData.rawBuffer = pixelData.data;
-
-					}
 
 				}
 
@@ -210,27 +198,15 @@ class NoopStructuralMetadataExtension {
 
 								ext.textures[ value.index ] = pixelData
 
-									? new DataTexture(
+									? {
 
-										pixelData.data, 
-										pixelData.width, 
-										pixelData.height, 
-										RGBAFormat
+										data: pixelData.data, 
+										width: pixelData.width, 
+										height: pixelData.height 
 
-									  )
+									  }
 
 									: null;
-
-								if ( ext.textures[ value.index ]?.isTexture ) {
-
-									ext.textures[ value.index ].needsUpdate = true;
-
-									// Attach the raw data to the texture object
-									// so we can read it instantly later
-
-									ext.textures[ value.index ].userData.rawBuffer = pixelData.data;
-
-								}
 
 							}
 
@@ -2829,7 +2805,7 @@ class Three3DTilesLoader extends Loader {
 
 						});
 
-					} else if ( child.isPoints && child.material ) {
+					} else if ( child.isPoints && !child.isHighlight && child.material ) {
 
 						if ( child.material.size !== ogc3DTile._pointTargetSize ) {
 
@@ -2846,7 +2822,7 @@ class Three3DTilesLoader extends Loader {
 
 					if ( ogc3DTile.hasMetadata ) {
 
-						if ( ( child.isMesh || child.isPoints ) && !child.userData.metadata ) {
+						if ( ( child.isMesh || child.isPoints ) && !child.isHighlight && !child.userData.metadata ) {
 
 							let internalURL = null;
 							let curr = child;
