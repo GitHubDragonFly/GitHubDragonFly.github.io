@@ -30,7 +30,7 @@ ThreeDTilesPlugins.ImplicitTilingPlugin.prototype.preprocessNode = function( til
 
 		tile.internal.hasUnrenderableContent = true;
 		tile.internal.hasRenderableContent = false;
-                tile.implicitTiling = undefined; // One-Line Fix
+		tile.implicitTiling = undefined; // One-Line Fix
 
 	}
 
