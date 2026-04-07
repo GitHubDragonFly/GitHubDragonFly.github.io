@@ -1176,6 +1176,8 @@
             options = {	binary: binary, maxTextureSize: (binary === true ? D16K : tex_res) };
           }
 
+          options.includeCustomExtensions = true;
+
           let mesh_clone = alternative === true ? await create_meshes( alternative ) : clone( gltf_obj );
 
           gltf_exporter.parse( mesh_clone, async json => {
@@ -2963,19 +2965,19 @@
 
         if (controls === undefined) {
           controls = new orb_controls( default_camera, renderer.domElement );
+          controls.enableZoom = true;
           controls.enableZoomToCursor = true;
           controls.zoomSpeed = 0.8;
           controls.rotateSpeed = 0.8;
           controls.keyPanSpeed = 0.8; 
           controls.panSpeed = 0.8;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.05;
           //controls.enableKeys = false;
-          //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
         }
 
         // Load DRACO or GLTF file
@@ -3031,22 +3033,12 @@
               const pixelData = await decodeBase64ToPixels( images[ indx ].uri );
 
               userData.textures[ indx ] = pixelData
-                ? new THREE.DataTexture(
-                    pixelData.data,
-                    pixelData.width,
-                    pixelData.height,
-                    THREE.RGBAFormat
-                  )
+                ? {
+                    data: pixelData.data,
+                    width: pixelData.width,
+                    height: pixelData.height
+                  }
                 : null;
-
-              if (userData.textures[ indx ]?.isTexture) {
-                userData.textures[ indx ].needsUpdate = true;
-
-                // Attach the raw data to the texture object
-                // so we can read it instantly later
-
-                userData.textures[ indx ].userData.rawBuffer = pixelData.data;
-              }
             }
           }
         }
@@ -3109,22 +3101,12 @@
                     const pixelData = await decodeBase64ToPixels( images[ value.index ].uri );
 
                     ext.textures[ value.index ] = pixelData
-                      ? new THREE.DataTexture(
-                          pixelData.data,
-                          pixelData.width,
-                          pixelData.height,
-                          THREE.RGBAFormat
-                        )
+                      ? {
+                          data: pixelData.data,
+                          width: pixelData.width,
+                          height: pixelData.height
+                        }
                       : null;
-
-                    if (ext.textures[ value.index ]?.isTexture) {
-                      ext.textures[ value.index ].needsUpdate = true;
-
-                      // Attach the raw data to the texture object
-                      // so we can read it instantly later
-
-                      ext.textures[ value.index ].userData.rawBuffer = pixelData.data;
-                    }
                   }
                 }
               }
@@ -3630,14 +3612,6 @@
               hasGltfExtensions = true;
             }
 
-            if (userData.structuralMetadata !== undefined) {
-              child.userData.structuralMetadata = userData.structuralMetadata;
-            }
-
-            if (userData.textures?.length > 0) {
-              child.userData.textures = userData.textures;
-            }
-
             // Create random vertex colors
 
             let length = child.geometry.attributes.position.array.length;
@@ -3827,6 +3801,8 @@
             })
           );
 
+          featureHighlightMesh.isHighlight = true;
+
           // Add the wireframe once
           const wireframe = new THREE.LineSegments(
             new THREE.EdgesGeometry( highlightGeo, 30 ),
@@ -3907,6 +3883,8 @@
           })
         );
 
+        featureHighlightMesh.isHighlight = true;
+
         // Create the Wireframe Outline (The "Border")
         const wireframeGeo = new THREE.EdgesGeometry( highlightGeo, 30 );
         const wireframe = new THREE.LineSegments(
@@ -3951,6 +3929,7 @@
         });
 
         featureHighlightMesh = new THREE.Mesh( highlightGeo, highlightMat );
+        featureHighlightMesh.isHighlight = true;
 
         // 3. Position the cube at the point's coordinates
         featureHighlightMesh.position.set( x, y, z );
@@ -3967,6 +3946,50 @@
         featureHighlightMesh.updateWorldMatrix( true, true );
 
         // 5. Attach it to the picked object so it moves with the tileset
+        pickedObject.add( featureHighlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
+      }
+
+      async function highlightPoints( highlight_id, attrName ) {
+        if (!pickedObject || !attrName) return;
+
+        const geometry = pickedObject.geometry;
+        const featureAttr = geometry.getAttribute( attrName );
+        const positionAttr = geometry.getAttribute( 'position' );
+
+        if (!featureAttr || !positionAttr) return;
+
+        // 1. Filter vertices for the specific feature
+        const pointIndices = [];
+
+        for ( let i = 0; i < featureAttr.count; i++ ) {
+          if (featureAttr.getX( i ) === highlight_id) {
+            pointIndices.push(i);
+          }
+        }
+
+        if (pointIndices.length === 0) return;
+
+        // 2. Construct Point Geometry
+        // We reuse the buffer attributes but use a specific index for the points
+        const pointGeo = new THREE.BufferGeometry();
+        pointGeo.setAttribute( 'position', positionAttr );
+        pointGeo.setIndex( pointIndices );
+
+        // 3. Construct Point Material
+        const pointMat = new THREE.PointsMaterial();
+        pointMat.color.setHex( 0xf08080 );
+        pointMat.size = 0.15;               // Adjust based on model scale
+        pointMat.sizeAttenuation = true;   // Dots get smaller with zoom out
+        pointMat.transparent = true;
+        pointMat.opacity = 0.4;
+        pointMat.depthTest = false;        // See points through the mesh!
+
+        // 4. Create the Points object
+        featureHighlightMesh = new THREE.Points( pointGeo, pointMat );
+        featureHighlightMesh.isHighlight = true;
+        featureHighlightMesh.renderOrder = 1000;
+
         pickedObject.add( featureHighlightMesh );
         pickedObject.updateWorldMatrix( true, true );
       }
@@ -4020,6 +4043,7 @@
 
         featureHighlightMesh = new THREE.LineSegments( highlightGeo, highlightMat );
         featureHighlightMesh.updateWorldMatrix( true, true );
+        featureHighlightMesh.isHighlight = true;
 
         // 4. Attach to the parent
         pickedObject.add( featureHighlightMesh );
@@ -4062,6 +4086,12 @@
           selectedObject.material.emissive.copy( oldColor );
         }
 
+        if (pickedObject?.userData?.structuralMetadata)
+          delete pickedObject.userData.structuralMetadata;
+
+        if (pickedObject?.userData?.textures)
+          delete pickedObject.userData.textures;
+
         selectedObject = null;
         mouse_wheel = true;
         return;
@@ -4102,10 +4132,19 @@
 
         const intersect = visibleIntersects[ 0 ];
         pickedObject = intersect.object;
-        selectedObject = pickedObject;
 
         // QUICK GUARD: Ensure geometry and attributes exist before we dig in
         if (!pickedObject.geometry) return;
+
+        if (userData.structuralMetadata !== undefined) {
+          pickedObject.userData.structuralMetadata = userData.structuralMetadata;
+        }
+
+        if (userData.textures?.length > 0) {
+          pickedObject.userData.textures = userData.textures;
+        }
+
+        selectedObject = pickedObject;
 
         // Prepare Material for highlighting
         if (selectedObject.material && selectedObject.material.emissive) {
@@ -4363,11 +4402,11 @@
         }
 
         function getFeatureIdFromTexture( texture, uv, channel ) {
-          const buffer = texture.userData.rawBuffer;
+          const buffer = texture.data;
           if (!buffer) return 0;
 
-          const w = texture.image.width;
-          const h = texture.image.height;
+          const w = texture.width;
+          const h = texture.height;
 
           const x = Math.floor( uv.x * ( w - 0.001 ) );
           const y = Math.floor( uv.y * ( h - 0.001 ) );
@@ -4391,11 +4430,11 @@
           const textures = metadata.structuralMetadata.textures;
           const texture = textures[ propTex.properties[ propertyName ].index ];
 
-          const buffer = texture.userData.rawBuffer;
+          const buffer = texture.data;
           if (!buffer) return 0;
 
-          const w = texture.image.width;
-          const h = texture.image.height;
+          const w = texture.width;
+          const h = texture.height;
 
           const x = Math.floor( uv.x * ( w - 0.001 ) );
           const y = Math.floor( uv.y * ( h - 0.001 ) );
@@ -4463,7 +4502,7 @@
           featureMetadataList.push( { class: className, properties } );
         }
 
-        let featureId, attributeName, featureId_ok = false;
+        let featureId, attributeName, smAttrName, smHighlightId, featureId_ok = false;
 
         if (meshFeatures?.featureIds?.length > 0) {
           for ( let i = 0; i < meshFeatures.featureIds.length; i++ ) {
@@ -4509,6 +4548,13 @@
 
             if (info.propertyTable !== undefined) {
               addPropertyTableMetadata( info.propertyTable, featureIdIndex, featureId, numFeatures );
+
+              if (featureId_ok && featureMetadataList.length === 0) {
+                featureMetadataList.push({
+                  class: className + ': Property Table Not Found',
+                  properties: { ID: featureId }
+                });
+              }
             } else {
               const fid_properties = {};
               if (featureIdIndex !== undefined && featureIdIndex !== null) fid_properties.Attribute = featureIdIndex;
@@ -4534,15 +4580,27 @@
               const pa_properties = {};
 
               for ( const [ key, value ] of Object.entries( attrib.properties || {} ) ) {
-                const attrName = value.attribute;
-                if (!attrName) continue;
+                const vAttr = value.attribute;
+                if (!vAttr) continue;
 
-                const attr =
-                  pickedObject.geometry.getAttribute( attrName.toLowerCase() ) ||
-                  pickedObject.geometry.getAttribute( attrName.toUpperCase() );
+                const vAttrLower = vAttr.toLowerCase();
+                const vAttrUpper = vAttr.toUpperCase();
+
+                const aName = pickedObject.geometry.hasAttribute( vAttrLower )
+                  ? vAttrLower
+                  : pickedObject.geometry.hasAttribute( vAttrUpper )
+                    ? vAttrUpper
+                    : '';
+
+                // Default to first attribute for highlight
+
+                if (smAttrName === undefined || smAttrName === null) smAttrName = aName;
+
+                const attr = pickedObject.geometry.getAttribute( aName );
 
                 if (attr) {
                   pa_properties[ key ] = attr.getX( vertexIndex );
+                  if (smHighlightId === undefined || smHighlightId === null) smHighlightId = pa_properties[ key ];
                 }
               }
 
@@ -4584,11 +4642,19 @@
           if (pickedObject.isInstancedMesh) {
             highlightFeatureInstanced( highlightId );
           } else if (pickedObject.isPoints) {
-            highlightPoint( highlightId );
+            if (smAttrName !== undefined && smHighlightId !== undefined) {
+              highlightPoints( smHighlightId, smAttrName );
+            } else {
+              highlightPoint( highlightId );
+            }
           } else if (pickedObject.isLine) {
             highlightLine( highlightId );
-          } else if (pickedObject.isMesh && highlightAttributeName) {
-            highlightFeature( highlightId, highlightAttributeName );
+          } else if (pickedObject.isMesh) {
+            if (smAttrName !== undefined && smHighlightId !== undefined) {
+              highlightFeature( smHighlightId, smAttrName );
+            } else if (highlightId !== undefined && highlightAttributeName) {
+              highlightFeature( highlightId, highlightAttributeName );
+            }
           }
 
           showUiPanel(
@@ -5008,7 +5074,6 @@
           selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
         }
 
-        pickedObject = null;
         popup_card_cleanup();
       }
 
@@ -6437,12 +6502,6 @@
 
         gltf_obj.traverse( function( child ) {
           if (child.isMesh || child.isPoints || ( child.isLine && child.geometry.type !== 'EdgesGeometry' )) {
-            if (child.userData?.textures) child.userData.textures.forEach( tex => { if (tex?.isTexture) tex.dispose(); } );
-
-            if (child.userData?.structuralMetadata?.textures) {
-              child.userData.structuralMetadata.textures.forEach( tex => { if (tex?.isTexture) tex.dispose(); } );
-            }
-
             if (child.skeleton && child.skeleton.boneTexture)
                 child.skeleton.boneTexture.dispose();
 
