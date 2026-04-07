@@ -4,7 +4,37 @@ import { DRACOLoader } from "three/addons/loaders/DRACOLoader.min.js";
 import { KTX2Loader } from "three/addons/loaders/KTX2Loader.min.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.min.js";
 import * as ThreeDTilesRenderer from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.23/build/index.three.min.js';
-import * as ThreeDTilesPlugins from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.23/build/index.three-plugins.min.js';
+import * as ThreeDTilesPlugins from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.23/build/index.plugins.min.js';
+
+// Inject "required" v1.1 Implicit Tiling one-line fixer-upper
+
+ThreeDTilesPlugins.ImplicitTilingPlugin.prototype.preprocessNode = function( tile, tilesetDir, parentTile ) {
+
+	if ( tile.implicitTiling ) {
+
+		tile.internal.hasUnrenderableContent = true;
+		tile.internal.hasRenderableContent = false;
+
+		tile.implicitTilingData = {
+
+			root: tile,
+			subtreeIdx: 0,
+			x: 0,
+			y: 0,
+			z: 0,
+			level: 0,
+
+		};
+
+	} else if ( /.subtree$/i.test( tile.content?.uri ) ) {
+
+		tile.internal.hasUnrenderableContent = true;
+		tile.internal.hasRenderableContent = false;
+                tile.implicitTiling = undefined; // One-Line Fix
+
+	}
+
+}
 
 /**
  * A loader for 3D Tilesets - normally loaded via tileset.json URL link.
@@ -150,12 +180,12 @@ class Three3DTilesLoader extends Loader {
 
 	/**
 	 * Sets the error target for tiles renderer.
-	 * Clamped between 0.1 and 30.
+	 * Clamped between 0.1 and 5.
 	 * @param { number } target
 	 */
 	setErrorTarget( target ) {
 
-		this._errorTarget = Math.max( 0.1, Math.min( 30.0, target ) );
+		this._errorTarget = Math.max( 0.1, Math.min( 5.0, target ) );
 		return this;
 
 	}
@@ -2293,6 +2323,9 @@ class Three3DTilesLoader extends Loader {
 
 			scope._gltfLoader.setKTX2Loader( scope._ktx2Loader );
 
+			// The following is "organized" hodgepodge of old and new ideas
+			// It should also cover v1.0 transition period to v1.1 (I hope)
+
 			// 1. Quick URL detection
 
 			const isLayerJson = url.toLowerCase().endsWith( 'layer.json' );
@@ -2351,8 +2384,35 @@ class Three3DTilesLoader extends Loader {
 
 			const json_transform = json.root.transform;
 
+			let availableLevels, subtreeIsJSON = false;
+
 			const isImplicit = json.root.implicitTiling !== undefined;
-			const isV10Implicit = json.root.extensions?.[ '3DTILES_implicit_tiling' ];
+
+			if ( isImplicit ) {
+
+				availableLevels = json.root.implicitTiling.availableLevels;
+
+				if ( json.root.implicitTiling.subtrees?.uri?.toLowerCase().endsWith( '.json' ) ) {
+
+					subtreeIsJSON = true;
+
+				}
+
+			}
+
+			const isV10Implicit = json.root.extensions?.[ '3DTILES_implicit_tiling' ] !== undefined;
+
+			if ( isV10Implicit ) {
+
+				availableLevels = json.root.extensions[ '3DTILES_implicit_tiling' ].availableLevels;
+
+				if ( json.root.extensions[ '3DTILES_implicit_tiling' ].subtrees?.uri?.toLowerCase().endsWith( '.json' ) ) {
+
+					subtreeIsJSON = true;
+
+				}
+
+			}
 
 			if ( hasMetadata ) {
 
@@ -2398,7 +2458,7 @@ class Three3DTilesLoader extends Loader {
 
 			let version_url = url;
 
-			if ( isImplicit || isV10Implicit || tilesetVersion === '1.1' ) {
+			if ( ( ( isImplicit || isV10Implicit ) && subtreeIsJSON ) || ( ! ( isImplicit || isV10Implicit ) && tilesetVersion === '1.1' ) ) {
 
 				// Create the Blob
 				// We turn the JavaScript Object back into a String, then into a Blob
@@ -2422,7 +2482,7 @@ class Three3DTilesLoader extends Loader {
 
 			tilesRenderer.maxTilesProcessed = scope._maxCacheSize;
 			tilesRenderer.autoDisableRendererCulling = true;
-			tilesRenderer.maxDepth = scope._maxDepthLevel;
+			tilesRenderer.maxDepth = scope._maxDepthLevel + 2; // Seems to be off by 2
 			tilesRenderer._optimizeRaycast = false;
 			tilesRenderer.loadSiblings = false;
 
@@ -2476,10 +2536,12 @@ class Three3DTilesLoader extends Loader {
 			const fadePlugin = new ThreeDTilesPlugins.TilesFadePlugin();
 			const compressionPlugin = new ThreeDTilesPlugins.TileCompressionPlugin();
 			const updateOnChangePlugin = new ThreeDTilesPlugins.UpdateOnChangePlugin();
+			const implicitTilingPlugin = new ThreeDTilesPlugins.ImplicitTilingPlugin();
 
 			tilesRenderer.registerPlugin( fadePlugin );
 			tilesRenderer.registerPlugin( compressionPlugin );
 			tilesRenderer.registerPlugin( updateOnChangePlugin );
+			tilesRenderer.registerPlugin( implicitTilingPlugin );
 
 			// Fallback bounding box for initial rendering
 
@@ -2488,6 +2550,7 @@ class Three3DTilesLoader extends Loader {
 			const threedTile = tilesRenderer.group;
 
 			threedTile.tilesetVersion = tilesetVersion;
+			if ( availableLevels ) threedTile.availableLevels = availableLevels;
 
 			if ( hasMetadata || scope._metadataLookup.length > 0 ) {
 
@@ -2551,21 +2614,6 @@ class Three3DTilesLoader extends Loader {
 					scope._controls.update();
 
 				}
-
-			}
-
-			// The "sledgehammer" fix for vanishing models (until this bug gets resolved)
-
-			if ( isImplicit || isV10Implicit || isQuantizedMesh ) {
-
-				tilesRenderer.displayActiveTiles = true;
-				const originalSetTileVisible = tilesRenderer.setTileVisible;
-
-				tilesRenderer.setTileVisible = function( tile, visible ) {
-
-					originalSetTileVisible.call( this, tile, true );
-
-				};
 
 			}
 
