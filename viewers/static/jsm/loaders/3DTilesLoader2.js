@@ -88,8 +88,8 @@ class Three3DTilesLoader extends Loader {
 		this._token = '';
 		this._assetId = '1';
 
+		this._maxTilesProcessed = 100;
 		this._maxDepthLevel = 4;
-		this._maxCacheSize = 100;
 		this._materialSide = -1;
 		this._errorTarget = 5;
 
@@ -192,19 +192,19 @@ class Three3DTilesLoader extends Loader {
 
 	/**
 	 * Sets the material side for meshes.
-	 * Front = 0, Back = 1, Double = 2.
+	 * Original = -1, Front = 0, Back = 1, Double = 2.
 	 * @param { number } side
 	 */
 	setMaterialSide( side ) {
 
-		this._materialSide = Math.max( 0, Math.min( 2, side ) );
+		this._materialSide = Math.max( -1, Math.min( 2, side ) );
 		return this;
 
 	}
 
 	/**
 	 * Determines maximum number of levels to be loaded.
-	 * Clamped between 1 and 100.
+	 * Clamped between 1 and 50.
 	 * @param { integer } maxDepthLevel
 	 */
 	setMaxDepthLevel( maxDepthLevel ) {
@@ -216,26 +216,26 @@ class Three3DTilesLoader extends Loader {
 
 		}
 
-		this._maxDepthLevel = Math.max( 1, Math.min( 100, maxDepthLevel ) );
+		this._maxDepthLevel = Math.max( 1, Math.min( 50, maxDepthLevel ) );
 		return this;
 
 	}
 
 	/**
-	 * Determines how many tiles are kept in the "ready" state.
-	 * Clamped between 100 and 5000.
-	 * @param { integer } maxCacheSize
+	 * Determines max number of tiles to process immediately.
+	 * Clamped between 100 and 500.
+	 * @param { integer } maxTiles
 	 */
-	setMaxCacheSize( maxCacheSize ) {
+	setMaxTilesToProcess( maxTiles ) {
 
-		if ( typeof maxCacheSize !== 'number' || !Number.isFinite( maxCacheSize ) ) {
+		if ( typeof maxTiles !== 'number' || !Number.isFinite( maxTiles ) ) {
 
-			console.warn( `Invalid maxCacheSize: ${ maxCacheSize }. Using default.` );
+			console.warn( `Invalid maxTiles: ${ maxTiles }. Using default.` );
 			return this;
 
 		}
 
-		this._maxCacheSize = Math.max( 100, Math.min( 5000, maxCacheSize ) );
+		this._maxTilesProcessed = Math.max( 100, Math.min( 500, maxTiles ) );
 		return this;
 
 	}
@@ -2480,9 +2480,9 @@ class Three3DTilesLoader extends Loader {
 			tilesRenderer.setResolutionFromRenderer( scope._camera, scope._renderer );
                         tilesRenderer.workingPath = rootPath;
 
-			tilesRenderer.maxTilesProcessed = scope._maxCacheSize;
-			tilesRenderer.autoDisableRendererCulling = true;
 			tilesRenderer.maxDepth = scope._maxDepthLevel + 2; // Seems to be off by 2
+			tilesRenderer.maxTilesProcessed = scope._maxTilesProcessed;
+			tilesRenderer.autoDisableRendererCulling = true;
 			tilesRenderer._optimizeRaycast = false;
 			tilesRenderer.loadSiblings = false;
 
@@ -2534,14 +2534,20 @@ class Three3DTilesLoader extends Loader {
 			}
 
 			const fadePlugin = new ThreeDTilesPlugins.TilesFadePlugin();
+			const imageOverlayPlugin = new ThreeDTilesPlugins.ImageOverlayPlugin();
 			const compressionPlugin = new ThreeDTilesPlugins.TileCompressionPlugin();
 			const updateOnChangePlugin = new ThreeDTilesPlugins.UpdateOnChangePlugin();
 			const implicitTilingPlugin = new ThreeDTilesPlugins.ImplicitTilingPlugin();
 
 			tilesRenderer.registerPlugin( fadePlugin );
 			tilesRenderer.registerPlugin( compressionPlugin );
+			tilesRenderer.registerPlugin( imageOverlayPlugin );
 			tilesRenderer.registerPlugin( updateOnChangePlugin );
 			tilesRenderer.registerPlugin( implicitTilingPlugin );
+
+			// Attach imageOverlayPlugin as overlayManager
+
+			tilesRenderer.group.overlayManager = imageOverlayPlugin;
 
 			// Fallback bounding box for initial rendering
 
@@ -2773,38 +2779,39 @@ class Three3DTilesLoader extends Loader {
 
 					if ( child.isMesh ) {
 
-						if ( !child.material.userData.originalMaterialSide ) {
-
-							// Ensure the renderer knows this mesh has positions and normals
-
-							child.castShadow = true;
-							child.receiveShadow = true;
-							child.material.userData.originalMaterialSide = child.material.side;
-
-						}
-
-
 						const mats = Array.isArray( child.material ) ? child.material : [ child.material ];
 
 						mats.forEach( m => {
 
-							if ( !m.userData.originalMaterialSide ) m.userData.originalMaterialSide = m.side;
+							if ( m.userData.originalMaterialSide === undefined ) {
+
+								child.castShadow = true;
+								child.receiveShadow = true;
+								m.userData.originalMaterialSide = m.side;
+
+							}
 
 							if ( materialSideChanged ) {
 
-								if ( scope._materialSide === -1 ) {
+								if ( scope._materialSide > -1 ) {
 
-									m.side = m.userData.originalMaterialSide;
+									m.side = scope._materialSide;
 
 								} else {
 
-									m.side = scope._materialSide;
+									m.side = m.userData.originalMaterialSide;
 
 								}
 
-							} else if ( newTile && scope._materialSide !== -1 ) {
+							} else if ( newTile && scope._materialSide > -1 ) {
 
-									m.side = scope._materialSide;
+								m.side = scope._materialSide;
+
+							} else {
+
+								m.side = scope._materialSide > -1
+									? scope._materialSide
+									: m.userData.originalMaterialSide;
 
 							}
 
