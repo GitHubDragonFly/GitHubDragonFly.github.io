@@ -372,7 +372,7 @@ class Three3DTilesLoader extends Loader {
 
 	/**
 	 * Determines maximum number of levels to be loaded.
-	 * Clamped between 1 and 100.
+	 * Clamped between 1 and 50.
 	 * @param { integer } maxDepthLevel
 	 */
 	setMaxDepthLevel( maxDepthLevel ) {
@@ -384,7 +384,7 @@ class Three3DTilesLoader extends Loader {
 
 		}
 
-		this._maxDepthLevel = Math.max( 1, Math.min( 100, maxDepthLevel ) );
+		this._maxDepthLevel = Math.max( 1, Math.min( 50, maxDepthLevel ) );
 		return this;
 
 	}
@@ -2512,8 +2512,13 @@ class Three3DTilesLoader extends Loader {
 
 			const json_transform = json.root.transform;
 
+			let availableLevels;
+
 			const isImplicit = json.root.implicitTiling !== undefined;
-			const isV10Implicit = json.root.extensions?.[ '3DTILES_implicit_tiling' ];
+			if ( isImplicit ) availableLevels = json.root.implicitTiling.availableLevels;
+
+			const isV10Implicit = json.root.extensions?.[ '3DTILES_implicit_tiling' ] !== undefined;
+			if ( isV10Implicit ) availableLevels = json.root.extensions[ '3DTILES_implicit_tiling' ].availableLevels;
 
 			if ( hasMetadata ) {
 
@@ -2614,6 +2619,7 @@ class Three3DTilesLoader extends Loader {
 
 			ogc3DTile.isTileset = true;
 			ogc3DTile.tilesetVersion = tilesetVersion;
+			if ( availableLevels ) ogc3DTile.availableLevels = availableLevels;
 
 			if ( hasMetadata || scope._metadataLookup.length > 0 ) {
 
