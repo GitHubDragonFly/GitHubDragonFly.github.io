@@ -78,9 +78,10 @@
       var scene, renderer, camera, controls, render_requested, needsRender;
       var gui, gui_container, gui_set = false, gui_pointSize, mouse_down, mouse_wheel;
       var animations, animation_mixer, current_animation, animation_running;
-      var ww = window.innerWidth, wh = window.innerHeight;
-      var stats, stats_enabled, events_initialized, clock;
-      var last_tile, last_level, last_uuid, params, halt_on_error;
+      var ww = window.innerWidth, wh = window.innerHeight, halt_on_error;
+      var stats, stats_enabled, events_initialized, clock, params;
+      var currCacheInfo, currDepthInfo, maxDepthInfo;
+      var currentCache = '100', currentDepth = '4';
       var selected_url_file = '', directionalLight, isMobile, safeJson, ghostMesh;
       var lod_displayed = false, warning_displayed = false, wireframe_enabled;
       var extended_render, extended_count = 0, count = 0, selectedObject, pickedObject;
@@ -136,6 +137,15 @@
         UINT64: 'getBigUint64',
         FLOAT32: 'getFloat32',
         FLOAT64: 'getFloat64'
+      };
+
+      const NORMALIZATION_DIVISORS = {
+        'INT8': 127.0,
+        'UINT8': 255.0,
+        'INT16': 32767.0,
+        'UINT16': 65535.0,
+        'INT32': 2147483647.0,
+        'UINT32': 4294967295.0
       };
     </script>
 
@@ -289,8 +299,6 @@
           <option value="20" onclick="set_tiles_depth_level( 20 );">20</option>
           <option value="25" onclick="set_tiles_depth_level( 25 );">25</option>
           <option value="50" onclick="set_tiles_depth_level( 50 );">50</option>
-          <option value="75" onclick="set_tiles_depth_level( 75 );">75</option>
-          <option value="100" onclick="set_tiles_depth_level( 100 );">100</option>
         </select>
       </div>
     </div>
@@ -304,10 +312,22 @@
     <script>
       function set_tiles_cache_size( val ) {
         tiles_loader.setMaxCacheSize( parseInt( val ) );
+        currentCache = val;
+
+        if (currCacheInfo) {
+          currCacheInfo.object.size = val;
+          currCacheInfo.updateDisplay();
+        }
       }
 
       function set_tiles_depth_level( val ) {
         tiles_loader.setMaxDepthLevel( parseInt( val ) );
+        currentDepth = val;
+
+        if (currDepthInfo) {
+          currDepthInfo.object.level = val;
+          currDepthInfo.updateDisplay();
+        }
       }
 
       function show_lod() {
@@ -655,9 +675,6 @@
         animations = [];
         animation_mixer = null;
         animation_running = false;
-        last_tile = 0;
-        last_uuid = '';
-        last_level = 0;
         count = 0;
         gui_pointSize = null;
         boxHelper = null;
@@ -875,6 +892,24 @@
             }
           });
 
+          // Add read-only current cache size info
+
+          const lod_cache_info_obj = { size: currentCache };
+
+          currCacheInfo = gui.add( lod_cache_info_obj, 'size' ).name( 'LOD Cache Size' );
+          currCacheInfo.domElement.style.backgroundColor = 'transparent';
+          currCacheInfo.$input.style.backgroundColor = 'transparent';
+          currCacheInfo.$input.disabled = true;
+
+          // Add read-only current depth level info
+
+          const lod_depth_info_obj = { level: currentDepth };
+
+          currDepthInfo = gui.add( lod_depth_info_obj, 'level' ).name( 'LOD Depth Level' );
+          currDepthInfo.domElement.style.backgroundColor = 'transparent';
+          currDepthInfo.$input.style.backgroundColor = 'transparent';
+          currDepthInfo.$input.disabled = true;
+
           set_gui_position();
 
           gui.open();
@@ -882,6 +917,22 @@
         }
 
         gui_pointSize = gui.controllersRecursive().find( c => c.property === 'pointSize' );
+
+        if (maxDepthInfo) {
+          maxDepthInfo.destroy();
+          maxDepthInfo = null;
+        }
+
+        if (tileset_obj.availableLevels) {
+          // Add read-only max tileset level info for Implicit Tiling
+
+          const tileset_info_obj = { level: tileset_obj.availableLevels.toString() };
+
+          maxDepthInfo = gui.add( tileset_info_obj, 'level' ).name( 'Tileset Max Depth' );
+          maxDepthInfo.domElement.style.backgroundColor = 'transparent';
+          maxDepthInfo.$input.style.backgroundColor = 'transparent';
+          maxDepthInfo.$input.disabled = true;
+        }
 
         gui_container.style.display = 'block';
         set_gui_position();
@@ -1089,6 +1140,8 @@
             })
           );
 
+          featureHighlightMesh.isHighlight = true;
+
           // Add the wireframe once
           const wireframe = new THREE.LineSegments(
             new THREE.EdgesGeometry( highlightGeo, 30 ),
@@ -1169,6 +1222,8 @@
           })
         );
 
+        featureHighlightMesh.isHighlight = true;
+
         // Create the Wireframe Outline (The "Border")
         const wireframeGeo = new THREE.EdgesGeometry( highlightGeo, 30 );
         const wireframe = new THREE.LineSegments(
@@ -1213,6 +1268,7 @@
         });
 
         featureHighlightMesh = new THREE.Mesh( highlightGeo, highlightMat );
+        featureHighlightMesh.isHighlight = true;
 
         // 3. Position the cube at the point's coordinates
         featureHighlightMesh.position.set( x, y, z );
@@ -1229,6 +1285,50 @@
         featureHighlightMesh.updateWorldMatrix( true, true );
 
         // 5. Attach it to the picked object so it moves with the tileset
+        pickedObject.add( featureHighlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
+      }
+
+      async function highlightPoints( highlight_id, attrName ) {
+        if (!pickedObject || !attrName) return;
+
+        const geometry = pickedObject.geometry;
+        const featureAttr = geometry.getAttribute( attrName );
+        const positionAttr = geometry.getAttribute( 'position' );
+
+        if (!featureAttr || !positionAttr) return;
+
+        // 1. Filter vertices for the specific feature
+        const pointIndices = [];
+
+        for ( let i = 0; i < featureAttr.count; i++ ) {
+          if (featureAttr.getX( i ) === highlight_id) {
+            pointIndices.push(i);
+          }
+        }
+
+        if (pointIndices.length === 0) return;
+
+        // 2. Construct Point Geometry
+        // We reuse the buffer attributes but use a specific index for the points
+        const pointGeo = new THREE.BufferGeometry();
+        pointGeo.setAttribute( 'position', positionAttr );
+        pointGeo.setIndex( pointIndices );
+
+        // 3. Construct Point Material
+        const pointMat = new THREE.PointsMaterial();
+        pointMat.color.setHex( 0xf08080 );
+        pointMat.size = 0.15;               // Adjust based on model scale
+        pointMat.sizeAttenuation = true;   // Dots get smaller with zoom out
+        pointMat.transparent = true;
+        pointMat.opacity = 0.4;
+        pointMat.depthTest = false;        // See points through the mesh!
+
+        // 4. Create the Points object
+        featureHighlightMesh = new THREE.Points( pointGeo, pointMat );
+        featureHighlightMesh.isHighlight = true;
+        featureHighlightMesh.renderOrder = 1000;
+
         pickedObject.add( featureHighlightMesh );
         pickedObject.updateWorldMatrix( true, true );
       }
@@ -1282,6 +1382,7 @@
 
         featureHighlightMesh = new THREE.LineSegments( highlightGeo, highlightMat );
         featureHighlightMesh.updateWorldMatrix( true, true );
+        featureHighlightMesh.isHighlight = true;
 
         // 4. Attach to the parent
         pickedObject.add( featureHighlightMesh );
@@ -1568,10 +1669,12 @@
             const val = readBinaryValue( rawBytes, 0, propDef.type, propDef.componentType, elementIndex );
 
             // Normalize if needed
-            if (propDef.componentType === 'UINT8' && propDef.normalized) {
+            if (propDef.normalized) {
+              const divisor = NORMALIZATION_DIVISORS[ propDef.componentType ] || 255.0;
+
               const normalized = Array.isArray( val )
-                ? val.map( v => Math.round( ( v / 255.0 ) * 100 ) / 100 )
-                : Math.round( ( val / 255.0 ) * 100 ) / 100;
+                ? val.map( v => Math.round( ( v / divisor ) * 100 ) / 100 )
+                : Math.round( ( val / divisor ) * 100 ) / 100;
 
               values.push( normalized );
             } else {
@@ -1621,11 +1724,11 @@
         }
 
         function getFeatureIdFromTexture( texture, uv, channel ) {
-          const buffer = texture.userData.rawBuffer;
+          const buffer = texture.data;
           if (!buffer) return 0;
 
-          const w = texture.image.width;
-          const h = texture.image.height;
+          const w = texture.width;
+          const h = texture.height;
 
           const x = Math.floor( uv.x * ( w - 0.001 ) );
           const y = Math.floor( uv.y * ( h - 0.001 ) );
@@ -1649,11 +1752,11 @@
           const textures = metadata.structuralMetadata.textures;
           const texture = textures[ propTex.properties[ propertyName ].index ];
 
-          const buffer = texture.userData.rawBuffer;
+          const buffer = texture.data;
           if (!buffer) return 0;
 
-          const w = texture.image.width;
-          const h = texture.image.height;
+          const w = texture.width;
+          const h = texture.height;
 
           const x = Math.floor( uv.x * ( w - 0.001 ) );
           const y = Math.floor( uv.y * ( h - 0.001 ) );
@@ -1668,12 +1771,14 @@
           const propDef = schema?.classes?.[ className ]?.properties?.[ propertyName ];
 
           if (propDef?.normalized) {
+            const divisor = NORMALIZATION_DIVISORS[ propDef.componentType ] || 255.0;
+
             rawValue = Array.isArray( rawValue )
-              ? rawValue.map( v => Math.round( ( v / 255.0 ) * 100 ) / 100 )
-              : Math.round( ( rawValue / 255.0 ) * 100 ) / 100;
+              ? rawValue.map( v => Math.round( ( v / divisor ) * 100 ) / 100 )
+              : Math.round( ( rawValue / divisor ) * 100 ) / 100;
           }
 
-          return rawValue * (propDef?.scale ?? 1) + (propDef?.offset ?? 0);
+          return rawValue * ( propDef?.scale ?? 1 ) + ( propDef?.offset ?? 0 );
         }
 
         function addPropertyTableMetadata( tableIndex, attributeIndex = null, featureId, numFeatures ) {
@@ -1720,14 +1825,15 @@
         }
 
         const meshFeatures = extensions.EXT_mesh_features || extensions.EXT_instance_features;
-        let featureId, attributeName;
+
+        let featureId, attributeName, smAttrName, smHighlightId, featureId_ok = false;
 
         if (meshFeatures?.featureIds?.length > 0) {
           for ( let i = 0; i < meshFeatures.featureIds.length; i++ ) {
             const info = meshFeatures.featureIds[ i ];
             const numFeatures = info.featureCount;
             const featureIdIndex = info.attribute;
-            const className = info.label || (featureIdIndex ? `Feature ${ featureIdIndex }` : 'Feature');
+            const className = info.label || ((featureIdIndex !== undefined && featureIdIndex !== null) ? `Feature ${ featureIdIndex }` : 'Feature');
 
             const attrName1 = `_feature_id_${ featureIdIndex }`;
             const attrName2 = `_FEATURE_ID_${ featureIdIndex }`;
@@ -1757,7 +1863,7 @@
               }
             }
 
-            const featureId_ok = (featureId !== null && featureId !== undefined && featureId !== info.nullFeatureId);
+            featureId_ok = (featureId !== null && featureId !== undefined && featureId !== info.nullFeatureId);
 
             if (!highlightAttributeName && attributeName && featureId_ok) {
               highlightAttributeName = attributeName;
@@ -1766,11 +1872,18 @@
 
             if (info.propertyTable !== undefined) {
               addPropertyTableMetadata( info.propertyTable, featureIdIndex, featureId, numFeatures );
+
+              if (featureId_ok && featureMetadataList.length === 0) {
+                featureMetadataList.push({
+                  class: className + ': Property Table Not Found',
+                  properties: { ID: featureId }
+                });
+              }
             } else {
               const fid_properties = {};
-              if (featureIdIndex) fid_properties.Attribute = featureIdIndex;
+              if (featureIdIndex !== undefined && featureIdIndex !== null) fid_properties.Attribute = featureIdIndex;
               isInstanced ? fid_properties.InstanceId = vertexIndex : fid_properties.VertexId = vertexIndex;
-              fid_properties.ID = featureId;
+              if (featureId_ok) fid_properties.ID = featureId;
 
               if (info.texture !== undefined && intersect.uv) {
                 fid_properties.UV_Coord = new THREE.Vector2( intersect.uv.x, intersect.uv.y );
@@ -1791,21 +1904,33 @@
               const pa_properties = {};
 
               for ( const [ key, value ] of Object.entries( attrib.properties || {} ) ) {
-                const attrName = value.attribute;
-                if (!attrName) continue;
+                const vAttr = value.attribute;
+                if (!vAttr) continue;
 
-                const attr =
-                  pickedObject.geometry.getAttribute( attrName.toLowerCase() ) ||
-                  pickedObject.geometry.getAttribute( attrName.toUpperCase() );
+                const vAttrLower = vAttr.toLowerCase();
+                const vAttrUpper = vAttr.toUpperCase();
+
+                const aName = pickedObject.geometry.hasAttribute( vAttrLower )
+                  ? vAttrLower
+                  : pickedObject.geometry.hasAttribute( vAttrUpper )
+                    ? vAttrUpper
+                    : '';
+
+                // Default to first attribute for highlight
+
+                if (smAttrName === undefined || smAttrName === null) smAttrName = aName;
+
+                const attr = pickedObject.geometry.getAttribute( aName );
 
                 if (attr) {
                   pa_properties[ key ] = attr.getX( vertexIndex );
+                  if (smHighlightId === undefined || smHighlightId === null) smHighlightId = pa_properties[ key ];
                 }
               }
 
               if (Object.keys( pa_properties).length > 0) {
                 pa_properties.VertexId = vertexIndex;
-                if (featureId) pa_properties.ID = featureId;
+                if (featureId_ok) pa_properties.ID = featureId;
                 featureMetadataList.push( { class: className, properties: pa_properties } );
               }
 
@@ -1824,8 +1949,8 @@
               }
 
               if (Object.keys( pt_properties ).length > 0) {
+                if (featureId_ok) pt_properties.ID = featureId;
                 pt_properties.UV_Coord = new THREE.Vector2( intersect.uv.x, intersect.uv.y );
-                if (featureId) pt_properties.ID = featureId;
                 featureMetadataList.push( { class: className, properties: pt_properties } );
               }
             });
@@ -1841,11 +1966,19 @@
           if (pickedObject.isInstancedMesh) {
             highlightFeatureInstanced( highlightId );
           } else if (pickedObject.isPoints) {
-            highlightPoint( highlightId );
+            if (smAttrName !== undefined && smHighlightId !== undefined) {
+              highlightPoints( smHighlightId, smAttrName );
+            } else {
+              highlightPoint( highlightId );
+            }
           } else if (pickedObject.isLine) {
             highlightLine( highlightId );
-          } else if (pickedObject.isMesh && highlightAttributeName) {
-            highlightFeature( highlightId, highlightAttributeName );
+          } else if (pickedObject.isMesh) {
+            if (smAttrName !== undefined && smHighlightId !== undefined) {
+              highlightFeature( smHighlightId, smAttrName );
+            } else if (highlightId !== undefined && highlightAttributeName) {
+              highlightFeature( highlightId, highlightAttributeName );
+            }
           }
 
           showUiPanel(
@@ -2265,7 +2398,6 @@
           selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
         }
 
-        pickedObject = null;
         popup_card_cleanup();
       }
 
