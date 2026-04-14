@@ -3,6 +3,7 @@ import {
 	ClampToEdgeWrapping,
 	Color,
 	CompressedTexture,
+	DataTexture,
 	DoubleSide,
 	InterpolateDiscrete,
 	InterpolateLinear,
@@ -25,15 +26,15 @@ import {
 	Source,
 	SRGBColorSpace,
 	Vector3
-} from "three";
+} from 'three';
 
 async function import_decompress() {
 
 	try {
 
-		const { WebGLRenderer } = await import( "three" );
+		const { WebGLRenderer } = await import( 'three' );
 		const { decompress } = await import(
-			"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/utils/TextureUtils.min.js"
+			'https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/utils/TextureUtils.min.js'
 		);
 
 		const renderer = new WebGLRenderer( { antialias: true } );
@@ -44,8 +45,8 @@ async function import_decompress() {
 
 	try {
 
-		const { CanvasTexture, NodeMaterial, QuadMesh, WebGPURenderer } = await import( "three" );
-		const { texture, uv } = await import( "three/tsl" );
+		const { CanvasTexture, NodeMaterial, QuadMesh, WebGPURenderer } = await import( 'three' );
+		const { texture, uv } = await import( 'three/tsl' );
 
 		const renderer = new WebGPURenderer( { antialias: true } );
 		await renderer.init();
@@ -235,6 +236,24 @@ class GLTFExporter {
 		this.register( function ( writer ) {
 
 			return new GLTFMeshGpuInstancing( writer );
+
+		} );
+
+		this.register( function ( writer ) {
+
+			return new GLTFMeshFeaturesExtension( writer );
+
+		} );
+
+		this.register( function ( writer ) {
+
+			return new GLTFInstanceFeaturesExtension( writer );
+
+		} );
+
+		this.register( function ( writer ) {
+
+			return new GLTFStructuralMetadataExtension( writer );
 
 		} );
 
@@ -538,6 +557,28 @@ function getCanvas() {
 
 }
 
+function getUriBlobPromise( uri ) {
+
+	return new Promise( ( resolve ) =>  {
+
+		const parts = uri.split( ',' );
+		const byteString = atob( parts[ 1 ] );
+
+		const ab = new ArrayBuffer( byteString.length );
+        	const ia = new Uint8Array( ab );
+
+		for ( let i = 0; i < byteString.length; i ++ ) {
+
+			ia[ i ] = byteString.charCodeAt( i );
+
+		}
+
+		resolve( new Blob( [ ab ], { type: 'image/png' } ) );
+
+	} );
+
+}
+
 function getToBlobPromise( canvas, mimeType ) {
 
 	if ( canvas.toBlob !== undefined ) {
@@ -650,8 +691,10 @@ class GLTFWriter {
 			binary: false,
 			trs: false,
 			onlyVisible: true,
-			maxTextureSize: Infinity,
 			animations: [],
+			metadataTextures: {},
+			structuralMetadata: {},
+			maxTextureSize: Infinity,
 			includeCustomExtensions: false
 		}, options );
 
@@ -1044,7 +1087,6 @@ class GLTFWriter {
 
 	}
 
-
 	async decompressTextureAsync( texture, maxTextureSize = Infinity ) {
 
 		if ( this.textureUtils === null ) {
@@ -1071,6 +1113,8 @@ class GLTFWriter {
 
 		// All buffers are merged before export.
 		buffers.push( buffer );
+
+		json.buffers[ 0 ].byteLength += buffer.byteLength;
 
 		return 0;
 
@@ -1238,33 +1282,28 @@ class GLTFWriter {
 	 * @param {Blob} blob
 	 * @return {Promise<Integer>}
 	 */
-	processBufferViewImage( blob ) {
+	async processBufferViewImage( blob ) {
 
 		const writer = this;
 		const json = writer.json;
 
 		if ( ! json.bufferViews ) json.bufferViews = [];
 
-		return new Promise( function ( resolve ) {
+		// Use arrayBuffer() instead of FileReader for cleaner async flow
 
-			const reader = new FileReader();
-			reader.readAsArrayBuffer( blob );
-			reader.onloadend = function () {
+		const arrayBuffer = await blob.arrayBuffer();
+		const buffer = getPaddedArrayBuffer( arrayBuffer );
 
-				const buffer = getPaddedArrayBuffer( reader.result );
+		const bufferViewDef = {
+			buffer: writer.processBuffer( buffer ),
+			byteOffset: writer.byteOffset,
+			byteLength: buffer.byteLength
+		};
 
-				const bufferViewDef = {
-					buffer: writer.processBuffer( buffer ),
-					byteOffset: writer.byteOffset,
-					byteLength: buffer.byteLength
-				};
+		writer.byteOffset += buffer.byteLength;
+		const index = json.bufferViews.push( bufferViewDef ) - 1;
 
-				writer.byteOffset += buffer.byteLength;
-				resolve( json.bufferViews.push( bufferViewDef ) - 1 );
-
-			};
-
-		} );
+		return index;
 
 	}
 
@@ -1372,9 +1411,9 @@ class GLTFWriter {
 	 * @param  {Integer} format of the image (RGBAFormat)
 	 * @param  {Boolean} flipY before writing out the image
 	 * @param  {String} mimeType export format
-	 * @return {Integer}     Index of the processed texture in the "images" array
+	 * @return {Integer} Index of the processed texture in the "images" array
 	 */
-	processImage( image, format, flipY, mimeType = 'image/png' ) {
+	async processImage( image, format, flipY, mimeType = 'image/png', mapURI = null ) {
 
 		if ( image !== null ) {
 
@@ -1390,20 +1429,16 @@ class GLTFWriter {
 
 			const key = mimeType + ':flipY/' + flipY.toString();
 
-			if ( cachedImages[ key ] !== undefined ) return cachedImages[ key ];
+			if ( cachedImages?.[ key ] !== undefined ) return cachedImages[ key ];
 
 			if ( ! json.images ) json.images = [];
-
-			const imageDef = { mimeType: mimeType };
 
 			const canvas = getCanvas();
 
 			canvas.width = Math.min( image.width, options.maxTextureSize );
 			canvas.height = Math.min( image.height, options.maxTextureSize );
 
-			const ctx = canvas.getContext( '2d', {
-				willReadFrequently: true,
-			} );
+			const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
 
 			if ( flipY === true ) {
 
@@ -1412,7 +1447,11 @@ class GLTFWriter {
 
 			}
 
-			if ( image.data !== undefined ) { // THREE.DataTexture
+			if ( mapURI !== null ) {
+
+				// Don't do anything, let it pass through
+
+			} else if ( image.data !== undefined ) { // THREE.DataTexture
 
 				if ( format !== RGBAFormat ) {
 
@@ -1456,23 +1495,48 @@ class GLTFWriter {
 
 			}
 
+			const imageDef = { mimeType: mimeType };
+
 			if ( options.binary === true ) {
 
-				pending.push(
+				if ( mapURI !== null ) {
 
-					getToBlobPromise( canvas, mimeType )
-						.then( blob => writer.processBufferViewImage( blob ) )
-						.then( bufferViewIndex => {
+					const blobPromise = getUriBlobPromise( mapURI )
+					.then( blob => writer.processBufferViewImage( blob ) )
+					.then( bufferViewIndex => {
 
-							imageDef.bufferView = bufferViewIndex;
+						imageDef.bufferView = bufferViewIndex;
 
-						} )
+					} );
 
-				);
+					// Push to queue AND await it so the function doesn't return
+					// until the bufferViewIndex is actually assigned to imageDef.
+
+					pending.push( blobPromise );
+					await blobPromise;
+
+				} else {
+
+					const blobPromise = getToBlobPromise( canvas, mimeType )
+					.then( blob => writer.processBufferViewImage( blob ) )
+					.then( bufferViewIndex => {
+
+						imageDef.bufferView = bufferViewIndex;
+
+					} );
+
+					pending.push( blobPromise );
+					await blobPromise;
+
+				}
 
 			} else {
 
-				if ( canvas.toDataURL !== undefined ) {
+				if ( mapURI !== null ) {
+
+					imageDef.uri = mapURI;
+
+				} else if ( canvas.toDataURL !== undefined ) {
 
 					imageDef.uri = canvas.toDataURL( mimeType );
 
@@ -1481,12 +1545,12 @@ class GLTFWriter {
 					pending.push(
 
 						getToBlobPromise( canvas, mimeType )
-							.then( blob => new FileReader().readAsDataURL( blob ) )
-							.then( dataURL => {
+						.then( blob => new FileReader().readAsDataURL( blob ) )
+						.then( dataURL => {
 
-								imageDef.uri = dataURL;
+							imageDef.uri = dataURL;
 
-							} )
+						} )
 
 					);
 
@@ -1496,6 +1560,7 @@ class GLTFWriter {
 
 			const index = json.images.push( imageDef ) - 1;
 			cachedImages[ key ] = index;
+
 			return index;
 
 		} else {
@@ -1509,7 +1574,7 @@ class GLTFWriter {
 	/**
 	 * Process sampler
 	 * @param  {Texture} map Texture to process
-	 * @return {Integer}     Index of the processed texture in the "samplers" array
+	 * @return {Integer} Index of the processed texture in the "samplers" array
 	 */
 	processSampler( map ) {
 
@@ -1533,7 +1598,7 @@ class GLTFWriter {
 	 * @param  {Texture} map Map to process
 	 * @return {Integer} Index of the processed texture in the "textures" array
 	 */
-	async processTextureAsync( map ) {
+	async processTextureAsync( map, mapURI = null ) {
 
 		const writer = this;
 		const options = writer.options;
@@ -1551,13 +1616,13 @@ class GLTFWriter {
 
 		}
 
-		let mimeType = map.userData.mimeType;
+		let mimeType = mapURI !== null ? 'image/png' : map.userData.mimeType || 'image/png';
 
 		if ( mimeType === 'image/webp' ) mimeType = 'image/png';
 
 		const textureDef = {
 			sampler: this.processSampler( map ),
-			source: this.processImage( map.image, map.format, map.flipY, mimeType )
+			source: await this.processImage( map.image, map.format, map.flipY, mimeType, mapURI )
 		};
 
 		if ( map.name ) textureDef.name = map.name;
@@ -1570,6 +1635,7 @@ class GLTFWriter {
 
 		const index = json.textures.push( textureDef ) - 1;
 		cache.textures.set( map, index );
+
 		return index;
 
 	}
@@ -1759,6 +1825,15 @@ class GLTFWriter {
 
 		const cache = this.cache;
 		const json = this.json;
+		const options = this.options;
+
+		json.extensionsUsed = json.extensionsUsed || [];
+
+		if ( options.metadataTextures?.textures ) {
+
+			json.extensionsUsed.push( 'EXT_mesh_features' );
+
+		}
 
 		const meshCacheKeyParts = [ mesh.geometry.uuid ];
 
@@ -1850,7 +1925,7 @@ class GLTFWriter {
 			const validVertexAttributes =
 					/^(POSITION|NORMAL|TANGENT|TEXCOORD_\d+|COLOR_\d+|JOINTS_\d+|WEIGHTS_\d+)$/;
 
-			if ( ! validVertexAttributes.test( attributeName ) ) attributeName = '_' + attributeName;
+			if ( ! validVertexAttributes.test( attributeName ) && ! attributeName.startsWith( '_' ) ) attributeName = '_' + attributeName;
 
 			if ( cache.attributes.has( this.getUID( attribute ) ) ) {
 
@@ -3322,6 +3397,576 @@ class GLTFMeshGpuInstancing {
 
 		writer.extensionsUsed[ this.name ] = true;
 		writer.extensionsRequired[ this.name ] = true;
+
+	}
+
+}
+
+/**
+ * Custom created Instance Features Extension
+ * Created with assistance from AI: Microsoft Copilot
+ * Official specs: https://github.com/CesiumGS/glTF/tree/3d-tiles-next/extensions/2.0/Vendor/EXT_instance_features
+ */
+class GLTFInstanceFeaturesExtension {
+
+	constructor( writer ) {
+
+		this.writer = writer;
+		this.name = 'EXT_instance_features';
+
+	}
+
+	writeNode( object, nodeDef ) {
+
+		// Only applies to InstancedMesh
+
+		if ( !object.isInstancedMesh ) return;
+
+		const writer = this.writer;
+		const json = writer.json;
+
+		// Expect user to attach feature IDs like:
+		// mesh.instanceFeatureIds = {
+		//   featureCount: N,
+		//   propertyTable: 0,
+		//   label: "Building",
+		//   data: Uint32Array([...])  // length = mesh.count
+		// };
+
+		const inst = object.instanceFeatureIds;
+		if ( !inst || !inst.data ) return;
+
+		const count = object.count;
+		const array = inst.data;
+
+		if ( array.length !== count ) {
+
+			console.warn(
+				`EXT_instance_features: instanceFeatureIds.data length (${array.length}) does not match instance count (${count})`
+			);
+
+			return;
+
+		}
+
+		// Create accessor for feature IDs
+
+		const accessorIndex = writer.processAccessor(
+			new BufferAttribute( array, 1 )
+		);
+
+		// Build featureIds entry
+
+		const featureIdDef = {
+
+			featureCount: inst.featureCount ?? count,
+			attribute: accessorIndex
+
+		};
+
+		if ( inst.propertyTable !== undefined )
+			featureIdDef.propertyTable = inst.propertyTable;
+
+		if ( inst.label )
+			featureIdDef.label = inst.label;
+
+		// Attach extension to node
+
+		nodeDef.extensions = nodeDef.extensions || {};
+		nodeDef.extensions[ this.name ] = { featureIds: [ featureIdDef ] };
+
+		writer.extensionsUsed[ this.name ] = true;
+
+	}
+
+}
+
+/**
+ * Custom created Mesh Features Extension
+ * Created with assistance from AI: Google Gemini
+ * Official specs: https://github.com/CesiumGS/glTF/tree/3d-tiles-next/extensions/2.0/Vendor/EXT_mesh_features
+ */
+class GLTFMeshFeaturesExtension {
+
+	constructor( writer ) {
+
+		this.writer = writer;
+		this.name = 'EXT_mesh_features';
+
+	}
+
+	async writeMesh( mesh, meshDef ) {
+
+		const writer = this.writer;
+		const options = writer.options;
+		const userData = mesh.userData;
+
+		if ( !userData?.gltfExtensions?.EXT_mesh_features ) return;
+
+		const extensionDef = userData.gltfExtensions.EXT_mesh_features;
+
+		if ( extensionDef.featureIds ) {
+
+			const processedTextureIndices = new Map(); // oldIndex → newIndex
+
+			for ( const fid of extensionDef.featureIds ) {
+
+				if ( fid.texture && options.metadataTextures?.uris ) {
+
+					const oldIndex = fid.texture.index;
+					const uri = options.metadataTextures.uris[ oldIndex ];
+
+					if ( uri ) {
+
+						// If we already processed this metadata texture, reuse the index
+
+						if ( processedTextureIndices.has( oldIndex ) ) {
+
+							fid.texture.index = processedTextureIndices.get( oldIndex );
+							continue;
+
+						}
+
+						const texture = options.metadataTextures.textures?.[ oldIndex ];
+						let tempTexture;
+
+						if ( texture ) {
+
+							tempTexture = new DataTexture({
+								data: texture.data,
+								width: texture.width,
+								height: texture.height,
+								format: RGBAFormat,
+								colorSpace: NoColorSpace
+							});
+
+						} else {
+
+							tempTexture = new DataTexture({
+								data: new Uint8Array( [ 255, 255, 255, 255 ] )
+							});
+
+						}
+
+						tempTexture.flipY = false;
+						tempTexture.unpackAlignment = 1;
+						tempTexture.name = 'metadataTexture';
+						tempTexture.needsUpdate = true;
+
+						const newIndex = await writer.processTextureAsync( tempTexture, uri );
+
+						// Cache it
+
+						processedTextureIndices.set( oldIndex, newIndex );
+
+						// Update the texture index
+
+						fid.texture.index = newIndex;
+
+					}
+
+				}
+
+			}
+
+		}
+
+		meshDef.primitives.forEach( prim => {
+
+			prim.extensions = prim.extensions || {};
+			prim.extensions[ this.name ] = extensionDef;
+
+		});
+
+		writer.extensionsUsed[ this.name ] = true;
+
+	}
+
+}
+
+/**
+ * Custom created Structural Metadata Extension
+ * Created with assistance from AI: Google Gemini and Microsoft Copilot
+ * Handles the Global Schema and Property Tables
+ * Official specs: https://github.com/CesiumGS/glTF/tree/3d-tiles-next/extensions/2.0/Vendor/EXT_structural_metadata
+ */
+class GLTFStructuralMetadataExtension {
+
+	constructor( writer ) {
+
+		this.writer = writer;
+		this.name = 'EXT_structural_metadata';
+
+	}
+
+	//
+	// This runs AFTER the scene has been parsed, allowing us to 
+	// inject the global extension object into the root.
+	//
+
+	async afterParse( input ) {
+
+		const writer = this.writer;
+		const json = writer.json;
+		const options = writer.options;
+		const structural = options.structuralMetadata;
+
+		if ( !structural ) return;
+
+		json.extensions = json.extensions || {};
+		json.extensions[ this.name ] = {};
+
+		const ext = json.extensions[ this.name ];
+
+		// Copy schema (already resolved in the viewer)
+
+		if ( structural.schema ) {
+
+			ext.schema = structural.schema;
+
+		} else if ( structural.schemaUri ) {
+
+			ext.schemaUri = structural.schemaUri;
+
+		}
+
+		//
+		// PROPERTY TABLES
+		//
+
+		if ( Array.isArray( structural.propertyTables ) && structural.propertyTables.length > 0 ) {
+
+			ext.propertyTables = [];
+
+			for ( const table of structural.propertyTables ) {
+
+				const outTable = {
+					count: table.count,
+					class: table.class,
+					properties: {}
+				};
+
+				for ( const [ propName, prop ] of Object.entries( table.properties || {} ) ) {
+
+					outTable.properties[ propName ] = this._exportPropertyTableProperty( prop, structural.schema, table.class );
+
+				}
+
+				ext.propertyTables.push( outTable );
+
+			}
+
+		}
+
+		//
+		// PROPERTY TEXTURES
+		//
+
+		if ( Array.isArray( structural.propertyTextures ) && structural.propertyTextures.length > 0 ) {
+
+			// Resolve textures first
+
+			const processedPropertyTextureIndices = new Map(); // oldIndex → newIndex
+
+			for ( const tex of structural.propertyTextures ) {
+
+				for ( const [ key, val ] of Object.entries( tex.properties || {} ) ) {
+
+					const oldIndex = val.index;
+					const uri = options.structuralMetadata.uris[ oldIndex ];
+
+					if ( uri ) {
+
+						// If we already processed this metadata texture, reuse the index
+
+						if ( processedPropertyTextureIndices.has( oldIndex ) ) {
+
+							val.index = processedPropertyTextureIndices.get( oldIndex );
+							continue;
+
+						}
+
+						const texture = options.structuralMetadata.textures?.[ oldIndex ];
+						let tempTexture;
+
+						if ( texture ) {
+
+							tempTexture = new DataTexture({
+								data: texture.data,
+								width: texture.width,
+								height: texture.height,
+								format: RGBAFormat,
+								colorSpace: NoColorSpace
+							});
+
+						} else {
+
+							tempTexture = new DataTexture({
+								data: new Uint8Array( [ 255, 255, 255, 255 ] )
+							});
+
+						}
+
+						tempTexture.flipY = false;
+						tempTexture.unpackAlignment = 1;
+						tempTexture.name = 'metadataTexture';
+						tempTexture.needsUpdate = true;
+
+						const newIndex = await writer.processTextureAsync( tempTexture, uri );
+
+						// Cache it
+
+						processedPropertyTextureIndices.set( oldIndex, newIndex );
+
+						// Update the propertyTexture index
+
+						val.index = newIndex;
+
+					}
+
+				}
+
+			}
+
+			ext.propertyTextures = structural.propertyTextures.map( pt => {
+
+				// Shallow clone, but keep indices as‑is
+
+				const out = {
+					class: pt.class,
+					properties: {}
+				};
+
+				for ( const [ key, val ] of Object.entries( pt.properties || {} ) ) {
+
+					// Expecting { index, texCoord?, channels? }
+					out.properties[ key ] = {
+						index: val.index,
+						texCoord: val.texCoord,
+						channels: val.channels
+					};
+
+				}
+
+				return out;
+
+			} );
+
+		}
+
+		//
+		// PROPERTY ATTRIBUTES
+		//
+
+		if ( Array.isArray( structural.propertyAttributes ) && structural.propertyAttributes.length > 0 ) {
+
+			ext.propertyAttributes = structural.propertyAttributes.map( pa => {
+
+				const out = {
+					class: pa.class,
+					properties: {}
+				};
+
+				for ( const [ key, val ] of Object.entries( pa.properties || {} ) ) {
+
+					// Expecting { attribute: 'attrName' }
+
+					out.properties[ key ] = { attribute: val.attribute };
+
+				}
+
+				return out;
+
+			} );
+
+		}
+
+		//
+		// OPTIONAL: carry through any other fields
+		//
+
+		if ( structural.statistics ) ext.statistics = structural.statistics;
+
+		// Mark extension as used
+
+		writer.extensionsUsed[ this.name ] = true;
+
+	}
+
+	//
+	// PROPERTY TABLE PROPERTY EXPORT
+	//
+
+	_exportPropertyTableProperty( prop, schema, className ) {
+
+		const writer = this.writer;
+		const json = writer.json;
+
+		const out = {};
+
+		// Copy basic JSON fields that are already valid
+		if ( prop.type ) out.type = prop.type;
+		if ( prop.componentType ) out.componentType = prop.componentType;
+		if ( prop.normalized ) out.normalized = prop.normalized;
+		if ( prop.array ) out.array = prop.array;
+		if ( prop.count !== undefined ) out.count = prop.count;
+		if ( prop.offset !== undefined ) out.offset = prop.offset;
+		if ( prop.scale !== undefined ) out.scale = prop.scale;
+		if ( prop.noData !== undefined ) out.noData = prop.noData;
+		if ( prop.required !== undefined ) out.required = prop.required;
+
+		// ENUM / STRING metadata is in the schema; we don't need to duplicate it here.
+		// We just need to make sure the buffers are wired correctly.
+
+		//
+		// VALUES BUFFER
+		//
+
+		if ( prop.hydratedArray ) {
+
+			const needs8 = this._needs8ByteAlignment( className, prop, schema );
+			const bufferViewIndex = this._createBufferViewFromArrayBuffer( prop.hydratedArray, needs8 );
+
+			out.values = bufferViewIndex;
+
+		} else if ( typeof prop.values === 'number' ) {
+
+			// Already a bufferView index (e.g. from a previous export)
+
+			out.values = prop.values;
+
+		}
+
+		//
+		// STRING OFFSETS
+		//
+
+		if ( prop.hydratedStringOffsets ) {
+
+			const bufferViewIndex = this._createBufferViewFromTypedOrArrayBuffer(
+				prop.hydratedStringOffsets,
+				/* needs8 */ false
+			);
+
+			out.stringOffsets = bufferViewIndex;
+
+		} else if ( typeof prop.stringOffsets === 'number' ) {
+
+			out.stringOffsets = prop.stringOffsets;
+
+		}
+
+		//
+		// ARRAY OFFSETS
+		//
+
+		if ( prop.hydratedArrayOffsets ) {
+
+			const bufferViewIndex = this._createBufferViewFromTypedOrArrayBuffer(
+				prop.hydratedArrayOffsets,
+				/* needs8 */ false
+			);
+
+			out.arrayOffsets = bufferViewIndex;
+
+		} else if ( typeof prop.arrayOffsets === 'number' ) {
+
+			out.arrayOffsets = prop.arrayOffsets;
+
+		}
+
+		return out;
+
+	}
+
+	//
+	// BUFFER VIEW HELPERS
+	//
+
+	_createBufferViewFromArrayBuffer( arrayBuffer, needs8ByteAlignment ) {
+
+		const writer = this.writer;
+		const json = writer.json;
+
+		// Align to 8 bytes if needed
+
+		if ( needs8ByteAlignment ) {
+
+			const pad = ( 8 - ( writer.byteOffset % 8 ) ) % 8;
+
+			if ( pad > 0 ) {
+
+				const padding = new Uint8Array( pad );
+				writer.processBuffer( padding.buffer );
+				writer.byteOffset += pad;
+
+			}
+
+		}
+
+		const padded = getPaddedArrayBuffer( arrayBuffer );
+		const bufferIndex = writer.processBuffer( padded );
+		const byteOffset = writer.byteOffset;
+
+		writer.byteOffset += padded.byteLength;
+
+		json.bufferViews = json.bufferViews || [];
+
+		const bufferView = {
+			buffer: bufferIndex,
+			byteOffset: byteOffset,
+			byteLength: padded.byteLength
+		};
+
+		json.bufferViews.push( bufferView );
+
+		return json.bufferViews.length - 1;
+
+	}
+
+	_createBufferViewFromTypedOrArrayBuffer( data, needs8ByteAlignment ) {
+
+		if ( data instanceof ArrayBuffer ) {
+
+			return this._createBufferViewFromArrayBuffer( data, needs8ByteAlignment );
+
+		} else if ( ArrayBuffer.isView( data ) ) {
+
+			return this._createBufferViewFromArrayBuffer( data.buffer, needs8ByteAlignment );
+
+		} else {
+
+			console.warn( 'GLTFStructuralMetadataExtension: Unsupported buffer type for property table.' );
+			return undefined;
+
+		}
+
+	}
+
+	//
+	// 8‑BYTE ALIGNMENT CHECK
+	//
+
+	_needs8ByteAlignment( className, prop, schema ) {
+
+		if ( !schema || !schema.classes || !className ) return false;
+
+		const classDef = schema.classes[ className ];
+		if ( !classDef || !classDef.properties ) return false;
+
+		// Find the schema definition for this property by matching type/componentType
+		// (You can refine this if you want to match by name instead.)
+
+		const propDef = Object.values( classDef.properties ).find( p => {
+
+			return ( !prop.type || p.type === prop.type ) &&
+				( !prop.componentType || p.componentType === prop.componentType );
+
+		} ) || {};
+
+		const ct = prop.componentType || propDef.componentType;
+
+		return ct === 'FLOAT64' || ct === 'INT64' || ct === 'UINT64';
 
 	}
 
