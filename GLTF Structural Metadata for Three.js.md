@@ -66,14 +66,24 @@ It was adapted to work with standalone glTF files because the metadata model is 
 
 The picking flow is identical whether the glTF is part of a tileset or loaded on its own.
 
-Here is the picking pipeline, somewhat simplified:
+Here is the picking pipeline, maybe somewhat simplified:
 
 ```
-raycast → mesh → primitive → feature ID
-                                 ├─ attributes        → metadata
-                                 ├─ metadata texture  → metadata
-                                 ├─ property table    → metadata
-                                 └─ property texture  → metadata
+[ Input ]          [ Geometric Resolution ]       [ Metadata Retrieval ]
+                                                         
+  Raycast  ──▶  Mesh (Object3D)                    Property Table
+                 │                                   (Row = Feature ID)
+                 └─ Primitive (Face/UV)              ──▶ Metadata Values
+                    │
+                    ▼
+               Feature ID (The Index) ◀──────────
+                 │                               │
+       ┌─────────┴─────────┐              ┌──────┴──────┐
+       │                   │              │             │
+   Attributes        Metadata Texture     │      Property Texture
+ (Vertex Data)        (Texel Lookup)      │       (Texel Data)
+                                          │
+                                          └─ (Hydrated Typed Arrays)
 ```
 
 This unified approach ensures:
