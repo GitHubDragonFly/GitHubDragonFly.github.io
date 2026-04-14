@@ -187,6 +187,12 @@ class GLTFLoader extends Loader {
 
 		this.register( function ( parser ) {
 
+			return new GLTFAnimationPointerExtension( parser );
+
+		} );
+
+		this.register( function ( parser ) {
+
 			return new GLTFStructuralMetadataExtension( parser );
 
 		} );
