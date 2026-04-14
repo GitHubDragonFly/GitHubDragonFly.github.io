@@ -69,21 +69,20 @@ The picking flow is identical whether the glTF is part of a tileset or loaded on
 Here is the picking pipeline, maybe somewhat simplified:
 
 ```
-[ Input ]          [ Geometric Resolution ]       [ Metadata Retrieval ]
-                                                         
-  Raycast  ──▶  Mesh (Object3D)                    Property Table
-                 │                                   (Row = Feature ID)
-                 └─ Primitive (Face/UV)              ──▶ Metadata Values
-                    │
-                    ▼
-               Feature ID (The Index) ◀──────────
-                 │                               │
-       ┌─────────┴─────────┐              ┌──────┴──────┐
-       │                   │              │             │
-   Attributes        Metadata Texture     │      Property Texture
- (Vertex Data)        (Texel Lookup)      │       (Texel Data)
-                                          │
-                                          └─ (Hydrated Typed Arrays)
+[ 1. GEOMETRIC PICKING ]        [ 2. ID RESOLUTION ]         [ 3. DATA HYDRATION ]
+                                                                    
+Raycast Intersection ────────┐                                  Property Table
+      │                      │                                 (Binary Buffers)
+      ▼                      ▼                                        ▼
+Mesh / Instanced / Point      Feature ID (Key) ───────▶───────────────┤
+      │                      ▲                                        ▼
+      ├─ Attribute Lookup ──▶┤           ┌─── Read String (Offsets) ──┤
+      ├─ Texture Sampling ──▶┤           ├─── Read Array (Strides)  ──┤
+      └─ Vertex Index     ──▶┘           └─── Read Enum (Schema)    ──┤
+                                                                      ▼
+                                                              [ Final JS Object ]
+                                                             { Name: "Building A",
+                                                               Height: 42.5 ... }
 ```
 
 This unified approach ensures:
