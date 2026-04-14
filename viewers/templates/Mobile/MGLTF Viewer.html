@@ -70,8 +70,7 @@
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@3.10.1",
           "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_encoder.module.min.js",
           "meshoptimizer_decoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_decoder.module.min.js",
-          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_simplifier.module.min.js",
-          "fast-png": "https://esm.sh/fast-png@8.0.0"
+          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_simplifier.module.min.js"
         }
       }
     </script>
@@ -94,9 +93,9 @@
       var url_displayed = false, url_loading = false, object_is_points, init_running = false;
       var mouse_down, mouse_wheel, events_initialized, count = 0, filesMap;
       var selected_gltf_file, selected_draco_file, selected_url_file = '';
-      var local_files, local_files_indexes, local_bin_files, rootPath, userData;
+      var local_files, local_files_indexes, local_bin_files, rootPath;
       var raycaster, mouse, mouseDownPos, raycastableObjects, featureHighlightMesh;
-      var pickedObject, selectedObject, hasMetadata, click_listener_added, png_decode;
+      var pickedObject, selectedObject, hasMetadata, click_listener_added = false, userData;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
@@ -161,7 +160,6 @@
 
     <script type="module">
       import * as threejs from 'three';
-      import { decode } from 'fast-png';
       import * as fflatejs from 'three/addons/libs/fflate.module.min.js';
       import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.min.js';
       import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.min.js';
@@ -170,7 +168,6 @@
 
       THREE = threejs;
       fflate = fflatejs;
-      png_decode = decode;
 
       default_camera = new THREE.Object3D();
 
@@ -229,7 +226,7 @@
     <!-- When applicable, using glTF Transform for DRACO / MESHOPT / WEBP compression: https://gltf-transform.dev -->
     <!--  - When applicable, using meshoptimizer: https://github.com/zeux/meshoptimizer -->
     <!-- When applicable, using JSZip for exports: https://github.com/Stuk/jszip -->
-    <!-- When applicable, using fast-png decode function: https://github.com/image-js/fast-png -->
+    <!-- When applicable, using fast-png functionality: https://github.com/image-js/fast-png -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
@@ -655,6 +652,10 @@
             options = {	binary: binary };
           }
 
+          options.metadataTextures = { textures: userData?.textures, uris: userData?.uris };
+          options.structuralMetadata = userData?.structuralMetadata || {};
+          options.includeCustomExtensions = true;
+
           gltf_exporter.parse( clone( gltf_obj ), async json => {
             let blob;
 
@@ -667,7 +668,7 @@
                 } else if (meshopt === true) {
                   blob = new Blob( [ await meshopt_compress( new Uint8Array( json ), webp ) ], { type: type } );
                 } else {
-                  blob = new Blob( [ await simplify( new Uint8Array( json ), webp ) ], { type: type } );
+                  blob = new Blob( [ hasMetadata ? new Uint8Array( json ) : await simplify( new Uint8Array( json ), webp ) ], { type: type } );
                 }
               } catch ( error ) {
                 handle_export_error( error );
@@ -1036,7 +1037,6 @@
         raycastableObjects = [];
         render_requested = false;
         featureHighlightMesh = null;
-        click_listener_added = false;
         mouseDownPos = { x: 0, y: 0 };
         bounding_box = new THREE.Box3();
 
@@ -1228,141 +1228,6 @@
         (selected_gltf_file !== null) ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : loadURLFile() );
       }
 
-      async function decodeBase64ToPixels( uri ) {
-        const response = await fetch( uri );
-
-        if (!response.ok) {
-          console.warn( 'Failed to fetch url: ' + uri );
-          return null;
-        }
-
-        const buff = await response.arrayBuffer();
-        const imgData = await png_decode( buff );  // imported fast-png decoder
-
-        return {
-          data: imgData.data,
-          width: imgData.width,
-          height: imgData.height
-        };
-      }
-
-      async function process_gltf_metadata( parser ) {
-        const json = parser.json;
-        const images = json.images;
-        let texture_indexes = [];
-
-        if (json.meshes?.length > 0) {
-          json.meshes.forEach( mesh => {
-            if (mesh.primitives?.length > 0) {
-              mesh.primitives.forEach( prim => {
-                if (prim.extensions?.EXT_mesh_features?.featureIds?.length > 0) {
-                  prim.extensions.EXT_mesh_features.featureIds.forEach( fid => {
-                    if (fid.texture?.index !== undefined) texture_indexes.push( fid.texture.index );
-                  });
-                }
-              });
-            }
-          });
-        }
-
-        if (texture_indexes.length > 0 && !userData.textures) {
-          const cleanSorted = texture_indexes.length === 1
-            ? texture_indexes
-            : [ ...new Set( texture_indexes ) ].sort( ( a, b ) => a - b );
-
-          userData[ 'textures' ] = [];
-
-          for ( const indx of cleanSorted ) {
-            if (images[ indx ] !== undefined && !userData.textures[ indx ]) {
-              const pixelData = await decodeBase64ToPixels( images[ indx ].uri );
-
-              userData.textures[ indx ] = pixelData
-                ? {
-                    data: pixelData.data,
-                    width: pixelData.width,
-                    height: pixelData.height
-                  }
-                : null;
-            }
-          }
-        }
-
-        if (json.extensions?.EXT_structural_metadata) {
-          const ext = json.extensions.EXT_structural_metadata;
-
-          if (!ext.schema && ext.schemaUri !== undefined && ext.schemaUri.endsWith( '.json' )) {
-            try {
-              const response = await fetch( filesMap[ ext.schemaUri ] ? filesMap[ ext.schemaUri ] : rootPath + ext.schemaUri );
-
-              if (!response.ok) {
-                console.warn( 'Could not fetch schema!' );
-              } else {
-                const schema = await response.json();
-                ext[ 'schema' ] = schema;
-                delete ext.schemaUri;
-              }
-            } catch ( err ) {
-              console.warn( 'Error fetching schema: ' + err.message );
-            }
-          }
-
-          if (ext.propertyTables?.length > 0) {
-            for ( const table of ext.propertyTables ) {
-              // ATTACH DATA
-              for ( const [ propName, prop ] of Object.entries( table.properties ) ) {
-                // Hydrate Array Offsets
-                if (typeof prop.arrayOffsets === 'number') {
-                  const offsetIndex = prop.arrayOffsets;
-                  const offsetView = json.bufferViews[ offsetIndex ];
-                  prop.hydratedArrayOffsets = await parser.getDependency( 'bufferView', offsetIndex );
-                }
-
-                // Hydrate String Offsets
-                if (typeof prop.stringOffsets === 'number') {
-                  const offsetIndex = prop.stringOffsets;
-                  const offsetView = json.bufferViews[ offsetIndex ];
-                  prop.hydratedStringOffsets = await parser.getDependency( 'bufferView', offsetIndex );
-                }
-
-                // Hydrate the Values
-                if (typeof prop.values === 'number') {
-                  const bufferViewIndex = prop.values;
-                  const bufferView = json.bufferViews[ bufferViewIndex ];
-                  const bufferData = await parser.getDependency( 'bufferView', bufferViewIndex );
-                  prop.hydratedArray = bufferData;
-                }
-              }
-            }
-          }
-
-          if (ext.propertyTextures?.length > 0 && !ext.textures) {
-            ext[ 'textures' ] = [];
-
-            for ( const tex of ext.propertyTextures ) {
-              if (tex.properties && Object.entries( tex.properties ).length > 0) {
-                for ( const value of Object.values( tex.properties ) ) {
-                  if (value.index !== undefined && images[ value.index ] !== undefined && !ext.textures[ value.index ]) {
-                    const pixelData = await decodeBase64ToPixels( images[ value.index ].uri );
-
-                    ext.textures[ value.index ] = pixelData
-                      ? {
-                          data: pixelData.data,
-                          width: pixelData.width,
-                          height: pixelData.height
-                        }
-                      : null;
-                  }
-                }
-              }
-            }
-          }
-
-          userData[ 'structuralMetadata' ] = ext;
-        }
-
-        return Promise.resolve();
-      }
-
       function loadFile() {
         gltf_loader.load( URL.createObjectURL( local_files[ selected_gltf_file ] ), async function( gltf ) {
           URL.revokeObjectURL( local_files[ selected_gltf_file ] );
@@ -1370,7 +1235,7 @@
           parser = gltf.parser;
           cameras = gltf.cameras;
 
-          await process_gltf_metadata( parser );
+          if (gltf.userData) userData = gltf.userData;
 
           if (cameras && cameras.length > 0) {
             document.getElementById('btn_cameras').disabled = false;
@@ -1627,7 +1492,7 @@
             parser = gltf.parser;
             cameras = gltf.cameras;
 
-            await process_gltf_metadata( parser );
+            if (gltf.userData) userData = gltf.userData;
 
             if (cameras && cameras.length > 0) {
               document.getElementById('btn_cameras').disabled = false;
@@ -1766,11 +1631,13 @@
           if (child.type === 'PointLight' || child.type === 'SpotLight') {
             child.intensity *= 250;
           } else if (child.isMesh || child.isPoints || child.isLine) {
-            if (child.isMesh) object_is_mesh = true;
+            const extensions = child.userData.gltfExtensions;
 
-            if (child.userData?.gltfExtensions?.EXT_mesh_features || child.userData?.gltfExtensions?.EXT_instance_features) {
+            if (extensions?.EXT_mesh_features || extensions?.EXT_instance_features) {
               hasGltfExtensions = true;
             }
+
+            if (child.isMesh) object_is_mesh = true;
           }
         });
 
@@ -2177,9 +2044,14 @@
         }
 
         // --- RESTORE PREVIOUS SELECTION ---
-        if (selectedObject?.material?.emissive !== undefined) {
-          const oldColor = selectedObject.userData.originalEmissive || new THREE.Color( 0x000000 );
-          selectedObject.material.emissive.copy( oldColor );
+        if (selectedObject) {
+          if (selectedObject.material?.emissive !== undefined) {
+            const oldColor = selectedObject.userData.originalEmissive || new THREE.Color( 0x000000 );
+            selectedObject.material.emissive.copy( oldColor );
+          }
+
+          delete selectedObject.userData.originalEmissive;
+          delete selectedObject.userData.hasUniqueMaterial;
         }
 
         if (pickedObject?.userData?.structuralMetadata)
@@ -2189,6 +2061,7 @@
           delete pickedObject.userData.textures;
 
         selectedObject = null;
+        pickedObject = null;
         mouse_wheel = true;
         return;
       }
@@ -2200,8 +2073,11 @@
           return;
         }
 
+        // Calculate how far the mouse moved
         const deltaX = Math.abs( event.clientX - mouseDownPos.x );
         const deltaY = Math.abs( event.clientY - mouseDownPos.y );
+
+        // If moved more than 5 pixels, it was likely a camera drag, not a click
         if (deltaX > 5 || deltaY > 5) return;
 
         if (!raycaster) {
@@ -2259,11 +2135,11 @@
 
         const isInstanced = pickedObject.isInstancedMesh;
 
-        const object_userData = pickedObject.userData || {};
-        const extensions = object_userData.gltfExtensions || {};
-        const structuralMetadata = object_userData.structuralMetadata;
+        const obj_userData = pickedObject.userData || {};
+        const extensions = obj_userData.gltfExtensions || {};
+        const structuralMetadata = extensions?.structuralMetadata || obj_userData.structuralMetadata;
 
-        const schema = object_userData.schema || structuralMetadata?.schema;
+        const schema = obj_userData.schema || structuralMetadata?.schema;
 
         const meshFeatures = extensions.EXT_mesh_features || extensions.EXT_instance_features;
 
@@ -2281,29 +2157,37 @@
           vertexIndex = intersect.face.a;
         }
 
-        function getMetadataString( prop, featureId ) {
-          if ( !prop.hydratedArray || !prop.hydratedStringOffsets ) return 'No Data';
+        /**
+         * Detects and reads the correct integer type from an offset buffer.
+         * @param {ArrayBuffer|Uint8Array} buffer - The hydrated offset buffer.
+         * @param {number} index - The feature index to read.
+         * @param {number} totalFeatures - The count of features in the table (to infer type).
+         */
+        function getOffsetValue( buffer, index, totalFeatures ) {
+          if ( !buffer ) return 0;
 
-          const data    = prop.hydratedArray;
-          const offsets = prop.hydratedStringOffsets;
+          const view = new DataView( 
+            buffer.buffer || buffer, 
+            buffer.byteOffset || 0, 
+            buffer.byteLength 
+          );
 
-          // 1. Interpret offsets as UINT32
-          const offset32  = new Uint32Array( offsets );
+          // Calculate bytes per entry: total length / (N + 1)
+          const bytesPerEntry = buffer.byteLength / ( totalFeatures + 1 );
 
-          if ( featureId < 0 || featureId >= offset32.length - 1 ) {
-            return 'No Data';
+          switch ( bytesPerEntry ) {
+            case 1:
+              return view.getUint8( index );
+            case 2:
+              return view.getUint16( index * 2, true );
+            case 4:
+              return view.getUint32( index * 4, true );
+            case 8:
+              // Handle BigInt for UINT64, converting to Number for offset use
+              return Number( view.getUint64( index * 8, true ) );
+            default:
+              return view.getUint32( index * 4, true );
           }
-
-          const start = offset32[ featureId ];
-          const end   = offset32[ featureId + 1 ];
-
-          if ( start === end || start < 0 || end > data.byteLength ) {
-            return 'No Data';
-          }
-
-          // 2. Slice data[ start:end ] as UTF‑8
-          const stringBuffer = new Uint8Array( data, start, end - start );
-          return new TextDecoder().decode( stringBuffer );
         }
 
         function getStride( type, componentType ) {
@@ -2311,6 +2195,46 @@
           const bytesPerComponent = COMPONENT_COUNT_MAP[ componentType ] || 1;
           return numComponents * bytesPerComponent;
 	}
+
+        function getMetadataString( prop, featureId, numFeatures ) {
+          if ( !prop.hydratedArray || !prop.hydratedStringOffsets ) return 'No Data';
+
+          const data    = prop.hydratedArray;
+          const offsets = prop.hydratedStringOffsets;
+
+          // 1. Use the helper for both start and end to handle variable-width offsets
+          const start = getOffsetValue( offsets, featureId, numFeatures );
+          const end   = getOffsetValue( offsets, featureId + 1, numFeatures );
+
+          if ( start === end || start < 0 || end > data.byteLength ) {
+            return 'No Data';
+          }
+
+          // 2. Slice data[ start : end ] as UTF-8
+          const stringBuffer = new Uint8Array( data, start, end - start );
+          return new TextDecoder().decode( stringBuffer );
+        }
+
+        function readBooleanValue( propData, featureId ) {
+          const rawBuffer = propData.hydratedArray;
+          if ( !rawBuffer ) return false;
+
+          const view = new Uint8Array( rawBuffer.buffer || rawBuffer, rawBuffer.byteOffset || 0, rawBuffer.byteLength );
+
+          // Each byte holds 8 booleans.
+          const byteIndex = Math.floor( featureId / 8 );
+          const bitIndex = featureId % 8;
+
+          if ( byteIndex >= view.length ) {
+            console.warn( `Boolean Overflow: featureId ${featureId} leads to byte ${byteIndex}, but buffer is only ${view.length} bytes.` );
+            return false;
+          }
+
+          const byte = view[ byteIndex ];
+
+          // Mask the specific bit and return as true/false
+          return ( ( byte >> bitIndex ) & 1 ) === 1;
+        }
 
         function readBinaryValue( binary, offset, type, componentType, rowIndex = 0 ) {
           // 1. Ensure we use the sliced buffer view correctly
@@ -2368,13 +2292,11 @@
 
           // 1. Variable-length arrays: element‑index offsets
           if (propData.hydratedArrayOffsets) {
-            const offsetBytes = new Uint8Array( propData.hydratedArrayOffsets );
-            const offset32 = new Uint32Array( offsetBytes.buffer, 0, 5 );
+            const offsets = propData.hydratedArrayOffsets;
 
-            if (featureId < 0 || featureId >= offset32.length - 1) return 'N/A';
+            const start = getOffsetValue( offsets, featureId, numFeatures );
+            const end   = getOffsetValue( offsets, featureId + 1, numFeatures );
 
-            const start = offset32[ featureId ];
-            const end   = offset32[ featureId + 1 ];
             startElement = start;
             numElements = end - start;
           }
@@ -2388,15 +2310,14 @@
 
           const values = [];
 
-          // 4. STRING array
+          // 3. STRING array
           if (propDef.type === 'STRING' && propData.hydratedStringOffsets) {
-            const stringBytes = new Uint8Array( propData.hydratedStringOffsets );
-            const stringOffset32 = new Uint32Array( stringBytes.buffer, 0 );
+            const stringOffsets = propData.hydratedStringOffsets;
 
             for ( let i = 0; i < numElements; i++ ) {
               const idx = startElement + i;
-              const s = stringOffset32[ idx ];
-              const e = stringOffset32[ idx + 1 ] || rawBytes.length;
+              const s = getOffsetValue( stringOffsets, idx, numFeatures );
+              const e = getOffsetValue( stringOffsets, idx + 1, numFeatures ) || rawBytes.length;
 
               if (s >= rawBytes.length || e > rawBytes.length) continue;
 
@@ -2407,7 +2328,7 @@
             return values;
           }
 
-          // 5. BOOLEAN array
+          // 4. BOOLEAN array
           if (propDef.type === 'BOOLEAN') {
             for ( let i = 0; i < numElements; i++ ) {
               const elementIndex = startElement + i;
@@ -2418,7 +2339,7 @@
             return values;
           }
 
-          // 6. ENUM array
+          // 5. ENUM array
           if (propDef.type === 'ENUM') {
             const enumDef = schema.enums?.[ propDef.enumType ];
 
@@ -2437,7 +2358,7 @@
             return values; 
           }
 
-          // 7. Generic numeric array (SCALAR / VEC / MAT)
+          // 6. Generic numeric array (SCALAR / VEC / MAT)
           for ( let i = 0; i < numElements; i++ ) {
             const elementIndex = startElement + i;
             const val = readBinaryValue( rawBytes, 0, propDef.type, propDef.componentType, elementIndex );
@@ -2459,13 +2380,18 @@
           return values;
         }
 
-        function readBinaryPropertyValue( propDef, propData, featureId, propName ) {
+        function readBinaryPropertyValue( propDef, propData, featureId, propName, numFeatures ) {
           const rawBuffer = propData.hydratedArray;
           if (!rawBuffer) return 'N/A';
 
+          // BOOLEAN PROPERTIES
+          if (propDef?.type === 'BOOLEAN') {
+            return readBooleanValue( propData, featureId );
+          }
+
           // STRING PROPERTIES
           if (propDef?.type === 'STRING' || propData.stringOffsets !== undefined) {
-            return getMetadataString( propData, featureId );
+            return getMetadataString( propData, featureId, numFeatures );
           }
 
           // NUMERIC PROPERTIES
@@ -2523,14 +2449,15 @@
           const propertyTextures = metadata.structuralMetadata.propertyTextures;
           const propTex = propertyTextures.find( pt => pt.properties[ propertyName ] );
 
-          const textures = metadata.structuralMetadata.textures;
-          const texture = textures[ propTex.properties[ propertyName ].index ];
+          const sm_textures = metadata.structuralMetadata.textures;
+          const sm_texture = sm_textures[ propTex.properties[ propertyName ].index ];
+          if (!sm_texture) return 0;
 
-          const buffer = texture.data;
+          const buffer = sm_texture.data;
           if (!buffer) return 0;
 
-          const w = texture.width;
-          const h = texture.height;
+          const w = sm_texture.width;
+          const h = sm_texture.height;
 
           const x = Math.floor( uv.x * ( w - 0.001 ) );
           const y = Math.floor( uv.y * ( h - 0.001 ) );
@@ -2552,7 +2479,7 @@
               : Math.round( ( rawValue / divisor ) * 100 ) / 100;
           }
 
-          return rawValue * (propDef?.scale ?? 1) + (propDef?.offset ?? 0);
+          return rawValue * ( propDef?.scale ?? 1 ) + ( propDef?.offset ?? 0 );
         }
 
         function addPropertyTableMetadata( tableIndex, attributeIndex = null, featureId, numFeatures ) {
@@ -2578,11 +2505,11 @@
               // Safe read with bounds check
               try {
                 if (propDef.array) {
-                  properties[ key ] = readArrayProperty( propDef, propData, featureId, numFeatures );
+                  properties[ key ] = readArrayProperty( propDef, propData, featureId, table.count );
                 } else if (propDef.type === 'STRING' || propData.stringOffsets !== undefined) {
-                  properties[ key ] = getMetadataString( propData, featureId );
+                  properties[ key ] = getMetadataString( propData, featureId, numFeatures );
                 } else {
-                  properties[ key ] = readBinaryPropertyValue( propDef, propData, featureId, key );
+                  properties[ key ] = readBinaryPropertyValue( propDef, propData, featureId, key, numFeatures );
                 }
               } catch ( err ) {
                 console.warn( `Failed to read property ${ key } for feature ${ featureId }: `, err.message );
@@ -2620,7 +2547,7 @@
 
             if (info.texture !== undefined) {
               const texInfo = info.texture;
-              const idTexture = object_userData.textures?.[ texInfo.index ];
+              const idTexture = obj_userData.textures?.[ texInfo.index ];
 
               if (idTexture && intersect.uv) {
                 featureId = getFeatureIdFromTexture( idTexture, intersect.uv, texInfo.channels?.[ 0 ] || 0 );
@@ -2716,7 +2643,7 @@
               const pt_properties = {};
 
               for ( const propName of Object.keys( texture.properties || {} ) ) {
-                const val = getPropertyFromTexture( object_userData, propName, intersect.uv, className );
+                const val = getPropertyFromTexture( obj_userData, propName, intersect.uv, className );
                 if (val !== undefined) pt_properties[ propName ] = val;
               }
 
@@ -2809,7 +2736,7 @@
           return;
         }
 
-        const data = object_userData.metadata;
+        const data = obj_userData.metadata;
         const tilesetMetadataOnly = !data && !!pickedObject.parent;
 
         if (( data && !data.empty ) || tilesetMetadataOnly) {
