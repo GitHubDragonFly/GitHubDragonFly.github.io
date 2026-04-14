@@ -150,9 +150,9 @@
     </script>
 
     <script type="module">
-      import * as threejs from "three";
-      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { Three3DTilesLoader } from "../static/jsm/loaders/3DTilesLoader1.min.js";
+      import * as threejs from 'three';
+      import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+      import { Three3DTilesLoader } from '../static/jsm/loaders/3DTilesLoader1.min.js';
 
       THREE = threejs;
 
@@ -171,7 +171,7 @@
     <style>
       #metadata-card {
         position: absolute;
-        display: none; /* Hidden by default */
+        display: none;        /* Hidden by default */
         background: rgba( 25, 25, 25, 0.9 );
         color: #fff;
         padding: 12px;
@@ -464,7 +464,7 @@
 
       function gui_reset() {
         params.brightness = 2.5;
-        params.multiplier = 0.5;
+        params.multiplier = 2.0;
         params.pointSize = 1.0;
         params.bias = 1.0;
 
@@ -694,7 +694,7 @@
         mouseDownPos = { x: 0, y: 0 };
         xAxis = new THREE.Vector3( 1, 0, 0 );
 
-        if (!params) params = { brightness: 2.5, pointSize: 1.0, multiplier: 0.5, bias: 1.0 };
+        if (!params) params = { brightness: 2.5, pointSize: 1.0, multiplier: 2.0, bias: 1.0 };
 
         console.time( 'Loading Time' );
         document.body.style.backgroundImage = 'none';
@@ -800,7 +800,7 @@
 
         ghostMesh = new THREE.Mesh( ghostGeo, ghostMat );
         ghostMesh.raycast = THREE.Mesh.prototype.raycast;
-        ghostMesh.name = "metadata_proxy_mesh";
+        ghostMesh.name = 'metadata_proxy_mesh';
 
         // Position it at the center of tileset bounding box
         tileset_obj.boundingBox.getCenter( ghostMesh.position );
@@ -866,7 +866,7 @@
           });
 
           // Add LOD Multiplier control (Geometric Error Correction)
-          gui.add( params, 'multiplier', 0.5, 20.0, 0.1 ).name( 'LOD Multiplier' )
+          gui.add( params, 'multiplier', 0.01, 20.0, 0.01 ).name( 'LOD Multiplier' )
           .onChange( ( value ) => {
             if (tileset_obj) {
               tileset_obj.setGeometricErrorMultiplier( parseFloat( value ) );
@@ -875,7 +875,7 @@
           });
 
           // Add LOD Distance Bias control
-          gui.add( params, 'bias', 1.0, 5.0, 0.1 ).name( 'LOD Distance Bias' )
+          gui.add( params, 'bias', 0.01, 5.0, 0.01 ).name( 'LOD Distance Bias' )
           .onChange( ( value ) => {
             if (tileset_obj) {
               tileset_obj.setDistanceBias( parseFloat( value ) );
@@ -1437,8 +1437,11 @@
           return;
         }
 
+        // Calculate how far the mouse moved
         const deltaX = Math.abs( event.clientX - mouseDownPos.x );
         const deltaY = Math.abs( event.clientY - mouseDownPos.y );
+
+        // If moved more than 5 pixels, it was likely a camera drag, not a click
         if (deltaX > 5 || deltaY > 5) return;
 
         if (!raycaster) {
@@ -1507,29 +1510,37 @@
           vertexIndex = intersect.face.a;
         }
 
-        function getMetadataString( prop, featureId ) {
-          if ( !prop.hydratedArray || !prop.hydratedStringOffsets ) return 'No Data';
+        /**
+         * Detects and reads the correct integer type from an offset buffer.
+         * @param {ArrayBuffer|Uint8Array} buffer - The hydrated offset buffer.
+         * @param {number} index - The feature index to read.
+         * @param {number} totalFeatures - The count of features in the table (to infer type).
+         */
+        function getOffsetValue( buffer, index, totalFeatures ) {
+          if ( !buffer ) return 0;
 
-          const data    = prop.hydratedArray;
-          const offsets = prop.hydratedStringOffsets;
+          const view = new DataView( 
+            buffer.buffer || buffer, 
+            buffer.byteOffset || 0, 
+            buffer.byteLength 
+          );
 
-          // 1. Interpret offsets as UINT32
-          const offset32  = new Uint32Array( offsets );
+          // Calculate bytes per entry: total length / (N + 1)
+          const bytesPerEntry = buffer.byteLength / ( totalFeatures + 1 );
 
-          if ( featureId < 0 || featureId >= offset32.length - 1 ) {
-            return 'No Data';
+          switch ( bytesPerEntry ) {
+            case 1:
+              return view.getUint8( index );
+            case 2:
+              return view.getUint16( index * 2, true );
+            case 4:
+              return view.getUint32( index * 4, true );
+            case 8:
+              // Handle BigInt for UINT64, converting to Number for offset use
+              return Number( view.getUint64( index * 8, true ) );
+            default:
+              return view.getUint32( index * 4, true );
           }
-
-          const start = offset32[ featureId ];
-          const end   = offset32[ featureId + 1 ];
-
-          if ( start === end || start < 0 || end > data.byteLength ) {
-            return 'No Data';
-          }
-
-          // 2. Slice data[ start:end ] as UTF‑8
-          const stringBuffer = new Uint8Array( data, start, end - start );
-          return new TextDecoder().decode( stringBuffer );
         }
 
         function getStride( type, componentType ) {
@@ -1537,6 +1548,46 @@
           const bytesPerComponent = COMPONENT_COUNT_MAP[ componentType ] || 1;
           return numComponents * bytesPerComponent;
 	}
+
+        function getMetadataString( prop, featureId, numFeatures ) {
+          if ( !prop.hydratedArray || !prop.hydratedStringOffsets ) return 'No Data';
+
+          const data    = prop.hydratedArray;
+          const offsets = prop.hydratedStringOffsets;
+
+          // 1. Use the helper for both start and end to handle variable-width offsets
+          const start = getOffsetValue( offsets, featureId, numFeatures );
+          const end   = getOffsetValue( offsets, featureId + 1, numFeatures );
+
+          if ( start === end || start < 0 || end > data.byteLength ) {
+            return 'No Data';
+          }
+
+          // 2. Slice data[ start : end ] as UTF‑8
+          const stringBuffer = new Uint8Array( data, start, end - start );
+          return new TextDecoder().decode( stringBuffer );
+        }
+
+        function readBooleanValue( propData, featureId ) {
+          const rawBuffer = propData.hydratedArray;
+          if ( !rawBuffer ) return false;
+
+          const view = new Uint8Array( rawBuffer.buffer || rawBuffer, rawBuffer.byteOffset || 0, rawBuffer.byteLength );
+
+          // Each byte holds 8 booleans.
+          const byteIndex = Math.floor( featureId / 8 );
+          const bitIndex = featureId % 8;
+
+          if ( byteIndex >= view.length ) {
+            console.warn( `Boolean Overflow: featureId ${featureId} leads to byte ${byteIndex}, but buffer is only ${view.length} bytes.` );
+            return false;
+          }
+
+          const byte = view[ byteIndex ];
+
+          // Mask the specific bit and return as true/false
+          return ( ( byte >> bitIndex ) & 1 ) === 1;
+        }
 
         function readBinaryValue( binary, offset, type, componentType, rowIndex = 0 ) {
           // 1. Ensure we use the sliced buffer view correctly
@@ -1594,13 +1645,11 @@
 
           // 1. Variable-length arrays: element‑index offsets
           if (propData.hydratedArrayOffsets) {
-            const offsetBytes = new Uint8Array( propData.hydratedArrayOffsets );
-            const offset32 = new Uint32Array( offsetBytes.buffer, 0, 5 );
+            const offsets = propData.hydratedArrayOffsets;
 
-            if (featureId < 0 || featureId >= offset32.length - 1) return 'N/A';
+            const start = getOffsetValue( offsets, featureId, numFeatures );
+            const end   = getOffsetValue( offsets, featureId + 1, numFeatures );
 
-            const start = offset32[ featureId ];
-            const end   = offset32[ featureId + 1 ];
             startElement = start;
             numElements = end - start;
           }
@@ -1614,15 +1663,14 @@
 
           const values = [];
 
-          // 4. STRING array
+          // 3. STRING array
           if (propDef.type === 'STRING' && propData.hydratedStringOffsets) {
-            const stringBytes = new Uint8Array( propData.hydratedStringOffsets );
-            const stringOffset32 = new Uint32Array( stringBytes.buffer, 0 );
+            const stringOffsets = propData.hydratedStringOffsets;
 
             for ( let i = 0; i < numElements; i++ ) {
               const idx = startElement + i;
-              const s = stringOffset32[ idx ];
-              const e = stringOffset32[ idx + 1 ] || rawBytes.length;
+              const s = getOffsetValue( stringOffsets, idx, numFeatures );
+              const e = getOffsetValue( stringOffsets, idx + 1, numFeatures ) || rawBytes.length;
 
               if (s >= rawBytes.length || e > rawBytes.length) continue;
 
@@ -1685,13 +1733,18 @@
           return values;
         }
 
-        function readBinaryPropertyValue( propDef, propData, featureId, propName ) {
+        function readBinaryPropertyValue( propDef, propData, featureId, propName, numFeatures ) {
           const rawBuffer = propData.hydratedArray;
           if (!rawBuffer) return 'N/A';
 
+          // BOOLEAN PROPERTIES
+          if (propDef?.type === 'BOOLEAN') {
+            return readBooleanValue( propData, featureId );
+          }
+
           // STRING PROPERTIES
           if (propDef?.type === 'STRING' || propData.stringOffsets !== undefined) {
-            return getMetadataString( propData, featureId );
+            return getMetadataString( propData, featureId, numFeatures );
           }
 
           // NUMERIC PROPERTIES
@@ -1749,14 +1802,14 @@
           const propertyTextures = metadata.structuralMetadata.propertyTextures;
           const propTex = propertyTextures.find( pt => pt.properties[ propertyName ] );
 
-          const textures = metadata.structuralMetadata.textures;
-          const texture = textures[ propTex.properties[ propertyName ].index ];
+          const sm_textures = metadata.structuralMetadata.textures;
+          const sm_texture = sm_textures[ propTex.properties[ propertyName ].index ];
 
-          const buffer = texture.data;
+          const buffer = sm_texture.data;
           if (!buffer) return 0;
 
-          const w = texture.width;
-          const h = texture.height;
+          const w = sm_texture.width;
+          const h = sm_texture.height;
 
           const x = Math.floor( uv.x * ( w - 0.001 ) );
           const y = Math.floor( uv.y * ( h - 0.001 ) );
@@ -1804,11 +1857,11 @@
               // Safe read with bounds check
               try {
                 if (propDef.array) {
-                  properties[ key ] = readArrayProperty( propDef, propData, featureId, numFeatures );
+                  properties[ key ] = readArrayProperty( propDef, propData, featureId, table.count );
                 } else if (propDef.type === 'STRING' || propData.stringOffsets !== undefined) {
-                  properties[ key ] = getMetadataString( propData, featureId );
+                  properties[ key ] = getMetadataString( propData, featureId, numFeatures );
                 } else {
-                  properties[ key ] = readBinaryPropertyValue( propDef, propData, featureId, key );
+                  properties[ key ] = readBinaryPropertyValue( propDef, propData, featureId, key, numFeatures );
                 }
               } catch ( err ) {
                 console.warn( `Failed to read property ${ key } for feature ${ featureId }: `, err.message );
