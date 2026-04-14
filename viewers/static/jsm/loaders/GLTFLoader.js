@@ -63,9 +63,11 @@ import {
 	Vector2,
 	Vector3,
 	VectorKeyframeTrack
-} from "three";
+} from 'three';
 
-import { toTrianglesDrawMode } from "three/addons/utils/BufferGeometryUtils.min.js";
+import { toTrianglesDrawMode } from 'three/addons/utils/BufferGeometryUtils.min.js';
+
+import { decode, encode } from 'https://esm.sh/fast-png@8.0.0';
 
 class GLTFLoader extends Loader {
 
@@ -185,7 +187,7 @@ class GLTFLoader extends Loader {
 
 		this.register( function ( parser ) {
 
-			return new GLTFAnimationPointerExtension( parser );
+			return new GLTFStructuralMetadataExtension( parser );
 
 		} );
 
@@ -2479,6 +2481,324 @@ class GLTFMeshGpuInstancing {
 			return instancedMeshes[ 0 ];
 
 		} );
+
+	}
+
+}
+
+/**
+ * Custom created Structural Metadata Extension
+ * Official specs: https://github.com/CesiumGS/glTF/tree/3d-tiles-next/extensions/2.0/Vendor/EXT_structural_metadata
+ *
+ */
+
+class GLTFStructuralMetadataExtension {
+
+	constructor( parser ) {
+
+		this.name = 'EXT_structural_metadata';
+		this.parser = parser;
+
+	}
+
+	async afterRoot( result ) {
+
+		const parser = this.parser;
+		const json = parser.json;
+		const images = json.images;
+
+		const ext = json.extensions?.[ this.name ];
+		if ( !ext ) return;
+
+		async function _encodeToPngUri( image ) {
+
+			if ( !image ) return null;
+
+			// Using imported fast-png encoder
+
+			const pngBytes = encode( {
+
+				width: image.width,
+				height: image.height,
+				data: image.data,
+				depth: 8,
+				channels: 4
+
+			} );
+
+			const base64 = btoa( String.fromCharCode( ...pngBytes ) );
+
+			const uri = `data:image/png;base64,${ base64 }`;
+
+			return uri;
+
+		}
+
+		async function _decodeBase64ToPixels( uri = null, ab = null ) {
+
+			if ( !uri && !ab ) return null;
+
+			let buff = ab;
+
+			if ( uri ) {
+
+				const response = await fetch( uri );
+
+				if ( !response.ok ) {
+
+					console.warn( 'Failed to fetch url: ' + uri );
+					return null;
+
+				}
+
+				buff = await response.arrayBuffer();
+
+			}
+
+			// Using imported fast-png decoder
+
+			const imgData = await decode( buff );
+
+			return {
+				data: imgData.data,
+				width: imgData.width,
+				height: imgData.height
+			};
+
+		}
+
+		async function _hydrate() {
+
+			let texture_indexes = [];
+
+			if ( json.meshes?.length > 0 ) {
+
+				json.meshes.forEach( mesh => {
+
+					if ( mesh.primitives?.length > 0 ) {
+
+						mesh.primitives.forEach( prim => {
+
+							if ( prim.extensions?.EXT_mesh_features?.featureIds?.length > 0 ) {
+
+								prim.extensions.EXT_mesh_features.featureIds.forEach( fid => {
+
+									if (fid.texture?.index !== undefined) {
+
+										texture_indexes.push( fid.texture.index );
+
+									}
+
+								});
+
+							}
+
+						});
+
+					}
+
+				});
+
+			}
+
+			if ( texture_indexes.length > 0 && !result.userData.textures ) {
+
+				const cleanSorted = texture_indexes.length === 1
+					? texture_indexes
+					: [ ...new Set( texture_indexes ) ].sort( ( a, b ) => a - b );
+
+				result.userData[ 'textures' ] = [];
+				result.userData[ 'uris' ] = []; // Collect uris for exporting
+
+				for ( const indx of cleanSorted ) {
+
+					if ( images[ indx ] !== undefined && !result.userData.textures[ indx ] ) {
+
+						let pixelData;
+						let uri = images[ indx ].uri;
+
+						// If the data is in a bufferView, not a URI
+
+						if ( !uri && images[ indx ].bufferView !== undefined ) {
+
+							// Use parser to get the actual array buffer object
+
+							const ab = await parser.getDependency( 'bufferView', images[ indx ].bufferView );
+							pixelData = await _decodeBase64ToPixels( null, ab );
+
+						} else {
+
+							pixelData = await _decodeBase64ToPixels( uri, null );
+
+						}
+
+						result.userData.textures[ indx ] = pixelData
+							?
+								{
+									data: pixelData.data,
+									width: pixelData.width,
+									height: pixelData.height
+								}
+							: null;
+
+						if ( uri && !userData.uris[ indx ] ) {
+
+							userData.uris[ indx ] = uri;
+
+						} else if ( pixelData && !userData.uris[ indx ] ) {
+
+							userData.uris[ indx ] = await _encodeToPngUri( pixelData );
+
+						}
+
+					}
+
+				}
+
+			}
+
+			if ( ext ) {
+
+				if ( !ext.schema && ext.schemaUri !== undefined && ext.schemaUri.endsWith( '.json' ) ) {
+
+					try {
+
+						const response = await fetch( ( parser.options?.path || '' ) + ext.schemaUri );
+
+						if ( !response.ok ) {
+
+							console.warn( 'Could not fetch schema!' );
+
+						} else {
+
+							const schema = await response.json();
+							ext[ 'schema' ] = schema;
+							delete ext.schemaUri;
+
+						}
+
+					} catch ( err ) {
+
+						console.warn( 'Error fetching schema: ' + err.message );
+
+					}
+
+				}
+
+				if ( ext.propertyTables?.length > 0 ) {
+
+					for ( const table of ext.propertyTables ) {
+
+						// ATTACH DATA
+
+						for ( const [ propName, prop ] of Object.entries( table.properties ) ) {
+
+							// Hydrate Array Offsets
+
+							if ( typeof prop.arrayOffsets === 'number' ) {
+
+								const offsetIndex = prop.arrayOffsets;
+								const offsetView = json.bufferViews[ offsetIndex ];
+								prop.hydratedArrayOffsets = await parser.getDependency( 'bufferView', offsetIndex );
+
+							}
+
+							// Hydrate String Offsets
+
+							if ( typeof prop.stringOffsets === 'number' ) {
+
+								const offsetIndex = prop.stringOffsets;
+								const offsetView = json.bufferViews[ offsetIndex ];
+								prop.hydratedStringOffsets = await parser.getDependency( 'bufferView', offsetIndex );
+
+							}
+
+							// Hydrate the Values
+
+							if ( typeof prop.values === 'number' ) {
+
+								const bufferViewIndex = prop.values;
+								const bufferView = json.bufferViews[ bufferViewIndex ];
+								const bufferData = await parser.getDependency( 'bufferView', bufferViewIndex );
+								prop.hydratedArray = bufferData;
+
+							}
+
+						}
+
+					}
+
+				}
+
+				if ( ext.propertyTextures?.length > 0 && !ext.textures ) {
+
+					ext[ 'textures' ] = [];
+					ext[ 'uris' ] = [];
+
+					for ( const tex of ext.propertyTextures ) {
+
+						if ( tex.properties && Object.entries( tex.properties ).length > 0 ) {
+
+							for ( const value of Object.values( tex.properties ) ) {
+
+								if ( value.index !== undefined && images[ value.index ] !== undefined && !ext.textures[ value.index ] ) {
+
+									let pixelData;
+									let uri = images[ value.index ].uri;
+
+									// If the data is in a bufferView, not a URI
+
+									if ( !uri && images[ value.index ].bufferView !== undefined ) {
+
+										// Use parser to get the actual array buffer object
+
+										const ab = await parser.getDependency( 'bufferView', images[ value.index ].bufferView );
+										pixelData = await _decodeBase64ToPixels( null, ab );
+
+									} else {
+
+										pixelData = await _decodeBase64ToPixels( uri, null );
+
+									}
+
+									ext.textures[ value.index ] = pixelData
+										?
+											{
+												data: pixelData.data,
+												width: pixelData.width,
+												height: pixelData.height
+											}
+										: null;
+
+									if ( uri && !ext.uris[ value.index ] ) {
+
+										ext.uris[ value.index ] = uri;
+
+									} else if ( pixelData && !ext.uris[ value.index ] ) {
+
+										ext.uris[ value.index ] = await _encodeToPngUri( pixelData );
+
+									}
+
+								}
+
+							}
+
+						}
+
+					}
+
+				}
+
+				result.userData[ 'structuralMetadata' ] = ext;
+
+			}
+
+			return Promise.resolve();
+
+		}
+
+		await _hydrate( ext );
 
 	}
 

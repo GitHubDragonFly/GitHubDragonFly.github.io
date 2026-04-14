@@ -2,7 +2,7 @@ import { Box3, Loader, MathUtils, Matrix4, Quaternion, RGBAFormat, Sphere, Vecto
 import * as OGC3D from 'https://cdn.jsdelivr.net/npm/@jdultra/threedtiles@14.0.26/dist/threedtiles.es.min.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.min.js';
 import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.min.js';
-import { decode } from 'https://esm.sh/fast-png@8.0.0';
+import { decode, encode } from 'https://esm.sh/fast-png@8.0.0';
 
 class NoopStructuralMetadataExtension {
 
@@ -17,27 +17,34 @@ class NoopStructuralMetadataExtension {
 
 	// Helper to decode Base64 to a pixel array
 
-	async decodeBase64ToPixels( uri ) {
+	async decodeBase64ToPixels( uri = null, ab = null ) {
 
-		const response = await fetch( uri );
+		if (!uri && !ab) return null;
 
-		if ( !response.ok ) {
+		let buff = ab;
 
-			console.warn( 'Could not fetch url: ' + uri );
-			return null;
+		if ( uri ) {
 
-		} else {
+			const response = await fetch( uri );
 
-			const buff = await response.arrayBuffer();
-			const imgData = await decode( buff );  // imported fast-png decoder
+			if ( !response.ok ) {
 
-			return {
-				data: imgData.data,
-				width: imgData.width,
-				height: imgData.height
-			};
+				console.warn( 'Could not fetch url: ' + uri );
+				return null;
+
+			}
+
+			buff = await response.arrayBuffer();
 
 		}
+
+		const imgData = await decode( buff );  // imported fast-png decoder
+
+		return {
+			data: imgData.data,
+			width: imgData.width,
+			height: imgData.height
+		};
 
 	}
 
@@ -86,7 +93,23 @@ class NoopStructuralMetadataExtension {
 
 				if ( images[ indx ] !== undefined && !this.userData.textures[ indx ] ) {
 
-					const pixelData = await this.decodeBase64ToPixels( images[ indx ].uri );
+					let pixelData;
+					let uri = images[ indx ].uri;
+
+					// If the data is in a bufferView, not a URI
+
+					if ( !uri && images[ indx ].bufferView !== undefined) {
+
+						// Use parser to get the actual array buffer object
+
+						const ab = await parser.getDependency( 'bufferView', images[ indx ].bufferView );
+						pixelData = await this.decodeBase64ToPixels( null, ab );
+
+					} else {
+
+						pixelData = await this.decodeBase64ToPixels( uri, null );
+
+					}
 
 					this.userData.textures[ indx ] = pixelData
 
@@ -194,7 +217,23 @@ class NoopStructuralMetadataExtension {
 
 							if ( value.index !== undefined && images[ value.index ] !== undefined && !ext.textures[ value.index ] ) {
 
-								const pixelData = await this.decodeBase64ToPixels( images[ value.index ].uri );
+								let pixelData;
+								let uri = images[ value.index ].uri;
+
+								// If the data is in a bufferView, not a URI
+
+								if ( !uri && images[ value.index ].bufferView !== undefined) {
+
+									// Use parser to get the actual array buffer object
+
+									const ab = await parser.getDependency( 'bufferView', images[ value.index ].bufferView );
+									pixelData = await this.decodeBase64ToPixels( null, ab );
+
+								} else {
+
+									pixelData = await this.decodeBase64ToPixels( uri, null );
+
+								}
 
 								ext.textures[ value.index ] = pixelData
 
@@ -2559,6 +2598,7 @@ class Three3DTilesLoader extends Loader {
 
 				rootPath: rootPath,
 				userData: scope._userData,
+				renderer: scope._renderer,
 				ktx2Loader: scope._ktx2Loader,
 				dracoLoader: scope._dracoLoader,
 				maxCachedItems: scope._maxCacheSize,
@@ -2607,8 +2647,7 @@ class Three3DTilesLoader extends Loader {
 					level: scope._maxDepthLevel,
 					geometricErrorMultiplier: 0.5,
 					drawBoundingVolume: isImplicit,
-					maxCacheSize: scope._maxCacheSize,
-					loadingStrategy: isImplicit ? "INCREMENTAL" : "PERLEVEL",
+					loadingStrategy: isImplicit ? 'INCREMENTAL' : 'PERLEVEL',
 					queryParams: scope._keyAPI !== '' ? { key: scope._keyAPI } : undefined,
 					headers: scope._token ? { Authorization: `Bearer ${ scope._token }` } : undefined,
 					onLoadCallback: tileset => { resolve( tileset ); }
