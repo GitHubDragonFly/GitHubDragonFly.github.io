@@ -1144,8 +1144,15 @@
             options = {	binary: binary, maxTextureSize: (binary === true ? I8K : tex_res) };
           }
 
-          options.metadataTextures = { textures: userData?.textures, uris: userData?.uris };
-          options.structuralMetadata = userData?.structuralMetadata || {};
+          if (userData?.textures || userData?.uris)
+            options.metadataTextures = { textures: userData?.textures, uris: userData?.uris };
+
+          if (userData?.structuralMetadata) {
+            options.structuralMetadata = userData.structuralMetadata;
+          } else if (userData?.gltfExtensions?.EXT_structural_metadata) {
+            options.structuralMetadata = userData.gltfExtensions.EXT_structural_metadata;
+          }
+
           options.includeCustomExtensions = true;
 
           gltf_exporter.parse( clone( gltf_obj ), async json => {
@@ -3591,7 +3598,7 @@
           if (child.isMesh || child.isPoints || child.isLine) {
             const extensions = child.userData.gltfExtensions;
 
-            if (extensions?.EXT_mesh_features || extensions?.EXT_instance_features) {
+            if (extensions?.EXT_mesh_features || extensions?.EXT_instance_features || extensions?.EXT_structural_metadata) {
               hasGltfExtensions = true;
             }
 
@@ -4121,6 +4128,8 @@
 
         if (userData.structuralMetadata !== undefined) {
           pickedObject.userData.structuralMetadata = userData.structuralMetadata;
+        } else if (userData.gltfExtensions?.EXT_structural_metadata !== undefined) {
+          pickedObject.userData.structuralMetadata = userData.gltfExtensions.EXT_structural_metadata;
         }
 
         if (userData.textures?.length > 0) {
@@ -4477,7 +4486,15 @@
           const index = ( y * w + x ) * 4;
 
           const channels = propTex.properties[ propertyName ].channels || [ 0 ];
-          let rawValue = buffer[ index + channels[ 0 ] ];
+
+          // Support multi-channel packing (e.g., UINT16 or UINT24 stored across R, G, B)
+
+          let rawValue = 0;
+
+          for ( let i = 0; i < channels.length; i++ ) {
+            const byteValue = buffer[ index + channels[ i ] ];
+            rawValue += byteValue * Math.pow( 256, i ); 
+          }
 
           // Normalize if needed
           const propDef = schema?.classes?.[ className ]?.properties?.[ propertyName ];
@@ -4849,7 +4866,7 @@
           }
 
           // B. Handle Nested Objects
-          if (typeof processedVal === 'object' && !Array.isArray( processedVal ) && !processedVal.isVector3) {
+          if (typeof processedVal === 'object' && !Array.isArray( processedVal ) && !processedVal.isVector3 && !processedVal.isVector2 && !processedVal.isColor) {
             let subHtml = '<div style="margin-left: 10px; font-size: 0.9em; color: #ccc;">';
 
             for ( const [ k, v ] of Object.entries( processedVal ) ) {
@@ -5066,40 +5083,71 @@
           const rawJson = JSON.stringify( data ? data : dataForClipboard, bigintReplacer, 2 );
           if (!rawJson) return;
 
-          // Escape it for use inside an HTML attribute
-          // We replace backslashes first, then single quotes
-          safeJson = rawJson
-            .replace(/\\/g, '\\\\')   // Escape backslashes
-            .replace(/'/g, "\\'")     // Escape single quotes
+          // Example 1.
+          // Set a hidden attribute on the card itself
+          //card.dataset.clipboard = rawJson;
+
+          //html += `
+          //  <button
+          //    onclick="navigator.clipboard.writeText( this.closest('#metadata-card').dataset.clipboard ).then( () => alert( 'Copied!' ) );">
+          //    📋 Copy To Clipboard
+          //  </button>`;
+
+          // Example 2.
+          // Encode it so it's 100% safe inside an HTML attribute
+          const safeUrlJson = encodeURIComponent( rawJson );
 
           html += `
             <div style="padding: 3px; border-top: 1px solid #444; text-align: center;">
               <button
                 style="vertical-align: middle; background: #111; color: white; border: 1px solid #00d4ff; padding: 2px; cursor: pointer; font-size: 11px; border-radius: 4px; width: 100%;"
-                onclick="navigator.clipboard.writeText( safeJson ).then( () => alert( 'Metadata copied!' ) );">
+                onclick="navigator.clipboard.writeText( decodeURIComponent('${safeUrlJson}') ).then( () => alert( 'Metadata copied!' ) );">
                 📋 Copy To Clipboard
               </button>
             </div>`;
         }
 
         card.innerHTML = html;
+
+        // Position Logic
+        const padding = 15;
+
+        // 1. Force the card to render invisibly so we can measure its dynamic size
+        card.style.visibility = 'hidden';
         card.style.display = 'block';
 
-        // 7. Position Logic
+        // 2. Get the actual dimensions the browser calculated (based on your CSS and content)
+        const rect = card.getBoundingClientRect();
+        const actualWidth = rect.width;
+        const actualHeight = rect.height;
 
-        const cardWidth = 220; 
-        let x = event.clientX + 15;
-        let y = event.clientY + 15;
+        // 3. Get viewport boundaries
+        const viewportWidth = window.innerWidth;
+        const viewportHeight = window.innerHeight;
 
-        if (x + cardWidth > window.innerWidth) x = event.clientX - cardWidth - 15;
+        // 4. Horizontal Logic (Flip if it hits the right edge)
+        let x = event.clientX + padding;
 
-        // If the card goes off the bottom of the screen
-        if (y + card.offsetHeight > window.innerHeight) {
-          y = window.innerHeight - card.offsetHeight - 15;
+        if (x + actualWidth > viewportWidth) {
+          // Flip to the left of the cursor
+          x = event.clientX - actualWidth - padding;
         }
 
+        // 5. Vertical Logic (Slide up if it hits the bottom)
+        let y = event.clientY + padding;
+
+        if (y + actualHeight > viewportHeight) {
+          y = viewportHeight - actualHeight - padding;
+        }
+
+        // 6. Final Safety Bumpers (Keep it at least 5px from any edge)
+        x = Math.max( 5, Math.min( x, viewportWidth - actualWidth - 5 ) );
+        y = Math.max( 5, Math.min( y, viewportHeight - actualHeight - 5 ) );
+
+        // 7. Apply and Reveal
         card.style.left = x + 'px';
         card.style.top = y + 'px';
+        card.style.visibility = 'visible';
       }
 
       function hideUiPanel() {
