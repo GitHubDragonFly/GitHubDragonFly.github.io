@@ -692,8 +692,8 @@ class GLTFWriter {
 			trs: false,
 			onlyVisible: true,
 			animations: [],
-			metadataTextures: {},
-			structuralMetadata: {},
+			metadataTextures: null,
+			structuralMetadata: null,
 			maxTextureSize: Infinity,
 			includeCustomExtensions: false
 		}, options );
@@ -819,6 +819,8 @@ class GLTFWriter {
 		try {
 
 			const json = JSON.parse( JSON.stringify( object.userData ) );
+
+			if ( json.name !== undefined ) delete json.name;
 
 			if ( options.includeCustomExtensions && json.gltfExtensions ) {
 
@@ -2442,6 +2444,10 @@ class GLTFWriter {
 		const options = this.options;
 		const nodeMap = this.nodeMap;
 
+		// 1. Check the cache first (Standard Three.js behavior)
+
+		if ( nodeMap.has( object ) ) return nodeMap.get( object );
+
 		if ( ! json.nodes ) json.nodes = [];
 
 		const nodeDef = {};
@@ -2483,6 +2489,27 @@ class GLTFWriter {
 				nodeDef.matrix = object.matrix.elements;
 
 			}
+
+		}
+
+		// Detect "Passthrough" Wrappers
+		// If this is a plain Object3D/Group with no transforms and exactly one child,
+		// we bypass it entirely and return the index of its child.
+
+		const isIdentity = !nodeDef.matrix && !nodeDef.translation && !nodeDef.rotation && !nodeDef.scale;
+
+		const isPlainWrapper = ( object.isGroup || object.type === 'Object3D' ) &&
+			object.children.length === 1 &&
+			isIdentity &&
+			Object.keys( object.userData ).length === 0;
+
+		if ( isPlainWrapper ) {
+
+			// Recursively process the child and return its index instead of creating a new node
+
+			const childIndex = await this.processNodeAsync( object.children[ 0 ] );
+			nodeMap.set( object, childIndex ); // Map this wrapper to the child's index
+			return childIndex;
 
 		}
 
