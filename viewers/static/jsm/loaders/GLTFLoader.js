@@ -193,7 +193,7 @@ class GLTFLoader extends Loader {
 
 		this.register( function ( parser ) {
 
-			return new GLTFStructuralMetadataExtension( parser );
+			return new NoopMetadataHydrationExtension( parser );
 
 		} );
 
@@ -2493,16 +2493,15 @@ class GLTFMeshGpuInstancing {
 }
 
 /**
- * Custom created Structural Metadata Extension
- * Official specs: https://github.com/CesiumGS/glTF/tree/3d-tiles-next/extensions/2.0/Vendor/EXT_structural_metadata
+ * Custom created Metadata Hydration Extension
+ * To be used for when EXT_mesh_features and/or EXT_instance_features and/or EXT_structural_metadata are present
  *
  */
-
-class GLTFStructuralMetadataExtension {
+class NoopMetadataHydrationExtension {
 
 	constructor( parser ) {
 
-		this.name = 'EXT_structural_metadata';
+		this.name = 'Noop_metadata_hydration';
 		this.parser = parser;
 
 	}
@@ -2513,8 +2512,11 @@ class GLTFStructuralMetadataExtension {
 		const json = parser.json;
 		const images = json.images;
 
-		const ext = json.extensions?.[ this.name ];
-		if ( !ext ) return;
+		const x_if = json.extensionsUsed?.includes( 'EXT_instance_features' );
+		const x_mf = json.extensionsUsed?.includes( 'EXT_mesh_features' );
+		const ext = json.extensions?.[ 'EXT_structural_metadata' ];
+
+		if ( ! ( ext || x_mf || x_if ) ) return;
 
 		async function _encodeToPngUri( image ) {
 
@@ -2573,7 +2575,7 @@ class GLTFStructuralMetadataExtension {
 
 		}
 
-		async function _hydrate() {
+		async function _hydrateMetadata() {
 
 			let texture_indexes = [];
 
@@ -2647,13 +2649,13 @@ class GLTFStructuralMetadataExtension {
 								}
 							: null;
 
-						if ( uri && !userData.uris[ indx ] ) {
+						if ( uri && !result.userData.uris[ indx ] ) {
 
-							userData.uris[ indx ] = uri;
+							result.userData.uris[ indx ] = uri;
 
-						} else if ( pixelData && !userData.uris[ indx ] ) {
+						} else if ( pixelData && !result.userData.uris[ indx ] ) {
 
-							userData.uris[ indx ] = await _encodeToPngUri( pixelData );
+							result.userData.uris[ indx ] = await _encodeToPngUri( pixelData );
 
 						}
 
@@ -2663,7 +2665,7 @@ class GLTFStructuralMetadataExtension {
 
 			}
 
-			if ( ext ) {
+			if ( typeof ext === 'object' && Object.entries( ext ).length > 0 ) {
 
 				if ( !ext.schema && ext.schemaUri !== undefined && ext.schemaUri.endsWith( '.json' ) ) {
 
@@ -2796,7 +2798,8 @@ class GLTFStructuralMetadataExtension {
 
 				}
 
-				result.userData[ 'structuralMetadata' ] = ext;
+				if ( result.userData.gltfExtensions?.[ 'EXT_structural_metadata' ] === undefined )
+					result.userData[ 'structuralMetadata' ] = ext;
 
 			}
 
@@ -2804,7 +2807,7 @@ class GLTFStructuralMetadataExtension {
 
 		}
 
-		await _hydrate( ext );
+		await _hydrateMetadata();
 
 	}
 
