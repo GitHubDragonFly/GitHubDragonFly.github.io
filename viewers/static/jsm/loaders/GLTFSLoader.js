@@ -1822,6 +1822,7 @@ class NoopMetadataHydrationExtension {
 		const parser = this.parser;
 		const json = parser.json;
 		const images = json.images;
+		const manager = parser.options.manager;
 
 		const x_if = json.extensionsUsed?.includes( 'EXT_instance_features' );
 		const x_mf = json.extensionsUsed?.includes( 'EXT_mesh_features' );
@@ -1982,7 +1983,14 @@ class NoopMetadataHydrationExtension {
 
 					try {
 
-						const response = await fetch( ( parser.options?.path || '' ) + ext.schemaUri );
+						// Try to manually resolve the URL using the manager's logic
+
+						const resolvedUrl = ext.schemaUri.startsWith( 'http' ) ? ext.schemaUri : manager.resolveURL( ext.schemaUri );
+
+						const response = await fetch( ( ext.schemaUri.startsWith( 'http' ) || resolvedUrl !== ext.schemaUri )
+							? resolvedUrl
+							: ( parser.options?.path || '' ) + ext.schemaUri
+						);
 
 						if ( !response.ok ) {
 
