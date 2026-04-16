@@ -199,14 +199,16 @@
         border: 1px solid #444;
         box-shadow: 0 4px 15px rgba( 0, 0, 0, 0.5 );
         pointer-events: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #555 transparent;
         z-index: 1000;
       }
 
-      #metadata-card::-webkit-scrollbar { width: 6px; }
+      #metadata-card::-webkit-scrollbar { width: 6px; height: 6px; }
       #metadata-card::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
       #metadata-card h4 { margin: 0 0 8px 0; color: #00d4ff; font-size: 11px; }
       #metadata-card .prop-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-      #metadata-card .prop-label { color: #aaa; margin-right: 15px; }
+      #metadata-card .prop-label { color: #aaa; margin-right: 10px; }
       #metadata-card .prop-value { font-weight: bold; color: #fff; }
     </style>
 
@@ -1469,11 +1471,7 @@
 
         // --- RESTORE PREVIOUS SELECTION ---
         if (selectedObject) {
-          if (selectedObject.material?.emissive !== undefined) {
-            const oldColor = selectedObject.userData.originalEmissive || new THREE.Color( 0x000000 );
-            selectedObject.material.emissive.copy( oldColor );
-          }
-
+          selectedObject.material.dispose();
           delete selectedObject.userData.originalEmissive;
           delete selectedObject.userData.hasUniqueMaterial;
         }
@@ -1590,7 +1588,7 @@
          * @param {number} totalFeatures - The count of features in the table (to infer type).
          */
         function getOffsetValue( buffer, index, totalFeatures ) {
-          if ( !buffer ) return 0;
+          if (!buffer) return 0;
 
           const view = new DataView( 
             buffer.buffer || buffer, 
@@ -1623,7 +1621,7 @@
 	}
 
         function getMetadataString( prop, featureId, numFeatures ) {
-          if ( !prop.hydratedArray || !prop.hydratedStringOffsets ) return 'No Data';
+          if (!prop.hydratedArray || !prop.hydratedStringOffsets) return 'No Data';
 
           const data    = prop.hydratedArray;
           const offsets = prop.hydratedStringOffsets;
@@ -1632,7 +1630,7 @@
           const start = getOffsetValue( offsets, featureId, numFeatures );
           const end   = getOffsetValue( offsets, featureId + 1, numFeatures );
 
-          if ( start === end || start < 0 || end > data.byteLength ) {
+          if (start === end || start < 0 || end > data.byteLength) {
             return 'No Data';
           }
 
@@ -1643,7 +1641,7 @@
 
         function readBooleanValue( propData, featureId ) {
           const rawBuffer = propData.hydratedArray;
-          if ( !rawBuffer ) return false;
+          if (!rawBuffer) return false;
 
           const view = new Uint8Array( rawBuffer.buffer || rawBuffer, rawBuffer.byteOffset || 0, rawBuffer.byteLength );
 
@@ -1651,7 +1649,7 @@
           const byteIndex = Math.floor( featureId / 8 );
           const bitIndex = featureId % 8;
 
-          if ( byteIndex >= view.length ) {
+          if (byteIndex >= view.length) {
             console.warn( `Boolean Overflow: featureId ${featureId} leads to byte ${byteIndex}, but buffer is only ${view.length} bytes.` );
             return false;
           }
@@ -1667,7 +1665,7 @@
           const view = new DataView( binary.buffer, binary.byteOffset, binary.byteLength );
 
           // 2. Handle Booleans (Bitstream)
-          if ( type === 'BOOLEAN' ) {
+          if (type === 'BOOLEAN') {
             const byteOffset = offset + Math.floor( rowIndex / 8 );
             const bitIndex = rowIndex % 8;
             return ( ( view.getUint8( byteOffset ) >> bitIndex ) & 1 ) === 1;
@@ -1680,7 +1678,7 @@
           const stride = bytesPerComponent * numComponents;
           const method = DATAVIEW_GETTER_MAP[ cType ];
 
-          if ( !method ) return null;
+          if (!method) return null;
 
           // 4. Calculate absolute byte position in the slice
           const rowStart = offset + ( rowIndex * stride );
@@ -1690,7 +1688,7 @@
             const currentOffset = rowStart + ( i * bytesPerComponent );
 
             // Safety check for buffer overflow
-            if ( currentOffset + bytesPerComponent > view.byteLength ) {
+            if (currentOffset + bytesPerComponent > view.byteLength) {
               results.push( 0 );
               continue;
             }
@@ -2178,59 +2176,74 @@
         }
       }
 
-      function showUiPanel( data, event, schema = null, meshName = '', tilesetMetadataOnly = false, type = '' ) {
+      async function showUiPanel( data, event, schema = null, meshName = '', tilesetMetadataOnly = false, type = '' ) {
         const card = document.getElementById('metadata-card');
         if (!card) return;
 
-        // Enhanced resolver to handle the complex types in new JSON
-
+        /**
+         * Helper: Formats arrays (simple or object-based) into HTML
+         */
         function formatArray( arr ) {
-          if (arr.length === 0) return '[]';
+          if (!arr || arr.length === 0) return '[]';
 
-          // If it's an array of objects
-          if (typeof arr[ 0 ] === 'object' && arr[ 0 ] !== null) {
-            return arr.map( ( item, idx ) => {
+          // Force TypedArrays (Float32Array, etc.) into standard Arrays 
+          // so .map() and .join() behave predictably
+          const arrayData = ArrayBuffer.isView( arr ) ? Array.from( arr ) : arr;
+
+          // If it's an array of objects (like matrix elements or custom structs)
+          if (typeof arrayData[ 0 ] === 'object' && arrayData[ 0 ] !== null) {
+            return arrayData.map( ( item, idx ) => {
               let itemHtml = `<div style="margin: 4px 0 4px 5px; padding-left: 8px; border-left: 2px solid #00d4ff; background: rgba(0,212,255,0.05);">`;
               itemHtml += `<div style="font-size: 9px; color: #00d4ff; opacity: 0.7;">Part ${idx + 1}</div>`;
 
-              for ( const [ sk, sv ] of Object.entries( item ) ) {
-                const cleanSv = ( typeof sv === 'number' )
-                  ? ( Number.isInteger( sv ) ? sv : sv.toFixed( 2 ) )
-                  : sv;
-
-                itemHtml += `<div style="font-size: 11px;"><span style="color: #666;">${sk}:</span> ${cleanSv}</div>`;
+              // --- Check for Matrix/Vector objects to flatten them ---
+              if (item.elements && (Array.isArray( item.elements ) || ArrayBuffer.isView( item.elements ))) {
+                // Just show the numbers, skip the "elements:" label
+                itemHtml += `<div style="font-size: 11px;">${formatArray( item.elements )}</div>`;
+              } else if (item.x !== undefined && item.y !== undefined) {
+                // Just show the coordinate tuple, skip "x:", "y:", "z:" labels
+                const zVal = item.z !== undefined ? `, ${item.z.toFixed( 2 )}` : '';
+                itemHtml += `<div style="font-size: 11px;">(${item.x.toFixed( 2 )}, ${item.y.toFixed( 2 )}${zVal})</div>`;
+              } else {
+                // Fallback for normal custom structs/objects
+                for ( const [ sk, sv ] of Object.entries( item ) ) {
+                  const cleanSv = resolveValue( null, sk, sv );
+                  itemHtml += `<div style="font-size: 11px;"><span style="color: #888;">${sk}:</span> ${cleanSv}</div>`;
+                }
               }
 
               itemHtml += `</div>`;
               return itemHtml;
             }).join('');
           }
-    
-          // If it's a simple array (like [1, 2, 3])
-          return `[ ${arr.map( v => {
-            if ( typeof v === 'number' ) {
-              return ( Number.isInteger( v ) ? v : v.toFixed( 2 ) );
-            }
 
+          // Standard simple array (numbers, strings, booleans)
+          return `[ ${arrayData.map( v => {
+            if (typeof v === 'number') return Number.isInteger( v ) ? v : v.toFixed( 2 );
+            if (typeof v === 'bigint') return v.toString();
             return String( v );
-          }).join( ', ' )} ]`;
+          }).join(', ')} ]`;
         }
 
-        const resolveValue = ( className, propName, val ) => {
+        /**
+         * Helper: Resolves any value type into a UI-friendly string/HTML
+         */
+        function resolveValue( className, propName, val, depth = 0 ) {
+          if (depth > 3) return '<span style="color:#666;">[Max Depth]</span>';
+
           let processedVal = val;
 
-          // Handle Three.js math objects (from interpolation)
-          if (processedVal && typeof processedVal === 'object') {
-            if (processedVal.isVector3) {
-              return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )}, ${processedVal.z.toFixed( 2 )})`;
-            }
+          if (processedVal === null || processedVal === undefined) return 'N/A';
 
-            if (processedVal.isVector2) {
-              return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )})`;
-            }
+          // Handle Three.js Math Objects / Matrices
+          if (typeof processedVal === 'object') {
+            if (processedVal.isVector3) return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )}, ${processedVal.z.toFixed( 2 )})`;
+            if (processedVal.isVector2) return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )})`;
+            if (processedVal.isColor) return `RGB(${processedVal.r.toFixed( 2 )}, ${processedVal.g.toFixed( 2 )}, ${processedVal.b.toFixed( 2 )})`;
 
-            if (processedVal.isColor) {
-              return `RGB(${processedVal.r.toFixed( 2 )}, ${processedVal.g.toFixed( 2 )}, ${processedVal.b.toFixed( 2 )})`;
+            // Matrix4 / Matrix3 elements
+            if (processedVal.elements && Array.isArray( processedVal.elements )) {
+              return formatArray( processedVal.elements );
             }
           }
 
@@ -2253,7 +2266,7 @@
 
           if (processedVal === null || processedVal === undefined) return 'N/A';
 
-          // A. Handle Arrays (The core of EXT_structural_metadata)
+          // Handle Arrays (The core of EXT_structural_metadata)
           if (Array.isArray( processedVal )) {
             if (processedVal.length === 0) return '[]';
 
@@ -2269,131 +2282,93 @@
 
             // General Array (Booleans, Strings, etc.)
             return formatArray( processedVal );
+          } else {
+            if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
+              const entry = schema.enums[ propDef.enumType ].values.find( v => v.value == processedVal || v.name === processedVal );
+              return entry ? entry.name : processedVal;
+            }
+
+            if (propDef?.type === 'BOOLEAN') {
+              const isTrue = (processedVal === true || processedVal === 'true' || processedVal === 1);
+              return isTrue ? 'Yes' : 'No';
+            }
           }
 
-          // B. Handle Nested Objects
-          if (typeof processedVal === 'object' && !Array.isArray( processedVal ) && !processedVal.isVector3 && !processedVal.isVector2 && !processedVal.isColor) {
+          // Final Formatting based on Type
+          if (typeof processedVal === 'object' && processedVal !== null) {
+            // 1. CATCH NESTED MATRICES/ELEMENTS OBJECTS
+            // This removes the "elements" label from the UI
+            if (processedVal.elements && ( Array.isArray( processedVal.elements ) || ArrayBuffer.isView( processedVal.elements ) )) {
+              return formatArray( processedVal.elements );
+            }
+
+            // 2. CATCH NESTED VECTORS (x, y, z)
+            if (processedVal.x !== undefined && processedVal.y !== undefined) {
+              const zStr = processedVal.z !== undefined ? `, ${processedVal.z.toFixed( 2 )}` : '';
+              return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )}${zStr})`;
+            }
+
+            // 3. FALLBACK: Generic Nested Object loop
             let subHtml = '<div style="margin-left: 10px; font-size: 0.9em; color: #ccc;">';
 
             for ( const [ k, v ] of Object.entries( processedVal ) ) {
-              let displayV = v;
-
-              // 1. If it's a string, try to "un-stringify" it first
-              if (typeof displayV === 'string' && ( displayV.startsWith( '[' ) || displayV.startsWith( '{' ) )) {
-                try {
-                  displayV = JSON.parse( displayV );
-                } catch ( e ) {
-                  // If it's the unquoted Cesium style [One, Two], manual split
-                  if (displayV.startsWith( '[' ) && displayV.endsWith( ']' )) {
-                    displayV = displayV.slice( 1, -1 ).split( ',' ).map( s => s.trim() );
-                  }
-                }
-              }
-
-              // 2. Now that we have the "truest" form of the data, format it for the UI
-              if (Array.isArray( displayV )) {
-                displayV = formatArray( displayV );
-              } else if (typeof displayV === 'object' && displayV !== null) {
-                // If it's still an object (deep nesting), stringify it as a fallback
-                displayV = JSON.stringify( displayV );
-              } else if (typeof displayV === 'number') {
-                displayV = ( Number.isInteger( displayV ) ? displayV : displayV.toFixed( 2 ) );
-              } else if (typeof displayV === 'boolean') {
-                displayV = displayV ? 'Yes' : 'No';
-              }
-
-              subHtml += `<div><span style="color: #888;">${k}:</span> ${displayV}</div>`;
+              subHtml += `<div><span style="color: #888;">${k}:</span> ${resolveValue( null, k, v, depth + 1 )}</div>`;
             }
 
-            subHtml += '</div>';
-            return subHtml;
+            return subHtml + '</div>';
           }
 
-          // C. Handle Single Values (Non-Arrays)
-
-          // Single Enums
-          if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
-            const entry = schema.enums[ propDef.enumType ].values.find( v => v.value == processedVal || v.name === processedVal );
-            return entry ? entry.name : processedVal;
-          }
-
-          // Single Booleans
-          if (propDef?.type === 'BOOLEAN') {
-            // Treat "true", true, or non-zero numbers as "Yes"
-            const isTrue = (processedVal === true || processedVal === 'true' || processedVal === 1);
-            return isTrue ? 'Yes' : 'No';
-          }
-
-          // Single Numbers
-          if (typeof processedVal === 'number') {
-            return Number.isInteger( processedVal ) ? processedVal : processedVal.toFixed( 2 );
-          }
-
-          // Handle BigInt / Numbers
+          if (typeof processedVal === 'number') return Number.isInteger( processedVal ) ? processedVal : processedVal.toFixed( 2 );
           if (typeof processedVal === 'bigint') return processedVal.toString();
+          if (typeof processedVal === 'boolean') return processedVal ? 'Yes' : 'No';
 
           return processedVal;
-        };
+        }
 
-        let show_copy_to_clipboard = true;
-
+        // --- HTML Assembly ---
         let html = '';
+        let show_copy_to_clipboard = true;
+        const tileset = tilesetMetadataOnly ? tileset_obj.userData?.tileset : data?.tileset;
 
-        // 1. Tileset Metadata - Maybe entries like author, date, tile count...
-
-        const tileset = tilesetMetadataOnly ? pickedObject.userData?.tileset : data?.tileset;
-
+        // 1. Tileset Section
         if (tileset?.class) {
-          html += `
-            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
-              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${tileset.class}</div>
-            </div>`;
+          html += `<div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+                     <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">TILESET: ${tileset.class}</div>
+                   </div>`;
 
           if (tileset.properties) {
             for ( const [ key, val ] of Object.entries( tileset.properties ) ) {
-              const display = resolveValue( tileset.class, key, val );
-              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
-           }
+              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${resolveValue( tileset.class, key, val )}</span></div>`;
+            }
           }
         } else if (tilesetMetadataOnly) {
           show_copy_to_clipboard = false;
-
           const description = (type === 'Box3Helper') ? 'No Data (turn off bounding box)' : 'No Data';
-
-          html += `
-            <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
-              <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${ description }</div>
-            </div>`;
+          html += `<div style="color: #888; font-size: 10px;">${description}</div>`;
         }
 
+        // 2. Feature / Tile / Group / Content Sections
         if (data && !tilesetMetadataOnly) {
-          if (tileset) html += `<br>`;
+          if (tileset) html += '<br>';
 
-          // 2. Tile Metadata - Maybe entries like district, population...
-
+          // Tile Class
           if (data.tile?.class) {
-            html += `
-              <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
-                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.tile.class}</div>
-              </div>`;
+            html += `<div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+                       <div style="font-size: 10px; color: #00d4ff;">TILE: ${data.tile.class}</div>
+                     </div>`;
 
-            if (data.tile.properties) {
-              for ( const [ key, val ] of Object.entries( data.tile.properties ) ) {
-                const display = resolveValue( data.tile.class, key, val );
-                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
-              }
+            for ( const [ k, v ] of Object.entries( data.tile.properties || {} ) ) {
+              html += `<div class="prop-row"><span class="prop-label">${k}:</span><span class="prop-value">${resolveValue( data.tile.class, k, v )}</span></div>`;
             }
 
-            html += `<br>`;
+            html += '<br>';
           }
 
-          // 3. Selected Object
-
-          if (meshName !== '') {
-            html += `<div style="font-size: 12px; font-weight: bold; color: #fff; line-height: 1.0;">Selected: ${meshName}</div><br>`;
+          if (meshName) {
+            html += `<div style="font-size: 12px; font-weight: bold; color: #fff;">Selected: ${meshName}</div><br>`;
           }
 
-          // 4. Group Metadata - Maybe entries like color, priority...
+          // Group Metadata - Maybe entries like color, priority...
 
           if (data.group?.class) {
             html += `
@@ -2411,7 +2386,7 @@
             html += `<br>`;
           }
 
-          // 5. Content Metadata - Maybe entries like vertices, materials...
+          // Content Metadata - Maybe entries like vertices, materials...
 
           if (data.content?.class) {
             html += `
@@ -2427,132 +2402,95 @@
             }
           }
 
-          // 5.5 Feature-Specific Metadata (EXT_structural_metadata)
-
+          // Feature Metadata (Structural Metadata)
           if (data.featureMetadata) {
             const fms = Array.isArray( data.featureMetadata ) ? data.featureMetadata : [ data.featureMetadata ];
 
-            fms.forEach( ( fm ) => {
-              html += `
-                <div style="border-bottom: 1px solid #00d4ff; margin-top: 10px; padding-bottom: 4px;">
-                  <div style="font-size: 10px; color: #00d4ff; font-weight: bold;">${fm.class}</div>
-                </div>`;
+            fms.forEach( fm => {
+              html += `<div style="border-bottom: 1px solid #00d4ff; margin-top: 10px; padding-bottom: 4px;">
+                         <div style="font-size: 10px; color: #00d4ff; font-weight: bold;">${fm.class}</div>
+                       </div>`;
 
-              if (fm.properties) {
-                for ( const [ key, val ] of Object.entries( fm.properties ) ) {
-                  const display = resolveValue( fm.class, key, val );
-                  html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
-                }
+              for ( const [ k, v ] of Object.entries( fm.properties || {} ) ) {
+                html += `<div class="prop-row"><span class="prop-label">${k}:</span><span class="prop-value">${resolveValue( fm.class, k, v )}</span></div>`;
               }
 
-              html += `<br>`;
-            });
-          }
-
-          // 6. FeatureId - Maybe entries from EXT_mesh_features, EXT_structural_metadata...
-          // Only show if not already merged into metadata
-
-          if (data.featureId && Array.isArray( data.featureId ) && !data.featureMetadata) {
-            data.featureId.forEach( ( fid_class, index ) => {
-              // Use the class name if found, otherwise use a readable layer index
-              const label = fid_class.class || `Feature Layer ${index}`;
-              const idValue = fid_class.id !== undefined ? fid_class.id : 'N/A';
-
-              html += `
-                <div class="feature-group" style="margin-top: 10px; border-left: 2px solid #00d4ff; padding-left: 8px;">
-                  <div style="font-size: 10px; color: #aaa; font-weight: bold;">${ label }</div>
-                  <div class="prop-row" style="display: flex; justify-content: space-between; align-items: center;">
-                    <span class="prop-label" style="color: #00d4ff;">ID:</span><span class="prop-value">${ idValue }</span>
-                  </div>
-                </div>`;
+              html += '<br>';
             });
           }
         }
 
+        // 3. Clipboard Button
         if (show_copy_to_clipboard) {
-          // Create a shallow copy so we don't accidentally delete the real schema from the viewer
-          const dataForClipboard = data
-            ? { ...data }
-            : object_userData?.tileset
-              ? { ...object_userData.tileset }
-              : {};
-
-          // Remove the heavy schema part for popup card, it will be included for clipboard
-          delete dataForClipboard.schema;
-
-          // Add selected mesh name
-          if (data && meshName) data[ 'Selected' ] = meshName;
-
-          // A helper to make JSON.stringify handle BigInt
-          const bigintReplacer = ( key, value ) => typeof value === 'bigint' ? value.toString() : value;
-
-          const rawJson = JSON.stringify( data ? data : dataForClipboard, bigintReplacer, 2 );
-          if (!rawJson) return;
-
-          // Example 1.
-          // Set a hidden attribute on the card itself
-          //card.dataset.clipboard = rawJson;
-
-          //html += `
-          //  <button
-          //    onclick="navigator.clipboard.writeText( this.closest('#metadata-card').dataset.clipboard ).then( () => alert( 'Copied!' ) );">
-          //    📋 Copy To Clipboard
-          //  </button>`;
-
-          // Example 2.
-          // Encode it so it's 100% safe inside an HTML attribute
-          const safeUrlJson = encodeURIComponent( rawJson );
-
           html += `
-            <div style="padding: 3px; border-top: 1px solid #444; text-align: center;">
-              <button
-                style="vertical-align: middle; background: #111; color: white; border: 1px solid #00d4ff; padding: 2px; cursor: pointer; font-size: 11px; border-radius: 4px; width: 100%;"
-                onclick="navigator.clipboard.writeText( decodeURIComponent('${safeUrlJson}') ).then( () => alert( 'Metadata copied!' ) );">
-                📋 Copy To Clipboard
+            <div style="padding-top: 8px; border-top: 1px solid #444; text-align: center;">
+              <button id="copy-btn" style="background: #111; color: #00d4ff; border: 1px solid #00d4ff; border-radius: 4px; padding: 5px; cursor: pointer; font-size: 11px; width: 100%;">
+                📋 Copy Metadata (JSON)
               </button>
             </div>`;
+
+          card.innerHTML = html;
+
+          // --- Post-Render Logic: Clipboard & Positioning ---
+          const btn = document.getElementById('copy-btn');
+
+          // Create a "Deep Clean" copy for the clipboard
+          const dataForClipboard = data
+            ? { ...data }
+            : tileset_obj.userData?.tileset
+              ? { ...tileset_obj.userData.tileset }
+              : {};
+
+          btn.onclick = () => {
+            // 1. Deep copy and BigInt handling
+            const cleanData = JSON.parse( JSON.stringify( dataForClipboard, ( k, v ) => 
+              typeof v === 'bigint' ? v.toString() : v
+            ));
+
+            // 2. Promotion: Convert stringified JSON into actual objects
+            const deepUnescape = ( obj ) => {
+
+              for ( const key in obj ) {
+                if (typeof obj[ key ] === 'string' && ( obj[ key ].startsWith( '{' ) || obj[ key ].startsWith( '[' ) )) {
+                  try {
+                    obj[ key ] = JSON.parse( obj[ key ] );
+                    deepUnescape( obj[ key ] );
+                  } catch ( e ) {}
+                } else if (obj[ key ] && typeof obj[ key ] === 'object') {
+                  deepUnescape( obj[ key ] );
+                }
+              }
+            };
+
+            deepUnescape( cleanData );
+
+            // 3. Metadata cleanup
+            if (meshName && meshName !== 'metadata_proxy_mesh') cleanData[ 'Selected' ] = meshName;
+            delete cleanData.schema;
+
+            // 4. Formatting: Pretty-print with "airy" compact arrays
+            let text = JSON.stringify( cleanData, null, 2 );
+            text = text.replace(/\[\s+([\d\.\-\"\'\w\s,]+)\s+\]/g, ( match, content ) => {
+              return `[ ${content.replace(/\s+/g, ' ')} ]`;
+            });
+
+            navigator.clipboard.writeText( text ).then( () => alert( '✅ Copied Airy JSON!' ) );
+          };
         }
 
-        card.innerHTML = html;
-
-        // Position Logic
-        const padding = 15;
-
-        // 1. Force the card to render invisibly so we can measure its dynamic size
+        // Display and Measurement
         card.style.visibility = 'hidden';
         card.style.display = 'block';
 
-        // 2. Get the actual dimensions the browser calculated (based on your CSS and content)
         const rect = card.getBoundingClientRect();
-        const actualWidth = rect.width;
-        const actualHeight = rect.height;
+        const vw = window.innerWidth, vh = window.innerHeight;
+        let x = event.clientX + 15, y = event.clientY + 15;
 
-        // 3. Get viewport boundaries
-        const viewportWidth = window.innerWidth;
-        const viewportHeight = window.innerHeight;
+        if (x + rect.width > vw) x = event.clientX - rect.width - 15;
+        if (y + rect.height > vh) y = vh - rect.height - 15;
 
-        // 4. Horizontal Logic (Flip if it hits the right edge)
-        let x = event.clientX + padding;
-
-        if (x + actualWidth > viewportWidth) {
-          // Flip to the left of the cursor
-          x = event.clientX - actualWidth - padding;
-        }
-
-        // 5. Vertical Logic (Slide up if it hits the bottom)
-        let y = event.clientY + padding;
-
-        if (y + actualHeight > viewportHeight) {
-          y = viewportHeight - actualHeight - padding;
-        }
-
-        // 6. Final Safety Bumpers (Keep it at least 5px from any edge)
-        x = Math.max( 5, Math.min( x, viewportWidth - actualWidth - 5 ) );
-        y = Math.max( 5, Math.min( y, viewportHeight - actualHeight - 5 ) );
-
-        // 7. Apply and Reveal
-        card.style.left = x + 'px';
-        card.style.top = y + 'px';
+        card.style.left = Math.max( 5, x ) + 'px';
+        card.style.top = Math.max( 5, y ) + 'px';
         card.style.visibility = 'visible';
       }
 
