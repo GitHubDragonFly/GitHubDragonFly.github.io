@@ -2534,20 +2534,14 @@ class Three3DTilesLoader extends Loader {
 			}
 
 			const fadePlugin = new ThreeDTilesPlugins.TilesFadePlugin();
-			const imageOverlayPlugin = new ThreeDTilesPlugins.ImageOverlayPlugin();
 			const compressionPlugin = new ThreeDTilesPlugins.TileCompressionPlugin();
 			const updateOnChangePlugin = new ThreeDTilesPlugins.UpdateOnChangePlugin();
 			const implicitTilingPlugin = new ThreeDTilesPlugins.ImplicitTilingPlugin();
 
 			tilesRenderer.registerPlugin( fadePlugin );
 			tilesRenderer.registerPlugin( compressionPlugin );
-			tilesRenderer.registerPlugin( imageOverlayPlugin );
 			tilesRenderer.registerPlugin( updateOnChangePlugin );
 			tilesRenderer.registerPlugin( implicitTilingPlugin );
-
-			// Attach imageOverlayPlugin as overlayManager
-
-			tilesRenderer.group.overlayManager = imageOverlayPlugin;
 
 			// Fallback bounding box for initial rendering
 
