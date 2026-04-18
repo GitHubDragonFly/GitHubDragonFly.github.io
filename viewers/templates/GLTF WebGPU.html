@@ -3594,7 +3594,7 @@
         enable_disable( false );
 
         let object_is_mesh = false;
-        let hasGltfExtensions = false;
+        let hasGltfExtensions = false, hasHybrid = false;
 
         gltf_obj.traverse( function( child ) {
           if (child.isMesh || child.isPoints || child.isLine) {
@@ -3602,6 +3602,8 @@
 
             if (extensions?.EXT_mesh_features || extensions?.EXT_instance_features || extensions?.EXT_structural_metadata) {
               hasGltfExtensions = true;
+            } else if (child.geometry.hasAttribute( '_batchid' ) || child.geometry.hasAttribute( '_BATCHID' )) {
+              hasHybrid = true;
             }
 
             // Store mesh edges
@@ -3631,7 +3633,7 @@
           }
         });
 
-        if (userData.structuralMetadata !== undefined || hasGltfExtensions) {
+        if (userData.structuralMetadata !== undefined || hasGltfExtensions || hasHybrid) {
           hasMetadata = true;
         }
 
@@ -4066,6 +4068,11 @@
 
         // --- RESTORE PREVIOUS SELECTION ---
         if (selectedObject) {
+          if (selectedObject.material?.emissive !== undefined) {
+            const oldColor = selectedObject.userData.originalEmissive || new THREE.Color( 0x000000 );
+            selectedObject.material.emissive.copy( oldColor );
+          }
+
           selectedObject.material.dispose();
           delete selectedObject.userData.originalEmissive;
           delete selectedObject.userData.hasUniqueMaterial;
@@ -4086,7 +4093,7 @@
       function handle_raycast_click( event ) {
         popup_card_cleanup();
 
-        if (event.target.closest( '#fixed_menu' ) || event.target.closest( '#right_gui_position' )) {
+        if (event.target.closest( '#fixed_menu' )) {
           return;
         }
 
@@ -4718,10 +4725,14 @@
           return;
         }
 
-        if (pickedObject.geometry.hasAttribute( '_batchid' )) {
-          if (vertexIndex === undefined || vertexIndex === null) return;
+        // Legacy support: some glTFs converted from 3D Tiles may contain _batchid
 
-          const batchId = pickedObject.geometry.attributes._batchid.getX( vertexIndex );
+        if (vertexIndex !== -1 && ( pickedObject.geometry.hasAttribute( '_batchid' ) || pickedObject.geometry.hasAttribute( '_BATCHID' ) )) {
+          const attr_name = pickedObject.geometry.hasAttribute( '_batchid' )
+            ? '_batchid'
+            : '_BATCHID';
+
+          const batchId = pickedObject.geometry.attributes[ attr_name ].getX( vertexIndex );
           const batchTable = pickedObject.batchTable || pickedObject.parent?.batchTable;
 
           const properties = { VertexId: vertexIndex, ID: batchId };
@@ -4750,7 +4761,13 @@
           }
 
           featureMetadataList.push( { class: className, properties } );
-          highlightFeature( batchId, '_batchid' );
+
+          // Restore color
+          if (selectedObject?.material?.emissive) {
+            selectedObject.material.emissive.copy( selectedObject.userData.originalEmissive );
+          }
+
+          highlightFeature( batchId, attr_name );
 
           showUiPanel(
             { ...pickedObject.userData.metadata, featureMetadata: featureMetadataList },
@@ -4766,7 +4783,7 @@
         const data = obj_userData.metadata;
         const tilesetMetadataOnly = !data && !!pickedObject.parent;
 
-        if (( data && !data.empty ) || tilesetMetadataOnly) {
+        if (data || tilesetMetadataOnly) {
           showUiPanel( data, event, schema, pickedObject.name, tilesetMetadataOnly, pickedObject.type );
         }
       }
@@ -4939,7 +4956,7 @@
         } else if (tilesetMetadataOnly) {
           show_copy_to_clipboard = false;
           const description = (type === 'Box3Helper') ? 'No Data (turn off bounding box)' : 'No Data';
-          html += `<div style="color: #888; font-size: 10px;">${description}</div>`;
+          html += `<div style="color: #fff; font-size: 11px;">${description}</div>`;
         }
 
         // 2. Feature / Tile / Group / Content Sections
@@ -5071,6 +5088,8 @@
 
             navigator.clipboard.writeText( text ).then( () => alert( '✅ Copied Airy JSON!' ) );
           };
+        } else {
+          card.innerHTML = html;
         }
 
         // Display and Measurement
