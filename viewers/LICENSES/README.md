@@ -68,7 +68,13 @@ PRWM exports are powered by the [PRWM](https://github.com/kchapelier/PRWM) whose
 
 [COPC](https://github.com/connormanning/copc.js) MIT license can be seen [here](https://github.com/connormanning/copc.js?tab=MIT-1-ov-file#readme)
 
+[fast-png](https://github.com/image-js/fast-png) MIT license can be seen [here](https://github.com/image-js/fast-png?tab=MIT-1-ov-file#readme)
+
+[threedtiles](https://github.com/ebeaufay/threedtiles) MIT license can be seen [here](https://github.com/ebeaufay/threedtiles?tab=MIT-1-ov-file#readme)
+
 [Laz-Perf](https://github.com/hobuinc/laz-perf) Apache 2 license can be seen [here](https://github.com/hobuinc/laz-perf?tab=Apache-2.0-1-ov-file#readme)
+
+[3DTilesRendererJS](https://github.com/NASA-AMMOS/3DTilesRendererJS) Apache 2 license can be seen [here](https://github.com/NASA-AMMOS/3DTilesRendererJS?tab=Apache-2.0-1-ov-file#readme)
 
 Some of the above mentioned licenses might also be found in some of the folders within this repository
 
