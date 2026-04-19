@@ -68,6 +68,8 @@ PRWM exports are powered by the [PRWM](https://github.com/kchapelier/PRWM) whose
 
 [COPC](https://github.com/connormanning/copc.js) MIT license can be seen [here](https://github.com/connormanning/copc.js?tab=MIT-1-ov-file#readme)
 
+[fzstd](https://github.com/101arrowz/fzstd) MIT license can be seen [here](https://github.com/101arrowz/fzstd?tab=MIT-1-ov-file#readme)
+
 [fast-png](https://github.com/image-js/fast-png) MIT license can be seen [here](https://github.com/image-js/fast-png?tab=MIT-1-ov-file#readme)
 
 [threedtiles](https://github.com/ebeaufay/threedtiles) MIT license can be seen [here](https://github.com/ebeaufay/threedtiles?tab=MIT-1-ov-file#readme)
