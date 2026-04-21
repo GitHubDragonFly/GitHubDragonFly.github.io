@@ -6,15 +6,15 @@
     <meta name="description" content="AR / VR Viewer">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
-    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/",
-          "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/decode.min.js",
-          "meshoptimizer_decoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.24.0/meshopt_decoder.module.min.js",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/",
+          "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.4.0/dist/decode.min.js",
+          "meshoptimizer_decoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_decoder.module.min.js",
           "@tweenjs": "https://esm.sh/@tweenjs/tween.js@23.1.2"
         }
       }
@@ -24,8 +24,8 @@
       var selected_url_file = '', url_displayed = false, url_loading = false;
       var THREE, fflate, manager, loaded_model, material, extension = '', vertex_colors;
       var ww = window.innerWidth, wh = window.innerHeight, bounding_box, rotation_enabled;
-      var scene, camera, renderer, animations, animation_mixer, merge_vertices;
-      var ambientLight, directionalLight, events_initialized, isMobile;
+      var scene, camera, renderer, animations, animation_mixer, animation_running, current_animation;
+      var ambientLight, directionalLight, events_initialized, isMobile, merge_vertices;
       var device_controls, do_controls, controls, clock, texture_maps;
       var ar_button, vr_button, controller, controllerGrip1, controllerGrip2;
       var ar, ar_selected, ar_activated, vr, vr_selected, vr_activated, current_up;
@@ -36,11 +36,11 @@
     </script>
 
     <script type="module">
-      import * as three_js from "three";
-      import * as fflate_js from "three/addons/libs/fflate.module.min.js";
+      import * as threejs from 'three';
+      import * as fflatejs from 'three/addons/libs/fflate.module.min.js';
 
-      THREE = three_js;
-      fflate = fflate_js;
+      THREE = threejs;
+      fflate = fflatejs;
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
@@ -191,13 +191,13 @@
     <!-- Using tween.js library: https://github.com/tweenjs/tween.js -->
     <!-- Using jQuery: https://github.com/jquery/jquery -->
 
-    <title>AR / VR Viewer (r178)</title>
+    <title>AR / VR Viewer (r184)</title>
   </head>
   <body onload="reset_all(); enable_disable( true ); document_ready();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm" id="fm1">
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" id="file_input" onchange="init()" accept=".3mf, .bim, .dae, .fbx, .glb, .gltf, .ply, .usdz" />
+        <input type="file" id="file_input" onchange="init()" accept=".3mf, .bim, .dae, .fbx, .glb, .gltf, .ply, .usd, .usda, .usdc, .usdz" />
         <select title="Scale" id="model_scale" disabled>
           <option title="Model Scale" value="scale" selected disabled>Scale</option>
           <option title="Scale 0.05x" value="0.05x" onclick="set_model_scale( '0.05x' );">1/20</option>
@@ -213,6 +213,7 @@
         </select>
         <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="min-width: 15px;" disabled>&#x2191</button>
         <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="min-width: 25px;" disabled>Eq</button>
+        <button title="Switch Animation" id="btn_animate" onclick="animate_model();" style="min-width: 28px;" disabled>A</button>
         <button title="Toggle Auto Rotate" id="btn_rotate" onclick="set_rotation();" disabled>R</button>
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
@@ -276,6 +277,7 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', ( event ) => {}, false);
         window.addEventListener( 'pointerup', ( event ) => {}, false);
@@ -283,17 +285,20 @@
         window.addEventListener( 'keydown', ( event ) => {
           if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
             if (controls) controls.listenToKeyEvents( window );
+            activeKeys.add( event.key ); // Track this key
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
-          if (arrow_keys.some( k => k === event.key )) {
-            if (controls) controls.stopListenToKeyEvents();
+          activeKeys.delete( event.key ); // Remove this key
+
+          if (controls && activeKeys.size === 0) {
+            controls.stopListenToKeyEvents();
           }
         }, false);
       }
 
       function resize() {
-        if (window.fullScreen || document.fullscreenElement || document.mozFullScreenElement ||
+        if (document.fullscreenElement || document.mozFullScreenElement ||
           document.msFullscreenElement || document.webkitFullscreenElement) {
 
           document.getElementById('btn_full_screen').style.backgroundColor = '#FFFF00';
@@ -321,8 +326,6 @@
           document.msFullscreenElement ? document.msExitFullscreen() : document.body.msRequestFullscreen();
         } else if (document.webkitFullscreenEnabled) {
           document.webkitFullscreenElement ? document.webkitExitFullscreen() : document.body.webkitRequestFullscreen();
-        } else if (window.fullScreen) {
-          // Do nothing. This fullscreen mode was triggered with F11 key press and requires the same again.
         }
       }
     </script>
@@ -341,7 +344,7 @@
       async function set_equi() {
         if (scene) {
           if (scene.environment === null) {
-            const { HDRJPGLoader } = await import( "@monogrid/gainmap-js/decode" );
+            const { HDRJPGLoader } = await import( '@monogrid/gainmap-js/decode' );
 
             let url = 'https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/textures/planets/earth_atmos_4096.jpg';
 
@@ -438,6 +441,28 @@
         }
       }
 
+      function animate_model() {
+        if (animation_running === true) {
+          animation_mixer.clipAction( animations[ current_animation ] ).stop();
+
+          if (current_animation === animations.length - 1) {
+            document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+            document.getElementById('btn_animate').innerHTML = 'A';
+            current_animation = 0;
+            animation_running = false;
+          } else {
+            current_animation += 1;
+            animation_mixer.clipAction( animations[ current_animation ] ).play();
+            document.getElementById('btn_animate').innerHTML = 'A' + current_animation;
+          }
+        } else {
+          animation_mixer.clipAction( animations[ current_animation ] ).play();
+          document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+          document.getElementById('btn_animate').innerHTML = 'A0';
+          animation_running = true;
+        }
+      }
+
       async function load_model( url = '', extension = '' ) {
         if (extension === '') {
           handle_error( 'Invalid extension!' );
@@ -479,7 +504,7 @@
         await new Promise( async resolve => {
           switch ( extension ) {
             case '.3MF':
-              const { ThreeMFLoader } = await import( "three/addons/loaders/3MFLoader.min.js" );
+              const { ThreeMFLoader } = await import( 'three/addons/loaders/3MFLoader.min.js' );
 
               const tmf_loader = new ThreeMFLoader( manager );
 
@@ -522,7 +547,7 @@
               break;
 
             case '.BIM':
-              const { BIMLoader } = await import( "../static/dotbim/loader/module/BIMLoader.min.js" );
+              const { BIMLoader } = await import( '../static/dotbim/loader/module/BIMLoader.min.js' );
 
               const bim_loader = new BIMLoader( manager );
 
@@ -560,7 +585,7 @@
               break;
 
             case '.DAE':
-              const { ColladaLoader } = await import( "../static/jsm/loaders/ColladaLoader.min.js" );
+              const { ColladaLoader } = await import( '../static/jsm/loaders/ColladaLoader.min.js' );
 
               const dae_loader = new ColladaLoader( manager );
 
@@ -570,9 +595,14 @@
                 animations = collada.scene.animations;
 
                 if (animations && animations.length > 0) {
+                  document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+                  document.getElementById( 'btn_animate' ).disabled = false;
+                  document.getElementById('btn_animate').innerHTML = 'A0';
+
                   animation_mixer = new THREE.AnimationMixer( collada.scene );
                   animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
                   animation_mixer.clipAction( animations[ 0 ] ).play();
+                  animation_running = true;
                 }
 
                 loaded_model.traverse( ( child ) => {
@@ -625,9 +655,9 @@
               break;
 
             case '.FBX':
-              const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
-              const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
-              const { FBXLoader } = await import( "../static/jsm/loaders/FBXLoader.min.js" );
+              const { DDSLoader } = await import( 'three/addons/loaders/DDSLoader.min.js' );
+              const { TGALoader } = await import( 'three/addons/loaders/TGALoader.min.js' );
+              const { FBXLoader } = await import( '../static/jsm/loaders/FBXLoader.min.js' );
 
               const fbx_loader = new FBXLoader( manager );
 
@@ -643,9 +673,14 @@
                 animations = fbx_scene.animations;
 
                 if (animations && animations.length > 0) {
+                  document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+                  document.getElementById( 'btn_animate' ).disabled = false;
+                  document.getElementById('btn_animate').innerHTML = 'A0';
+
                   animation_mixer = new THREE.AnimationMixer( fbx_scene );
                   animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
                   animation_mixer.clipAction( animations[ 0 ] ).play();
+                  animation_running = true;
                 }
 
                 loaded_model.traverse( ( child ) => {
@@ -681,20 +716,20 @@
 
             case '.GLB':
             case '.GLTF':
-              const { MeshoptDecoder } = await import( "meshoptimizer_decoder" );
-              const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
-              const { DRACOLoader } = await import( "three/addons/loaders/DRACOLoader.min.js" );
-              const { GLTFLoader } = await import( "../static/jsm/loaders/GLTFLoader.min.js" );
+              const { MeshoptDecoder } = await import( 'meshoptimizer_decoder' );
+              const { KTX2Loader } = await import( 'three/addons/loaders/KTX2Loader.min.js' );
+              const { DRACOLoader } = await import( 'three/addons/loaders/DRACOLoader.min.js' );
+              const { GLTFLoader } = await import( '../static/jsm/loaders/GLTFLoader.min.js' );
 
               const gltf_loader = new GLTFLoader( manager );
 
               const draco_loader = new DRACOLoader( manager );
-              draco_loader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/libs/draco/" );
+              draco_loader.setDecoderPath( 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/draco/' );
               draco_loader.setDecoderConfig( { type: 'js' } );
               draco_loader.preload();
 
               const ktx2_loader = new KTX2Loader( manager );
-              ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/libs/basis/" );
+              ktx2_loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/basis/' );
               ktx2_loader.detectSupport( renderer );
               manager.addHandler( /\.ktx2$/i, ktx2_loader );
 
@@ -708,9 +743,14 @@
                 animations = gltf.animations;
 
                 if (animations && animations.length > 0) {
+                  document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+                  document.getElementById( 'btn_animate' ).disabled = false;
+                  document.getElementById('btn_animate').innerHTML = 'A0';
+
                   animation_mixer = new THREE.AnimationMixer( gltf.scene );
                   animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
                   animation_mixer.clipAction( animations[ 0 ] ).play();
+                  animation_running = true;
                 }
 
                 let point_size = isMobile === true ? 1.0 : 1.5;
@@ -731,7 +771,7 @@
               break;
 
             case '.PLY':
-              const { PLYLoader } = await import( "three/addons/loaders/PLYLoader.min.js" );
+              const { PLYLoader } = await import( 'three/addons/loaders/PLYLoader.min.js' );
 
               const ply_loader = new PLYLoader( manager );
 
@@ -763,31 +803,40 @@
 
               break;
 
+            case '.USD':
+            case '.USDA':
+            case '.USDC':
             case '.USDZ':
-              const { USDZLoader } = await import( "../static/jsm/loaders/USDZLoader.min.js" );
+              const { USDLoader } = await import( 'three/addons/loaders/USDLoader.min.js' );
 
-              const usdz_loader = new USDZLoader( manager );
+              const usd_loader = new USDLoader( manager );
 
-              usdz_loader.load( url, function( usd ) {
+              usd_loader.load( url, function( usd ) {
                 loaded_model = usd;
+
+                animations = usd.animations;
+
+                if (animations && animations.length > 0) {
+                  document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
+                  document.getElementById( 'btn_animate' ).disabled = false;
+                  document.getElementById('btn_animate').innerHTML = 'A0';
+
+                  animation_mixer = new THREE.AnimationMixer( loaded_model );
+                  animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
+                  animation_mixer.clipAction( animations[ 0 ] ).play();
+                  animation_running = true;
+                }
 
                 loaded_model.traverse( ( child ) => {
                   if (child.isMesh) {
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        set_texture_colorSpace( mtl );
-                        mtl.side = THREE.DoubleSide;
-                        mtl.flatShading = false;
+                    const mats = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                        mtl.needsUpdate = true;
-                      });
-                    } else {
-                      set_texture_colorSpace( child.material );
-                      child.material.side = THREE.DoubleSide;
-                      child.material.flatShading = false;
-
-                      child.material.needsUpdate = true;
-                    }
+                    mats.forEach( m => {
+                      set_texture_colorSpace( m );
+                      m.side = THREE.DoubleSide;
+                      m.flatShading = false;
+                      m.needsUpdate = true;
+                    });
                   }
                 });
 
@@ -807,13 +856,16 @@
       }
 
       async function init() {
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+        if (url_loading === false && document.getElementById( 'file_input' ).files.length === 0) return;
 
         if (rotation_enabled === true) set_rotation();
 
         if (manager === undefined) manager = new THREE.LoadingManager();
 
-        if (clock === undefined) clock = new THREE.Clock();
+        if (clock === undefined) {
+          clock = new THREE.Timer();
+          clock.connect( document );
+        }
 
         if (scene === undefined) {
           scene = new THREE.Scene();
@@ -823,7 +875,7 @@
         if (loaded_model === undefined) loaded_model = new THREE.Object3D();
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 10000 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.01, 1e9 );
           camera.position.set( 0, 0, 0 );
           scene.add( camera );
         }
@@ -858,7 +910,7 @@
           document.body.appendChild( renderer.domElement );
 
           if (vr_button === undefined) {
-            const { VRButton } = await import( "three/addons/webxr/VRButton.min.js" );
+            const { VRButton } = await import( 'three/addons/webxr/VRButton.min.js' );
 
             vr_button = await VRButton.createButton( renderer, { requiredFeatures: [ 'local-floor' ] } );
             vr_button.style.color = 'red';
@@ -883,7 +935,7 @@
             if (vr === true) vr_selected = true;
 
             if (vr_button === undefined) {
-              const { VRButton } = await import( "three/addons/webxr/VRButton.min.js" );
+              const { VRButton } = await import( 'three/addons/webxr/VRButton.min.js' );
 
               vr_button = await VRButton.createButton( renderer, {
                 optionalFeatures: [
@@ -915,7 +967,7 @@
           } else if (ar === true && ar_button === undefined) {
             ar_selected = true;
 
-            const { ARButton } = await import( "three/addons/webxr/ARButton.min.js" );
+            const { ARButton } = await import( 'three/addons/webxr/ARButton.min.js' );
 
             ar_button = await ARButton.createButton( renderer, {
               optionalFeatures: [
@@ -947,7 +999,7 @@
             renderer.xr.enabled = true;
 
             if (controller === undefined) {
-              const { XRControllerModelFactory } = await import( "three/addons/webxr/XRControllerModelFactory.min.js" );
+              const { XRControllerModelFactory } = await import( 'three/addons/webxr/XRControllerModelFactory.min.js' );
 
               // The XRControllerModelFactory will automatically fetch controller models
               // that match what the user is holding as closely as possible. The models
@@ -973,22 +1025,22 @@
           }
 
           if (controls === undefined) {
-            const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+            const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
 
             controls = new OrbitControls( camera, renderer.domElement );
+            controls.enableZoom = true;
             controls.zoomToCursor = true;
             controls.zoomSpeed = 0.5;
             controls.rotateSpeed = 0.5;
             controls.keyPanSpeed = 0.5; 
             controls.panSpeed = 0.5;
             controls.enableDamping = true;
+            controls.minDistance = 0;
+            controls.maxDistance = Infinity;
             //controls.dampingFactor = 0.05;
             //controls.enableKeys = false;
-            //controls.enableZoom = true;
             //controls.maxPolarAngle = 2.2;
             //controls.minPolarAngle = 1.1;
-            //controls.minDistance = 2;
-            //controls.maxDistance = 500;
           }
 
           if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
@@ -1007,10 +1059,12 @@
         }
 
         if (merge_vertices === undefined) {
-          const { mergeVertices } = await import( "three/addons/utils/BufferGeometryUtils.min.js" );
+          const { mergeVertices } = await import( 'three/addons/utils/BufferGeometryUtils.min.js' );
           merge_vertices = mergeVertices;
         }
 
+        current_animation = 0;
+        animation_running = false;
         rotation_enabled = false;
         kinematics_running = false;
 
@@ -1021,7 +1075,7 @@
 
         enable_disable( true );
 
-        const model_extensions = [ '.3MF', '.BIM', '.DAE', '.FBX', '.GLB', '.GLTF', '.PLY', '.USDZ' ];
+        const model_extensions = [ '.3MF', '.BIM', '.DAE', '.FBX', '.GLB', '.GLTF', '.PLY', '.USD', '.USDA', '.USDC', '.USDZ' ];
 
         if (url_loading === false) {
           // Load local model file
@@ -1188,7 +1242,7 @@
 
         if (ar === true || vr === true) {
           if (device_controls === undefined) {
-            const { DeviceOrientationControls } = await import( "../static/jsm/controls/DeviceOrientationControls.min.js" );
+            const { DeviceOrientationControls } = await import( '../static/jsm/controls/DeviceOrientationControls.min.js' );
             do_controls = DeviceOrientationControls;
           } else {
             device_controls.disconnect();
@@ -1221,6 +1275,8 @@
           selected_url_file = '';
         }
 
+        document.getElementById('btn_animate').style.backgroundColor = 'transparent';
+        document.getElementById('btn_animate').disabled = true;
         document.getElementById('div_loading').innerHTML = '';
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').innerHTML = '';
@@ -1257,61 +1313,35 @@
                   child.skeleton.boneTexture.dispose();
 
                 if (child.material) {
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      if (mtl.uniforms) {
-                        Object.keys( mtl.uniforms ).forEach( ( key ) => {
-                          if (mtl.uniforms[ key ].value) {
-                            if (Array.isArray( mtl.uniforms[ key ].value ) && mtl.uniforms[ key ].value.length > 0) {
-                              mtl.uniforms[ key ].value.forEach( val => {
-                                if (val.type && val.type === 1009)
-                                  val.dispose();
-                              });
-                            } else {
-                              if (mtl.uniforms[ key ].value.type && mtl.uniforms[ key ].value.type === 1009)
-                                mtl.uniforms[ key ].value.dispose();
-                            }
-                          }
-                        });
-                      } else {
-                        for (const prop in mtl) {
-                          texture_maps.forEach( tex_map => {
-                            if (prop === tex_map) {
-                              if (mtl[ prop ]) mtl[ prop ].dispose();
-                            }
-                          });
-                        };
-                      }
+                  const mats = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                      mtl.dispose();
-                    });
-                  } else {
-                    if (child.material.uniforms) {
-                      Object.keys( child.material.uniforms ).forEach( ( key ) => {
-                        if (child.material.uniforms[ key ].value) {
-                          if (Array.isArray( child.material.uniforms[ key ].value ) && child.material.uniforms[ key ].value.length > 0) {
-                            child.material.uniforms[ key ].value.forEach( val => {
+                  mats.forEach( m => {
+                    if (m.uniforms) {
+                      Object.keys( m.uniforms ).forEach( ( key ) => {
+                        if (m.uniforms[ key ].value) {
+                          if (Array.isArray( m.uniforms[ key ].value ) && m.uniforms[ key ].value.length > 0) {
+                            m.uniforms[ key ].value.forEach( val => {
                               if (val.type && val.type === 1009)
                                 val.dispose();
                             });
                           } else {
-                            if (child.material.uniforms[ key ].value.type && child.material.uniforms[ key ].value.type === 1009)
-                              child.material.uniforms[ key ].value.dispose();
+                            if (m.uniforms[ key ].value.type && m.uniforms[ key ].value.type === 1009)
+                              m.uniforms[ key ].value.dispose();
                           }
                         }
                       });
                     } else {
-                      for (const prop in child.material) {
+                      for (const prop in m) {
                         texture_maps.forEach( tex_map => {
                           if (prop === tex_map) {
-                            if (child.material[ prop ]) child.material[ prop ].dispose();
+                            if (m[ prop ]) m[ prop ].dispose();
                           }
                         });
                       };
                     }
 
-                    child.material.dispose();
-                  }
+                    m.dispose();
+                  });
                 }
 
                 child.geometry.dispose();
@@ -1333,9 +1363,13 @@
         disabled_changed();
       }
 
-      function render() {
+      function render( timestamp ) {
         if (loaded_model) {
-          if (animation_mixer) animation_mixer.update( clock.getDelta() );
+          if (animation_mixer) {
+            clock.update( timestamp );
+            animation_mixer.update( clock.getDelta() );
+          }
+
           if (kinematics_running && kinematicsTween) tween_update();
 
           if (rotation_enabled) {
