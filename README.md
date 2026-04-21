@@ -180,10 +180,10 @@ Number Type Converter
     - Browser specific, desktop viewers might show this button as either `Browse...` or `Choose Files`
     - Mobile viewers show it as the `Browse` button
 - Any of the viewers might have bugs and interface / library related limitations
-  - Some viewers might be slow to load some models, usually if using `WASM` of some library
+  - Some viewers might be slow to load some models, usually if using `WASM` of some 3rd party library
 - Both Microsoft Copilot and Google Gemini assisted in creating multiple shaders
 - Google Gemini AI assisted in creating the following within CSS / HTML files, wherever present:
-  - Catching Global and Unhandled and Network errors
+  - Catching Global, Unhandled and Network errors
   - Flashing red status indicator, which is visible during loading of a 3D model file(s)
 - Most desktop viewers will also allow you to test multiple image formats by setting either of them as a background and even turning it into an equirectangular environment
 - Currently experimental three.js `WebGPU` support is included in the following experimental viewers, either their standalone or desktop or mobile version:
@@ -286,7 +286,7 @@ Number Type Converter
     - Supports both local (blob) and remote URL loading
     - Local loading supports self-contained models (embedded GLTF or binary GLB) as well as GLTF + BIN + Textures
     - The viewer supports loading of multiple models at once, which will be switchable with the viewer's `M` button
-  - `GLTF Viewer` is for v2.0 glTF files and is currently using r183 of three.js:
+  - `GLTF Viewer` is for v2.0 glTF files and is currently using r184 of three.js:
     - does not support obsolete `pbrSpecularGlossiness`
     - supports currently arbitrary `KHR_animation_pointer`
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js:
@@ -435,13 +435,12 @@ Number Type Converter
     - `Depth` level defines how many subtrees are processed (default 4)
   - Consider adjusting LOD settings to improve performance and memory usage
 
-- Special notes about `USDZ Viewer`:
-  - Currently, it only supports USDZ files with USDA (ascii model packed in)
-  - USDZ files with USDC (binary model packed in) can be viewed with the following:
+- Special notes about `USD Viewer`:
+  - As of three.js `v0.184.0` it supports USD, USDA, USDC and USDZ
+  - Other resources:
     - [USDZ Online Viewer](https://www.usdz-viewer.net/)
     - [USD Viewer](https://usd-viewer.glitch.me/?file=)
-    - Both of the above can also be used as a workaround to export some models to GLB format and then:
-      - use either my [GLTF Viewer](https://githubdragonfly.github.io/viewers/templates/GLTF%20Viewer.html) or [three.js editor](https://threejs.org/editor/) to export it to USDZ with USDA packed in
+    - Both of the above can also export some models to GLB format
 
 - Special notes about `GLTF Legacy` viewer:
   - Using modified version of mrdoob's [model-tag](https://github.com/mrdoob/model-tag) element
@@ -492,6 +491,7 @@ Number Type Converter
   - 3DM, 3MF, AMF, BIM, DAE, APNG, FBX, STEP, X3D, X, ASSJSON, GCODE, GIF, GLB, GLTF, JSON, OBJ + MTL, OFF, PCD, PLY, STL, PRWM, USDZ
     - OFF exports are only available in the Quick Viewer, as stated further above
     - BIM exports are available in the Quick Viewer as well as some other viewers with custom BIM Exporter
+    - GLTF exporter has been customized to also export any present metadata to GLTF / GLB formats
     - PCD exporter was created with assistance from Microsoft Copilot and Google Gemini:
       - This is a custom exporter not officially available in the three.js library
       - Supported export formats: ascii, binary, binary_compressed:
@@ -526,8 +526,6 @@ Number Type Converter
         - Mesh geometry could be either of: Buffer, Sphere, Box, Cylinder, Cone, Icosahedron and maybe other
         - Textures and additional MeshPhysicalMaterial properties are passed via user strings
         - Maximum texture resolution is limited to 2.5k (2560 x 2560)
-      - GLTFS Viewer might produce richer colors in exported 3DM models than GLTF Viewer
-      - USDZ Viewer appears to produce more accurate output than other viewers
       - Exported 3dm files might not show properly in any other 3rd party 3DM viewer
     - GCODE exports are powered by [Polyslice](https://github.com/jgphilpott/polyslice):
       - Single mesh model should be optimal for conversion
