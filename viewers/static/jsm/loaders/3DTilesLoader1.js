@@ -1526,6 +1526,8 @@ class Three3DTilesLoader extends Loader {
 			properties: {}
 		};
 
+		const text_decoder = new TextDecoder();
+
 		for ( const [ propName, propDef ] of Object.entries( table.properties ) ) {
 
 			// Look up the actual data types from the schema
@@ -1579,14 +1581,14 @@ class Three3DTilesLoader extends Loader {
 
 				if ( type === 'STRING' ) {
 
-					metadata.properties[ propName ] = new TextDecoder().decode( dataSlice );
+					metadata.properties[ propName ] = text_decoder.decode( dataSlice );
 
 				} else {
 
 					// It's a Variable-Length Array of Numbers (e.g., SCALAR, VEC3)
 
 					const elementStride = this._getStride( type, componentType );
-					const numElements = ( endOffset - startOffset ) / elementStride;
+					const numElements = ( endByte - startByte ) / elementStride;
 					const arrayResult = [];
 
 					for ( let i = 0; i < numElements; i++ ) {

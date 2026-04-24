@@ -3,8 +3,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.min.js";
 import { KTX2Loader } from "three/addons/loaders/KTX2Loader.min.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.min.js";
-import * as ThreeDTilesRenderer from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.23/build/index.three.min.js';
-import * as ThreeDTilesPlugins from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.23/build/index.plugins.min.js';
+import * as ThreeDTilesRenderer from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.24/build/index.three.min.js';
+import * as ThreeDTilesPlugins from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.24/build/index.plugins.min.js';
 
 // Inject "required" v1.1 Implicit Tiling one-line fixer-upper
 
@@ -1323,6 +1323,8 @@ class Three3DTilesLoader extends Loader {
 			properties: {}
 		};
 
+		const text_decoder = new TextDecoder();
+
 		for ( const [ propName, propDef ] of Object.entries( table.properties ) ) {
 
 			// Look up the actual data types from the schema
@@ -1376,14 +1378,14 @@ class Three3DTilesLoader extends Loader {
 
 				if ( type === 'STRING' ) {
 
-					metadata.properties[ propName ] = new TextDecoder().decode( dataSlice );
+					metadata.properties[ propName ] = text_decoder.decode( dataSlice );
 
 				} else {
 
 					// It's a Variable-Length Array of Numbers (e.g., SCALAR, VEC3)
 
 					const elementStride = this._getStride( type, componentType );
-					const numElements = ( endOffset - startOffset ) / elementStride;
+					const numElements = ( endByte - startByte ) / elementStride;
 					const arrayResult = [];
 
 					for ( let i = 0; i < numElements; i++ ) {
@@ -2576,7 +2578,7 @@ class Three3DTilesLoader extends Loader {
 
 			}
 
-			function fitCameraToBox3() {
+			function _fitCameraToBox3() {
 
 				const center = new Vector3();
 				const size = new Vector3();
@@ -2679,7 +2681,7 @@ class Three3DTilesLoader extends Loader {
 
 				// Call camera fit function
 
-				fitCameraToBox3();
+				_fitCameraToBox3();
 
 			});
 
