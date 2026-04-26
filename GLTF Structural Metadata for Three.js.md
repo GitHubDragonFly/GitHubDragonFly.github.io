@@ -185,5 +185,6 @@ To demonstrate this, here is a quick video showing some random values being prov
   - Yellow represents a warning, values being over threshold limit
   - Red represents values being over critical limit
 - A sharp eye might catch that these values are being polled at different intervals
+- This video was captured with Windows 10 built-in `Xbox Game Bar` app
 
 https://github.com/user-attachments/assets/4a439c3a-d8a0-4baa-933d-8c9202c652f8
