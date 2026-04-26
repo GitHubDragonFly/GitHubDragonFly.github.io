@@ -179,7 +179,8 @@ Bonus Features
   - Optionally setup some alarming if desired
 
 To demonstrate this, here is a quick video showing some random values being provided to the same property of unique Feature IDs:
-- Cesium's [Multiple Feature IDs and Properties](https://github.com/CesiumGS/3d-tiles-samples/tree/main/glTF/EXT_structural_metadata/MultipleFeatureIdsAndProperties) glTF file was used in this demo
+- Cesium's [Multiple Feature IDs and Properties](https://github.com/CesiumGS/3d-tiles-samples/tree/main/glTF/EXT_structural_metadata/MultipleFeatureIdsAndProperties) glTF file was used in this demo:
+  - This example does not have live data property built-in, it was just manipulated by the code to appear as if it does
 - Coloring is done by setting a Threshold and Critical limits, with colors representing the following:
   - Light blue represent regular / acceptable values, under the threshold limit
   - Yellow represents a warning, values being over threshold limit
