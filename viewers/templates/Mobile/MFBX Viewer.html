@@ -7,13 +7,13 @@
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
-    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
         }
       }
     </script>
@@ -33,10 +33,10 @@
     </script>
 
     <script type="module">
-      import * as three_js from "three";
-      import { FBXLoader } from "../../static/jsm/loaders/FBXLoader.min.js";
+      import * as threejs from 'three';
+      import { FBXLoader } from 'three/addons/loaders/FBXLoader.min.js';
 
-      THREE = three_js;
+      THREE = threejs;
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
@@ -52,7 +52,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>FBX Viewer (r182)</title>
+    <title>FBX Viewer (r184)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -142,6 +142,7 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
         window.addEventListener( 'pointerup', (event) => { mouse_down = false; mouse_wheel = true; }, false);
@@ -149,11 +150,14 @@
         window.addEventListener( 'keydown', ( event ) => {
           if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
             controls.listenToKeyEvents( window );
+            activeKeys.add( event.key ); // Track this key
             mouse_wheel = true;
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
-          if (arrow_keys.some( k => k === event.key )) {
+          activeKeys.delete( event.key ); // Remove this key
+
+          if (controls && activeKeys.size === 0) {
             controls.stopListenToKeyEvents();
             mouse_wheel = false;
           }
@@ -192,57 +196,25 @@
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it hopefully comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( fbx_obj );
-        let size = bounding_box.getSize( new THREE.Vector3() );
-        let center = bounding_box.getCenter( new THREE.Vector3() );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        // Move to the center
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        camera.lookAt( center );
 
-        if (center.x !== 0) fbx_obj.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) fbx_obj.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) fbx_obj.translateZ( center.z * ( - 1 ) );
+        // Center root
+        fbx_obj.position.sub( center );
 
-        // Scale according to window width / height, whichever is greater
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist * 1.5 );
+        camera.lookAt( 0, 0, 0 );
 
-        if (ww > wh) {
-          fbx_obj.scale.multiplyScalar( ( wh / size.y ) * 0.15 );
-        } else {
-          fbx_obj.scale.multiplyScalar( ( ww / size.x ) * 0.15 );
-        }
-
-        // Get center coordinates and move to the center again
-
-        bounding_box.setFromObject( fbx_obj );
-        size = bounding_box.getSize( new THREE.Vector3() );
-        center = bounding_box.getCenter( new THREE.Vector3() );
-
-        if (center.x !== 0) fbx_obj.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) fbx_obj.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) fbx_obj.translateZ( center.z * ( - 1 ) );
-
-        // Scale again and re-center if the model's width / height is greater than the screen's width / height
-
-        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
-          fbx_obj.scale.multiplyScalar( ( ww / (ww > wh ? size.x : size.y) ) );
-
-          bounding_box.setFromObject( fbx_obj );
-          size = bounding_box.getSize( new THREE.Vector3() );
-          center = bounding_box.getCenter( new THREE.Vector3() );
-
-          if (center.x !== 0) fbx_obj.translateX( center.x * ( - 1 ) );
-          if (center.y !== 0) fbx_obj.translateY( center.y * ( - 1 ) );
-          if (center.z !== 0) fbx_obj.translateZ( center.z * ( - 1 ) );
-        }
-
-        // Set the camera's z distance
-
-        camera.position.z = bounding_box.max.z + 250;
-        camera.updateProjectionMatrix();
-
-        mouse_wheel = true;
+        resize();
       }
 
       function fbx_animations() {
@@ -281,13 +253,13 @@
         enable_disable( true );
 
         if (tga_loader === undefined) {
-          const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
+          const { TGALoader } = await import( 'three/addons/loaders/TGALoader.min.js' );
           tga_loader = new TGALoader( manager );
           manager.addHandler( /\.tga$/i, tga_loader );
         }
 
         if (dds_loader === undefined) {
-          const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
+          const { DDSLoader } = await import( 'three/addons/loaders/DDSLoader.min.js' );
           dds_loader = new DDSLoader( manager );
           manager.addHandler( /\.dds$/i, dds_loader );
         }
@@ -368,7 +340,10 @@
           document.body.appendChild( renderer.domElement );
         }
 
-        if (clock === undefined) clock = new THREE.Clock();
+        if (clock === undefined) {
+          clock = new THREE.Timer();
+          clock.connect( document );
+        }
 
         if (scene === undefined) scene = new THREE.Scene();
         if (fbx_obj === undefined) fbx_obj = new THREE.Object3D();
@@ -376,7 +351,7 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.01, 1e9 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -390,22 +365,22 @@
         }
 
         if (controls === undefined) {
-          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+          const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
 
           controls = new OrbitControls( camera, renderer.domElement );
+          controls.enableZoom = true;
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.6;
           controls.rotateSpeed = 0.6;
           controls.keyPanSpeed = 0.6; 
           controls.panSpeed = 0.6;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.3;
           //controls.enableKeys = false;
-          //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
         }
 
         if (scene.environment === null) {
@@ -464,7 +439,6 @@
           });
 
           fbx_obj = fbx_scene;
-
           animations = fbx_scene.animations;
 
           if (animations.length > 0) animation_mixer = new THREE.AnimationMixer( fbx_scene );
@@ -545,7 +519,6 @@
               });
 
               fbx_obj = fbx_scene;
-
               animations = fbx_scene.animations;
 
               if (animations.length > 0) animation_mixer = new THREE.AnimationMixer( fbx_scene );
@@ -570,8 +543,7 @@
       async function finish_loading() {
         enable_disable( false );
 
-        set_initial_scale();
-        resize();
+        frame_camera();
 
         let object_is_mesh = false;
 
@@ -596,6 +568,7 @@
         }
 
         console.timeEnd( 'Loading Time' );
+
         document.getElementById('div_loading').style.display = 'none';
 
         render_requested = true;
@@ -604,7 +577,7 @@
         fr_count = 0;
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
       function log_info() {
@@ -686,10 +659,13 @@
         }
       }
 
-      async function render() {
+      async function render( timestamp ) {
         if (fbx_obj) {
-          if (first_run === true || animation_running === true || mouse_down === true || mouse_wheel === true) {
-            if (animation_running === true) animation_mixer.update( clock.getDelta() );
+          if (first_run || animation_running || mouse_down || mouse_wheel) {
+            if (animation_running) {
+              clock.update( timestamp );
+              animation_mixer.update( clock.getDelta() );
+            }
 
             controls.update();
 
@@ -697,7 +673,7 @@
             renderer.render( scene, camera );
 
             // If it might be slow to render initially
-            if (first_run === true) {
+            if (first_run) {
               fr_count ++;
               if (fr_count > 10) {
                 mouse_wheel = true;
@@ -706,7 +682,7 @@
                 count = 0;
               }
             } else {
-              if (mouse_wheel === true) {
+              if (mouse_wheel) {
                 if (count > 5) {
                   mouse_wheel = false;
                   count = 0;
@@ -718,7 +694,7 @@
           }
         }
 
-        if (render_requested === true) requestAnimationFrame( render );
+        if (render_requested) requestAnimationFrame( render );
       }
 
       async function reset_all( reset = false ) {
