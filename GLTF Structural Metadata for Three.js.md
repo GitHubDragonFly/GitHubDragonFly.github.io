@@ -171,18 +171,24 @@ Live Demo: My repository is public, using GitHub Pages to host the functional GL
 
 ----------------------------------------------------------------------------------
 
-Bonus Features
-- With a little bit of additional coding you could turn this metadata picking into highly functional live data `Digital Twin` (as some might call it this name):
-  - Make sure to implement communication path to your data sources, either via MQTT or Modbus or WebSockets or any other
-  - Collect corresponding data, normally you should use some unique identifier like Feature ID
+Bonus Feature: Live-Data Integration (Digital Twin-Style)
+
+- Because feature IDs provide stable, unique identifiers, this picking system can serve as the backbone for live-data integrations
+- Some additional coding could turn this metadata picking into highly functional live-data `Digital Twin`:
+  - Make sure to implement communication path to your data sources:
+    - Production-grade live-data pipelines (MQTT / Modbus / WebSockets / etc.) are outside the scope of this repository:
+      - The picking system is still designed to naturally integrate with any of them in a clean way
+  - Collect corresponding data, normally you would use some unique identifier like Feature ID
   - Pass the data to corresponding fields of the popup card
   - Optionally setup some alarming if desired
 
 To demonstrate this, here is a quick video showing some random values being provided to the same property of unique Feature IDs:
+
 - Cesium's [Multiple Feature IDs and Properties](https://github.com/CesiumGS/3d-tiles-samples/tree/main/glTF/EXT_structural_metadata/MultipleFeatureIdsAndProperties) glTF file was used in this demo:
-  - This example does not have live data property built-in, it was just manipulated by the code to appear as if it does
+  - This example does not contain live-data
+  - It simply accepts external data for dynamic updates
 - Coloring is done by setting a Threshold and Critical limits, with colors representing the following:
-  - Light blue represent regular / acceptable values, under the threshold limit
+  - Light blue represents regular / acceptable values, below the threshold limit
   - Yellow represents a warning, values being over threshold limit
   - Red represents values being over critical limit
 - A sharp eye might catch that these values are being polled at different intervals
