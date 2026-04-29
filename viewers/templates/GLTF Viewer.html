@@ -61,6 +61,7 @@
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/",
+          "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/",
           "three-viewport-gizmo": "https://cdn.jsdelivr.net/npm/three-viewport-gizmo@2.2.0/dist/three-viewport-gizmo.min.js",
           "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.4.0/dist/decode.min.js",
           "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.4.0/dist/encode.min.js",
@@ -112,7 +113,7 @@
       var vertex_colors_enabled, vertex_colors_present, current_colors;
       var original_vertex_colors, original_vertex_color_array, animated_gif_texture;
       var local_files, local_files_indexes, slider_height = 0;
-      var zip, zip_file, unzipped_files, filesMap, pcdExportOptions;
+      var zip, zip_file, unzipped_files, filesMap, pcdExportOptions, labelRenderer;
       var selected_gltf_file, selected_draco_file, selected_url_file = '', rootPath;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
       var raycaster, mouse, mouseDownPos, raycastableObjects, featureHighlightMesh;
@@ -124,6 +125,9 @@
       const A4K = 4096;   // AVIF 4k limit
       const I8K = 8192;   // iPad 8k limit
       const D16K = 16384; // Desktop 16k limit
+
+      const EARTH_RADIUS = 6371000; // Meters
+      const TOLERANCE = 500000;     // 500km buffer
 
       const TYPE_COUNT_MAP = {
         'SCALAR': 1,
@@ -508,7 +512,7 @@
             <span id="z_val">0</span>
           </div>
         </button>
-        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="background-color: transparent; min-width: 15px;">&#x2191</button>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="background-color: transparent; min-width: 15px;">&#x2191</button>
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
             <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="50" step="0.05" value="5" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
@@ -1007,6 +1011,7 @@
           wh = window.innerHeight;
 
           renderer.setSize( ww, wh );
+          if (labelRenderer) labelRenderer.setSize( ww, wh );
 
           default_camera.aspect = ww / wh;
           default_camera.updateProjectionMatrix();
@@ -2974,8 +2979,25 @@
         mouse_wheel = true;
       }
 
-      function quick_x_rotation( angle ) {
-        gltf_obj.rotateX( Math.PI * parseFloat( angle ) );
+      function quick_x_rotation( angle = undefined ) {
+        if (!gltf_obj.boundingBox) gltf_obj.boundingBox = new THREE.Box3().setFromObject( gltf_obj );
+
+        const oldCenter = new THREE.Vector3();
+        gltf_obj.boundingBox.getCenter( oldCenter );
+
+        gltf_obj.rotateOnWorldAxis( new THREE.Vector3( 1, 0, 0 ), angle !== undefined ? angle : -Math.PI / 2.0 );
+        gltf_obj.updateMatrixWorld( true );
+
+        // Get the center AFTER rotation
+        const newBox = new THREE.Box3().setFromObject( gltf_obj );
+        const newCenter = new THREE.Vector3();
+        newBox.getCenter( newCenter );
+
+        // Calculate the 'swing' offset and move it back
+        const offset = new THREE.Vector3().subVectors( oldCenter, newCenter );
+
+        gltf_obj.position.add( offset );
+        gltf_obj.updateMatrixWorld( true );
 
         set_grid_y();
         set_polar_grid_y();
@@ -3436,7 +3458,7 @@
         //scene.add( new THREE.AxesHelper( 50 ) );
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 1e9 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.01, 1e9 );
           camera.position.set( 0, 0, 250 );
 
           default_camera = camera;
@@ -4549,18 +4571,19 @@
       }
 
       function handle_raycast_click( event ) {
-        popup_card_cleanup();
-
-        if (event.target.closest( '#fixed_menu' )) {
-          return;
-        }
-
         // Calculate how far the mouse moved
         const deltaX = Math.abs( event.clientX - mouseDownPos.x );
         const deltaY = Math.abs( event.clientY - mouseDownPos.y );
 
         // If moved more than 5 pixels, it was likely a camera drag, not a click
+        // Leave previous popup card and highlight visible, if present
         if (deltaX > 5 || deltaY > 5) return;
+
+        popup_card_cleanup();
+
+        if (event.target.closest( '#fixed_menu' )) {
+          return;
+        }
 
         if (!raycaster) {
           raycaster = new THREE.Raycaster();
@@ -5398,7 +5421,7 @@
         // --- HTML Assembly ---
         let html = '';
         let show_copy_to_clipboard = true;
-        const tileset = tilesetMetadataOnly ? tileset_obj.userData?.tileset : data?.tileset;
+        const tileset = tilesetMetadataOnly ? gltf_obj.userData?.tileset : data?.tileset;
 
         // 1. Tileset Section
         if (tileset?.class) {
@@ -5507,8 +5530,8 @@
           // Create a "Deep Clean" copy for the clipboard
           const dataForClipboard = data
             ? { ...data }
-            : tileset_obj.userData?.tileset
-              ? { ...tileset_obj.userData.tileset }
+            : gltf_obj.userData?.tileset
+              ? { ...gltf_obj.userData.tileset }
               : {};
 
           btn.onclick = () => {
