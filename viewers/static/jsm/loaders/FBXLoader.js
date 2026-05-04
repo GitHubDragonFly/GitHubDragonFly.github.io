@@ -2196,7 +2196,7 @@ class GeometryParser {
 
 		} );
 
-		if ( buffers.vertex.length === 0 || ( buffers.materialIndex.length === 0 && buffers.uvs.length === 0 ) ) {
+		if ( buffers.vertex.length === 0 || ( buffers.colors.length > 0 && buffers.materialIndex.length === 0 && buffers.uvs.length === 0 ) ) {
 
 			// Assume it is a points model
 
