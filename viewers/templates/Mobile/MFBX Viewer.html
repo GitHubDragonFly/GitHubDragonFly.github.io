@@ -7,13 +7,65 @@
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running === true) {
+            handle_error( 'RESOURCE ERROR' );
+          } else {
+            document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running === true) handle_error( 'UNHANDLED PROMISE: ' + event.reason );
+      });
+    </script>
+
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/",
+          "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
         }
       }
     </script>
@@ -24,17 +76,17 @@
       var THREE, manager, texture_loader, fbx_loader, tga_loader, dds_loader;
       var animations, animation_mixer, animation_running, current_animation, texture_maps;
       var renderer, scene, camera, fbx_obj, render_requested, clock, isMobile;
-      var controls, mouse_down, mouse_wheel, events_initialized;
+      var controls, mouse_down, mouse_wheel, events_initialized, init_running = false;
       var first_run, fr_count, directionalLight, wireframe_enabled;
       var ww = window.innerWidth, wh = window.innerHeight, count = 0;
       var bounding_box, flat_shading_enabled, vertex_colors_enabled;
       var selected_fbx_file, selected_fbx_url_file, selected_url_file = '';
-      var url_displayed = false, url_loading = false, textures, resource_path = '';
+      var url_displayed = false, url_loading = false, filesMap;
     </script>
 
     <script type="module">
       import * as threejs from 'three';
-      import { FBXLoader } from 'three/addons/loaders/FBXLoader.min.js';
+      import { FBXLoader } from '../../static/jsm/loaders/FBXLoader.min.js';
 
       THREE = threejs;
 
@@ -79,7 +131,7 @@
         <label for="btn_flat" title="Flat Shading"></label>
         <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
         <label for="btn_wireframe" title="Wireframe"></label>
-        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="min-width: 15px;" disabled>&#x2191</button>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
         <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
       </div>
       <div class="fm" id="url" style="display: none;">
@@ -210,8 +262,8 @@
         // Frame camera to root
         const maxDim = Math.max( size.x, size.y, size.z );
         const fov = THREE.MathUtils.degToRad( camera.fov );
-        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
-        camera.position.set( 0, 0, dist * 1.5 );
+        const dist = maxDim + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist );
         camera.lookAt( 0, 0, 0 );
 
         resize();
@@ -250,6 +302,8 @@
           await reset_all( true );
         }
 
+        init_running = true;
+
         enable_disable( true );
 
         if (tga_loader === undefined) {
@@ -266,10 +320,9 @@
 
         selected_fbx_file = null;
         selected_fbx_url_file = null;
-        resource_path = '';
         mouse_down = false;
         mouse_wheel = false;
-        textures = [];
+        filesMap = {};
         animations = [];
         animation_mixer = null;
         animation_running = false;
@@ -288,8 +341,14 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
+        manager.setURLModifier( function( url ) {
+          const file = filesMap[ url ];
+          if ( file ) return file;
+          return url;
+        });
+
         if (url_loading === false) {
-          let image_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF', '.KTX2',
+          const image_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF', '.KTX2',
             '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
 
           // Loaded file
@@ -301,21 +360,16 @@
             let fn_uc = fi.files[ i ].name.toUpperCase();
 
             if (fn_uc.endsWith('.FBX')) selected_fbx_file = fi.files[ i ];
-            else if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) textures.push( fi.files[ i ] );
+            else if (image_extensions.some( ext => fn_uc.endsWith( ext ) )) {
+              const url = URL.createObjectURL( fi.files[ i ] );
+              filesMap[ fi.files[ i ].name ] = url;
+              URL.revokeObjectURL( fi.files[ i ] );
+            }
           };
 
           if (selected_fbx_file === null) {
             handle_error( 'No valid FBX file selected!' );
             return;
-          }
-
-          if (textures.length > 0) {
-            textures.forEach( file => {
-              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
-              URL.revokeObjectURL( file );
-            });
-
-            resource_path = resource_path.substring( 0, resource_path.length - 1 );
           }
 
           selected_url_file = '';
@@ -383,26 +437,6 @@
           //controls.minPolarAngle = 1.1;
         }
 
-        if (scene.environment === null) {
-          let url = 'https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/textures/water.avif';
-
-          texture_loader.load( url, async function( texture ) {
-            texture.mapping = THREE.EquirectangularReflectionMapping;
-            texture.needsUpdate = true;
-
-            scene.environment = texture.clone();
-            scene.environmentIntensity = 0.15;
-
-            mouse_wheel = true;
-
-            texture.dispose();
-          }, function ( xhr ) {
-          }, function ( error ) {
-            console.log( 'Error Loading Scene Environment Image File!' );
-            console.log( error );
-          });
-        }
-
         // Load the fbx file
         selected_fbx_file !== null ? loadFile() : loadURLFile();
       }
@@ -427,12 +461,10 @@
               if (child.isSkinnedMesh) child.frustumCulled = false;
 
               if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  if (child.isPoints) mtl.size = isMobile === true ? 0.8 : 0.6;
-                  mtl.vertexColors = vertex_colors_enabled;
+                child.material.forEach( m => {
+                  m.vertexColors = vertex_colors_enabled;
                 });
               } else {
-                if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 0.6;
                 child.material.vertexColors = vertex_colors_enabled;
               }
             }
@@ -452,7 +484,7 @@
         }, function ( error ) { // onError
           URL.revokeObjectURL( selected_fbx_file );
           handle_error( error );
-        }, resource_path);
+        });
 
         mouse_wheel = true;
       }
@@ -461,7 +493,6 @@
         if (selected_url_file !== '') {
           if (selected_url_file.indexOf( ',' ) > -1) {
             let urls = selected_url_file.split( ',' );
-            textures = [];
 
             for (let i = 0; i < urls.length; i++) {
               let url = urls[ i ].trim();
@@ -507,12 +538,10 @@
                   if (child.isSkinnedMesh) child.frustumCulled = false;
 
                   if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      if (child.isPoints) mtl.size = isMobile === true ? 0.8 : 0.6;
-                      mtl.vertexColors = vertex_colors_enabled;
+                    child.material.forEach( m => {
+                      m.vertexColors = vertex_colors_enabled;
                     });
                   } else {
-                    if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 0.6;
                     child.material.vertexColors = vertex_colors_enabled;
                   }
                 }
@@ -531,7 +560,7 @@
             }, function ( xhr ) { // onProgress
             }, function ( error ) { // onError
               handle_error( error );
-            }, resource_path);
+            });
           } else {
             handle_error( 'Unsupported URL model!' );
           }
@@ -541,9 +570,9 @@
       }
 
       async function finish_loading() {
-        enable_disable( false );
-
         frame_camera();
+
+        enable_disable( false );
 
         let object_is_mesh = false;
 
@@ -566,6 +595,8 @@
           animation_running = true;
           disabled_changed();
         }
+
+        init_running = false;
 
         console.timeEnd( 'Loading Time' );
 
@@ -592,12 +623,14 @@
         render_requested = false;
         enable_disable( true );
 
+        init_running = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
       }
 
-      function quick_x_rotation( angle ) {
-        fbx_obj.rotateX( Math.PI * parseFloat( angle ) );
+      function quick_x_rotation() {
+        fbx_obj.rotateX( - Math.PI / 2.0 );
 
         bounding_box.setFromObject( fbx_obj );
         let center = bounding_box.getCenter( new THREE.Vector3() );
@@ -619,9 +652,9 @@
         fbx_obj.traverse( function( child ) {
     	    if (child.isMesh) {
             if (Array.isArray( child.material )) {
-              child.material.forEach( mtl => {
-                mtl.flatShading = flat_shading_enabled;
-                mtl.needsUpdate = true;
+              child.material.forEach( m => {
+                m.flatShading = flat_shading_enabled;
+                m.needsUpdate = true;
               });
             } else {
               child.material.flatShading = flat_shading_enabled;
@@ -646,8 +679,8 @@
           fbx_obj.traverse( function( child ) {
       	    if (child.isMesh) {
               if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.wireframe = wireframe_enabled;
+                child.material.forEach( m => {
+                  m.wireframe = wireframe_enabled;
                 });
               } else {
                 child.material.wireframe = wireframe_enabled;
