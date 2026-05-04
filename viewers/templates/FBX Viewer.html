@@ -98,10 +98,10 @@
       var bounding_box, flat_shading_enabled, filename, zip, scene_bgnd, hdrjpg_texture;
       var initial_transparency, initial_transparency_array, init_running = false;
       var initial_opacity, initial_opacity_array, enable_opacity;
-      var original_side, original_side_array, bgnd_linear_gradient;
+      var original_side, original_side_array, bgnd_linear_gradient, filesMap;
       var selected_fbx_file, selected_fbx_url_file, selected_url_file = '', gif_export;
       var url_displayed = false, url_loading = false, menu_location_bottom = false, slider_height = 0;
-      var current_texture, textures, initial_textures, initial_textures_array, animated_gif_texture, resource_path = '';
+      var current_texture, textures, initial_textures, initial_textures_array, animated_gif_texture;
       var vertex_colors_enabled, random_vertex_colors_enabled, original_vertex_color_array, random_vertex_color_array;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
@@ -115,9 +115,9 @@
     <script type="module">
       import * as threejs from 'three';
       import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
-      import { FBXLoader } from 'three/addons/loaders/FBXLoader.min.js';
       import { GifLoader } from '../static/jsm/loaders/three-gif-loader/gif-loader.js';
       import { GifWriter } from '../static/jsm/libs/omggif/omggif.min.js';
+      import { FBXLoader } from '../static/jsm/loaders/FBXLoader.min.js';
 
       THREE = threejs;
 
@@ -298,7 +298,7 @@
             <span id="z_val">0</span>
           </div>
         </button>
-        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="background-color: transparent; min-width: 15px;">&#x2191</button>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="background-color: transparent; min-width: 15px;">&#x2191</button>
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
             <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="20" step="0.05" value="5" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
@@ -2371,8 +2371,8 @@
         // Frame camera to root
         const maxDim = Math.max( size.x, size.y, size.z );
         const fov = THREE.MathUtils.degToRad( camera.fov );
-        const dist = maxDim / ( 2 * Math.tan( fov / 2.0 ) );
-        camera.position.set( 0, 0, dist * 1.5 );
+        const dist = maxDim + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist );
         camera.lookAt( 0, 0, 0 );
 
         resize();
@@ -2455,8 +2455,8 @@
         mouse_wheel = true;
       }
 
-      function quick_x_rotation( angle ) {
-        fbx_obj.rotateX( Math.PI * parseFloat( angle ) );
+      function quick_x_rotation() {
+        fbx_obj.rotateX( - Math.PI / 2.0 );
 
         set_grid_y();
         set_polar_grid_y();
@@ -2611,9 +2611,9 @@
         selected_fbx_file = null;
         selected_fbx_url_file = null;
         object_is_points = false;
-        resource_path = '';
         mouse_down = false;
         mouse_wheel = false;
+        filesMap = {};
         tex_fmt = '';
         tex_flip = false;
         tex_res = D16K;
@@ -2665,6 +2665,12 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
+        manager.setURLModifier( function( url ) {
+          const file = filesMap[ url ];
+          if ( file ) return file;
+          return url;
+        });
+
         if (url_loading === false) {
           let image_extensions = [ '.AVIF', '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF', '.KTX2',
             '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
@@ -2688,14 +2694,12 @@
 
           if (textures.length > 0) {
             document.getElementById('btn_textures').disabled = false;
-            document.getElementById('btn_textures').style.backgroundColor = 'lightgreen';
 
             textures.forEach( file => {
-              resource_path += file.name + ',' + URL.createObjectURL( file ) + ',';
+              const url = URL.createObjectURL( file );
+              filesMap[ file.name ] = url;
               URL.revokeObjectURL( file );
             });
-
-            resource_path = resource_path.substring( 0, resource_path.length - 1 );
           }
 
           selected_url_file = '';
@@ -2791,19 +2795,19 @@
           const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
 
           controls = new OrbitControls( camera, renderer.domElement );
+          controls.enableZoom = true;
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.6;
           controls.rotateSpeed = 0.6;
           controls.keyPanSpeed = 0.6;
           controls.panSpeed = 0.6;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.05;
           //controls.enableKeys = false;
-          //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
         }
 
         // Load the fbx file
@@ -2849,20 +2853,18 @@
               initial_textures_array[ child.name ] = {};
               original_side_array[ child.name ] = {};
 
-              child.material.forEach( mtl => {
-                mtl.vertexColors = vertex_colors_enabled;
-                if (object_is_points === true) mtl.size = 0.8;
+              child.material.forEach( m => {
+                m.vertexColors = vertex_colors_enabled;
 
-                initial_opacity_array[ child.name ][ child_count_array ] = mtl.opacity;
-                initial_transparency_array[ child.name ][ child_count_array ] = mtl.transparent;
-                initial_textures_array[ child.name ][ child_count_array ] = mtl.map;
-                original_side_array[ child.name ][ child_count_array ] = mtl.side;
+                initial_opacity_array[ child.name ][ child_count_array ] = m.opacity;
+                initial_transparency_array[ child.name ][ child_count_array ] = m.transparent;
+                initial_textures_array[ child.name ][ child_count_array ] = m.map;
+                original_side_array[ child.name ][ child_count_array ] = m.side;
 
                 child_count_array += 1;
               });
             } else {
               child.material.vertexColors = vertex_colors_enabled;
-              if (object_is_points === true) child.material.size = 0.8;
 
               initial_opacity[ child.name ] = child.material.opacity;
               initial_transparency[ child.name ] = child.material.transparent;
@@ -2916,7 +2918,7 @@
         }, function ( error ) { // onError
           URL.revokeObjectURL( selected_fbx_file );
           handle_error( error );
-        }, resource_path);
+        });
       }
 
       function loadURLFile() {
@@ -2993,7 +2995,7 @@
             }, function ( xhr ) { // onProgress
             }, function ( error ) { // onError
               handle_error( error );
-            }, resource_path);
+            });
           } else {
             handle_error( 'Unsupported URL model!' );
           }
@@ -3820,9 +3822,9 @@
           // This will allow us to check if the child is an instance of the Mesh constructor
     	    if (child.isMesh) {
             if (Array.isArray( child.material )) {
-              child.material.forEach( mtl => {
-                mtl.flatShading = flat_shading_enabled;
-                mtl.needsUpdate = true;
+              child.material.forEach( m => {
+                m.flatShading = flat_shading_enabled;
+                m.needsUpdate = true;
               });
             } else {
               child.material.flatShading = flat_shading_enabled;
@@ -3865,23 +3867,23 @@
               if (Array.isArray( child.material )) {
                 let child_count_array = 1;
 
-                child.material.forEach( mtl => {
+                child.material.forEach( m => {
                   switch ( current_side ) {
                     case 'FS':
-                      mtl.side = THREE.FrontSide;
+                      m.side = THREE.FrontSide;
                       break;
 
                     case 'BS':
-                      mtl.side = THREE.BackSide;
+                      m.side = THREE.BackSide;
                       break;
 
                     case 'OS':
-                      mtl.side = original_side_array[ child.name ][ child_count_array ];
+                      m.side = original_side_array[ child.name ][ child_count_array ];
                       child_count_array += 1;
                       break;
 
                     default:
-                      mtl.side = THREE.DoubleSide;
+                      m.side = THREE.DoubleSide;
                       break;
                   }
 
@@ -3927,8 +3929,8 @@
         fbx_obj.traverse( function( child ) {
     	    if(child.isMesh){
             if (Array.isArray( child.material )) {
-              child.material.forEach( mtl => {
-                mtl.wireframe = wireframe_enabled;
+              child.material.forEach( m => {
+                m.wireframe = wireframe_enabled;
               });
             } else {
               child.material.wireframe = wireframe_enabled;
@@ -3951,16 +3953,16 @@
         }
 
         fbx_obj.traverse( async function( child ) {
-        	if (child.isMesh || child.isPoints) {
+          if (child.isMesh || child.isPoints) {
             if (current_texture == -1) {
               // Remove texture
               if (Array.isArray( child.material )) {
                 let child_count_array = 1;
 
-                child.material.forEach( mtl => {
-                  mtl.map = initial_textures_array[ child.name ][ child_count_array ];
+                child.material.forEach( m => {
+                  m.map = initial_textures_array[ child.name ][ child_count_array ];
+                  m.needsUpdate = true;
                   child_count_array += 1;
-                  mtl.needsUpdate = true;
                 });
               } else {
                 child.material.map = initial_textures[ child.name ];
@@ -3972,9 +3974,9 @@
 
                 // Apply texture
                 if (Array.isArray( child.material )) {
-                  child.material.forEach( mtl => {
-                    mtl.map = textures[ current_texture ];
-                    mtl.needsUpdate = true;
+                  child.material.forEach( m => {
+                    m.map = textures[ current_texture ];
+                    m.needsUpdate = true;
                   });
                 } else {
                   child.material.map = textures[ current_texture ];
@@ -3987,9 +3989,9 @@
 
                     // Apply texture
                     if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        mtl.map = texture;
-                        mtl.needsUpdate = true;
+                      child.material.forEach( m => {
+                        m.map = texture;
+                        m.needsUpdate = true;
                       });
                     } else {
                       child.material.map = texture;
@@ -4000,14 +4002,15 @@
                   tga_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
                     URL.revokeObjectURL( textures[ current_texture ] );
 
+                    texture.colorSpace = THREE.SRGBColorSpace;
                     texture.generateMipmaps = true;
                     texture.flipY = true;
 
                     // Apply texture
                     if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        mtl.map = texture;
-                        mtl.needsUpdate = true;
+                      child.material.forEach( m => {
+                        m.map = texture;
+                        m.needsUpdate = true;
                       });
                     } else {
                       child.material.map = texture;
@@ -4021,12 +4024,13 @@
                   await new Promise(resolve => setTimeout( resolve, 1000 )); // adjust timing if necessary
 
                   if (tex.num_frames > 1) animated_gif_texture = true;
+                  else tex.colorSpace = THREE.SRGBColorSpace;
 
                   // Apply texture
                   if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      mtl.map = tex;
-                      mtl.needsUpdate = true;
+                    child.material.forEach( m => {
+                      m.map = tex;
+                      m.needsUpdate = true;
                     });
                   } else {
                     child.material.map = tex;
@@ -4038,11 +4042,13 @@
                   texture_loader.load( URL.createObjectURL( textures[ current_texture ] ), function( texture ) {
                     URL.revokeObjectURL( textures[ current_texture ] );
 
+                    texture.colorSpace = THREE.SRGBColorSpace;
+
                     // Apply texture
                     if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        mtl.map = texture;
-                        mtl.needsUpdate = true;
+                      child.material.forEach( m => {
+                        m.map = texture;
+                        m.needsUpdate = true;
                       });
                     } else {
                       child.material.map = texture;
