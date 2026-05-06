@@ -101,6 +101,8 @@
       var initial_transparency, initial_transparency_array;
       var selected_ifc_file, selected_ifc_url_file, selected_url_file = '';
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
+      var raycaster, mouse, mouseDownPos, featureHighlightMesh, spatialStructure;
+      var pickedObject, hasMetadata, click_listener_added = false, spatialMap;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
@@ -108,6 +110,64 @@
       const A4K = 4096; // AVIF 4k limit
       const I8K = 8192; // iPad 8k limit
       const D16K = 16384; // Desktop 16k limit
+
+      const TYPE_COUNT_MAP = {
+        'SCALAR': 1,
+        'VEC2': 2,
+        'VEC3': 3,
+        'VEC4': 4,
+        'MAT2': 4,
+        'MAT3': 9,
+        'MAT4': 16
+      };
+
+      const COMPONENT_COUNT_MAP = {
+        'INT8': 1,
+        'UINT8': 1,
+        'INT16': 2,
+        'UINT16': 2,
+        'INT32': 4,
+        'UINT32': 4,
+        'INT64': 8,
+        'UINT64': 8,
+        'FLOAT32': 4,
+        'FLOAT64': 8
+      };
+
+      const COMPONENT_TYPE_MAP = {
+        'INT8': Int8Array,
+        'UINT8': Uint8Array,
+        'INT16': Int16Array,
+        'UINT16': Uint16Array,
+        'INT32': Int32Array,
+        'UINT32': Uint32Array,
+        'INT64': BigInt64Array,
+        'UINT64': BigUint64Array,
+        'FLOAT32': Float32Array,
+        'FLOAT64': Float64Array
+      };
+
+      const DATAVIEW_GETTER_MAP = {
+        INT8: 'getInt8',
+        UINT8: 'getUint8',
+        INT16: 'getInt16',
+        UINT16: 'getUint16',
+        INT32: 'getInt32',
+        UINT32: 'getUint32',
+        INT64: 'getBigInt64',
+        UINT64: 'getBigUint64',
+        FLOAT32: 'getFloat32',
+        FLOAT64: 'getFloat64'
+      };
+
+      const NORMALIZATION_DIVISORS = {
+        'INT8': 127.0,
+        'UINT8': 255.0,
+        'INT16': 32767.0,
+        'UINT16': 65535.0,
+        'INT32': 2147483647.0,
+        'UINT32': 4294967295.0
+      };
     </script>
 
     <script type="module">
@@ -193,6 +253,37 @@
     <script src="../static/js/upng/UPNG.min.js" defer></script>
     <script src="../static/js/omggif/omggif.min.js" defer></script>
     <script src="../static/js/pako/dist/pako.min.js" defer></script>
+
+    <style>
+      #metadata-card {
+        position: absolute;
+        display: none; /* Hidden by default */
+        background: rgba( 25, 25, 25, 0.9 );
+        color: #fff;
+        padding: 12px;
+        border-radius: 8px;
+        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-size: 13px;
+        min-width: 180px;
+        max-width: 70vw;     /* Limits width to 70% of the screen */
+        max-height: 70vh;    /* Limits height to 70% of the screen */
+        overflow-x: auto;    /* Enables horizontal scroll */
+        overflow-y: auto;    /* Enables vertical scroll */
+        border: 1px solid #444;
+        box-shadow: 0 4px 15px rgba( 0, 0, 0, 0.5 );
+        pointer-events: auto;
+        scrollbar-width: thin;
+        scrollbar-color: #555 transparent;
+        z-index: 1000;
+      }
+
+      #metadata-card::-webkit-scrollbar { width: 6px; height: 6px; }
+      #metadata-card::-webkit-scrollbar-thumb { background: #555; border-radius: 3px; }
+      #metadata-card h4 { margin: 0 0 8px 0; color: #00d4ff; font-size: 11px; }
+      #metadata-card .prop-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+      #metadata-card .prop-label { color: #aaa; margin-right: 10px; }
+      #metadata-card .prop-value { font-weight: bold; color: #fff; }
+    </style>
 
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
@@ -301,7 +392,7 @@
             <span id="z_val">0</span>
           </div>
         </button>
-        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="background-color: transparent; min-width: 15px;">&#x2191</button>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="background-color: transparent; min-width: 15px;">&#x2191</button>
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
             <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="20" step="0.05" value="5" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
@@ -471,6 +562,9 @@
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">Loading</div>
     <div id="div_gif_rectangle" class="gif_rectangle"></div>
+    <div id="metadata-card"></div>
+
+    <div id="metadata_message" style="position: fixed; visibility: hidden; font-family: Monospace, Arial; color: #d1cefc; bottom: calc(env(safe-area-inset-bottom) + 15px); left: 5px; pointer-events: none;">Metadata Raycasting Enabled</div>
 
     <script>
       function hide_dropdown_x() { $('#dc_x').fadeOut(); mouse_wheel = true; }
@@ -678,11 +772,17 @@
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
         const activeKeys = new Set();
 
-        window.addEventListener( 'pointerdown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
+        window.addEventListener( 'pointerdown', ( event ) => {
+          mouse_down = true;
+          mouseDownPos.x = event.clientX;
+          mouseDownPos.y = event.clientY;
+        }, false);
         window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; }, false);
         window.addEventListener( 'pointercancel', ( event ) => { mouse_down = false; mouse_wheel = false; }, false);
         window.addEventListener( 'wheel', ( event ) => { if (progress.value === 0) mouse_wheel = true; }, false);
         window.addEventListener( 'keydown', ( event ) => {
+          if (event.key === 'Escape') hideUiPanel();
+
           if (progress.value === 0) {
             if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
               controls.listenToKeyEvents( window );
@@ -704,7 +804,7 @@
       }
 
       function resize() {
-        if (window.fullScreen || document.fullscreenElement || document.mozFullScreenElement ||
+        if (document.fullscreenElement || document.mozFullScreenElement ||
           document.msFullscreenElement || document.webkitFullscreenElement) {
 
           document.getElementById('btn_full_screen').style.backgroundColor = '#FFFF00';
@@ -740,8 +840,6 @@
           document.msFullscreenElement ? document.msExitFullscreen() : document.body.msRequestFullscreen();
         } else if (document.webkitFullscreenEnabled) {
           document.webkitFullscreenElement ? document.webkitExitFullscreen() : document.body.webkitRequestFullscreen();
-        } else if (window.fullScreen) {
-          // Do nothing. This fullscreen mode was triggered with F11 key press and requires the same again.
         }
       }
 
@@ -2419,8 +2517,8 @@
         mouse_wheel = true;
       }
 
-      function quick_x_rotation( angle ) {
-        ifc_obj.rotateX( Math.PI * parseFloat( angle ) );
+      function quick_x_rotation() {
+        ifc_obj.rotateX( - Math.PI / 2.0 );
 
         set_grid_y();
         set_polar_grid_y();
@@ -2502,6 +2600,8 @@
 
         selected_ifc_file = null;
         selected_ifc_url_file = null;
+        spatialStructure = null;
+        spatialMap = {};
         ifcFolder = null;
         mouse_down = false;
         mouse_wheel = false;
@@ -2521,6 +2621,9 @@
         scene_bgnd = null;
         gif_export = false;
         equi_enabled = false;
+        hasMetadata = false;
+        featureHighlightMesh = null;
+        mouseDownPos = { x: 0, y: 0 };
         bounding_box = new THREE.Box3();
 
         console.time( 'Loading Time' );
@@ -2714,6 +2817,8 @@
           ifc_obj = new THREE.Object3D();
           ex_ifc_obj = object;
 
+          hasMetadata = object.geometry.hasAttribute( 'expressID' );
+
           if (object.material) {
             if (Array.isArray( object.material )) {
               let child_count_array = 1;
@@ -2760,6 +2865,8 @@
           ifc_loader.load( selected_ifc_url_file, function( object ) {
             ifc_obj = new THREE.Object3D();
             ex_ifc_obj = object;
+
+            hasMetadata = object.geometry.hasAttribute( 'expressID' );
 
             if (object.material) {
               if (Array.isArray( object.material )) {
@@ -2957,6 +3064,21 @@
 
         document.getElementById('right_gui_position').style.display = 'block';
 
+        if (hasMetadata) {
+          document.getElementById('metadata_message').style.visibility = 'visible';
+          console.log( 'Metadata Raycasting Enabled' );
+
+          if (click_listener_added === false) {
+            window.addEventListener( 'click', handle_raycast_click );
+            click_listener_added = true;
+          }
+        } else {
+          if (click_listener_added) {
+            window.removeEventListener( 'click', handle_raycast_click );
+            click_listener_added = false;
+          }
+        }
+
         console.timeEnd( 'Loading Time' );
 
         init_running = false;
@@ -2966,12 +3088,45 @@
 
         set_gui_position();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info, 1000 ) );
+        function buildSpatialMap( node, currentStorey = 'Unknown Level' ) {
+          // 1. Update the 'currentStorey' if we hit a Storey node
+          let storeyName = currentStorey;
+
+          if (node.type === 'IfcBuildingStorey') {
+            storeyName = node.Name?.value || node.LongName?.value || 'Unnamed Level';
+          }
+
+          // 2. Map this specific element's ID to the level name
+          // This catches windows, walls, and furniture
+          spatialMap[ node.expressID ] = storeyName;
+
+          // 3. Recurse through children
+          if (node.children && node.children.length > 0) {
+            node.children.forEach( child => buildSpatialMap( child, storeyName ) );
+          }
+        }
+
+        spatialStructure = await ifc_loader.ifcManager.getSpatialStructure( 0, true );
+        buildSpatialMap( spatialStructure );
+
+        if (!isMobile) {
+          await new Promise( resolve => setTimeout( log_info, 1000 ) );
+        } else {
+          if (document.getElementById('metadata_message').style.visibility === 'visible')
+            await new Promise( resolve => setTimeout( hide_metadata_message, 5000 ) );
+        }
       }
 
-      function log_info() {
+      async function log_info() {
         console.log( 'Memory: ', renderer.info.memory );
         console.log( 'Render: ', renderer.info.render );
+
+        if (document.getElementById('metadata_message').style.visibility === 'visible')
+          await new Promise( resolve => setTimeout( hide_metadata_message, 5000 ) );
+      }
+
+      function hide_metadata_message() {
+        document.getElementById('metadata_message').style.visibility = 'hidden';
       }
 
       function handle_error( error ) {
@@ -2995,6 +3150,607 @@
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
+      }
+
+      function highlightFeature( highlight_id, attrName ) {
+        if (!attrName) return;
+
+        const geometry = pickedObject.geometry;
+
+        const indexAttr = geometry.index;
+        const featureAttr = geometry.getAttribute( attrName );
+        const positionAttr = geometry.getAttribute( 'position' );
+
+        if (!featureAttr || !indexAttr || !positionAttr) return;
+
+        // Find all triangles that belong to this highlight id
+        const activeIndices = [];
+
+        for ( let i = 0; i < indexAttr.count; i += 3 ) {
+          const a = indexAttr.getX( i );
+          const b = indexAttr.getX( i + 1 );
+          const c = indexAttr.getX( i + 2 );
+
+          // If the first vertex of the triangle matches the ID, we take the whole triangle
+          if ( a < featureAttr.count ) {
+            if (featureAttr.getX( a ) === highlight_id) {
+              activeIndices.push( a, b, c );
+            }
+          }
+        }
+
+        if (activeIndices.length === 0) return;
+
+        // Create a new "Slice" geometry
+        const highlightGeo = new THREE.BufferGeometry();
+        highlightGeo.setAttribute( 'position', positionAttr.clone() );
+        highlightGeo.setIndex( activeIndices );
+
+        // Create the overlay mesh
+        featureHighlightMesh = new THREE.Mesh(
+          highlightGeo,
+          new THREE.MeshBasicMaterial({
+            color: 0xf08080,
+            transparent: true,
+            opacity: 0.5,
+            side: THREE.DoubleSide,
+            depthTest: true,
+            depthWrite: false,   // Keeps the highlight from messing up the depth buffer for other transparents
+            polygonOffset: true, // Physically pushes the quad slightly toward the camera
+            polygonOffsetFactor: -1,
+            polygonOffsetUnits: -1
+          })
+        );
+
+        featureHighlightMesh.isHighlight = true;
+
+        // Create the Wireframe Outline (The "Border")
+        const wireframeGeo = new THREE.EdgesGeometry( highlightGeo, 30 );
+        const wireframe = new THREE.LineSegments(
+          wireframeGeo,
+          new THREE.LineBasicMaterial( { color: 0xffffff, linewidth: 3 } ) // White border
+        );
+
+        // Add the wireframe to our highlight mesh so they move together
+        featureHighlightMesh.add( wireframe );
+
+        featureHighlightMesh.position.set( 0, 0, 0 );
+        featureHighlightMesh.rotation.set( 0, 0, 0 );
+        featureHighlightMesh.scale.set( 1, 1, 1 );
+        featureHighlightMesh.updateWorldMatrix( true, true );
+
+        // Sync transformation with the parent object
+        pickedObject.add( featureHighlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
+      }
+
+      function popup_card_cleanup() {
+        const card = document.getElementById('metadata-card');
+
+        if (card) {
+          card.scrollTop = 0;
+          card.scrollLeft = 0;
+          card.innerHTML = '';
+          card.style.display = 'none';
+        }
+
+        // Clean up previous highlight
+        if (featureHighlightMesh) {
+          // Detach it from the old parent
+          if (featureHighlightMesh.parent) {
+            featureHighlightMesh.parent.remove( featureHighlightMesh );
+          }
+
+          // Clean up the children (the wireframe)
+          featureHighlightMesh.traverse( ( child ) => {
+            if (child.isLine) {
+              child.parent.remove( child );
+              if (child.geometry) child.geometry.dispose();
+              if (child.material) child.material.dispose();
+            }
+          });
+
+          if (featureHighlightMesh.geometry) featureHighlightMesh.geometry.dispose();
+          if (featureHighlightMesh.material) featureHighlightMesh.material.dispose();
+          featureHighlightMesh = null;
+        }
+
+        pickedObject = null;
+        mouse_wheel = true;
+        return;
+      }
+
+      async function handle_raycast_click( event ) {
+        // Calculate how far the mouse moved
+        const deltaX = Math.abs( event.clientX - mouseDownPos.x );
+        const deltaY = Math.abs( event.clientY - mouseDownPos.y );
+
+        // If moved more than 5 pixels, it was likely a camera drag, not a click
+        // Leave previous popup card and highlight visible, if present
+        if (deltaX > 5 || deltaY > 5) return;
+
+        popup_card_cleanup();
+
+        if (event.target.closest( '#fixed_menu' )) {
+          return;
+        }
+
+        if (!raycaster) {
+          raycaster = new THREE.Raycaster();
+          raycaster.params.Points.threshold = 0.05;
+        }
+
+        if (!mouse) mouse = new THREE.Vector2();
+
+        const HIGHLIGHT_COLOR = new THREE.Color( 0xf08080 );
+
+        mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+        mouse.y = -( event.clientY / window.innerHeight ) * 2 + 1;
+
+        raycaster.setFromCamera( mouse, camera );
+
+        const intersects = raycaster.intersectObjects( scene.children, true );
+
+        if (intersects.length === 0) return;
+
+        const visibleIntersects = intersects.filter( hit => hit.object.visible );
+        if (visibleIntersects.length === 0) return;
+
+        const intersect = visibleIntersects[ 0 ];
+
+        pickedObject = intersect.object;
+
+        // QUICK GUARD: Ensure geometry and attributes exist before we dig in
+        if (!pickedObject.geometry) return;
+
+        const expressId = pickedObject.geometry.attributes.expressID.getX( intersect.face.a );
+        if (!expressId) return;
+
+        const mgr = ifc_loader.ifcManager;
+
+        const schema = await mgr.getItemProperties( 0, expressId );
+        const meshFeatures = await mgr.getPropertySets( 0, expressId, true );
+        const typeFeatures = await mgr.getTypeProperties( 0, expressId, true );
+        const materials = await mgr.getMaterialsProperties( 0, expressId, true );
+
+        const featureMetadataList = [];
+        const seenProperties = new Set(); // Track unique property combinations
+
+        // 1. Add the basic IFC info
+        const locationPath = spatialMap[ expressId ] || 'External / Unassigned';
+
+        featureMetadataList.push({
+          class: "IFC Location",
+          properties: { 'Hierarchy': locationPath }
+        });
+
+        featureMetadataList.push({
+          class: 'IFC Identity',
+          properties: {
+            'Express ID': expressId,
+            'Global ID': schema.GlobalId?.value || 'N/A'
+          }
+        });
+
+        // Helper to process properties and avoid exact duplicates
+        function processPset( pset, prefix = '' ) {
+          const className = prefix + ( pset.Name?.value || 'Unnamed Pset' );
+          const properties = {};
+
+          if (Array.isArray( pset.HasProperties )) {
+            pset.HasProperties.forEach( prop => {
+              const key = prop.Name?.value;
+              const val = prop.NominalValue?.value ?? prop.Value?.value ?? prop.value;
+
+              if (key) {
+                // Create a unique fingerprint: 'PsetName-Key-Value'
+                const fingerprint = `${pset.Name?.value}-${key}-${val}`;
+
+                if (!seenProperties.has( fingerprint )) {
+                  properties[ key ] = val ?? 'N/A';
+                  seenProperties.add( fingerprint );
+                }
+              }
+            });
+          }
+
+          return { className, properties };
+        }
+
+        // Process Instance Properties (High Priority)
+        if (meshFeatures && meshFeatures.length > 0) {
+          meshFeatures.forEach( set => {
+            const { className, properties } = processPset( set );
+
+            if (Object.keys( properties ).length > 0) {
+              featureMetadataList.push({ class: className, properties });
+            }
+          });
+        }
+
+        // Process Type Features
+        if (typeFeatures && typeFeatures.length > 0) {
+          typeFeatures.forEach( typeObj => {
+            featureMetadataList.push({
+              class: 'IFC Type Identity',
+              properties: {
+                'Type Name': typeObj.Name?.value || 'N/A',
+                'Type Tag': typeObj.Tag?.value || 'N/A'
+              }
+            });
+
+            if (Array.isArray( typeObj.HasPropertySets )) {
+              typeObj.HasPropertySets.forEach( pset => {
+                const { className, properties } = processPset( pset, 'Type: ');
+
+                if (Object.keys( properties ).length > 0) {
+                  featureMetadataList.push( { class: className, properties } );
+                }
+              });
+            }
+          });
+        }
+
+        // Process Materials
+        if (materials && materials.length > 0) {
+          const properties = {};
+
+          materials.forEach( mset => {
+            const mat_set = mset.Materials || mset.ForLayerSet?.MaterialLayers;
+
+            if (!mat_set) {
+              const key = mset.expressID;
+              const val = mset.Name?.value;
+              properties[ key ] = val || 'N/A';
+            } else {
+              const mat_arr = Array.isArray( mat_set ) ? mat_set : [ mat_set ];
+
+              for ( const mat of mat_arr ) {
+                const key = mat.expressID;
+                const val = mat.Name?.value || mat.Material.Name?.value;
+                properties[ key ] = val || 'N/A';
+              }
+            }
+
+            featureMetadataList.push( { class: 'IFC Material Identity', properties } );
+          });
+        }
+
+        if (featureMetadataList.length > 0) {
+          if (pickedObject.isMesh) highlightFeature( expressId, 'expressID' );
+
+          showUiPanel(
+            { featureMetadata: featureMetadataList },
+            event,
+            schema,
+            pickedObject.name,
+            false
+          );
+        }
+      }
+
+      async function showUiPanel( data, event, schema = null, meshName = '', tilesetMetadataOnly = false, type = '' ) {
+        const card = document.getElementById('metadata-card');
+        if (!card) return;
+
+        /**
+         * Helper: Formats arrays (simple or object-based) into HTML
+         */
+        function formatArray( arr ) {
+          if (!arr || arr.length === 0) return '[]';
+
+          // Force TypedArrays (Float32Array, etc.) into standard Arrays 
+          // so .map() and .join() behave predictably
+          const arrayData = ArrayBuffer.isView( arr ) ? Array.from( arr ) : arr;
+
+          // If it's an array of objects (like matrix elements or custom structs)
+          if (typeof arrayData[ 0 ] === 'object' && arrayData[ 0 ] !== null) {
+            return arrayData.map( ( item, idx ) => {
+              let itemHtml = `<div style="margin: 4px 0 4px 5px; padding-left: 8px; border-left: 2px solid #00d4ff; background: rgba(0,212,255,0.05);">`;
+              itemHtml += `<div style="font-size: 9px; color: #00d4ff; opacity: 0.7;">Part ${idx + 1}</div>`;
+
+              // --- Check for Matrix/Vector objects to flatten them ---
+              if (item.elements && (Array.isArray( item.elements ) || ArrayBuffer.isView( item.elements ))) {
+                // Just show the numbers, skip the "elements:" label
+                itemHtml += `<div style="font-size: 11px;">${formatArray( item.elements )}</div>`;
+              } else if (item.x !== undefined && item.y !== undefined) {
+                // Just show the coordinate tuple, skip "x:", "y:", "z:" labels
+                const zVal = item.z !== undefined ? `, ${item.z.toFixed( 2 )}` : '';
+                itemHtml += `<div style="font-size: 11px;">(${item.x.toFixed( 2 )}, ${item.y.toFixed( 2 )}${zVal})</div>`;
+              } else {
+                // Fallback for normal custom structs/objects
+                for ( const [ sk, sv ] of Object.entries( item ) ) {
+                  const cleanSv = resolveValue( null, sk, sv );
+                  itemHtml += `<div style="font-size: 11px;"><span style="color: #888;">${sk}:</span> ${cleanSv}</div>`;
+                }
+              }
+
+              itemHtml += `</div>`;
+              return itemHtml;
+            }).join('');
+          }
+
+          // Standard simple array (numbers, strings, booleans)
+          return `[ ${arrayData.map( v => {
+            if (typeof v === 'number') return Number.isInteger( v ) ? v : v.toFixed( 2 );
+            if (typeof v === 'bigint') return v.toString();
+            return String( v );
+          }).join(', ')} ]`;
+        }
+
+        /**
+         * Helper: Resolves any value type into a UI-friendly string/HTML
+         */
+        function resolveValue( className, propName, val, depth = 0 ) {
+          if (depth > 3) return '<span style="color:#666;">[Max Depth]</span>';
+
+          let processedVal = val;
+
+          if (processedVal === null || processedVal === undefined) return 'N/A';
+
+          // Handle Three.js Math Objects / Matrices
+          if (typeof processedVal === 'object') {
+            if (processedVal.isVector3) return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )}, ${processedVal.z.toFixed( 2 )})`;
+            if (processedVal.isVector2) return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )})`;
+            if (processedVal.isColor) return `RGB(${processedVal.r.toFixed( 2 )}, ${processedVal.g.toFixed( 2 )}, ${processedVal.b.toFixed( 2 )})`;
+
+            // Matrix4 / Matrix3 elements
+            if (processedVal.elements && Array.isArray( processedVal.elements )) {
+              return formatArray( processedVal.elements );
+            }
+          }
+
+          const propDef = schema?.classes?.[ className ]?.properties?.[ propName ];
+
+          // Pre-check: If it's a string that looks like an array but isn't parsed
+          // This handles the "[One, Two]" or "[true, false]" strings
+          if (typeof processedVal === 'string' &&
+            ((processedVal.startsWith( '{' ) && processedVal.endsWith( '}' )) ||
+             (processedVal.startsWith( '[' ) && processedVal.endsWith( ']' )))) {
+
+            try {
+              // Try JSON parse first (handles ["One", "Two"])
+              processedVal = JSON.parse( processedVal );
+            } catch ( e ) {
+              // Manual fallback for unquoted strings like [One, Two]
+              processedVal = processedVal.slice( 1, -1 ).split( ',' ).map( s => s.trim() );
+            }
+          }
+
+          if (processedVal === null || processedVal === undefined) return 'N/A';
+
+          // Handle Arrays (The core of EXT_structural_metadata)
+          if (Array.isArray( processedVal )) {
+            if (processedVal.length === 0) return '[]';
+
+            // Handle ENUM Arrays
+            if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
+              const enumValues = schema.enums[ propDef.enumType ].values;
+              return `[ ${processedVal.map( v => {
+                // Look up by integer value (0, 1, 2) or by string name
+                const entry = enumValues.find( e => e.value == v || e.name === v );
+                return entry ? entry.name : v;
+              }).join(', ')} ]`;
+            }
+
+            // General Array (Booleans, Strings, etc.)
+            return formatArray( processedVal );
+          } else {
+            if (propDef?.type === 'ENUM' && schema.enums?.[ propDef.enumType ]) {
+              const entry = schema.enums[ propDef.enumType ].values.find( v => v.value == processedVal || v.name === processedVal );
+              return entry ? entry.name : processedVal;
+            }
+
+            if (propDef?.type === 'BOOLEAN') {
+              const isTrue = (processedVal === true || processedVal === 'true' || processedVal === 1);
+              return isTrue ? 'Yes' : 'No';
+            }
+          }
+
+          // Final Formatting based on Type
+          if (typeof processedVal === 'object' && processedVal !== null) {
+            // 1. CATCH NESTED MATRICES/ELEMENTS OBJECTS
+            // This removes the "elements" label from the UI
+            if (processedVal.elements && ( Array.isArray( processedVal.elements ) || ArrayBuffer.isView( processedVal.elements ) )) {
+              return formatArray( processedVal.elements );
+            }
+
+            // 2. CATCH NESTED VECTORS (x, y, z)
+            if (processedVal.x !== undefined && processedVal.y !== undefined) {
+              const zStr = processedVal.z !== undefined ? `, ${processedVal.z.toFixed( 2 )}` : '';
+              return `(${processedVal.x.toFixed( 2 )}, ${processedVal.y.toFixed( 2 )}${zStr})`;
+            }
+
+            // 3. FALLBACK: Generic Nested Object loop
+            let subHtml = '<div style="margin-left: 10px; font-size: 0.9em; color: #ccc;">';
+
+            for ( const [ k, v ] of Object.entries( processedVal ) ) {
+              subHtml += `<div><span style="color: #888;">${k}:</span> ${resolveValue( null, k, v, depth + 1 )}</div>`;
+            }
+
+            return subHtml + '</div>';
+          }
+
+          if (typeof processedVal === 'number') return Number.isInteger( processedVal ) ? processedVal : processedVal.toFixed( 2 );
+          if (typeof processedVal === 'bigint') return processedVal.toString();
+          if (typeof processedVal === 'boolean') return processedVal ? 'Yes' : 'No';
+
+          return processedVal;
+        }
+
+        // --- HTML Assembly ---
+        let html = '';
+        let show_copy_to_clipboard = true;
+        const tileset = tilesetMetadataOnly ? gltf_obj.userData?.tileset : data?.tileset;
+
+        // 1. Tileset Section
+        if (tileset?.class) {
+          html += `<div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+                     <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">TILESET: ${tileset.class}</div>
+                   </div>`;
+
+          if (tileset.properties) {
+            for ( const [ key, val ] of Object.entries( tileset.properties ) ) {
+              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${resolveValue( tileset.class, key, val )}</span></div>`;
+            }
+          }
+        } else if (tilesetMetadataOnly) {
+          show_copy_to_clipboard = false;
+          const description = (type === 'Box3Helper') ? 'No Data (turn off bounding box)' : 'No Data';
+          html += `<div style="color: #fff; font-size: 11px;">${description}</div>`;
+        }
+
+        // 2. Feature / Tile / Group / Content Sections
+        if (data && !tilesetMetadataOnly) {
+          if (tileset) html += '<br>';
+
+          // Tile Class
+          if (data.tile?.class) {
+            html += `<div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+                       <div style="font-size: 10px; color: #00d4ff;">TILE: ${data.tile.class}</div>
+                     </div>`;
+
+            for ( const [ k, v ] of Object.entries( data.tile.properties || {} ) ) {
+              html += `<div class="prop-row"><span class="prop-label">${k}:</span><span class="prop-value">${resolveValue( data.tile.class, k, v )}</span></div>`;
+            }
+
+            html += '<br>';
+          }
+
+          if (meshName) {
+            html += `<div style="font-size: 12px; font-weight: bold; color: #fff;">Selected: ${meshName}</div><br>`;
+          }
+
+          // Group Metadata - Maybe entries like color, priority...
+
+          if (data.group?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.group.class}</div>
+              </div>`;
+
+            if (data.group.properties) {
+              for ( const [ key, val ] of Object.entries( data.group.properties ) ) {
+                const display = resolveValue( data.group.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
+            }
+
+            html += `<br>`;
+          }
+
+          // Content Metadata - Maybe entries like vertices, materials...
+
+          if (data.content?.class) {
+            html += `
+              <div style="border-bottom: 1px solid #555; margin-bottom: 8px; padding-bottom: 6px;">
+                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.content.class}</div>
+              </div>`;
+
+            if (data.content.properties) {
+              for ( const [ key, val ] of Object.entries( data.content.properties ) ) {
+                const display = resolveValue( data.content.class, key, val );
+                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
+              }
+            }
+          }
+
+          // Feature Metadata (Structural Metadata)
+          if (data.featureMetadata) {
+            const fms = Array.isArray( data.featureMetadata ) ? data.featureMetadata : [ data.featureMetadata ];
+
+            fms.forEach( fm => {
+              html += `<div style="border-bottom: 1px solid #00d4ff; margin-top: 10px; padding-bottom: 4px;">
+                         <div style="font-size: 10px; color: #00d4ff; font-weight: bold;">${fm.class}</div>
+                       </div>`;
+
+              for ( const [ k, v ] of Object.entries( fm.properties || {} ) ) {
+                html += `<div class="prop-row"><span class="prop-label">${k}:</span><span class="prop-value">${resolveValue( fm.class, k, v )}</span></div>`;
+              }
+
+              html += '<br>';
+            });
+          }
+        }
+
+        // 3. Clipboard Button
+        if (show_copy_to_clipboard) {
+          html += `
+            <div style="padding-top: 8px; border-top: 1px solid #444; text-align: center;">
+              <button id="copy-btn" style="background: #111; color: #00d4ff; border: 1px solid #00d4ff; border-radius: 4px; padding: 5px; cursor: pointer; font-size: 11px; width: 100%;">
+                📋 Copy Metadata (JSON)
+              </button>
+            </div>`;
+
+          card.innerHTML = html;
+
+          // --- Post-Render Logic: Clipboard & Positioning ---
+          const btn = document.getElementById('copy-btn');
+
+          // Create a "Deep Clean" copy for the clipboard
+          const dataForClipboard = data
+            ? { ...data }
+            : gltf_obj.userData?.tileset
+              ? { ...gltf_obj.userData.tileset }
+              : {};
+
+          btn.onclick = () => {
+            // 1. Deep copy and BigInt handling
+            const cleanData = JSON.parse( JSON.stringify( dataForClipboard, ( k, v ) => 
+              typeof v === 'bigint' ? v.toString() : v
+            ));
+
+            // 2. Promotion: Convert stringified JSON into actual objects
+            const deepUnescape = ( obj ) => {
+
+              for ( const key in obj ) {
+                if (typeof obj[ key ] === 'string' && ( obj[ key ].startsWith( '{' ) || obj[ key ].startsWith( '[' ) )) {
+                  try {
+                    obj[ key ] = JSON.parse( obj[ key ] );
+                    deepUnescape( obj[ key ] );
+                  } catch ( e ) {}
+                } else if (obj[ key ] && typeof obj[ key ] === 'object') {
+                  deepUnescape( obj[ key ] );
+                }
+              }
+            };
+
+            deepUnescape( cleanData );
+
+            // 3. Metadata cleanup
+            if (meshName && meshName !== 'metadata_proxy_mesh') cleanData[ 'Selected' ] = meshName;
+            delete cleanData.schema;
+
+            // 4. Formatting: Pretty-print with "airy" compact arrays
+            let text = JSON.stringify( cleanData, null, 2 );
+            text = text.replace(/\[\s+([\d\.\-\"\'\w\s,]+)\s+\]/g, ( match, content ) => {
+              return `[ ${content.replace(/\s+/g, ' ')} ]`;
+            });
+
+            navigator.clipboard.writeText( text ).then( () => alert( '✅ Copied Airy JSON!' ) );
+          };
+        } else {
+          card.innerHTML = html;
+        }
+
+        // Display and Measurement
+        card.style.visibility = 'hidden';
+        card.style.display = 'block';
+
+        const rect = card.getBoundingClientRect();
+        const vw = window.innerWidth, vh = window.innerHeight;
+        let x = event.clientX + 15, y = event.clientY + 15;
+
+        if (x + rect.width > vw) x = event.clientX - rect.width - 15;
+        if (y + rect.height > vh) y = vh - rect.height - 15;
+
+        card.style.left = Math.max( 5, x ) + 'px';
+        card.style.top = Math.max( 5, y ) + 'px';
+        card.style.visibility = 'visible';
+      }
+
+      function hideUiPanel() {
+        popup_card_cleanup();
       }
 
       /*
@@ -3527,6 +4283,8 @@
         bg_flip = false;
         document.getElementById('btn_bg_flip').style.backgroundColor = 'transparent';
 
+        document.getElementById('metadata_message').style.visibility = 'hidden';
+
         document.getElementById('model_scale').selectedIndex = 0;
         document.getElementById('export_names').selectedIndex = 0;
 
@@ -3590,6 +4348,21 @@
 
       async function scene_cleanup() {
         mouse_wheel = true;
+
+        hideUiPanel();
+
+        if (featureHighlightMesh) {
+          if (featureHighlightMesh.parent) {
+            featureHighlightMesh.parent.remove( featureHighlightMesh );
+          }
+
+          featureHighlightMesh.traverse( ( child ) => {
+            if (child.geometry) child.geometry.dispose();
+            if (child.material) child.material.dispose();
+          });
+
+          featureHighlightMesh = null;
+        }
 
         if (polar_grid_visible) await show_polar_grid();
         if (grid_visible) await show_grid();
