@@ -289,6 +289,8 @@ Number Type Converter
   - `GLTF Viewer` is for v2.0 glTF files and is currently using r184 of three.js:
     - does not support obsolete `pbrSpecularGlossiness`
     - supports currently arbitrary `KHR_animation_pointer`
+    - supports converting and exporting meshed model to points:
+      - will sample `material.map` if present
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js:
     - supports obsolete `pbrSpecularGlossiness`
     - does not support either `Anisotropy` or currently arbitrary `KHR_animation_pointer`
@@ -434,6 +436,10 @@ Number Type Converter
     - `Cache` which defines how many tiles are loaded and kept in ready state (default 100, affects memory usage and smooth movement)
     - `Depth` level defines how many subtrees are processed (default 4)
   - Consider adjusting LOD settings to improve performance and memory usage
+
+- Special notes about `IFC Viewer`:
+  - It supports metadata picking, similar to glTF based viewers
+  - It also provides live control to show exploded view of the model
 
 - Special notes about `USD Viewer`:
   - As of three.js `v0.184.0` it supports USD, USDA, USDC and USDZ
