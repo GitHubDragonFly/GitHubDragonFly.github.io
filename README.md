@@ -296,6 +296,7 @@ Number Type Converter
     - does not support either `Anisotropy` or currently arbitrary `KHR_animation_pointer`
   - All of the above viewers also support metadata picking when metadata is present in the model:
     - Maybe try some of GLB files available in [Cesium GLTF](https://github.com/CesiumGS/3d-tiles-samples/tree/main/glTF) folder
+    - Applying edges to the model might prevent metadata picking until edges are removed (button `E`)
   - `GLTF Legacy` viewer is for v1.0 glTF files and is purely experimental and rather limited (see notes further below)
 
 - Special notes about `ASSIMP Viewer` which is using [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and [ASSIMP](https://github.com/assimp/assimp) library:
@@ -438,7 +439,8 @@ Number Type Converter
   - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `IFC Viewer`:
-  - It supports metadata picking, similar to glTF based viewers
+  - It supports metadata picking, similar to glTF based viewers:
+    - Applying edges to the model might prevent metadata picking until edges are removed (button `E`)
   - It also provides live control to show exploded view of the model
 
 - Special notes about `USD Viewer`:
