@@ -429,8 +429,47 @@ class ColladaExporter {
 				if ( 'color' in bufferGeometry.attributes ) {
 
 					// colors are always written as floats
+
 					const colName = `${meshid}-color`;
-					gnode += getAttribute( bufferGeometry.attributes.color, colName, [ 'R', 'G', 'B' ], 'float' );
+					const attr = bufferGeometry.attributes.color;
+					const components = attr.itemSize === 4 ? [ 'R', 'G', 'B', 'A' ] : [ 'R', 'G', 'B' ];
+
+					// 1. Create a clone of the attribute so we don't mess up the original scene
+
+					const srgbAttr = attr.clone();
+					const _color = new Color();
+
+					// 1. Determine if the values are 0-255 or 0-1
+
+					let needsNormalization = false;
+
+					for ( let i = 0; i < attr.count; i ++ ) {
+						// Check if any primary color channel exceeds 1.0
+						if ( attr.getX( i ) > 1.0 || attr.getY( i ) > 1.0 || attr.getZ( i ) > 1.0 ) {
+							needsNormalization = true;
+							break; // Stop checking early once confirmed
+						}
+					}
+
+					const divisor = needsNormalization ? 255.0 : 1.0;
+
+					// 2. Iterate through the vertices and apply the divisor
+
+					for ( let i = 0; i < srgbAttr.count; i ++ ) {
+
+						_color.fromBufferAttribute( srgbAttr, i );
+
+						srgbAttr.setXYZ( i, _color.r / divisor, _color.g / divisor, _color.b / divisor );
+
+						if ( attr.itemSize === 4 ) {
+
+							srgbAttr.setW( i, attr.getW( i ) / divisor );
+
+						}
+
+					}
+
+					gnode += getAttribute( srgbAttr, colName, components, 'float' );
 					triangleInputs += `<input semantic="COLOR" source="#${colName}" offset="0" />`;
 
 				}
