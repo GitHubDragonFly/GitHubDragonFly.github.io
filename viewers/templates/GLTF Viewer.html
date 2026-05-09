@@ -3749,6 +3749,8 @@
         gltf_loader.load( zip_file !== null ? selected_gltf_file : URL.createObjectURL( lfile ), async function( gltf ) {
           if (zip_file === null) URL.revokeObjectURL( lfile );
 
+          console.log('gltf ', gltf);
+
           parser = gltf.parser;
           scenes = gltf.scenes;
           cameras = gltf.cameras;
@@ -4115,6 +4117,7 @@
             if (child.isMesh) {
               let child_edge = new THREE.LineSegments( new THREE.EdgesGeometry( child.geometry, 30 ), outline_material );
               child_edge.name = child.name + '_edge';
+              child_edge.raycast = () => {};
               object_is_mesh = true;
 
               if (child.isInstancedMesh) {
@@ -5726,111 +5729,111 @@
         return meshes;
       }
 
-async function sample_gltf_surface_proportional() {
-  const { MeshSurfaceSampler } = await import( 'three/addons/math/MeshSurfaceSampler.min.js' );
+      async function sample_gltf_surface_proportional() {
+        const { MeshSurfaceSampler } = await import( 'three/addons/math/MeshSurfaceSampler.min.js' );
 
-  const vertices = [];
-  const colors = [];
-  const tempNormal = new THREE.Vector3();
-  const tempPosition = new THREE.Vector3();
-  const tempColor = new THREE.Color();
-  const tempUV = new THREE.Vector2(); // To hold sampled UV
-  const triangle = new THREE.Triangle();
+        const vertices = [];
+        const colors = [];
+        const tempNormal = new THREE.Vector3();
+        const tempPosition = new THREE.Vector3();
+        const tempColor = new THREE.Color();
+        const tempUV = new THREE.Vector2(); // To hold sampled UV
+        const triangle = new THREE.Triangle();
 
-  const meshData = [];
-  let totalArea = 0;
+        const meshData = [];
+        let totalArea = 0;
 
-  gltf_obj.traverse( ( child ) => {
-    if (child.isMesh) {
-      const geometry = child.geometry;
-      let area = 0;
-      const pos = geometry.attributes.position;
+        gltf_obj.traverse( ( child ) => {
+          if (child.isMesh) {
+            const geometry = child.geometry;
+            let area = 0;
+            const pos = geometry.attributes.position;
 
-      // Area Calculation
-      if (geometry.index) {
-        for (let i = 0; i < geometry.index.count; i += 3) {
-          triangle.setFromAttributeAndIndices(pos, geometry.index.getX(i), geometry.index.getX(i + 1), geometry.index.getX(i + 2));
-          area += triangle.getArea();
+            // Area Calculation
+            if (geometry.index) {
+              for ( let i = 0; i < geometry.index.count; i += 3 ) {
+                triangle.setFromAttributeAndIndices( pos, geometry.index.getX( i ), geometry.index.getX( i + 1 ), geometry.index.getX( i + 2 ) );
+                area += triangle.getArea();
+              }
+            } else {
+              for ( let i = 0; i < pos.count; i += 3 ) {
+                triangle.setFromAttributeAndIndices( pos, i, i + 1, i + 2 );
+                area += triangle.getArea();
+              }
+            }
+
+            const worldScale = new THREE.Vector3();
+            child.getWorldScale( worldScale );
+            const scaleFactor = ( worldScale.x * worldScale.y + worldScale.y * worldScale.z + worldScale.z * worldScale.x ) / 3.0;
+            const weightedArea = area * scaleFactor;
+
+            // --- TEXTURE PREP ---
+            let textureData = null;
+
+            if (child.material.map && child.material.map.image) {
+              const img = child.material.map.image;
+              const canvas = document.createElement( 'canvas' );
+              canvas.width = img.width;
+              canvas.height = img.height;
+              const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
+              ctx.drawImage( img, 0, 0 );
+              textureData = ctx.getImageData( 0, 0, img.width, img.height ).data;
+            }
+
+            meshData.push({ 
+              mesh: child, 
+              area: weightedArea, 
+              textureData, 
+              textureWidth: child.material.map?.image.width, 
+              textureHeight: child.material.map?.image.height 
+            });
+
+            totalArea += weightedArea;
+          }
+        });
+
+        meshData.forEach( ( { mesh, area, textureData, textureWidth, textureHeight } ) => {
+          const sampler = new MeshSurfaceSampler( mesh ).build();
+          const meshPointCount = Math.floor( ( area / totalArea ) * totalPoints );
+
+          for ( let i = 0; i < meshPointCount; i++ ) {
+            // 1. Get sample point and UV
+            // We pass tempUV as the fourth argument (custom attribute sampling)
+            sampler.sample( tempPosition, tempNormal, tempColor, tempUV );
+
+            // 2. If we have texture data, override tempColor with texture pixel
+            if (textureData) {
+              const u = Math.floor( tempUV.x * textureWidth );
+              const v = Math.floor( ( 1 - tempUV.y ) * textureHeight ); // Flip Y for Three.js
+              const index = ( v * textureWidth + u ) * 4;
+
+              tempColor.setRGB(
+                textureData[ index ] / 255.0,
+                textureData[ index + 1 ] / 255.0,
+                textureData[ index + 2 ] / 255.0
+              );
+            } else if (mesh.material.color) {
+              tempColor.copy( mesh.material.color );
+            }
+
+            mesh.localToWorld( tempPosition );
+            vertices.push( tempPosition.x, tempPosition.y, tempPosition.z );
+            colors.push( tempColor.r, tempColor.g, tempColor.b );
+          }
+        });
+
+        const geometry = new THREE.BufferGeometry();
+        geometry.setAttribute( 'position', new THREE.Float32BufferAttribute( vertices, 3 ) );
+
+        // White is the default color so check if all white
+        if (colors.some( c => c < 1.0 )) {
+          // Update the color attribute with sampled colors
+          geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 3 ) );
         }
-      } else {
-        for (let i = 0; i < pos.count; i += 3) {
-          triangle.setFromAttributeAndIndices(pos, i, i + 1, i + 2);
-          area += triangle.getArea();
-        }
+
+        const material = new THREE.PointsMaterial( { size: 0.001, vertexColors: true } );
+        return new THREE.Points(geometry, material);
       }
-
-      const worldScale = new THREE.Vector3();
-      child.getWorldScale(worldScale);
-      const scaleFactor = (worldScale.x * worldScale.y + worldScale.y * worldScale.z + worldScale.z * worldScale.x) / 3.0;
-      const weightedArea = area * scaleFactor;
-
-      // --- TEXTURE PREP ---
-      let textureData = null;
-
-      if (child.material.map && child.material.map.image) {
-        const img = child.material.map.image;
-        const canvas = document.createElement( 'canvas' );
-        canvas.width = img.width;
-        canvas.height = img.height;
-        const ctx = canvas.getContext( '2d', { willReadFrequently: true } );
-        ctx.drawImage( img, 0, 0 );
-        textureData = ctx.getImageData( 0, 0, img.width, img.height ).data;
-      }
-
-      meshData.push({ 
-        mesh: child, 
-        area: weightedArea, 
-        textureData, 
-        textureWidth: child.material.map?.image.width, 
-        textureHeight: child.material.map?.image.height 
-      });
-
-      totalArea += weightedArea;
-    }
-  });
-
-  meshData.forEach( ( { mesh, area, textureData, textureWidth, textureHeight } ) => {
-    const sampler = new MeshSurfaceSampler( mesh ).build();
-    const meshPointCount = Math.floor( ( area / totalArea ) * totalPoints );
-
-    for ( let i = 0; i < meshPointCount; i++ ) {
-      // 1. Get sample point and UV
-      // We pass tempUV as the fourth argument (custom attribute sampling)
-      sampler.sample( tempPosition, tempNormal, tempColor, tempUV );
-
-      // 2. If we have texture data, override tempColor with texture pixel
-      if (textureData) {
-        const u = Math.floor( tempUV.x * textureWidth );
-        const v = Math.floor( ( 1 - tempUV.y ) * textureHeight ); // Flip Y for Three.js
-        const index = ( v * textureWidth + u ) * 4;
-
-        tempColor.setRGB(
-          textureData[ index ] / 255.0,
-          textureData[ index + 1 ] / 255.0,
-          textureData[ index + 2 ] / 255.0
-        );
-      } else if (mesh.material.color) {
-        tempColor.copy( mesh.material.color );
-      }
-
-      mesh.localToWorld( tempPosition );
-      vertices.push( tempPosition.x, tempPosition.y, tempPosition.z );
-      colors.push( tempColor.r, tempColor.g, tempColor.b );
-    }
-  });
-
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
-
-  // White is the default color so check if all white
-  if (colors.some( c => c < 1.0 )) {
-    // Update the color attribute with sampled colors
-    geometry.setAttribute( 'color', new THREE.Float32BufferAttribute( colors, 3 ) );
-  }
-
-  const material = new THREE.PointsMaterial( { size: 0.001, vertexColors: true } );
-  return new THREE.Points(geometry, material);
-}
 
       /*
 
