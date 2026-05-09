@@ -287,16 +287,15 @@ Number Type Converter
     - Local loading supports self-contained models (embedded GLTF or binary GLB) as well as GLTF + BIN + Textures
     - The viewer supports loading of multiple models at once, which will be switchable with the viewer's `M` button
   - `GLTF Viewer` is for v2.0 glTF files and is currently using r184 of three.js:
-    - does not support obsolete `pbrSpecularGlossiness`
-    - supports currently arbitrary `KHR_animation_pointer`
-    - supports converting and exporting meshed model to points:
-      - will sample `material.map` if present
+    - Does not support obsolete `pbrSpecularGlossiness`
+    - Supports currently arbitrary `KHR_animation_pointer`
+    - Supports converting and exporting meshed model to points:
+      - Will sample `material.map` texture if present
   - `GLTFS Viewer` is for v2.0 glTF files and is currently using r150 of three.js:
     - supports obsolete `pbrSpecularGlossiness`
     - does not support either `Anisotropy` or currently arbitrary `KHR_animation_pointer`
   - All of the above viewers also support metadata picking when metadata is present in the model:
     - Maybe try some of GLB files available in [Cesium GLTF](https://github.com/CesiumGS/3d-tiles-samples/tree/main/glTF) folder
-    - Applying edges to the model might prevent metadata picking until edges are removed (button `E`)
   - `GLTF Legacy` viewer is for v1.0 glTF files and is purely experimental and rather limited (see notes further below)
 
 - Special notes about `ASSIMP Viewer` which is using [ASSIMPJS](https://github.com/kovacsv/assimpjs) interface and [ASSIMP](https://github.com/assimp/assimp) library:
@@ -439,9 +438,10 @@ Number Type Converter
   - Consider adjusting LOD settings to improve performance and memory usage
 
 - Special notes about `IFC Viewer`:
-  - It supports metadata picking, similar to glTF based viewers:
-    - Applying edges to the model might prevent metadata picking until edges are removed (button `E`)
-  - It also provides live control to show exploded view of the model
+  - It supports metadata picking, similar to glTF based viewers
+  - It also provides live controls for:
+    - Showing exploded view of the model
+    - Showing / hiding selectable categories
 
 - Special notes about `USD Viewer`:
   - As of three.js `v0.184.0` it supports USD, USDA, USDC and USDZ
