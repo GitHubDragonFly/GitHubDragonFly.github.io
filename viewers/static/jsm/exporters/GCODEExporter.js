@@ -1,5 +1,6 @@
-import { DefaultLoadingManager } from "three";
-import Polyslice from "https://cdn.jsdelivr.net/npm/@jgphilpott/polyslice@26.1.1/dist/index.browser.esm.js";
+import { DefaultLoadingManager, Mesh } from 'three';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.min.js';
+import Polyslice from 'https://cdn.jsdelivr.net/npm/@jgphilpott/polyslice@26.4.0/dist/index.browser.esm.js';
 
 /**
 *
@@ -91,28 +92,45 @@ class GcodeExporter {
 
 		});
 
-		let mesh_count = 0, gcode = '';
+		const geometries = [];
+		let mesh, mergedGeometry, gcode = '', mesh_count = 0;
 
 		scene.updateMatrixWorld( true, true );
 
-		function parse_objects() {
+		try {
 
-			scene.traverse( function ( object ) {
+			scene.traverse( ( child ) => {
 
-				if ( object.isMesh && object.geometry ) {
+				if ( child.isMesh && child.geometry ) {
 
+					const clonedGeom = child.geometry.clone();
+					clonedGeom.applyMatrix4( child.matrixWorld ); // Move to world position
+					geometries.push( clonedGeom );
 					mesh_count ++;
-
-					const cloned = object.clone();
-					gcode += slicer.slice( cloned ) + '\n';
 
 				}
 
 			} );
 
-		}
+			if ( geometries.length > 1 ) {
 
-		parse_objects();
+				mergedGeometry = await mergeGeometries( geometries );
+				mesh = new Mesh( mergedGeometry );
+
+				gcode = await slicer.slice( mesh );
+
+			} else {
+
+				gcode = await slicer.slice( scene );
+
+			}
+
+		} catch ( err ) {
+
+			if ( onError ) onError( err );
+			else throw err;
+
+		}
 
 		if ( mesh_count === 0 || gcode.trim().length === 0 ) {
 
@@ -128,6 +146,20 @@ class GcodeExporter {
 			}
 
 		} else {
+
+			if ( mesh ) {
+
+				mergedGeometry.dispose();
+				mesh.geometry.dispose();
+				mesh.material.dispose();
+
+				if ( geometries.length > 0 ) {
+
+					for ( const geo of geometries ) { geo.dispose(); }
+
+				}
+
+			}
 
 			if ( typeof onDone === 'function' ) {
 
