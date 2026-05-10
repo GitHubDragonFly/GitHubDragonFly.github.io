@@ -85,7 +85,7 @@
       var THREE, ifc_loader, texture_loader, tiff_loader;
       var ktx2_loader, exr_loader, hdr_loader, hdrJPGLoader;
       var manager, renderer, ifc_obj, ex_ifc_obj, render_requested;
-      var IFC_CLASSES, ifcCategories, ifcFolder;
+      var IFC_CLASSES, web_ifc, ifcCategories, ifcFolder;
       var ifc_gui, ifc_gui_set = false, equi_enabled;
       var gui, gui_set = false, guiExposure = null, params;
       var scene, camera, controls, gizmo, isMobile, isNewiPad;
@@ -175,67 +175,12 @@
       import * as webIFC from 'web-ifc';
       import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
 
+      web_ifc = webIFC;
+
       ifcCategories = Object.fromEntries( Object.entries( webIFC )
       .filter( ( [ key, value ] ) => key.startsWith( 'IFC' ) && typeof value === 'number' && Number.isFinite( value ) ) );
 
-      IFC_CLASSES = new Set([
-        'IFCACTUATOR',
-        'IFCAIRTERMINAL',
-        'IFCAIRTERMINALBOX',
-        'IFCALARM',
-        'IFCAUDIOVISUALAPPLIANCE',
-        'IFCWALL',
-        'IFCCURTAINWALL',
-        'IFCWALLSTANDARDCASE',
-        'IFCRAILING',
-        'IFCWINDOW',
-        'IFCDOOR',
-        'IFCSLAB',
-        'IFCROOF',
-        'IFCBEAM',
-        'IFCBEARING',
-        'IFCBOILER',
-        'IFCBRIDGE',
-        'IFCBRIDGEPART',
-        'IFCBURNER',
-        'IFCCIVILELEMENT',
-        'IFCCOIL',
-        'IFCCOLUMN',
-        'IFCCOMPRESSOR',
-        'IFCCOVERING',
-        'IFCMEMBER',
-        'IFCMEDICALDEVICE',
-        'IFCPLATE',
-        'IFCSTAIR',
-        'IFCSTAIRFLIGHT',
-        'IFCDUCTFITTING',
-        'IFCDUCTSEGMENT',
-        'IFCDUCTSILENCER',
-        'IFCELECTRICALELEMENT',
-        'IFCELECTRICALCIRCUIT',
-        'IFCELECTRICAPPLIANCE',
-        'IFCELECTRICMOTOR',
-        'IFCENGINE',
-        'IFCFAN',
-        'IFCLAMP',
-        'IFCLIGHTFIXTURE',
-        'IFCPAVEMENT',
-        'IFCPIPESEGMENT',
-        'IFCPIPEFITTING',
-        'IFCFLOWSEGMENT',
-        'IFCFLOWFITTING',
-        'IFCFLOWTERMINAL',
-        'IFCFLOWTREATMENTDEVICE',
-        'IFCENERGYCONVERSIONDEVICE',
-        'IFCDISTRIBUTIONPORT',
-        'IFCSPACE',
-        'IFCSPACEHEATER',
-        'IFCOPENINGELEMENT',
-        'IFCFURNISHINGELEMENT',
-        'IFCBUILDINGELEMENTPROXY',
-        'IFCMECHANICALFASTENER',
-        // add more as needed
-      ]);
+      IFC_CLASSES = new Set( Object.keys( ifcCategories ) );
 
       THREE = threejs;
 
@@ -3090,6 +3035,40 @@
 
         set_gui_position();
 
+        async function repairSpatialMap() {
+          const mgr = ifc_loader.ifcManager;
+
+          // 1. Get all containment relationships (Level -> Element)
+          const containers = await mgr.getAllItemsOfType( 0, web_ifc.IFCRELCONTAINEDINSPATIALSTRUCTURE, true );
+
+          // 2. Get all aggregate relationships (Parent -> Children)
+          // We do this to find things like Curtain Wall -> Panels
+          const allAggregates = await mgr.getAllItemsOfType( 0, web_ifc.IFCRELAGGREGATES, true );
+
+          const aggregateLookup = {};
+
+          allAggregates.forEach( agg => {
+            const pID = agg.RelatingObject.value;
+            if (!aggregateLookup[ pID ]) aggregateLookup[ pID ] = [];
+            aggregateLookup[ pID ].push( ...agg.RelatedObjects.map( o => o.value ) );
+          });
+
+          containers.forEach( rel => {
+            const levelName = spatialMap[ rel.RelatingStructure.value ];
+
+            rel.RelatedElements.forEach( element => {
+              const parentID = element.value;
+              spatialMap[ parentID ] = levelName;
+
+              // 3. CHECK FOR GRANDCHILDREN
+              // Find aggregates where the current element is the "RelatingObject" (the parent)
+              if (aggregateLookup[ parentID ]) {
+                aggregateLookup[ parentID ].forEach( childID => spatialMap[ childID ] = levelName );
+              }
+            });
+          });
+        }
+
         function buildSpatialMap( node, currentStorey = 'Unknown Level' ) {
           // 1. Update the 'currentStorey' if we hit a Storey node
           let storeyName = currentStorey;
@@ -3110,7 +3089,8 @@
 
         if (!isMobile) {
           spatialStructure = await ifc_loader.ifcManager.getSpatialStructure( 0, true );
-          buildSpatialMap( spatialStructure );
+          await buildSpatialMap( spatialStructure );
+          await repairSpatialMap();
 
           await new Promise( resolve => setTimeout( log_info, 1000 ) );
         } else {
@@ -3273,7 +3253,7 @@
 
         popup_card_cleanup();
 
-        if (event.target.closest( '#fixed_menu' )) {
+        if (event.target.closest( '#fixed_menu' ) || event.target.closest( '#gui_position' ) || event.target.closest( '#right_gui_position' )) {
           return;
         }
 
@@ -3320,11 +3300,11 @@
 
         // 1. Add basic IFC info, device dependent
         if (!isMobile) {
-          const locationPath = spatialMap[ expressId ] || 'External / Unassigned';
+          const level = spatialMap[ expressId ] || 'External / Unassigned';
 
           featureMetadataList.push({
             class: "IFC Location",
-            properties: { 'Hierarchy': locationPath }
+            properties: { 'Hierarchy': level }
           });
         }
 
@@ -3509,8 +3489,7 @@
           // Pre-check: If it's a string that looks like an array but isn't parsed
           // This handles the "[One, Two]" or "[true, false]" strings
           if (typeof processedVal === 'string' &&
-            ((processedVal.startsWith( '{' ) && processedVal.endsWith( '}' )) ||
-             (processedVal.startsWith( '[' ) && processedVal.endsWith( ']' )))) {
+            (processedVal.startsWith( '{' ) || processedVal.startsWith( '[' ))) {
 
             try {
               // Try JSON parse first (handles ["One", "Two"])
@@ -4201,7 +4180,7 @@
             if (first_run) {
               fr_count ++;
 
-              if (fr_count > 25) {
+              if (fr_count > 30) {
                 mouse_wheel = true;
                 first_run = false;
                 fr_count = 0;
@@ -4210,7 +4189,7 @@
               }
             } else {
               if (mouse_wheel) {
-                if (count > 15) {
+                if (count > 30) {
                   mouse_wheel = false;
                   count = 0;
                 } else {
