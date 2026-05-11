@@ -102,7 +102,7 @@
       var selected_ifc_file, selected_ifc_url_file, selected_url_file = '';
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
       var raycaster, mouse, mouseDownPos, featureHighlightMesh, spatialStructure;
-      var pickedObject, hasMetadata, click_listener_added = false, spatialMap;
+      var pickedObject, hasMetadata, click_listener_added = false, spatialMap, raycastableObjects;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
@@ -110,64 +110,6 @@
       const A4K = 4096; // AVIF 4k limit
       const I8K = 8192; // iPad 8k limit
       const D16K = 16384; // Desktop 16k limit
-
-      const TYPE_COUNT_MAP = {
-        'SCALAR': 1,
-        'VEC2': 2,
-        'VEC3': 3,
-        'VEC4': 4,
-        'MAT2': 4,
-        'MAT3': 9,
-        'MAT4': 16
-      };
-
-      const COMPONENT_COUNT_MAP = {
-        'INT8': 1,
-        'UINT8': 1,
-        'INT16': 2,
-        'UINT16': 2,
-        'INT32': 4,
-        'UINT32': 4,
-        'INT64': 8,
-        'UINT64': 8,
-        'FLOAT32': 4,
-        'FLOAT64': 8
-      };
-
-      const COMPONENT_TYPE_MAP = {
-        'INT8': Int8Array,
-        'UINT8': Uint8Array,
-        'INT16': Int16Array,
-        'UINT16': Uint16Array,
-        'INT32': Int32Array,
-        'UINT32': Uint32Array,
-        'INT64': BigInt64Array,
-        'UINT64': BigUint64Array,
-        'FLOAT32': Float32Array,
-        'FLOAT64': Float64Array
-      };
-
-      const DATAVIEW_GETTER_MAP = {
-        INT8: 'getInt8',
-        UINT8: 'getUint8',
-        INT16: 'getInt16',
-        UINT16: 'getUint16',
-        INT32: 'getInt32',
-        UINT32: 'getUint32',
-        INT64: 'getBigInt64',
-        UINT64: 'getBigUint64',
-        FLOAT32: 'getFloat32',
-        FLOAT64: 'getFloat64'
-      };
-
-      const NORMALIZATION_DIVISORS = {
-        'INT8': 127.0,
-        'UINT8': 255.0,
-        'INT16': 32767.0,
-        'UINT16': 65535.0,
-        'INT32': 2147483647.0,
-        'UINT32': 4294967295.0
-      };
     </script>
 
     <script type="module">
@@ -2567,6 +2509,7 @@
         gif_export = false;
         equi_enabled = false;
         hasMetadata = false;
+        raycastableObjects = [];
         featureHighlightMesh = null;
         mouseDownPos = { x: 0, y: 0 };
         bounding_box = new THREE.Box3();
@@ -2641,8 +2584,8 @@
         if (grid === undefined) grid = new THREE.GridHelper( 200, 200, 'yellow' );
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 2000 );
-          camera.position.set( 0, 0, 100 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.01, 1e9 );
+          camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
 
@@ -3009,6 +2952,10 @@
           }
         }
 
+        for ( const value of Object.values( ifc_loader.ifcManager.subsets.subsets ) ) {
+          if (value.mesh) raycastableObjects.push( value.mesh );
+        }
+
         document.getElementById('right_gui_position').style.display = 'block';
 
         if (hasMetadata) {
@@ -3271,7 +3218,8 @@
 
         raycaster.setFromCamera( mouse, camera );
 
-        const intersects = raycaster.intersectObjects( scene.children, true );
+        const targets = raycastableObjects.length > 0 ? raycastableObjects : scene.children;
+        const intersects = raycaster.intersectObjects( targets, true );
 
         if (intersects.length === 0) return;
 
@@ -4428,6 +4376,28 @@
 
         ex_ifc_obj = undefined;
 
+        if (raycastableObjects.length > 0) {
+          raycastableObjects.forEach( mesh => {
+            if (mesh.material) {
+              if (Array.isArray( mesh.material )) {
+                mesh.material.forEach( m => {
+                  if (m.map) m.map.dispose();
+                  m.dispose();
+                  m = null;
+                });
+              } else {
+                mesh.material.dispose();
+                mesh.material = null;
+              }
+            }
+
+            if (mesh.geometry) {
+              mesh.geometry.dispose();
+              mesh.geometry = null;
+            }
+          });
+        }
+
         renderer.clear();
 
         if (ifcFolder) ifcFolder.destroy();
@@ -4440,6 +4410,8 @@
           scene_bgnd.dispose();
           scene_bgnd = null;
         }
+
+        THREE.Cache.clear();
 
         if (isMobile === false) {
           renderer.info.reset();
