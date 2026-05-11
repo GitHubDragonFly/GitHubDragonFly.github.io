@@ -77,71 +77,13 @@
     <script>
       var THREE, manager, ifc_loader, ifc_obj, ex_ifc_obj, renderer, scene, camera;
       var IFC_CLASSES, web_ifc, ifcCategories, ifcFolder, controls, render_requested;
-      var gui, gui_container, gui_set = false, params, init_running = false;
+      var gui, gui_container, gui_set = false, params, explosionParams, init_running = false;
       var mouse_down, mouse_wheel, events_initialized, bounding_box, count = 0;
       var ww = window.innerWidth, wh = window.innerHeight, halt_on_error;
       var url_displayed = false, url_loading = false, isMobile, wireframe_enabled;
       var first_run = false, fr_count = 0, selected_ifc_file, selected_url_file = '';
       var raycaster, mouse, mouseDownPos, featureHighlightMesh, spatialStructure;
-      var pickedObject, hasMetadata, click_listener_added = false, spatialMap;
-
-      const TYPE_COUNT_MAP = {
-        'SCALAR': 1,
-        'VEC2': 2,
-        'VEC3': 3,
-        'VEC4': 4,
-        'MAT2': 4,
-        'MAT3': 9,
-        'MAT4': 16
-      };
-
-      const COMPONENT_COUNT_MAP = {
-        'INT8': 1,
-        'UINT8': 1,
-        'INT16': 2,
-        'UINT16': 2,
-        'INT32': 4,
-        'UINT32': 4,
-        'INT64': 8,
-        'UINT64': 8,
-        'FLOAT32': 4,
-        'FLOAT64': 8
-      };
-
-      const COMPONENT_TYPE_MAP = {
-        'INT8': Int8Array,
-        'UINT8': Uint8Array,
-        'INT16': Int16Array,
-        'UINT16': Uint16Array,
-        'INT32': Int32Array,
-        'UINT32': Uint32Array,
-        'INT64': BigInt64Array,
-        'UINT64': BigUint64Array,
-        'FLOAT32': Float32Array,
-        'FLOAT64': Float64Array
-      };
-
-      const DATAVIEW_GETTER_MAP = {
-        INT8: 'getInt8',
-        UINT8: 'getUint8',
-        INT16: 'getInt16',
-        UINT16: 'getUint16',
-        INT32: 'getInt32',
-        UINT32: 'getUint32',
-        INT64: 'getBigInt64',
-        UINT64: 'getBigUint64',
-        FLOAT32: 'getFloat32',
-        FLOAT64: 'getFloat64'
-      };
-
-      const NORMALIZATION_DIVISORS = {
-        'INT8': 127.0,
-        'UINT8': 255.0,
-        'INT16': 32767.0,
-        'UINT16': 65535.0,
-        'INT32': 2147483647.0,
-        'UINT32': 4294967295.0
-      };
+      var pickedObject, hasMetadata, click_listener_added = false, spatialMap, raycast_label;
     </script>
 
     <script type="module">
@@ -396,6 +338,7 @@
         render_requested = false;
         wireframe_enabled = false;
         hasMetadata = false;
+        explosionParams = null;
         featureHighlightMesh = null;
         mouseDownPos = { x: 0, y: 0 };
         bounding_box = new THREE.Box3();
@@ -457,8 +400,8 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 2000 );
-          camera.position.set( 0, 0, 150 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.01, 1e9 );
+          camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
 
@@ -674,6 +617,8 @@
 
           oldMaterials.length = 0;
           object.material = newMaterials;
+          object.geometry.computeBoundingSphere();
+          object.geometry.computeBoundingBox();
 
           finish_loading( object );
         }, function ( xhr ) { // onProgress
@@ -786,6 +731,16 @@
 
           ifcFolder = gui.addFolder( 'Filtered IFC Categories' );
 
+          // Add read-only raycasting state
+
+          const raycast_obj = { state: hasMetadata ? 'Enabled' : 'Disabled' };
+
+          raycast_label = ifcFolder.add( raycast_obj, 'state' ).name( 'Raycasting' );
+          raycast_label.$input.style.color = hasMetadata ? 'lightgreen' : 'red';
+          raycast_label.domElement.style.backgroundColor = 'transparent';
+          raycast_label.$input.style.backgroundColor = 'transparent';
+          raycast_label.$input.disabled = true;
+
           // Add "Explode All" slider
 
           if (!geom.boundingBox) {
@@ -864,13 +819,27 @@
             }
           }
 
-          const explosionParams = { scale: 0.0 };
+          explosionParams = { scale: 0.0 };
 
           ifcFolder.add( explosionParams, 'scale', 0, 2.0, 0.01 )
           .name( 'Explode All' )
           .onChange( value => {
             const offset = value * EXPLOSION_DISTANCE;
             updateUniform( 'uExplosion', offset );
+
+            if (hasMetadata && raycast_label) {
+              if (value > 0) {
+                raycast_label.object.state = 'Disabled';
+                raycast_label.$input.style.color = 'red';
+                if (pickedObject) popup_card_cleanup();
+              } else {
+                raycast_label.object.state = 'Enabled';
+                raycast_label.$input.style.color = 'lightgreen';
+              }
+
+              raycast_label.updateDisplay();
+            }
+
             mouse_wheel = true;
           });
 
@@ -1131,6 +1100,13 @@
       }
 
       async function handle_raycast_click( event ) {
+        // Raycasting is CPU bound, so prevent it on exploded model since that is GPU bound
+        if (explosionParams?.scale > 0) {
+          // Clear existing highlight
+          if (pickedObject) popup_card_cleanup();
+          return; 
+        }
+
         // Calculate how far the mouse moved
         const deltaX = Math.abs( event.clientX - mouseDownPos.x );
         const deltaY = Math.abs( event.clientY - mouseDownPos.y );
@@ -1797,6 +1773,11 @@
           ex_ifc_obj = undefined;
         }
 
+        if (raycast_label) {
+          raycast_label.destroy();
+          raycast_label = null;
+        }
+
         if (mat_cache) mat_cache.clear();
 
         if (ifcFolder) ifcFolder.destroy();
@@ -1806,6 +1787,8 @@
         present_categories = {};
         filtered_categories = {};
         categoryParams = {};
+
+        THREE.Cache.clear();
 
         if (isMobile === false) {
           renderer.info.reset();
