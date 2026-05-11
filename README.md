@@ -442,7 +442,7 @@ Number Type Converter
   - It also provides live controls for:
     - Showing / hiding selectable categories
     - Showing exploded view of the model:
-      - Mobile IFC viewers will disable raycasting while in exploded view since it is GPU bound
+      - Mobile IFC viewers will disable raycasting while in exploded view since they use shader material and explosion is GPU bound
 
 - Special notes about `USD Viewer`:
   - As of three.js `v0.184.0` it supports USD, USDA, USDC and USDZ
