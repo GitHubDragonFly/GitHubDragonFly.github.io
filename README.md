@@ -440,8 +440,9 @@ Number Type Converter
 - Special notes about `IFC Viewer`:
   - It supports metadata picking, similar to glTF based viewers
   - It also provides live controls for:
-    - Showing exploded view of the model
     - Showing / hiding selectable categories
+    - Showing exploded view of the model:
+      - Mobile IFC viewers will disable raycasting while in exploded view since it is GPU bound
 
 - Special notes about `USD Viewer`:
   - As of three.js `v0.184.0` it supports USD, USDA, USDC and USDZ
