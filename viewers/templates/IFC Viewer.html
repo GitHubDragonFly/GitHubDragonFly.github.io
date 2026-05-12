@@ -101,8 +101,8 @@
       var initial_transparency, initial_transparency_array;
       var selected_ifc_file, selected_ifc_url_file, selected_url_file = '';
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
-      var raycaster, mouse, mouseDownPos, featureHighlightMesh, spatialStructure;
-      var pickedObject, hasMetadata, click_listener_added = false, spatialMap, raycast_label;
+      var raycaster, mouse, mouseDownPos, featureHighlightMesh, spatialStructure, spatialMap;
+      var pickedObject, hasMetadata, click_listener_added = false, recompute_edges, raycast_label;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
@@ -288,8 +288,8 @@
         </button>
         <button title="Ambient Light Intensity" id="btn_dc_ali" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_ali();">ALi
           <div id="dc_ali" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_ali();">
-            <input type="range" orient="vertical" id="ambient_light_intensity" min="0" max="5" step="0.05" value="0" onkeydown="return_false();" oninput="set_ambient_light_intensity();" disabled />
-            <span id="ali_val">0</span>
+            <input type="range" orient="vertical" id="ambient_light_intensity" min="0" max="5" step="0.01" value="0.25" onkeydown="return_false();" oninput="set_ambient_light_intensity();" disabled />
+            <span id="ali_val">0.25</span>
           </div>
         </button>
         <label for="ambient_light_color" title="Ambient Light Color">AL<input type="color" title="Ambient Light Color" id="ambient_light_color" onchange="set_ambient_light_color();" disabled /></label>
@@ -2509,11 +2509,13 @@
         gif_export = false;
         equi_enabled = false;
         hasMetadata = false;
+        recompute_edges = false;
         featureHighlightMesh = null;
         mouseDownPos = { x: 0, y: 0 };
         bounding_box = new THREE.Box3();
 
-        console.time( 'Loading Time' );
+        if (!isMobile) console.time( 'Loading Time' );
+
         document.body.style.backgroundImage = 'none';
         document.getElementById('div_spinner').style.display = 'none';
         document.getElementById('div_error').style.display = 'none';
@@ -2590,7 +2592,7 @@
 
         // Add AmbientLight to the scene
         if (ambientLight === undefined) {
-          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0 );
+          ambientLight = new THREE.AmbientLight( 0xFFFFFF, 0.25 );
           ambientLight.position.set( 0, 0, -250 );
           scene.add( ambientLight );
         }
@@ -2669,20 +2671,40 @@
       }
 
       async function setup_edges() {
+        let restore_edges = false;
+
+        if (Object.entries( edges ).length > 0) {
+          if (edges_visible) {
+            mouse_wheel = true;
+            await show_edges();
+            restore_edges = true;
+          }
+
+          for ( const [ key, value ] of Object.entries( edges ) ) {
+            if (value.isLine) {
+              value.material.dispose();
+              value.geometry.dispose();
+              delete edges[ key ];
+            }
+          }
+        }
+
         const categories = Object.keys( filtered_categories );
 
         for ( const key of categories ) {
           const subsetKey = `0 - DEFAULT - ${ key }`;
           const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
 
-          if (subsetRecord && subsetRecord.mesh && subsetRecord.mesh?.geometry?.index?.count > 0) {
+          if (subsetRecord?.mesh?.geometry?.index?.count > 0) {
             const edgeGeom = new THREE.EdgesGeometry( subsetRecord.mesh.geometry, 30 );
 
             edges[ subsetKey ] = new THREE.LineSegments( edgeGeom, outline_material );
-            edges[ subsetKey ].matrixAutoUpdate = false;
+            if (!recompute_edges) edges[ subsetKey ].matrixAutoUpdate = false;
             edges[ subsetKey ].raycast = () => {};
           }
         }
+
+        if (restore_edges) await show_edges();
       }
 
       function show_hide_category( key, value ) {
@@ -2796,9 +2818,7 @@
         first_run = true;
         fr_count = 0;
         render();
-      }
 
-      async function load_gizmo() {
         enable_disable( false );
 
         // Skip gizmo creation on mobile devices
@@ -2830,6 +2850,17 @@
           // Create a folder for IFC categories
 
           ifcFolder = ifc_gui.addFolder( 'Filtered IFC Categories' );
+
+          // Add option to recompute edges
+
+          const edges_obj = { state: false };
+
+          const edges_controller = ifcFolder.add( edges_obj, 'state' )
+          .name( 'Recompute Edges (slow process)' )
+          .onChange( value => {
+            recompute_edges = value;
+            mouse_wheel = true;
+          });
 
           // Add read-only raycasting state
 
@@ -2935,11 +2966,21 @@
           }
 
           const explosionParams = { scale: 0.0 };
+          let lastExplodeValue = 0, refit_edges = false;
 
           ifcFolder.add( explosionParams, 'scale', 0, 2.0, 0.01 )
           .name( 'Explode All' )
           .onChange( value => {
             if (pickedObject) popup_card_cleanup();
+
+            if (edges_controller) edges_controller.disable( value > 0 );
+
+            if (edges_visible && recompute_edges) {
+              mouse_wheel = true;
+              refit_edges = true;
+              show_edges();
+            }
+
             applyExplosionScale( value );
 
             if (hasMetadata && raycast_label) {
@@ -2951,38 +2992,52 @@
             mouse_wheel = true;
           })
           .onFinishChange( async () => {
-            // Collect all meshes first
-            const meshes = [];
+            if (lastExplodeValue !== explosionParams.scale) {
+              lastExplodeValue = explosionParams.scale;
 
-            ifc_obj.traverse( child => {
-              if (child.isMesh) meshes.push( child );
-            });
+              // Collect all meshes first
+              const meshes = [];
 
-            if (!isMobile) console.log( `Updating bounds for ${meshes.length} parts...` );
+              ifc_obj.traverse( child => {
+                if (child.isMesh) meshes.push( child );
+              });
 
-            // Process in chunks to prevent thread-lock
-            const chunkSize = 500; // Adjust based on performance
+              if (!isMobile) console.log( `Updating bounds for ${meshes.length} parts...` );
 
-            for ( let i = 0; i < meshes.length; i += chunkSize ) {
-              const chunk = meshes.slice( i, i + chunkSize );
+              // Process in chunks to prevent thread-lock
+              const chunkSize = 500; // Adjust based on performance
 
-              for ( const child of chunk ) {
-                child.geometry.computeBoundingBox();
-                child.geometry.computeBoundingSphere();
+              for ( let i = 0; i < meshes.length; i += chunkSize ) {
+                const chunk = meshes.slice( i, i + chunkSize );
 
-                if (child.geometry.boundsTree) {
-                  child.geometry.boundsTree.refit();
+                for ( const child of chunk ) {
+                  child.geometry.computeBoundingBox();
+                  child.geometry.computeBoundingSphere();
+
+                  if (child.geometry.boundsTree) {
+                    child.geometry.boundsTree.refit();
+                  }
+                }
+
+                // Pause the loop for a split second 
+                // to let the browser breathe.
+                await new Promise( resolve => setTimeout( resolve, 0 ) );
+              }
+
+              if (recompute_edges) {
+                await setup_edges();
+
+                if (refit_edges) {
+                  mouse_wheel = true;
+                  refit_edges = false;
+                  await show_edges();
                 }
               }
 
-              // Pause the loop for a split second 
-              // to let the browser breathe.
-              await new Promise( resolve => setTimeout( resolve, 0 ) );
+              // Wrap up
+              mouse_wheel = true;
+              if (!isMobile) console.log( 'Raycasting bounds restored.' );
             }
-
-            // Wrap up
-            mouse_wheel = true;
-            if (!isMobile) console.log( 'Raycasting bounds restored.' );
 
             if (hasMetadata && raycast_label) {
               raycast_label.object.state = 'Enabled';
@@ -2997,7 +3052,7 @@
             const subsetKey = `0 - DEFAULT - ${ key }`;
             const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
 
-            if (subsetRecord && subsetRecord.mesh && subsetRecord.mesh?.geometry?.index?.count > 0) {
+            if (subsetRecord && subsetRecord.mesh?.geometry?.index?.count > 0) {
               // Initialize checkbox state
               categoryParams[ key ] = true;
 
@@ -3027,7 +3082,7 @@
           }
         }
 
-        console.timeEnd( 'Loading Time' );
+        if (!isMobile) console.timeEnd( 'Loading Time' );
 
         init_running = false;
 
@@ -3035,7 +3090,9 @@
         document.getElementById('div_message').style.display = 'none';
 
         set_gui_position();
+      }
 
+      async function complete_loading() {
         async function repairSpatialMap() {
           const mgr = ifc_loader.ifcManager;
 
@@ -4186,7 +4243,7 @@
                 first_run = false;
                 fr_count = 0;
                 count = 0;
-                await load_gizmo();
+                complete_loading();
               }
             } else {
               if (mouse_wheel) {
@@ -4228,7 +4285,7 @@
 
         // Reset all range values
         document.getElementById('opacity_val').innerText = 1;
-        document.getElementById('ali_val').innerText = 0;
+        document.getElementById('ali_val').innerText = 0.25;
         document.getElementById('dli_val').innerText = 5;
         document.getElementById('x_val').innerText = 0;
         document.getElementById('y_val').innerText = 0;
@@ -4243,7 +4300,7 @@
         document.getElementById('ambient_light_color').value = '#FFFFFF';
         document.getElementById('directional_light_color').value = '#FFFFFF';
         document.getElementById('directional_light_intensity').value = 5;
-        document.getElementById('ambient_light_intensity').value = 0;
+        document.getElementById('ambient_light_intensity').value = 0.25;
 
         // Reset the radio inputs
         document.getElementById('rotate').checked = true;
@@ -4355,7 +4412,7 @@
 
         if (wireframe_enabled) await show_wireframe();
 
-        if (edges && Object.entries( edges ).length !== 0) {
+        if (Object.entries( edges ).length > 0) {
           if (edges_visible === true) await show_edges();
           if (document.getElementById('edge_color').value !== '#FF0000') {
             document.getElementById('edge_color').value = '#FF0000';
