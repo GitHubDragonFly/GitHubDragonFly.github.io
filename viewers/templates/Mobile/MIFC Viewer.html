@@ -748,6 +748,11 @@
             geom.computeBoundingSphere();
             geom.boundingSphere.radius *= 2; // done once so exploded elements remain visible
           }
+
+          if (!geom.userData.originalPosition) {
+            geom.userData.originalPosition = new Float32Array( posAttr.array );
+          }
+
           const modelBox = geom.boundingBox;
           const modelCenter = modelBox.getCenter( new THREE.Vector3() );
           const modelSize = modelBox.getSize( new THREE.Vector3() );
@@ -819,28 +824,84 @@
             }
           }
 
+          function applyExplosionScale( scale ) {
+            const array = posAttr.array;
+            const offset = scale * EXPLOSION_DISTANCE;
+            const originalPos = geom.userData.originalPosition;
+
+            for ( let i = 0; i < posAttr.count; i++ ) {
+              const i3 = i * 3;
+
+              // Access the flat Float32Array instead of using .get()
+              const dirX = elementDirs[ i3 ];
+              const dirY = elementDirs[ i3 + 1 ];
+              const dirZ = elementDirs[ i3 + 2 ];
+
+              // Apply the transformation
+              array[ i3 ]     = originalPos[ i3 ]     + dirX * offset;
+              array[ i3 + 1 ] = originalPos[ i3 + 1 ] + dirY * offset;
+              array[ i3 + 2 ] = originalPos[ i3 + 2 ] + dirZ * offset;
+            }
+
+            posAttr.needsUpdate = true;
+
+            // Geometry bounds updates remain the same
+            geom.computeBoundingSphere();
+            geom.computeBoundingBox();
+          }
+
           explosionParams = { scale: 0.0 };
 
           ifcFolder.add( explosionParams, 'scale', 0, 2.0, 0.01 )
           .name( 'Explode All' )
           .onChange( value => {
+            if (pickedObject) popup_card_cleanup();
             const offset = value * EXPLOSION_DISTANCE;
-            updateUniform( 'uExplosion', offset );
+            applyExplosionScale( value );
 
             if (hasMetadata && raycast_label) {
-              if (value > 0) {
-                raycast_label.object.state = 'Disabled';
-                raycast_label.$input.style.color = 'red';
-                if (pickedObject) popup_card_cleanup();
-              } else {
-                raycast_label.object.state = 'Enabled';
-                raycast_label.$input.style.color = 'lightgreen';
-              }
-
+              raycast_label.object.state = 'Refitting...';
+              raycast_label.$input.style.color = 'yellow';
               raycast_label.updateDisplay();
             }
 
             mouse_wheel = true;
+          })
+          .onFinishChange( async () => {
+            // Collect all meshes first
+            const meshes = [];
+
+            ifc_obj.traverse( child => {
+              if (child.isMesh) meshes.push( child );
+            });
+
+            if (!isMobile) console.log( `Updating bounds for ${meshes.length} parts...` );
+
+            // Process in chunks to prevent thread-lock
+            const chunkSize = 500; // Adjust based on performance
+
+            for ( let i = 0; i < meshes.length; i += chunkSize ) {
+              const chunk = meshes.slice( i, i + chunkSize );
+
+              for ( const child of chunk ) {
+                child.geometry.computeBoundingBox();
+                child.geometry.computeBoundingSphere();
+              }
+
+              // Pause the loop for a split second 
+              // to let the browser breathe.
+              await new Promise( resolve => setTimeout( resolve, 0 ) );
+            }
+
+            // Wrap up
+            mouse_wheel = true;
+            if (!isMobile) console.log( 'Raycasting bounds restored.' );
+
+            if (hasMetadata && raycast_label) {
+              raycast_label.object.state = 'Enabled';
+              raycast_label.$input.style.color = 'lightgreen';
+              raycast_label.updateDisplay();
+            }
           });
 
           // Add filtered categories visibility toggles
@@ -1100,13 +1161,6 @@
       }
 
       async function handle_raycast_click( event ) {
-        // Raycasting is CPU bound, so prevent it on exploded model since that is GPU bound
-        if (explosionParams?.scale > 0) {
-          // Clear existing highlight
-          if (pickedObject) popup_card_cleanup();
-          return; 
-        }
-
         // Calculate how far the mouse moved
         const deltaX = Math.abs( event.clientX - mouseDownPos.x );
         const deltaY = Math.abs( event.clientY - mouseDownPos.y );
@@ -1135,7 +1189,7 @@
 
         raycaster.setFromCamera( mouse, camera );
 
-        const intersects = raycaster.intersectObjects( scene.children, true );
+        const intersects = raycaster.intersectObjects( ifc_obj.children, true );
 
         if (intersects.length === 0) return;
 
