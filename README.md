@@ -442,9 +442,9 @@ Number Type Converter
   - It also provides live controls for:
     - Showing / hiding selectable categories
     - Showing exploded view of the model:
-      - Bounding boxes will be re-computed for raycasting so be patient when exploding complex models
-      - Desktop IFC Viewer has edges, when applied with button `E`, which are static in nature and will not be following explosion:
-        - It is possible to re-compute edges but this is too expensive of a process
+      - Bounding boxes will be re-computed for raycasting, which could be a slow process, so be patient when exploding complex models
+      - Desktop IFC Viewer can have edges, when applied with button `E`, which are static in nature and normally do not follow the explosion:
+        - If you enable re-computing edges just keep in mind that this could be a slow process
 
 - Special notes about `USD Viewer`:
   - As of three.js `v0.184.0` it supports USD, USDA, USDC and USDZ
