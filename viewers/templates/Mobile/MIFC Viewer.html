@@ -680,6 +680,12 @@
         scene.add( ifc_obj );
         frame_camera();
 
+        render_requested = true;
+        mouse_wheel = false;
+        first_run = true;
+        fr_count = 0;
+        render();
+
         function updateUniform( name, value ) {
           if (ex_ifc_obj && ex_ifc_obj.material) {
             const mats = Array.isArray( ex_ifc_obj.material )
@@ -851,11 +857,13 @@
           }
 
           explosionParams = { scale: 0.0 };
+          let lastExplodeValue = 0;
 
           ifcFolder.add( explosionParams, 'scale', 0, 2.0, 0.01 )
           .name( 'Explode All' )
           .onChange( value => {
             if (pickedObject) popup_card_cleanup();
+
             const offset = value * EXPLOSION_DISTANCE;
             applyExplosionScale( value );
 
@@ -868,34 +876,38 @@
             mouse_wheel = true;
           })
           .onFinishChange( async () => {
-            // Collect all meshes first
-            const meshes = [];
+            if (lastExplodeValue !== explosionParams.scale) {
+              lastExplodeValue = explosionParams.scale;
 
-            ifc_obj.traverse( child => {
-              if (child.isMesh) meshes.push( child );
-            });
+              // Collect all meshes first
+              const meshes = [];
 
-            if (!isMobile) console.log( `Updating bounds for ${meshes.length} parts...` );
+              ifc_obj.traverse( child => {
+                if (child.isMesh) meshes.push( child );
+              });
 
-            // Process in chunks to prevent thread-lock
-            const chunkSize = 500; // Adjust based on performance
+              if (!isMobile) console.log( `Updating bounds for ${meshes.length} parts...` );
 
-            for ( let i = 0; i < meshes.length; i += chunkSize ) {
-              const chunk = meshes.slice( i, i + chunkSize );
+              // Process in chunks to prevent thread-lock
+              const chunkSize = 500; // Adjust based on performance
 
-              for ( const child of chunk ) {
-                child.geometry.computeBoundingBox();
-                child.geometry.computeBoundingSphere();
+              for ( let i = 0; i < meshes.length; i += chunkSize ) {
+                const chunk = meshes.slice( i, i + chunkSize );
+
+                for ( const child of chunk ) {
+                  child.geometry.computeBoundingBox();
+                  child.geometry.computeBoundingSphere();
+                }
+
+                // Pause the loop for a split second 
+                // to let the browser breathe.
+                await new Promise( resolve => setTimeout( resolve, 0 ) );
               }
 
-              // Pause the loop for a split second 
-              // to let the browser breathe.
-              await new Promise( resolve => setTimeout( resolve, 0 ) );
+              // Wrap up
+              mouse_wheel = true;
+              if (!isMobile) console.log( 'Raycasting bounds restored.' );
             }
-
-            // Wrap up
-            mouse_wheel = true;
-            if (!isMobile) console.log( 'Raycasting bounds restored.' );
 
             if (hasMetadata && raycast_label) {
               raycast_label.object.state = 'Enabled';
@@ -910,7 +922,7 @@
             const subsetKey = `0 - DEFAULT - ${ key }`;
             const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
 
-            if (subsetRecord && subsetRecord.mesh && subsetRecord.mesh?.geometry?.index?.count > 0) {
+            if (subsetRecord && subsetRecord.mesh?.geometry?.index?.count > 0) {
               // Initialize checkbox state
               categoryParams[ key ] = true;
 
@@ -951,13 +963,9 @@
         enable_disable( false );
 
         init_running = false;
+      }
 
-        render_requested = true;
-        mouse_wheel = false;
-        first_run = true;
-        fr_count = 0;
-        render();
-
+      async function complete_loading() {
         async function repairSpatialMap() {
           const mgr = ifc_loader.ifcManager;
 
@@ -1693,6 +1701,7 @@
                 first_run = false;
                 fr_count = 0;
                 count = 0;
+                complete_loading();
               }
             } else {
               if (mouse_wheel) {

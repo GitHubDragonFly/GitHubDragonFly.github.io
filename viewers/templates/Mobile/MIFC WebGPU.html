@@ -161,8 +161,6 @@
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
-        <button title="Set Level of Detail for Displaying IFC Classes" id="btn_lod" onclick="show_lod();" style="min-width: 34px;">LOD</button>
-        <label for="btn_lod" title="Set Level of Detail for Displaying IFC Classes"></label>
         <button title="Get remote model via URL" id="btn_url" onclick="show_url()" style="min-width: 38px;">URL</button>
         <label for="btn_url" title="Get remote model via URL"></label>
         <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
@@ -352,7 +350,8 @@
 
         if (!params) params = { brightness: 2.0, roughness: 0.5, metalness: 0.0 };
 
-        console.time( 'Loading Time' );
+        if (!isMobile) console.time( 'Loading Time' );
+
         document.body.style.backgroundImage = 'none';
         document.getElementById('div_error').style.display = 'none';
         document.getElementById('div_loading').style.display = 'block';
@@ -386,7 +385,6 @@
           }
 
           renderer.setPixelRatio( window.devicePixelRatio < 1.5 ? window.devicePixelRatio : 2.0 );
-          renderer.outputColorSpace = THREE.SRGBColorSpace;
           renderer.toneMapping = THREE.NeutralToneMapping;
           renderer.toneMappingExposure = 1.5;
           renderer.setSize( ww, wh );
@@ -859,12 +857,13 @@
           }
 
           explosionParams = { scale: 0.0 };
+          let lastExplodeValue = 0;
 
           ifcFolder.add( explosionParams, 'scale', 0, 2.0, 0.01 )
           .name( 'Explode All' )
           .onChange( value => {
             if (pickedObject) popup_card_cleanup();
-            const offset = value * EXPLOSION_DISTANCE;
+
             applyExplosionScale( value );
 
             if (hasMetadata && raycast_label) {
@@ -876,34 +875,38 @@
             mouse_wheel = true;
           })
           .onFinishChange( async () => {
-            // Collect all meshes first
-            const meshes = [];
+            if (lastExplodeValue !== explosionParams.scale) {
+              lastExplodeValue = explosionParams.scale;
 
-            ifc_obj.traverse( child => {
-              if (child.isMesh) meshes.push( child );
-            });
+              // Collect all meshes first
+              const meshes = [];
 
-            if (!isMobile) console.log( `Updating bounds for ${meshes.length} parts...` );
+              ifc_obj.traverse( child => {
+                if (child.isMesh) meshes.push( child );
+              });
 
-            // Process in chunks to prevent thread-lock
-            const chunkSize = 500; // Adjust based on performance
+              if (!isMobile) console.log( `Updating bounds for ${meshes.length} parts...` );
 
-            for ( let i = 0; i < meshes.length; i += chunkSize ) {
-              const chunk = meshes.slice( i, i + chunkSize );
+              // Process in chunks to prevent thread-lock
+              const chunkSize = 500; // Adjust based on performance
 
-              for ( const child of chunk ) {
-                child.geometry.computeBoundingBox();
-                child.geometry.computeBoundingSphere();
+              for ( let i = 0; i < meshes.length; i += chunkSize ) {
+                const chunk = meshes.slice( i, i + chunkSize );
+
+                for ( const child of chunk ) {
+                  child.geometry.computeBoundingBox();
+                  child.geometry.computeBoundingSphere();
+                }
+
+                // Pause the loop for a split second 
+                // to let the browser breathe.
+                await new Promise( resolve => setTimeout( resolve, 0 ) );
               }
 
-              // Pause the loop for a split second 
-              // to let the browser breathe.
-              await new Promise( resolve => setTimeout( resolve, 0 ) );
+              // Wrap up
+              mouse_wheel = true;
+              if (!isMobile) console.log( 'Raycasting bounds restored.' );
             }
-
-            // Wrap up
-            mouse_wheel = true;
-            if (!isMobile) console.log( 'Raycasting bounds restored.' );
 
             if (hasMetadata && raycast_label) {
               raycast_label.object.state = 'Enabled';
@@ -918,7 +921,7 @@
             const subsetKey = `0 - DEFAULT - ${ key }`;
             const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
 
-            if (subsetRecord && subsetRecord.mesh && subsetRecord.mesh?.geometry?.index?.count > 0) {
+            if (subsetRecord && subsetRecord.mesh?.geometry?.index?.count > 0) {
               // Initialize checkbox state
               categoryParams[ key ] = true;
 
@@ -946,7 +949,7 @@
           }
         }
 
-        console.timeEnd( 'Loading Time' );
+        if (!isMobile) console.timeEnd( 'Loading Time' );
 
         // Stop flashing indicator
         document.getElementById('status_indicator').style.display = 'none';
@@ -1050,7 +1053,7 @@
       }
 
       function handle_error( error ) {
-        if (isMobile === false) {
+        if (!isMobile) {
           document.getElementById('div_message').innerText = 'Check the console for any error messages';
         } else {
           document.getElementById('div_message').innerText = error.message || error;
@@ -1701,11 +1704,6 @@
       async function render() {
         if (ifc_obj) {
           if (first_run || mouse_down || mouse_wheel) {
-            controls.update();
-
-            renderer.clear();
-            renderer.render( scene, camera );
-
             // If it might be slow to render initially
             if (first_run) {
               fr_count ++;
@@ -1727,6 +1725,11 @@
                 }
               }
             }
+
+            controls.update();
+
+            renderer.clear();
+            renderer.render( scene, camera );
           }
         }
 
