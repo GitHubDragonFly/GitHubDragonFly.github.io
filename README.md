@@ -445,6 +445,7 @@ Number Type Converter
       - Bounding boxes will be re-computed for raycasting, which could be a slow process, so be patient when exploding complex models
       - Desktop IFC Viewer can have edges, when applied with button `E`, which are static in nature and normally do not follow the explosion:
         - If you enable re-computing edges just keep in mind that this could be a slow process
+        - If running this desktop viewer on mobile devices then these options, including edges, will not be available
 
 - Special notes about `USD Viewer`:
   - As of three.js `v0.184.0` it supports USD, USDA, USDC and USDZ
