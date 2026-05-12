@@ -102,7 +102,7 @@
       var selected_ifc_file, selected_ifc_url_file, selected_url_file = '';
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
       var raycaster, mouse, mouseDownPos, featureHighlightMesh, spatialStructure;
-      var pickedObject, hasMetadata, click_listener_added = false, spatialMap, raycastableObjects;
+      var pickedObject, hasMetadata, click_listener_added = false, spatialMap, raycast_label;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
@@ -2509,7 +2509,6 @@
         gif_export = false;
         equi_enabled = false;
         hasMetadata = false;
-        raycastableObjects = [];
         featureHighlightMesh = null;
         mouseDownPos = { x: 0, y: 0 };
         bounding_box = new THREE.Box3();
@@ -2677,11 +2676,10 @@
           const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
 
           if (subsetRecord && subsetRecord.mesh && subsetRecord.mesh?.geometry?.index?.count > 0) {
-            edges[ subsetKey ] = new THREE.LineSegments(
-              new THREE.EdgesGeometry( subsetRecord.mesh.geometry, 30 ),
-              outline_material
-            );
+            const edgeGeom = new THREE.EdgesGeometry( subsetRecord.mesh.geometry, 30 );
 
+            edges[ subsetKey ] = new THREE.LineSegments( edgeGeom, outline_material );
+            edges[ subsetKey ].matrixAutoUpdate = false;
             edges[ subsetKey ].raycast = () => {};
           }
         }
@@ -2833,6 +2831,16 @@
 
           ifcFolder = ifc_gui.addFolder( 'Filtered IFC Categories' );
 
+          // Add read-only raycasting state
+
+          const raycast_obj = { state: hasMetadata ? 'Enabled' : 'Disabled' };
+
+          raycast_label = ifcFolder.add( raycast_obj, 'state' ).name( 'Raycasting' );
+          raycast_label.$input.style.color = hasMetadata ? 'lightgreen' : 'red';
+          raycast_label.domElement.style.backgroundColor = 'transparent';
+          raycast_label.$input.style.backgroundColor = 'transparent';
+          raycast_label.$input.disabled = true;
+
           // Add "Explode All" slider for simple models
 
           if (!geom.boundingBox) geom.computeBoundingBox();
@@ -2900,7 +2908,6 @@
           }
 
           const originalPos = geom.userData.originalPosition;
-          const explosionParams = { scale: 0.0 };
 
           function applyExplosionScale( scale ) {
             const array = posAttr.array;
@@ -2924,13 +2931,64 @@
             // If we don't update it, the model will vanish when we zoom in during explosion.
 
             geom.computeBoundingSphere();
+            geom.computeBoundingBox();
           }
+
+          const explosionParams = { scale: 0.0 };
 
           ifcFolder.add( explosionParams, 'scale', 0, 2.0, 0.01 )
           .name( 'Explode All' )
           .onChange( value => {
+            if (pickedObject) popup_card_cleanup();
             applyExplosionScale( value );
+
+            if (hasMetadata && raycast_label) {
+              raycast_label.object.state = 'Refitting...';
+              raycast_label.$input.style.color = 'yellow';
+              raycast_label.updateDisplay();
+            }
+
             mouse_wheel = true;
+          })
+          .onFinishChange( async () => {
+            // Collect all meshes first
+            const meshes = [];
+
+            ifc_obj.traverse( child => {
+              if (child.isMesh) meshes.push( child );
+            });
+
+            if (!isMobile) console.log( `Updating bounds for ${meshes.length} parts...` );
+
+            // Process in chunks to prevent thread-lock
+            const chunkSize = 500; // Adjust based on performance
+
+            for ( let i = 0; i < meshes.length; i += chunkSize ) {
+              const chunk = meshes.slice( i, i + chunkSize );
+
+              for ( const child of chunk ) {
+                child.geometry.computeBoundingBox();
+                child.geometry.computeBoundingSphere();
+
+                if (child.geometry.boundsTree) {
+                  child.geometry.boundsTree.refit();
+                }
+              }
+
+              // Pause the loop for a split second 
+              // to let the browser breathe.
+              await new Promise( resolve => setTimeout( resolve, 0 ) );
+            }
+
+            // Wrap up
+            mouse_wheel = true;
+            if (!isMobile) console.log( 'Raycasting bounds restored.' );
+
+            if (hasMetadata && raycast_label) {
+              raycast_label.object.state = 'Enabled';
+              raycast_label.$input.style.color = 'lightgreen';
+              raycast_label.updateDisplay();
+            }
           });
 
           // Add filtered categories visibility toggles
@@ -2950,10 +3008,6 @@
               });
             }
           }
-        }
-
-        for ( const value of Object.values( ifc_loader.ifcManager.subsets.subsets ) ) {
-          if (value.mesh) raycastableObjects.push( value.mesh );
         }
 
         document.getElementById('right_gui_position').style.display = 'block';
@@ -3218,8 +3272,7 @@
 
         raycaster.setFromCamera( mouse, camera );
 
-        const targets = raycastableObjects.length > 0 ? raycastableObjects : scene.children;
-        const intersects = raycaster.intersectObjects( targets, true );
+        const intersects = raycaster.intersectObjects( ifc_obj.children, true );
 
         if (intersects.length === 0) return;
 
@@ -4063,7 +4116,7 @@
             const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
 
             if (subsetRecord && subsetRecord.mesh && subsetRecord.mesh.visible && edges[ subsetKey ] !== undefined) {
-              edges_visible ? ifc_obj.add( edges[ subsetKey ] ) : ifc_obj.remove( edges[ subsetKey ] );
+              edges_visible ? subsetRecord.mesh.add( edges[ subsetKey ] ) : subsetRecord.mesh.remove( edges[ subsetKey ] );
             }
           }
         }
@@ -4376,26 +4429,9 @@
 
         ex_ifc_obj = undefined;
 
-        if (raycastableObjects.length > 0) {
-          raycastableObjects.forEach( mesh => {
-            if (mesh.material) {
-              if (Array.isArray( mesh.material )) {
-                mesh.material.forEach( m => {
-                  if (m.map) m.map.dispose();
-                  m.dispose();
-                  m = null;
-                });
-              } else {
-                mesh.material.dispose();
-                mesh.material = null;
-              }
-            }
-
-            if (mesh.geometry) {
-              mesh.geometry.dispose();
-              mesh.geometry = null;
-            }
-          });
+        if (raycast_label) {
+          raycast_label.destroy();
+          raycast_label = null;
         }
 
         renderer.clear();
