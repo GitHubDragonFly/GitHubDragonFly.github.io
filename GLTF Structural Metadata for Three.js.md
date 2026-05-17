@@ -195,3 +195,5 @@ To demonstrate this, here is a quick video showing some random values being prov
 - This video was captured with Windows 10 built-in `Xbox Game Bar` app
 
 https://github.com/user-attachments/assets/4a439c3a-d8a0-4baa-933d-8c9202c652f8
+
+There is a longer video available on [YouTube](https://youtu.be/Z6VDh6Tq0yk), which showcases 3 possible examples of in-browser GLTF metadata picking (try to select 1080p quality for better viewing experience).
