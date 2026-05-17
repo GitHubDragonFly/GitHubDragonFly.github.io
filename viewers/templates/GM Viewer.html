@@ -81,7 +81,7 @@
       var equi_enabled = false, rotation_enabled = false;
       var variants, current_variant = 0, variants_available = false;
       var animations, current_animation = 0, animation_running = false;
-      var pickedObject, png_decode, userData, safeJson, isMobile;
+      var pickedObject, png_decode, userData, hasMetadata, safeJson, isMobile;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
@@ -264,6 +264,7 @@
       }
 
       #metadata-card {
+        right: 5px;
         position: absolute;
         display: none; /* Hidden by default */
         background: rgba( 25, 25, 25, 0.9 );
@@ -446,10 +447,21 @@
         set_viewer_position();
       }
 
+      function set_card_position() {
+        if (self.ModelViewerElement) {
+          const card = document.getElementById('metadata-card');
+
+          if (card) {
+            card.style.top = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
+          }
+        }
+      }
+
       function set_viewer_position() {
         if (self.ModelViewerElement) {
           let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
           document.getElementById( 'mv' ).style.marginTop = fixed_menu_bottom;
+          set_card_position();
         }
       }
 
@@ -1050,6 +1062,7 @@
         gltf_filenames = {};
         models = [];
         userData = {};
+        hasMetadata = false;
 
         enable_disable( true );
 
@@ -1208,6 +1221,7 @@
         document.getElementById('div_error').style.color = 'gold';
         document.getElementById('div_error').innerHTML = 'Loading ... ' + pw;
         document.getElementById('div_error').style.display = 'block';
+        hasMetadata = false;
 
         current_model += 1;
 
@@ -1325,10 +1339,6 @@
       }
 
       function reset_all( page_loading = true ) {
-        if (typeof $ === 'undefined') {
-          alert('Limited functionality. Check your internet connection!');
-        }
-
         if (userData) Object.keys( userData ).forEach( key => delete userData[ key ] );
 
         current_model = 0;
@@ -2023,10 +2033,16 @@
           return;
         }
 
-        const data = object_userData.metadata;
+        const data = object_userData.metadata
+          ? object_userData.metadata
+          : object_userData.extras
+            ? object_userData.extras
+            : object_userData;
+
         const tilesetMetadataOnly = !data && !!pickedObject.parent;
 
         if (data || tilesetMetadataOnly) {
+          highlightFeatureUnique();
           showUiPanel( data, event, schema, pickedObject.name, tilesetMetadataOnly, pickedObject.type );
         }
       }
@@ -2204,10 +2220,14 @@
 
         // 2. Feature / Tile / Group / Content Sections
         if (data && !tilesetMetadataOnly) {
+          let dataSorted = false;
+
           if (tileset) html += '<br>';
 
           // Tile Class
           if (data.tile?.class) {
+            dataSorted = true;
+
             html += `<div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
                        <div style="font-size: 10px; color: #00d4ff;">TILE: ${data.tile.class}</div>
                      </div>`;
@@ -2226,6 +2246,8 @@
           // Group Metadata - Maybe entries like color, priority...
 
           if (data.group?.class) {
+            dataSorted = true;
+
             html += `
               <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
                 <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.group.class}</div>
@@ -2244,6 +2266,8 @@
           // Content Metadata - Maybe entries like vertices, materials...
 
           if (data.content?.class) {
+            dataSorted = true;
+
             html += `
               <div style="border-bottom: 1px solid #555; margin-bottom: 8px; padding-bottom: 6px;">
                 <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.content.class}</div>
@@ -2259,6 +2283,8 @@
 
           // Feature Metadata (Structural Metadata)
           if (data.featureMetadata) {
+            dataSorted = true;
+
             const fms = Array.isArray( data.featureMetadata ) ? data.featureMetadata : [ data.featureMetadata ];
 
             fms.forEach( fm => {
@@ -2267,6 +2293,24 @@
                        </div>`;
 
               for ( const [ k, v ] of Object.entries( fm.properties || {} ) ) {
+                html += `<div class="prop-row"><span class="prop-label">${k}:</span><span class="prop-value">${resolveValue( fm.class, k, v )}</span></div>`;
+              }
+
+              html += '<br>';
+            });
+          }
+
+          // Some sort of general data that possibly came from 'userData.extras' or just a pile of exported data
+          if (!dataSorted && ((data.name && Object.entries( data ).length > 1) || data.Name || data.GlobalId || data.element_id || data.id || data.Id || data.ID)) {
+
+            const fms = Array.isArray( data ) ? data : [ data ];
+
+            fms.forEach( fm => {
+              html += `<div style="border-bottom: 1px solid #00d4ff; margin-top: 10px; padding-bottom: 4px;">
+                         <div style="font-size: 10px; color: #00d4ff; font-weight: bold;">${fm.Name || fm.GlobalId || fm.element_id || fm.id || fm.Id || fm.ID || 'Unknown'}</div>
+                       </div>`;
+
+              for ( const [ k, v ] of Object.entries( data.properties || data || {} ) ) {
                 html += `<div class="prop-row"><span class="prop-label">${k}:</span><span class="prop-value">${resolveValue( fm.class, k, v )}</span></div>`;
               }
 
@@ -2336,19 +2380,8 @@
         }
 
         // Display and Measurement
-        card.style.visibility = 'hidden';
+        set_card_position();
         card.style.display = 'block';
-
-        const rect = card.getBoundingClientRect();
-        const vw = window.innerWidth, vh = window.innerHeight;
-        let x = event.clientX + 15, y = event.clientY + 15;
-
-        if (x + rect.width > vw) x = event.clientX - rect.width - 15;
-        if (y + rect.height > vh) y = vh - rect.height - 15;
-
-        card.style.left = Math.max( 5, x ) + 'px';
-        card.style.top = Math.max( 5, y ) + 'px';
-        card.style.visibility = 'visible';
       }
 
       async function decodeBase64ToPixels( uri = null, ab = null ) {
@@ -2431,6 +2464,15 @@
         const json = parser.json;
         const images = json.images;
         let texture_indexes = [];
+
+        if (json.nodes?.length > 0) {
+          for ( const node of json.nodes ) {
+            if (node.extras) {
+              hasMetadata = true;
+              break;
+            }
+          }
+        }
 
         if (json.meshes?.length > 0) {
           json.meshes.forEach( mesh => {
@@ -2592,6 +2634,55 @@
         }
       }
 
+      function highlightFeatureUnique() {
+        if (!pickedObject || pickedObject.material?.isShaderMaterial) return;
+
+        // 1. Borrow Three.js constructor via the object's prototype
+        const MeshConstructor = pickedObject.constructor;
+        const MaterialConstructor = pickedObject.material.constructor;
+
+        // 3. Cleanup: Remove any existing highlight to prevent "stacking"
+        const existing = pickedObject.children.find( c => c.isHighlight );
+
+        if (existing) {
+          pickedObject.remove( existing );
+          if (existing.geometry) existing.geometry.dispose();
+          if (existing.material) existing.material.dispose();
+
+          refreshScene();
+        }
+
+        // 4. Construct the overlay
+        const highlightMat = new MaterialConstructor();
+        highlightMat.color.setHex( 0xf08080 ); // Light coral
+        highlightMat.transparent = true;
+        highlightMat.opacity = 0.5;
+        highlightMat.side = 2;               // DoubleSide
+        highlightMat.depthWrite = false;     // Don't obscure other objects
+        highlightMat.polygonOffset = true;   // Shift it slightly towards camera
+        highlightMat.polygonOffsetFactor = -1;
+        highlightMat.polygonOffsetUnits = -1;
+
+        // If the borrowed material is MeshStandardMaterial (default for model-viewer),
+        // we turn off metalness/roughness so it looks like a flat highlight
+        if (highlightMat.metalness !== undefined) highlightMat.metalness = 0.15;
+        if (highlightMat.roughness !== undefined) highlightMat.roughness = 0.85;
+
+        highlightMat.needsUpdate = true;
+
+        const highlightMesh = new MeshConstructor( pickedObject.geometry, highlightMat );
+        highlightMesh.isHighlight = true; // Tag for later cleanup
+        highlightMesh.receiveShadow = false;
+        highlightMesh.castShadow = false;
+        highlightMesh.renderOrder = 999;
+
+        // 5. Add to the local coordinate system of the picked object
+        pickedObject.add( highlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
+
+        refreshScene();
+      }
+
       function highlightFeatureSimple( highlight_id, attrName ) {
         if (!pickedObject || pickedObject.material?.isShaderMaterial || !attrName) return;
 
@@ -2629,6 +2720,7 @@
           pickedObject.remove( existing );
           if (existing.geometry) existing.geometry.dispose();
           if (existing.material) existing.material.dispose();
+
           refreshScene();
         }
 
@@ -2909,8 +3001,8 @@
             const hasHybrid = intersect.object.geometry.hasAttribute( '_batchid' ) ||
                               intersect.object.geometry.hasAttribute( '_BATCHID' );
 
-            if (!intersect.object?.userData?.gltfExtensions &&
-                !hasHybrid &&
+            if (!hasMetadata && !hasHybrid &&
+                !intersect.object?.userData?.gltfExtensions &&
                 hydratedStore?.textures?.length === 0 &&
                 hydratedStore?.structuralMetadata === null) {
 
@@ -3004,7 +3096,7 @@
 
           const hydratedStore = userData[ currentKey ];
 
-          if (hydratedStore?.textures?.length > 0 || hydratedStore?.structuralMetadata !== null || hydratedStore?.hasGLTFExtensions) {
+          if (hasMetadata || hydratedStore?.textures?.length > 0 || hydratedStore?.structuralMetadata !== null || hydratedStore?.hasGLTFExtensions) {
             document.getElementById('metadata_message').style.visibility = 'visible';
             await new Promise( resolve => setTimeout( hide_metadata_message, 5000 ) );
           }
