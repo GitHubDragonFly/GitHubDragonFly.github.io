@@ -441,8 +441,8 @@ Number Type Converter
   - It supports metadata picking, similar to glTF based viewers
   - It also provides live controls for:
     - Showing / hiding selectable categories
-    - Showing exploded view of the model:
-      - Bounding boxes will be re-computed for raycasting, which could be a slow process, so be patient when exploding complex models
+    - Showing snappy exploded view of the model:
+      - Fast recomputing of bounds so raycasting continues to work properly
       - Desktop IFC Viewer can have edges, when applied with button `E`, which will follow the explosion:
         - Edges are not available for any IFC viewer on mobile devices
 
