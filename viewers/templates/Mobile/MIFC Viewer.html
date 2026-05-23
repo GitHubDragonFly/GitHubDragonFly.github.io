@@ -82,8 +82,8 @@
       var ww = window.innerWidth, wh = window.innerHeight, halt_on_error;
       var url_displayed = false, url_loading = false, isMobile, wireframe_enabled;
       var first_run = false, fr_count = 0, selected_ifc_file, selected_url_file = '';
-      var raycaster, mouse, mouseDownPos, featureHighlightMesh, spatialStructure, refitting;
-      var pickedObject, hasMetadata, click_listener_added = false, spatialMap, raycast_label;
+      var raycaster, mouse, mouseDownPos, featureHighlightMesh, spatialStructure;
+      var pickedObject, hasMetadata, click_listener_added = false, spatialMap;
     </script>
 
     <script type="module">
@@ -339,7 +339,6 @@
         halt_on_error = false;
         render_requested = false;
         wireframe_enabled = false;
-        refitting = false;
         hasMetadata = false;
         explosionParams = null;
         featureHighlightMesh = null;
@@ -678,8 +677,29 @@
       async function finish_loading() {
         if (halt_on_error) return;
 
+        ex_ifc_obj.geometry.userData.originalPosition = new Float32Array( ex_ifc_obj.geometry.attributes.position.array );
+
         await detect_present_categories();
         await setup_filtered_categories();
+
+        const geom = ex_ifc_obj.geometry;
+        const posAttr = geom.getAttribute( 'position' );
+        const pcount = posAttr.count;
+
+        if (hasMetadata) {
+          document.getElementById('metadata_message').style.visibility = 'visible';
+          console.log( 'Metadata Raycasting Enabled' );
+
+          if (click_listener_added === false) {
+            window.addEventListener( 'click', handle_raycast_click );
+            click_listener_added = true;
+          }
+        } else {
+          if (click_listener_added) {
+            window.removeEventListener( 'click', handle_raycast_click );
+            click_listener_added = false;
+          }
+        }
 
         scene.add( ifc_obj );
         frame_camera();
@@ -732,24 +752,9 @@
           gui_set = true;
         }
 
-        const geom = ex_ifc_obj.geometry;
-        const posAttr = geom.getAttribute( 'position' );
-        const pcount = posAttr.count;
-
         if (!ifcFolder) {
           // Create a folder for IFC categories
-
           ifcFolder = gui.addFolder( 'Filtered IFC Categories' );
-
-          // Add read-only raycasting state
-
-          const raycast_obj = { state: hasMetadata ? 'Enabled' : 'Disabled' };
-
-          raycast_label = ifcFolder.add( raycast_obj, 'state' ).name( 'Raycasting' );
-          raycast_label.$input.style.color = hasMetadata ? 'lightgreen' : 'red';
-          raycast_label.domElement.style.backgroundColor = 'transparent';
-          raycast_label.$input.style.backgroundColor = 'transparent';
-          raycast_label.$input.disabled = true;
 
           // Add "Explode All" slider
 
@@ -757,10 +762,6 @@
             geom.computeBoundingBox();
             geom.computeBoundingSphere();
             geom.boundingSphere.radius *= 2; // done once so exploded elements remain visible
-          }
-
-          if (!geom.userData.originalPosition) {
-            geom.userData.originalPosition = new Float32Array( posAttr.array );
           }
 
           const modelBox = geom.boundingBox;
@@ -800,13 +801,13 @@
           // COMPUTE DIRECTIONS: Turn bounds into normalized vectors
           // ------------------------------------------------------------
 
-          const elementDirs = new Float32Array( pcount * 3 );
+          const dirMap = new Map(); // expressID -> THREE.Vector3
           const tempVec = new THREE.Vector3();
 
-          for ( let i = 0; i < pcount; i++ ) {
-            const id = idAttr.getX( i );
+          for ( const id in elementBounds ) {
             const b = elementBounds[ id ];
 
+            // Center of the element's bounding box
             const cx = ( b.min[ 0 ] + b.max[ 0 ] ) / 2.0;
             const cy = ( b.min[ 1 ] + b.max[ 1 ] ) / 2.0;
             const cz = ( b.min[ 2 ] + b.max[ 2 ] ) / 2.0;
@@ -814,11 +815,21 @@
             tempVec.set( cx, cy, cz ).sub( modelCenter );
             if (tempVec.lengthSq() > 0) tempVec.normalize();
 
-            const i3 = i * 3;
+            dirMap.set( Number( id ), tempVec.clone() );
+          }
 
-            elementDirs[ i3 ]     = tempVec.x;
-            elementDirs[ i3 + 1 ] = tempVec.y;
-            elementDirs[ i3 + 2 ] = tempVec.z;
+          const elementDirs = new Float32Array( pcount * 3 );
+
+          for ( let i = 0; i < pcount; i++ ) {
+            const i3 = i * 3;
+            const id = idAttr.getX( i );
+            const dir = dirMap.get( id );
+
+            if ( dir ) {
+              elementDirs[ i3 ]     = dir.x;
+              elementDirs[ i3 + 1 ] = dir.y;
+              elementDirs[ i3 + 2 ] = dir.z;
+            }
           }
 
           geom.setAttribute( 'explodeDir', new THREE.BufferAttribute( elementDirs, 3 ) );
@@ -833,6 +844,71 @@
               subsetRecord.mesh.geometry.setAttribute( 'explodeDir', geom.getAttribute( 'explodeDir' ) );
             }
           }
+
+          // ------------------------------------------------------------
+          // COMPUTE SYSTEM EXPANSION ENVELOPES (For Raycasting Bounds)
+          // ------------------------------------------------------------
+
+          const baseMin = [ Infinity, Infinity, Infinity ];
+          const baseMax = [ -Infinity, -Infinity, -Infinity ];
+          const explodedMin = [ Infinity, Infinity, Infinity ];
+          const explodedMax = [ -Infinity, -Infinity, -Infinity ];
+
+          for ( const id in elementBounds ) {
+            const b = elementBounds[ id ];
+            const dir = dirMap.get( Number( id ) );
+
+            const dx = dir ? dir.x * EXPLOSION_DISTANCE : 0;
+            const dy = dir ? dir.y * EXPLOSION_DISTANCE : 0;
+            const dz = dir ? dir.z * EXPLOSION_DISTANCE : 0;
+
+            // Base bounding box min/max points
+            for ( let i = 0; i < 3; i++ ) {
+              if (b.min[ i ] < baseMin[ i ]) baseMin[ i ] = b.min[ i ];
+              if (b.max[ i ] > baseMax[ i ]) baseMax[ i ] = b.max[ i ];
+            }
+
+            // Fully exploded (Scale = 1.0) bounding box min/max points
+            const extMin = [ b.min[ 0 ] + dx, b.min[ 1 ] + dy, b.min[ 2 ] + dz ];
+            const extMax = [ b.max[ 0 ] + dx, b.max[ 1 ] + dy, b.max[ 2 ] + dz ];
+
+            const actualMin = [ Math.min( extMin[ 0 ], extMax[ 0 ] ), Math.min( extMin[ 1 ], extMax[ 1 ] ), Math.min( extMin[ 2 ], extMax[ 2 ] ) ];
+            const actualMax = [ Math.max( extMin[ 0 ], extMax[ 0 ] ), Math.max( extMin[ 1 ], extMax[ 1 ] ), Math.max( extMin[ 2 ], extMax[ 2 ] ) ];
+
+            for ( let i = 0; i < 3; i++ ) {
+              if (actualMin[ i ] < explodedMin[ i ]) explodedMin[ i ] = actualMin[ i ];
+              if (actualMax[ i ] > explodedMax[ i ]) explodedMax[ i ] = actualMax[ i ];
+            }
+          }
+
+          // Store boundaries inside userData for global tracking
+          geom.userData.explosionEnvelopes = {
+            baseMin: new THREE.Vector3( ...baseMin ),
+            baseMax: new THREE.Vector3( ...baseMax ),
+            explodedMin: new THREE.Vector3( ...explodedMin ),
+            explodedMax: new THREE.Vector3( ...explodedMax )
+          };
+
+          geom.userData.currentExplosionScale = 0.0;
+
+          // Override bounding box generation
+          geom.computeBoundingBox = function() {
+            if (!this.boundingBox) this.boundingBox = new THREE.Box3();
+            const env = this.userData.explosionEnvelopes;
+            const scale = this.userData.currentExplosionScale;
+            if (!env) return;
+
+            this.boundingBox.min.lerpVectors( env.baseMin, env.explodedMin, scale );
+            this.boundingBox.max.lerpVectors( env.baseMax, env.explodedMax, scale );
+          };
+
+          // Override bounding sphere generation
+          geom.computeBoundingSphere = function() {
+            if (!this.boundingSphere) this.boundingSphere = new THREE.Sphere();
+            if (!this.boundingBox) this.computeBoundingBox();
+            this.boundingBox.getCenter( this.boundingSphere.center );
+            this.boundingSphere.radius = this.boundingBox.min.distanceTo( this.boundingBox.max ) / 2.0;
+          };
 
           function applyExplosionScale( scale ) {
             const array = posAttr.array;
@@ -854,77 +930,59 @@
             }
 
             posAttr.needsUpdate = true;
-
-            // Geometry bounds updates remain the same
-            geom.computeBoundingSphere();
-            geom.computeBoundingBox();
           }
 
           explosionParams = { scale: 0.0 };
-          let lastExplodeValue = 0;
 
           ifcFolder.add( explosionParams, 'scale', 0, 2.0, 0.01 )
           .name( 'Explode All' )
           .onChange( value => {
             if (pickedObject) popup_card_cleanup();
 
-            const offset = value * EXPLOSION_DISTANCE;
             applyExplosionScale( value );
 
-            if (hasMetadata && raycast_label) {
-              raycast_label.object.state = 'Refitting...';
-              raycast_label.$input.style.color = 'yellow';
-              raycast_label.updateDisplay();
-              refitting = true;
+            // Keep CPU mathematical boundaries synchronized for raycasting
+            geom.userData.currentExplosionScale = value;
+            geom.computeBoundingBox();
+            geom.computeBoundingSphere();
+
+            // Synchronize bounding boxes AND force attributes to refresh on subsets
+            for ( const key of Object.keys( filtered_categories ) ) {
+              const subsetKey = `0 - DEFAULT - ${ key }`;
+              const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
+
+              if (subsetRecord && subsetRecord.mesh) {
+                const subsetGeom = subsetRecord.mesh.geometry;
+                const subsetPosAttr = subsetGeom.getAttribute( 'position' );
+
+                // Force the raycaster to read the newly calculated CPU values
+                if (subsetPosAttr) {
+                  // If subsets copy the master array structure, make sure data copies over
+                  if (subsetPosAttr.array !== posAttr.array) {
+                    // Match individual vertex changes if arrays are detached copies
+                    subsetPosAttr.array.set( posAttr.array ); 
+                  }
+
+                  subsetPosAttr.needsUpdate = true;
+                }
+
+                subsetGeom.userData.currentExplosionScale = value;
+
+                if (!subsetGeom.userData.explosionEnvelopes) {
+                  subsetGeom.userData.explosionEnvelopes = geom.userData.explosionEnvelopes;
+                  subsetGeom.computeBoundingBox = geom.computeBoundingBox;
+                  subsetGeom.computeBoundingSphere = geom.computeBoundingSphere;
+                }
+
+                subsetGeom.boundingBox = null;
+                subsetGeom.boundingSphere = null;
+                subsetGeom.computeBoundingBox();
+                subsetGeom.computeBoundingSphere();
+              }
             }
 
             mouse_wheel = true;
           })
-          .onFinishChange( async () => {
-            if (lastExplodeValue !== explosionParams.scale) {
-              lastExplodeValue = explosionParams.scale;
-
-              // Collect all meshes first
-              const meshes = [];
-
-              ifc_obj.traverse( child => {
-                if (child.isMesh) meshes.push( child );
-              });
-
-              if (!isMobile) console.log( `Updating bounds for ${meshes.length} parts...` );
-
-              // Process in chunks to prevent thread-lock
-              const chunkSize = 500; // Adjust based on performance
-
-              for ( let i = 0; i < meshes.length; i += chunkSize ) {
-                const chunk = meshes.slice( i, i + chunkSize );
-
-                for ( const child of chunk ) {
-                  child.geometry.computeBoundingBox();
-                  child.geometry.computeBoundingSphere();
-
-                  if (child.geometry.boundsTree) {
-                    child.geometry.boundsTree.refit();
-                  }
-
-                  // Pause the loop for a split second 
-                  // to let the browser breathe.
-                  await new Promise( resolve => setTimeout( resolve, 0 ) );
-                }
-              }
-
-              // Wrap up
-              mouse_wheel = true;
-              if (!isMobile) console.log( 'Raycasting bounds restored.' );
-            }
-
-            if (hasMetadata && raycast_label) {
-              raycast_label.object.state = 'Enabled';
-              raycast_label.$input.style.color = 'lightgreen';
-              raycast_label.updateDisplay();
-              refitting = false;
-            }
-          });
 
           // Add filtered categories visibility toggles
 
@@ -942,21 +1000,6 @@
                 mouse_wheel = true;
               });
             }
-          }
-        }
-
-        if (hasMetadata) {
-          document.getElementById('metadata_message').style.visibility = 'visible';
-          console.log( 'Metadata Raycasting Enabled' );
-
-          if (click_listener_added === false) {
-            window.addEventListener( 'click', handle_raycast_click );
-            click_listener_added = true;
-          }
-        } else {
-          if (click_listener_added) {
-            window.removeEventListener( 'click', handle_raycast_click );
-            click_listener_added = false;
           }
         }
 
@@ -1008,6 +1051,8 @@
               }
             });
           });
+
+          mouse_wheel = true;
         }
 
         function buildSpatialMap( node, currentStorey = 'Unknown Level' ) {
@@ -1026,6 +1071,8 @@
           if (node.children && node.children.length > 0) {
             node.children.forEach( child => buildSpatialMap( child, storeyName ) );
           }
+
+          mouse_wheel = true;
         }
 
         if (!isMobile) {
@@ -1050,6 +1097,7 @@
 
       function hide_metadata_message() {
         document.getElementById('metadata_message').style.visibility = 'hidden';
+        mouse_wheel = true;
       }
 
       function handle_error( error ) {
@@ -1108,7 +1156,7 @@
         featureHighlightMesh = new THREE.Mesh(
           highlightGeo,
           new THREE.MeshBasicMaterial({
-            color: 0xf08080,
+            color: 0x80ff80,
             transparent: true,
             opacity: 0.5,
             side: THREE.DoubleSide,
@@ -1168,7 +1216,11 @@
             }
           });
 
-          if (featureHighlightMesh.geometry) featureHighlightMesh.geometry.dispose();
+          if (featureHighlightMesh.geometry) {
+            featureHighlightMesh.geometry.setIndex( null );
+            featureHighlightMesh.geometry.dispose();
+          }
+
           if (featureHighlightMesh.material) featureHighlightMesh.material.dispose();
           featureHighlightMesh = null;
         }
@@ -1179,16 +1231,17 @@
       }
 
       async function handle_raycast_click( event ) {
-        if (refitting) return;
-
         // Calculate how far the mouse moved
         const deltaX = Math.abs( event.clientX - mouseDownPos.x );
         const deltaY = Math.abs( event.clientY - mouseDownPos.y );
 
         // If moved more than 5 pixels, it was likely a camera drag, not a click
-        // Leave previous popup card and highlight visible, if present
         if (deltaX > 5 || deltaY > 5) return;
 
+        // Leave previous popup card and highlight visible, if present
+        if (event.target.closest( '#metadata-card' )) return;
+
+        // Now clean the popup card and highlight
         popup_card_cleanup();
 
         if (event.target.closest( '#fixed_menu' ) || event.target.closest( '#right_gui_position' )) {
@@ -1202,7 +1255,7 @@
 
         if (!mouse) mouse = new THREE.Vector2();
 
-        const HIGHLIGHT_COLOR = new THREE.Color( 0xf08080 );
+        const HIGHLIGHT_COLOR = new THREE.Color( 0x80ff80 );
 
         mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
         mouse.y = -( event.clientY / window.innerHeight ) * 2 + 1;
@@ -1246,12 +1299,14 @@
           });
         }
 
+        const properties = {};
+        properties[ 'Express ID' ] = expressId;
+        properties[ 'Global ID' ] = schema.GlobalId?.value || 'N/A';
+        if (typeFeatures?.length === 0 && schema.Name?.value) properties[ 'Schema Name' ] = schema.Name.value;
+
         featureMetadataList.push({
           class: 'IFC Identity',
-          properties: {
-            'Express ID': expressId,
-            'Global ID': schema.GlobalId?.value || 'N/A'
-          }
+          properties: properties
         });
 
         // Helper to process properties and avoid exact duplicates
@@ -1834,11 +1889,6 @@
           }
 
           ex_ifc_obj = undefined;
-        }
-
-        if (raycast_label) {
-          raycast_label.destroy();
-          raycast_label = null;
         }
 
         if (mat_cache) mat_cache.clear();
