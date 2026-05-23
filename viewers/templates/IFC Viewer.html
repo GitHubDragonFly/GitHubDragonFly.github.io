@@ -99,9 +99,9 @@
       var initial_opacity, initial_opacity_array, enable_opacity, slider_height = 0;
       var initial_transparency, initial_transparency_array;
       var selected_ifc_file, selected_ifc_url_file, selected_url_file = '';
-      var url_displayed = false, url_loading = false, menu_location_bottom = false, refitting;
-      var raycaster, mouse, mouseDownPos, featureHighlightMesh, spatialStructure, spatialMap;
-      var pickedObject, hasMetadata, click_listener_added = false, raycast_label;
+      var url_displayed = false, url_loading = false, menu_location_bottom = false;
+      var raycaster, mouse, mouseDownPos, spatialStructure, spatialMap;
+      var pickedObject, featureHighlightMesh, hasMetadata, click_listener_added = false;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
@@ -2552,7 +2552,6 @@
         scene_bgnd = null;
         gif_export = false;
         equi_enabled = false;
-        refitting = false;
         hasMetadata = false;
         featureHighlightMesh = null;
         mouseDownPos = { x: 0, y: 0 };
@@ -2932,31 +2931,6 @@
         }
       }
 
-      const pendingBounds = new Set();
-      let boundsScheduled = false;
-
-      async function scheduleBoundsUpdate( geom ) {
-        pendingBounds.add( geom );
-
-        if (!boundsScheduled) {
-          boundsScheduled = true;
-
-          requestAnimationFrame( () => {
-            for ( const g of pendingBounds ) {
-              g.computeBoundingBox();
-              g.computeBoundingSphere();
-
-              if (g.boundsTree) {
-                g.boundsTree.refit();
-              }
-            }
-
-            pendingBounds.clear();
-            boundsScheduled = false;
-          });
-        }
-      }
-
       function loadFile() {
         ifc_loader.load( URL.createObjectURL( selected_ifc_file ), function( object ) {
           URL.revokeObjectURL( selected_ifc_file );
@@ -2998,7 +2972,7 @@
             selected_ifc_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
           } else {
             if (selected_url_file.startsWith('https://github.com') === true) {
-              selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+              selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace( 'blob/', '' );
             }
 
             if (selected_url_file.toUpperCase().endsWith('.IFC')) selected_ifc_url_file = selected_url_file;
@@ -3051,6 +3025,7 @@
         const geom = ex_ifc_obj.geometry;
         const posAttr = geom.getAttribute( 'position' );
         posAttr.setUsage( THREE.DynamicDrawUsage );
+        const pcount = posAttr.count;
 
         if (hasMetadata) {
           document.getElementById('metadata_message').style.visibility = 'visible';
@@ -3102,20 +3077,9 @@
 
         if (!ifcFolder) {
           // Create a folder for IFC categories
-
           ifcFolder = ifc_gui.addFolder( 'Filtered IFC Categories' );
 
-          // Add read-only raycasting state
-
-          const raycast_obj = { state: hasMetadata ? 'Enabled' : 'Disabled' };
-
-          raycast_label = ifcFolder.add( raycast_obj, 'state' ).name( 'Raycasting' );
-          raycast_label.$input.style.color = hasMetadata ? 'lightgreen' : 'red';
-          raycast_label.domElement.style.backgroundColor = 'transparent';
-          raycast_label.$input.style.backgroundColor = 'transparent';
-          raycast_label.$input.disabled = true;
-
-          // Add "Explode All" slider for simple models
+          // Add 'Explode All' slider for simple models
 
           if (!geom.boundingBox) geom.computeBoundingBox();
           const modelBox = geom.boundingBox;
@@ -3132,7 +3096,7 @@
 
           const elementBounds = {}; // expressID -> { min: [ x, y, z ], max: [ x, y, z ] }
 
-          for ( let i = 0; i < posAttr.count; i++ ) {
+          for ( let i = 0; i < pcount; i++ ) {
             const id = idAttr.getX( i );
             const x = posAttr.getX( i );
             const y = posAttr.getY( i );
@@ -3173,6 +3137,106 @@
             elementDirs.set( Number( id ), { x: tempVec.x, y: tempVec.y, z: tempVec.z } );
           }
 
+          function createFlatDirections() {
+            // Each vertex needs 3 slots (x, y, z)
+            const flatElementDirs = new Float32Array( pcount * 3 );
+
+            for ( let i = 0; i < pcount; i++ ) {
+              const i3 = i * 3;
+              const id = idAttr.getX( i );
+              const dir = elementDirs.get( id );
+
+              if (dir) {
+                flatElementDirs[ i3 ]     = dir.x;
+                flatElementDirs[ i3 + 1 ] = dir.y;
+                flatElementDirs[ i3 + 2 ] = dir.z;
+              } else {
+                // If an element has no direction, keep it 0 so it doesn't move
+                flatElementDirs[ i3 ]     = 0;
+                flatElementDirs[ i3 + 1 ] = 0;
+                flatElementDirs[ i3 + 2 ] = 0;
+              }
+            }
+
+            return flatElementDirs;
+          }
+
+          const flatElementDirs = await createFlatDirections();
+
+          // ------------------------------------------------------------
+          // COMPUTE SYSTEM EXPANSION ENVELOPES (For Instant Intersect Bounds)
+          // ------------------------------------------------------------
+
+          const baseMin = [ Infinity, Infinity, Infinity ];
+          const baseMax = [ -Infinity, -Infinity, -Infinity ];
+          const explodedMin = [ Infinity, Infinity, Infinity ];
+          const explodedMax = [ -Infinity, -Infinity, -Infinity ];
+
+          for ( const id in elementBounds ) {
+            const b = elementBounds[ id ];
+            const dir = elementDirs.get( Number( id ) );
+            const dx = dir ? dir.x * EXPLOSION_DISTANCE : 0;
+            const dy = dir ? dir.y * EXPLOSION_DISTANCE : 0;
+            const dz = dir ? dir.z * EXPLOSION_DISTANCE : 0;
+
+            // Base bounding box min/max points
+            for ( let i = 0; i < 3; i++ ) {
+              if (b.min[ i ] < baseMin[ i ]) baseMin[ i ] = b.min[ i ];
+              if (b.max[ i ] > baseMax[ i ]) baseMax[ i ] = b.max[ i ];
+            }
+
+            // Fully exploded (Scale = 1.0) bounding box min/max points
+            const extMin = [ b.min[ 0 ] + dx, b.min[ 1 ] + dy, b.min[ 2 ] + dz ];
+            const extMax = [ b.max[ 0 ] + dx, b.max[ 1 ] + dy, b.max[ 2 ] + dz ];
+
+            // Accounts for direction sign swaps
+            const actualMin = [ Math.min( extMin[ 0 ], extMax[ 0 ] ), Math.min( extMin[ 1 ], extMax[ 1 ] ), Math.min( extMin[ 2 ], extMax[ 2 ] ) ];
+            const actualMax = [ Math.max( extMin[ 0 ], extMax[ 0 ] ), Math.max( extMin[ 1 ], extMax[ 1 ] ), Math.max( extMin[ 2 ], extMax[ 2 ] ) ];
+
+            for ( let i = 0; i < 3; i++ ) {
+              if (actualMin[ i ] < explodedMin[ i ]) explodedMin[ i ] = actualMin[ i ];
+              if (actualMax[ i ] > explodedMax[ i ]) explodedMax[ i ] = actualMax[ i ];
+            }
+          }
+
+          // Store these static boundaries inside userData for global tracking
+          geom.userData.explosionEnvelopes = {
+            baseMin: new THREE.Vector3( ...baseMin ),
+            baseMax: new THREE.Vector3( ...baseMax ),
+            explodedMin: new THREE.Vector3( ...explodedMin ),
+            explodedMax: new THREE.Vector3( ...explodedMax )
+          };
+
+          // Track the active scale on the geometry profile
+          geom.userData.currentExplosionScale = 0.0;
+
+          // Completely override bounding box generation
+          geom.computeBoundingBox = function() {
+            // If Three.js deleted the object reference, reconstruct it
+            if (!this.boundingBox) this.boundingBox = new THREE.Box3();
+
+            const env = this.userData.explosionEnvelopes;
+            const scale = this.userData.currentExplosionScale;
+
+            if (!env) return;
+
+            // Mathematically lerp the bounding box to match the current explosion scale
+            this.boundingBox.min.lerpVectors( env.baseMin, env.explodedMin, scale );
+            this.boundingBox.max.lerpVectors( env.baseMax, env.explodedMax, scale );
+          };
+
+          // Completely override bounding sphere generation
+          geom.computeBoundingSphere = function() {
+            if (!this.boundingSphere) this.boundingSphere = new THREE.Sphere();
+            if (!this.boundingBox) this.computeBoundingBox();
+
+            // Center point shifts perfectly with the explosion
+            this.boundingBox.getCenter( this.boundingSphere.center );
+
+            // Recalculate radius to encapsulate the expanding system bounds
+            this.boundingSphere.radius = this.boundingBox.min.distanceTo( this.boundingBox.max ) / 2.0;
+          };
+
           // ------------------------------------------------------------
           // POSITION MANAGEMENT
           // ------------------------------------------------------------
@@ -3182,26 +3246,69 @@
           function applyExplosionScale( scale ) {
             const array = posAttr.array;
             const offset = scale * EXPLOSION_DISTANCE;
+            const count = posAttr.count;
 
-            for ( let i = 0; i < posAttr.count; i++ ) {
-              const id = idAttr.getX( i );
-              const dir = elementDirs.get( id );
+            // Core tracking state updated on the master geometry
+            geom.userData.currentExplosionScale = scale;
+
+            // Main master vertex array mutated directly
+            for ( let i = 0; i < count; i++ ) {
               const i3 = i * 3;
-
-              if (!dir) continue;
-
-              array[ i3 ]     = originalPos[ i3 ]     + dir.x * offset;
-              array[ i3 + 1 ] = originalPos[ i3 + 1 ] + dir.y * offset;
-              array[ i3 + 2 ] = originalPos[ i3 + 2 ] + dir.z * offset;
+              array[ i3 ]     = originalPos[ i3 ]     + flatElementDirs[ i3 ]     * offset;
+              array[ i3 + 1 ] = originalPos[ i3 + 1 ] + flatElementDirs[ i3 + 1 ] * offset;
+              array[ i3 + 2 ] = originalPos[ i3 + 2 ] + flatElementDirs[ i3 + 2 ] * offset;
             }
 
+            // Tell WebGL to re-upload the shared vertex buffer once
             posAttr.needsUpdate = true;
-            scheduleBoundsUpdate( geom );
+            
+            // Clear master bounds tracking blocks
+            geom.boundingBox = null;
+            geom.boundingSphere = null;
+            geom.computeBoundingBox();
+            geom.computeBoundingSphere();
 
+            // ------------------------------------------------------------
+            // SYNC MATHEMATICAL BOUNDS TO ACTIVE SUBSETS
+            // ------------------------------------------------------------
+
+            for ( const key of Object.keys( filtered_categories ) ) {
+              const subsetKey = `0 - DEFAULT - ${ key }`;
+              // Pull the subset definition profile directly out of web-ifc-three manager storage
+              const subsetRecord = ifc_loader.ifcManager.subsets.subsets[ subsetKey ];
+              
+              if (subsetRecord && subsetRecord.mesh) {
+                const subsetGeom = subsetRecord.mesh.geometry;
+                
+                // Inject explosion parameters directly into the subset geometry profiles
+                subsetGeom.userData.currentExplosionScale = scale;
+                
+                if (!subsetGeom.userData.explosionEnvelopes) {
+                  // Bind the master boundary coordinates directly to the subset 
+                  subsetGeom.userData.explosionEnvelopes = geom.userData.explosionEnvelopes;
+                  
+                  // Inject your mathematical override functions directly onto the subset
+                  subsetGeom.computeBoundingBox = geom.computeBoundingBox;
+                  subsetGeom.computeBoundingSphere = geom.computeBoundingSphere;
+                }
+                
+                // Reset the Three.js cache on the subset mesh geometry so the raycaster re-evaluates it
+                subsetGeom.boundingBox = null;
+                subsetGeom.boundingSphere = null;
+                
+                // Recalculate mathematical bounding boundaries instantly
+                subsetGeom.computeBoundingBox();
+                subsetGeom.computeBoundingSphere();
+              }
+            }
+
+            // Edge Processing Loops
             if (!isMobile) {
-              // Update Synchronized Edges
-              for ( const key in edges ) {
-                const edgeObj = edges[ key ];
+              const edgeObjects = Object.values( edges );
+              const edgeCount = edgeObjects.length;
+
+              for ( let e = 0; e < edgeCount; e++ ) {
+                const edgeObj = edgeObjects[ e ];
                 if (!edgeObj || !edgeObj.geometry) continue;
 
                 const edgeGeom = edgeObj.geometry;
@@ -3212,21 +3319,28 @@
                 if (!edgeOrigPos || !edgeDirs) continue;
 
                 const edgeArray = edgePosAttr.array;
+                const vCount = edgePosAttr.count;
 
-                for ( let i = 0; i < edgePosAttr.count; i++ ) {
+                for ( let i = 0; i < vCount; i++ ) {
                   const i3 = i * 3;
-
-                  const dx = edgeDirs[ i3 ];
-                  const dy = edgeDirs[ i3 + 1 ];
-                  const dz = edgeDirs[ i3 + 2 ];
-
-                  edgeArray[ i3 ]     = edgeOrigPos[ i3 ]     + dx * offset;
-                  edgeArray[ i3 + 1 ] = edgeOrigPos[ i3 + 1 ] + dy * offset;
-                  edgeArray[ i3 + 2 ] = edgeOrigPos[ i3 + 2 ] + dz * offset;
+                  edgeArray[ i3 ]     = edgeOrigPos[ i3 ]     + edgeDirs[ i3 ]     * offset;
+                  edgeArray[ i3 + 1 ] = edgeOrigPos[ i3 + 1 ] + edgeDirs[ i3 + 1 ] * offset;
+                  edgeArray[ i3 + 2 ] = edgeOrigPos[ i3 + 2 ] + edgeDirs[ i3 + 2 ] * offset;
                 }
 
                 edgePosAttr.needsUpdate = true;
-                scheduleBoundsUpdate( edgeGeom );
+                
+                edgeGeom.userData.currentExplosionScale = scale;
+                if (!edgeGeom.userData.explosionEnvelopes) {
+                  edgeGeom.userData.explosionEnvelopes = geom.userData.explosionEnvelopes;
+                  edgeGeom.computeBoundingBox = geom.computeBoundingBox;
+                  edgeGeom.computeBoundingSphere = geom.computeBoundingSphere;
+                }
+                
+                edgeGeom.boundingBox = null;
+                edgeGeom.boundingSphere = null;
+                edgeGeom.computeBoundingBox();
+                edgeGeom.computeBoundingSphere();
               }
             }
           }
@@ -3234,64 +3348,16 @@
           if (!isMobile) await setup_edges( geom, elementDirs );
 
           const explosionParams = { scale: 0.0 };
-          let lastExplodeValue = 0;
 
           ifcFolder.add( explosionParams, 'scale', 0, 2.0, 0.01 )
           .name( 'Explode All' )
           .onChange( async value => {
             if (pickedObject) popup_card_cleanup();
 
-            await applyExplosionScale( value );
-
-            if (hasMetadata && raycast_label) {
-              raycast_label.object.state = 'Refitting...';
-              raycast_label.$input.style.color = 'yellow';
-              raycast_label.updateDisplay();
-              refitting = true;
-            }
+            applyExplosionScale( value );
 
             mouse_wheel = true;
           })
-          .onFinishChange( async () => {
-            if (lastExplodeValue !== explosionParams.scale) {
-              lastExplodeValue = explosionParams.scale;
-
-              // Collect all meshes first
-              const meshes = [];
-
-              ifc_obj.traverse( child => {
-                if (child.isMesh) meshes.push( child );
-              });
-
-              if (!isMobile) console.log( `Updating bounds for ${meshes.length} parts...` );
-
-              // Process in chunks to prevent thread-lock
-              const chunkSize = 500; // Adjust based on performance
-
-              for ( let i = 0; i < meshes.length; i += chunkSize ) {
-                const chunk = meshes.slice( i, i + chunkSize );
-
-                for ( const child of chunk ) {
-                  scheduleBoundsUpdate( child.geometry );
-
-                  // Pause the loop for a split second 
-                  // to let the browser breathe.
-                  await new Promise( resolve => setTimeout( resolve, 0 ) );
-                }
-              }
-
-              // Wrap up
-              mouse_wheel = true;
-              if (!isMobile) console.log( 'Raycasting bounds restored.' );
-            }
-
-            if (hasMetadata && raycast_label) {
-              raycast_label.object.state = 'Enabled';
-              raycast_label.$input.style.color = 'lightgreen';
-              raycast_label.updateDisplay();
-              refitting = false;
-            }
-          });
 
           // Add filtered categories visibility toggles
 
@@ -3542,8 +3608,6 @@
       }
 
       async function handle_raycast_click( event ) {
-        if (refitting) return;
-
         // Calculate how far the mouse moved
         const deltaX = Math.abs( event.clientX - mouseDownPos.x );
         const deltaY = Math.abs( event.clientY - mouseDownPos.y );
@@ -3552,8 +3616,9 @@
         if (deltaX > 5 || deltaY > 5) return;
 
         // Leave previous popup card and highlight visible, if present
-        if (event.target.closest( '#gizmo' )) return;
+        if (event.target.closest( '#gizmo' ) || event.target.closest( '#metadata-card' )) return;
 
+        // Now clean the popup card and highlight
         popup_card_cleanup();
 
         if (event.target.closest( '#fixed_menu' ) || event.target.closest( '#gui_position' ) || event.target.closest( '#right_gui_position' )) {
@@ -4730,11 +4795,6 @@
         }
 
         ex_ifc_obj = undefined;
-
-        if (raycast_label) {
-          raycast_label.destroy();
-          raycast_label = null;
-        }
 
         renderer.clear();
 
