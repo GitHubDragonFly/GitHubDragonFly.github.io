@@ -7,21 +7,67 @@
     <link rel="stylesheet" href="../static/css/desktop-viewers-webgpu.css">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
-    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running) handle_error( 'RESOURCE ERROR' );
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running) handle_error( 'UNHANDLED PROMISE: ' + event.reason );
+      });
+    </script>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.webgpu.min.js",
-          "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.webgpu.min.js",
-          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.tsl.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/",
-          "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.webgpu.min.js",
+          "three/webgpu": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.webgpu.min.js",
+          "three/tsl": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.tsl.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/",
+          "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/",
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@3.10.1",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@3.10.1",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@3.10.1",
-          "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.24.0/meshopt_encoder.module.min.js",
-          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.24.0/meshopt_simplifier.module.min.js"
+          "meshoptimizer": "https://esm.sh/meshoptimizer@1.1.1"
         }
       }
     </script>
@@ -30,11 +76,11 @@
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
     <!-- For encoding GLB exports with draco compression -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
       var THREE, manager, pdb_loader, pdb_obj, ktx2_loader, font_loader;
-      var uSync, texture_loader, tiff_loader, exr_loader, rgbe_loader;
+      var uSync, texture_loader, tiff_loader, exr_loader, hdr_loader;
       var renderer, _renderer, render_requested, scene_bgnd, bg_flip;
       var gpu, gl2, controls, isMobile, isNewiPad, isFirefoxNightly;
       var scene, camera, params, toneMappingOptions, label_font;
@@ -44,9 +90,9 @@
       var local_files, filesMap, zip_file, unzipped_files;
       var grid, polar_grid, grid_visible, polar_grid_visible;
       var ambientLight, hemisphereLight, directionalLight;
-      var ww = window.innerWidth, wh = window.innerHeight;
-      var rot_x = 0, rot_y = 0, rot_z = 0, reset_rotation, link;
-      var root, position, color, offset, start, end, enable_opacity;
+      var ww = window.innerWidth, wh = window.innerHeight, link;
+      var rot_x = 0, rot_y = 0, rot_z = 0, reset_rotation, enable_opacity;
+      var root, position, color, offset, start, end, init_running = false;
       var json, positions, colors, atom_colors, gif_export, bgnd_linear_gradient;
       var atoms, labels, bonds, atoms_visible, labels_visible, bonds_visible, geometryAtoms, geometryBonds;
       var boxGeometry, boxMaterial, sphereGeometry, sphereMaterial, labelGeometry, labelMaterial;
@@ -60,15 +106,15 @@
     </script>
 
     <script type="module">
-      import * as three_js from "three";
-      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { PDBLoader } from "three/addons/loaders/PDBLoader.min.js";
-      import { FontLoader } from "three/addons/loaders/FontLoader.min.js";
-      import { TextGeometry } from "three/addons/geometries/TextGeometry.min.js";
-      import { unzipSync } from "three/addons/libs/fflate.module.min.js";
-      import { texture, uv, equirectUV } from "three/tsl";
+      import * as threejs from 'three';
+      import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+      import { PDBLoader } from 'three/addons/loaders/PDBLoader.min.js';
+      import { FontLoader } from 'three/addons/loaders/FontLoader.min.js';
+      import { TextGeometry } from 'three/addons/geometries/TextGeometry.min.js';
+      import { unzipSync } from 'three/addons/libs/fflate.module.min.js';
+      import { texture, uv, equirectUV } from 'three/tsl';
 
-      THREE = three_js;
+      THREE = threejs;
       uSync = unzipSync;
 
       tsl_uv = uv;
@@ -84,15 +130,15 @@
 
       font_loader = new FontLoader( manager );
 
-      let font_url = "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/fonts/optimer_bold.typeface.json";
+      let font_url = 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/fonts/optimer_bold.typeface.json';
 
       await font_loader.load( font_url, function( font ) { label_font = font; } );
 
       labelGeometry = TextGeometry;
 
-      gui_legend = new GUI( { title: "Atoms Legend", autoPlace: false, container: document.getElementById("gui_position") } );
+      gui_legend = new GUI( { title: 'Atoms Legend', autoPlace: false, container: document.getElementById('gui_position') } );
 
-      gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
+      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
       gui.domElement.style.display = 'none';
 
       set_gui_position();
@@ -128,7 +174,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>PDB WebGPU (r178)</title>
+    <title>PDB WebGPU (r184)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -476,6 +522,7 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
         window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; if (progress.value === 0) mouse_wheel = true; }, false);
@@ -484,13 +531,16 @@
           if (progress.value === 0) {
             if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
               controls.listenToKeyEvents( window );
+              activeKeys.add( event.key ); // Track this key
               mouse_wheel = true;
             }
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
+          activeKeys.delete( event.key ); // Remove this key
+
           if (progress.value === 0) {
-            if (arrow_keys.some( k => k === event.key )) {
+            if (controls && activeKeys.size === 0) {
               controls.stopListenToKeyEvents();
               mouse_wheel = false;
             }
@@ -499,7 +549,7 @@
       }
 
       function resize() {
-        if (window.fullScreen || document.fullscreenElement || document.mozFullScreenElement ||
+        if (document.fullscreenElement || document.mozFullScreenElement ||
           document.msFullscreenElement || document.webkitFullscreenElement) {
 
           document.getElementById('btn_full_screen').style.backgroundColor = '#FFFF00';
@@ -533,8 +583,6 @@
           document.msFullscreenElement ? document.msExitFullscreen() : document.body.msRequestFullscreen();
         } else if (document.webkitFullscreenEnabled) {
           document.webkitFullscreenElement ? document.webkitExitFullscreen() : document.body.webkitRequestFullscreen();
-        } else if (window.fullScreen) {
-          // Do nothing. This fullscreen mode was triggered with F11 key press and requires the same again.
         }
       }
 
@@ -639,7 +687,7 @@
 
           await start_export();
 
-          const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.min.js" );
+          const { OBJExporter } = await import( '../static/jsm/exporters/OBJExporter.min.js' );
 
           let obj_exporter = new OBJExporter( manager );
 
@@ -684,7 +732,7 @@
 
           await start_export();
 
-          const { PLYExporter } = await import( "../static/jsm/exporters/PLYExporter.min.js" );
+          const { PLYExporter } = await import( '../static/jsm/exporters/PLYExporter.min.js' );
 
           let ply_exporter = new PLYExporter( manager );
 
@@ -718,7 +766,7 @@
 
           await start_export();
 
-          const { STLExporter } = await import( "../static/jsm/exporters/STLExporter.min.js" );
+          const { STLExporter } = await import( '../static/jsm/exporters/STLExporter.min.js' );
 
           let stl_exporter = new STLExporter( manager );
 
@@ -743,7 +791,7 @@
 
           await start_export();
 
-          const { ColladaExporter } = await import( "../static/jsm/exporters/ColladaExporter.min.js" );
+          const { ColladaExporter } = await import( '../static/jsm/exporters/ColladaExporter.min.js' );
 
           let dae_exporter = new ColladaExporter( manager );
 
@@ -781,7 +829,7 @@
 
           await start_export();
 
-          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+          const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
           let gltf_exporter = new GLTFExporter( manager );
 
@@ -839,7 +887,7 @@
 
           await start_export();
 
-          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+          const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
           let gltf_exporter = new GLTFExporter( manager );
 
@@ -912,7 +960,7 @@
 
           await start_export();
 
-          const { USDZExporter } = await import( "../static/jsm/exporters/USDZExporter.min.js" );
+          const { USDZExporter } = await import( '../static/jsm/exporters/USDZExporter.min.js' );
 
           let usdz_exporter = new USDZExporter( manager );
 
@@ -938,7 +986,7 @@
 
           await start_export();
 
-          const { Rhino3dmExporter } = await import( "../static/jsm/exporters/3DMExporter.min.js" );
+          const { Rhino3dmExporter } = await import( '../static/jsm/exporters/3DMExporter.min.js' );
 
           let rhino_exporter = new Rhino3dmExporter( manager );
 
@@ -964,7 +1012,7 @@
 
           await start_export();
 
-          const { AMFExporter } = await import( "../static/jsm/exporters/AMFExporter.min.js" );
+          const { AMFExporter } = await import( '../static/jsm/exporters/AMFExporter.min.js' );
 
           let amf_exporter = new AMFExporter( manager );
 
@@ -992,7 +1040,7 @@
 
           await start_export();
 
-          const { ThreeMFExporter } = await import( "../static/jsm/exporters/3MFExporter.min.js" );
+          const { ThreeMFExporter } = await import( '../static/jsm/exporters/3MFExporter.min.js' );
 
           let tmf_exporter = new ThreeMFExporter( manager );
 
@@ -1821,7 +1869,7 @@
             });
           } else if (fn_uc.endsWith('.TIF') || fn_uc.endsWith('.TIFF')) {
             if (tiff_loader === undefined) {
-              const { TIFFLoader } = await import( "three/addons/loaders/TIFFLoader.min.js" );
+              const { TIFFLoader } = await import( 'three/addons/loaders/TIFFLoader.min.js' );
               tiff_loader = new TIFFLoader( manager );
             }
 
@@ -1880,7 +1928,7 @@
               URL.revokeObjectURL( fii );
             });
           } else if (fn_uc.endsWith('.EXR') || fn_uc.endsWith('.HDR')) {
-            let loader = fn_uc.endsWith('.EXR') ? exr_loader : rgbe_loader;
+            let loader = fn_uc.endsWith('.EXR') ? exr_loader : hdr_loader;
 
             loader.load( URL.createObjectURL( fii ), async function( tex ) {
               URL.revokeObjectURL( fii );
@@ -2187,26 +2235,28 @@
           await reset_all( true );
         }
 
+        init_running = true;
+
         enable_disable( true );
 
         if (zip === undefined) zip = new JSZip();
 
         if (exr_loader === undefined) {
-          const { EXRLoader } = await import( "three/addons/loaders/EXRLoader.min.js" );
+          const { EXRLoader } = await import( 'three/addons/loaders/EXRLoader.min.js' );
           exr_loader = new EXRLoader( manager );
           manager.addHandler( /\.exr$/i, exr_loader );
         }
 
-        if (rgbe_loader === undefined) {
-          const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
-          rgbe_loader = new RGBELoader( manager );
-          manager.addHandler( /\.hdr$/i, rgbe_loader );
+        if (hdr_loader === undefined) {
+          const { HDRLoader } = await import( 'three/addons/loaders/HDRLoader.min.js' );
+          hdr_loader = new HDRLoader( manager );
+          manager.addHandler( /\.hdr$/i, hdr_loader );
         }
 
         if (ktx2_loader === undefined) {
-          const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
+          const { KTX2Loader } = await import( 'three/addons/loaders/KTX2Loader.min.js' );
           ktx2_loader = new KTX2Loader( manager );
-          ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/libs/basis/" );
+          ktx2_loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/basis/' );
           manager.addHandler( /\.ktx2$/i, ktx2_loader );
         }
 
@@ -2377,22 +2427,22 @@
         }
 
         if (controls === undefined) {
-          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+          const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
 
           controls = new OrbitControls( camera, renderer.domElement );
+          controls.enableZoom = true;
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.6;
           controls.rotateSpeed = 0.6;
           controls.keyPanSpeed = 0.6; 
           controls.panSpeed = 0.6;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.05;
           //controls.enableKeys = false;
-          //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
         }
 
         if (zip_file !== null) {
@@ -2500,6 +2550,8 @@
 
         console.timeEnd( 'Loading Time' );
 
+        init_running = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_message').style.display = 'none';
         document.getElementById('gui_position').style.display = 'block';
@@ -2511,7 +2563,7 @@
         gui_legend.open();
         set_gui_position();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+        if (isMobile === false) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
       function log_info() {
@@ -2528,6 +2580,8 @@
         }
 
         set_gui_position();
+
+        init_running = false;
 
         console.timeEnd( 'Loading Time' );
         console.log( 'Error loading model!' );
@@ -3041,7 +3095,7 @@
       // Logic from three.js SceneUtils.js function createMeshesFromInstancedMesh( instancedMesh )
 
       async function create_meshes( amf_export = false ) {
-        const { mergeVertices } = await import( "three/addons/utils/BufferGeometryUtils.min.js" );
+        const { mergeVertices } = await import( 'three/addons/utils/BufferGeometryUtils.min.js' );
 
         let meshes = new THREE.Group();
 
@@ -3123,10 +3177,10 @@
       /* Simplify */
 
       async function simplify( arrayBuffer ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
-        const { dedup, flatten, join, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
+        const { WebIO } = await import( '@gltf-transform/core' );
+        const { MeshoptSimplifier } = await import( 'meshoptimizer' );
+        const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
+        const { dedup, flatten, join, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
 
@@ -3153,10 +3207,10 @@
       /* Encode with draco compression - geometry */
 
       async function draco_compress( arrayBuffer ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
-        const { dedup, flatten, instance, join, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
+        const { WebIO } = await import( '@gltf-transform/core' );
+        const { MeshoptSimplifier } = await import( 'meshoptimizer' );
+        const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
+        const { dedup, flatten, instance, join, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         const io = new WebIO().registerExtensions( ALL_EXTENSIONS )
 
@@ -3198,11 +3252,10 @@
       /* Encode with meshopt compression - geometry, morphs, animations */
 
       async function meshopt_compress( arrayBuffer ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { MeshoptEncoder } = await import( "meshoptimizer_encoder" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
-        const { dedup, flatten, instance, join, meshopt, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
+        const { WebIO } = await import( '@gltf-transform/core' );
+        const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
+        const { MeshoptEncoder, MeshoptSimplifier } = await import( 'meshoptimizer' );
+        const { dedup, flatten, instance, join, meshopt, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         await MeshoptEncoder.ready;
 
@@ -3721,8 +3774,8 @@
 
     <script>
       async function document_ready() {
-        const WebGPU = await import( "three/addons/capabilities/WebGPU.min.js" );
-        const WebGL = await import( "three/addons/capabilities/WebGL.min.js" );
+        const WebGPU = await import( 'three/addons/capabilities/WebGPU.min.js' );
+        const WebGL = await import( 'three/addons/capabilities/WebGL.min.js' );
 
         gpu = WebGPU[ 'default' ].isAvailable();
         gl2 = WebGL[ 'default' ].isWebGL2Available();
