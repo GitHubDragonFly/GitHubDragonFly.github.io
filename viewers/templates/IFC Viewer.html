@@ -839,7 +839,7 @@
           geo = mergeGroups( nonIndexedGeo );
           nonIndexedGeo.dispose();
         } else {
-          geo = ex_ifc_obj.geometry.clone()
+          geo = ex_ifc_obj.geometry.clone();
         }
 
         let materials = ex_ifc_obj.material;
@@ -858,6 +858,7 @@
         }
 
         export_clone = new THREE.Mesh( geo, materials );
+        export_clone.geometry.center();
         export_clone.geometry.computeBoundingSphere();
         export_clone.geometry.computeBoundingBox();
         export_clone.geometry.userData = {};
@@ -1076,6 +1077,123 @@
         }
       }
 
+      async function parseGeospatialContext( mgr, modelID, api ) {
+        const geoContext = {
+          Type: "None",
+          CoordinateSystem: "Not Georeferenced / Local",
+          Properties: {}
+        };
+
+        try {
+          // Determine the safe IFC entity type IDs (using global window/module web_ifc if api.webIfc is missing them)
+          // web-ifc maps these to standard integers (e.g., IFCMAPCONVERSION is typically 3822105152 or similar depending on the compilation)
+          const targetMapConversionType = api.webIfc?.IFCMAPCONVERSION ?? (typeof web_ifc !== 'undefined' ? web_ifc.IFCMAPCONVERSION : null);
+          const targetRigidOperationType = api.webIfc?.IFCRIGIDOPERATION ?? (typeof web_ifc !== 'undefined' ? web_ifc.IFCRIGIDOPERATION : null);
+          const targetGridType = api.webIfc?.IFCGRID ?? (typeof web_ifc !== 'undefined' ? web_ifc.IFCGRID : null);
+
+          // 1. Try Projected Map Conversions first (UTM / Gauss-Krueger)
+          if (targetMapConversionType) {
+            const mapConversions = await mgr.getAllItemsOfType( modelID, targetMapConversionType, true );
+
+            if (mapConversions?.length > 0) {
+              const conversion = mapConversions[ 0 ];
+              const getIfcValue = ( p ) => p?._representationValue ?? p?.value ?? p?._internalValue;
+
+              let crsName = 'Projected CRS';
+              const crsTargetId = conversion.TargetCRS?.value ?? conversion.TargetCRS;
+
+              if (crsTargetId) {
+                const crsElement = await mgr.getItemProperties( modelID, parseInt( crsTargetId ) );
+                crsName = crsElement?.Name?.value || crsElement?.Name || 'Projected CRS';
+              }
+
+              geoContext.Type = 'Projected Grid';
+              geoContext.CoordinateSystem = crsName;
+
+              geoContext.Properties = {
+                EastingX: getIfcValue( conversion.Eastings ) ?? 'N/A',
+                NorthingY: getIfcValue( conversion.Northings ) ?? 'N/A',
+                OrthometricHeightZ: getIfcValue( conversion.OrthogonalHeight ) ?? getIfcValue( conversion.OrthometricHeight ) ?? 'N/A',
+                RotationVectorX: getIfcValue( conversion.XAxisAbscissa ) ?? 'N/A',
+                RotationVectorY: getIfcValue( conversion.XAxisOrdinate ) ?? 'N/A',
+                ScaleFactor: getIfcValue( conversion.Scale ) ?? '1.0 ( Default )'
+              };
+
+              return geoContext;
+            }
+          }
+
+          // 2. Fallback to Geographic Transformation maps (Rigid Operation)
+          if (targetRigidOperationType) {
+            const rigidOperations = await mgr.getAllItemsOfType( modelID, targetRigidOperationType, true );
+
+            if (rigidOperations?.length > 0) {
+              const operation = rigidOperations[ 0 ];
+              const opX = operation.FirstCoordinate?.value ?? operation.FirstCoordinate;
+              const opY = operation.SecondCoordinate?.value ?? operation.SecondCoordinate;
+              const opZ = operation.Height?.value ?? operation.Height;
+
+              let crsName = 'Geographic CRS';
+              const crsTargetId = operation.TargetCRS?.value ?? operation.TargetCRS;
+
+              if (crsTargetId) {
+                const crsElement = await mgr.getItemProperties( modelID, parseInt( crsTargetId ) );
+                crsName = crsElement?.Name?.value || crsElement?.Name || 'Geographic CRS';
+              }
+
+              geoContext.Type = 'Geographic Transformation';
+              geoContext.CoordinateSystem = crsName;
+
+              geoContext.Properties = {
+                OriginLongitudeX: opX ?? 'N/A',
+                OriginLatitudeY: opY ?? 'N/A',
+                HeightAnchorZ: opZ ?? 'N/A'
+              };
+
+              return geoContext;
+            }
+          }
+
+          // 3. Fallback to checking active IfcGrid nodes if neither match
+          if (targetGridType) {
+            const grids = await mgr.getAllItemsOfType( modelID, targetGridType, false );
+
+            if (grids?.length > 0) {
+              geoContext.Type = 'Local Engineering Grid';
+              geoContext.Properties = { LayoutEngine: 'Active ( IfcGrid Defined )' };
+              return geoContext;
+            }
+          }
+        } catch ( err ) {
+          console.warn( 'Failed to securely resolve geospatial contexts for bulk dictionary output: ', err );
+        }
+
+        // ==========================================
+        // UNIVERSAL SANITY CHECK
+        // ==========================================
+
+        const easting = parseFloat( geoContext.Properties.EastingX );
+        const northing = parseFloat( geoContext.Properties.NorthingY );
+        const rotX = parseFloat( geoContext.Properties.RotationVectorX );
+        const rotY = parseFloat( geoContext.Properties.RotationVectorY );
+
+        // 1. Fallback for corrupt or unset rotation arrays (Prevents 3D engine matrix crashes)
+        if (geoContext.Type === 'Projected Grid') {
+          if (isNaN( rotX ) || isNaN( rotY ) || ( Math.abs( rotX ) < 1e-5 && Math.abs( rotY ) < 1e-5 )) {
+            geoContext.Properties.RotationVectorX = 1;
+            geoContext.Properties.RotationVectorY = 0;
+            geoContext.Properties.Note = 'Degenerate rotation vectors auto-aligned to identity matrix.';
+          }
+        }
+
+        // 2. Flags suspiciously massive values without altering them
+        if (Math.abs( easting ) > 20000000 || Math.abs( northing ) > 20000000) {
+          geoContext.Properties.Warning = 'Values suspect of scale/unit inflation (e.g., millimeter export error).';
+        }
+
+        return geoContext;
+      }
+
       // Helper block to flatten nested Web-IFC material properties into an object keyed by Express ID
       function parseMaterials( materials ) {
         const cleanMaterials = {};
@@ -1187,6 +1305,12 @@
             // Macro task yield handler to prevent UI freezes on massive databases
             const yieldToBrowser = () => new Promise( resolve => setTimeout( resolve, 0 ) );
 
+            // ========================================================
+            // Extract the Global Spatial Context ONCE!
+            // ========================================================
+
+            const globalGeoContext = await parseGeospatialContext( mgr, modelID, api );
+
             // ==========================================
             // EXTRACTION LOOP UTILIZING NATIVE MACROS
             // ==========================================
@@ -1228,6 +1352,14 @@
                       GlobalID: itemProperties.GlobalId?.value || '',
                       Location: !isMobile ? ( spatialMap[ expressID ] || 'External / Unassigned' ) : 'External / Unassigned',
                       IfcType: rawTypeName.toUpperCase(),
+
+                      // 🌟 ENHANCEMENT: Attach system spatial references directly here
+                      GeospatialContext: {
+                        Type: globalGeoContext.Type,
+                        CoordinateSystem: globalGeoContext.CoordinateSystem,
+                        Properties: globalGeoContext.Properties
+                      },
+
                       PropertySets: propertySets ? parsePropertySets( propertySets ) : {},
                       TypeFeatures: typeFeatures ? parseTypeFeatures( Array.isArray( typeFeatures ) ? typeFeatures : [ typeFeatures ] ) : {}, 
                       Materials: materials ? parseMaterials( materials ) : {}
@@ -1285,7 +1417,7 @@
 
               zip.file( filename + '.gltf', blob );
 
-              let str = '_GLB';
+              let str = '_GLTF';
               if (meta) str += '_METADATA';
 
               await process_zip( '_GLTF', export_clone );
@@ -3884,7 +4016,109 @@
         const featureMetadataList = [];
         const seenProperties = new Set(); // Track unique property combinations
 
-        // 1. Add basic IFC info, device dependent
+        // DYNAMIC GEOSPATIAL EXTRACTION
+        // We look for globally defined Map Conversions and CRS structures in the model.
+        try {
+          let geoRefClass = 'Geospatial Reference (Projected Grid)';
+          let geoProps = null;
+          let gpsProps = null;
+
+          // 1. TRY IFCMAPCONVERSION PATH FIRST (UTM/GK code)
+          const mapConversions = await mgr.getAllItemsOfType( 0, web_ifc.IFCMAPCONVERSION, true );
+
+          if (mapConversions?.length > 0) {
+            const conversion = mapConversions[ 0 ];
+            const getIfcValue = ( prop ) => prop?._representationValue ?? prop?.value ?? prop?._internalValue;
+
+            let crsName = 'Projected CRS';
+            const crsTargetId = conversion.TargetCRS?.value ?? conversion.TargetCRS;
+
+            if (crsTargetId) {
+              const crsElement = await mgr.getItemProperties( 0, parseInt( crsTargetId ) );
+              crsName = crsElement?.Name?.value || crsElement?.Name || 'Projected CRS';
+            }
+
+            geoProps = {
+              'Coordinate System': crsName,
+              'Easting (X)': getIfcValue( conversion.Eastings ) ?? 'N/A',
+              'Northing (Y)': getIfcValue( conversion.Northings ) ?? 'N/A',
+              'Orthometric Height (Z)': getIfcValue( conversion.OrthogonalHeight ) ?? getIfcValue( conversion.OrthometricHeight ) ?? 'N/A',
+              'Map Rotation Vector X': getIfcValue( conversion.XAxisAbscissa ) ?? 'N/A',
+              'Map Rotation Vector Y': getIfcValue( conversion.XAxisOrdinate ) ?? 'N/A',
+              'Scale Factor': getIfcValue( conversion.Scale ) ?? '1.0 ( Default )'
+            };
+          }
+          // 2. FALLBACK: TRY IFCRIGIDOPERATION PATH
+          else {
+            const rigidOperations = await mgr.getAllItemsOfType( 0, web_ifc.IFCRIGIDOPERATION, true );
+
+            if (rigidOperations?.length > 0) {
+              const operation = rigidOperations[ 0 ];
+              geoRefClass = 'Geospatial Reference (Geographic Transformation)';
+
+              // In IfcRigidOperation, the arguments contain raw values or wrapped values
+              const opX = operation.FirstCoordinate?.value ?? operation.FirstCoordinate;   // Longitude factor
+              const opY = operation.SecondCoordinate?.value ?? operation.SecondCoordinate; // Latitude factor
+              const opZ = operation.Height?.value ?? operation.Height;                     // Height offset
+
+              let crsName = 'Geographic CRS';
+              const crsTargetId = operation.TargetCRS?.value ?? operation.TargetCRS;
+
+              if (crsTargetId) {
+                const crsElement = await mgr.getItemProperties( 0, parseInt( crsTargetId ) );
+                crsName = crsElement?.Name?.value || crsElement?.Name || "EPSG:4258";
+              }
+
+              geoProps = {
+                'Coordinate System': crsName,
+                'Origin Longitude (X)': opX ?? 'N/A',
+                'Origin Latitude (Y)': opY ?? 'N/A',
+                'Height Anchor (Z)': opZ ?? 'N/A'
+              };
+
+              // Generate the clean user-facing GPS data from the operation values
+              if (opY && opX) {
+                gpsProps = {
+                  'Latitude': `${opY.toFixed( 6 )}° N`,
+                  'Longitude': `${opX.toFixed( 6 )}° E`,
+                  'Elevation': opZ ?? 'N/A'
+                };
+              }
+            }
+          }
+
+          // Push to metadata array if we found something
+          if (geoProps) {
+            featureMetadataList.push( { class: geoRefClass, properties: geoProps } );
+          }
+
+          // 3. Fallback standard Site-based GPS processor if RigidOperation didn't create it
+          if (!geoProps) {
+            // If neither MapConversion nor RigidOperation was discovered, it's a local file
+            geoRefClass = 'Geospatial Reference (Local Grid)';
+
+            geoProps = {
+              'Coordinate System': 'Not Georeferenced / Local',
+              'Measurement Unit': 'Millimeter ( SI Unit )',
+              'Grid Layout Engine': 'Active ( IfcGrid Defined )'
+            };
+
+            gpsProps = {
+              'Latitude': 'N/A (Local Grid Only)',
+              'Longitude': 'N/A (Local Grid Only)',
+              'Elevation': '0.00 (Relative Origin)'
+            };
+
+            featureMetadataList.unshift(
+              { class: geoRefClass, properties: geoProps },
+              { class: 'Geodetic Position (GPS)', properties: gpsProps }
+            );
+          }
+        } catch ( geoError ) {
+          console.warn( 'Error resolving geographic operations: ', geoError );
+        }
+
+        // Add basic IFC info, device dependent
         if (!isMobile) {
           const level = spatialMap[ expressId ] || 'External / Unassigned';
 
@@ -3897,7 +4131,9 @@
         const properties = {};
         properties[ 'Express ID' ] = expressId;
         properties[ 'Global ID' ] = schema?.GlobalId?.value || 'N/A';
-        if (typeFeatures?.length === 0 && schema?.Name?.value) properties[ 'Schema Name' ] = schema.Name.value;
+
+        if (schema?.Name?.value) properties[ 'Name' ] = schema.Name.value;
+        if (schema?.ObjectType?.value) properties[ 'Type Object' ] = schema.ObjectType.value;
 
         featureMetadataList.push({
           class: 'IFC Identity',
