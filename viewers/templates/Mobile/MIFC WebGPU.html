@@ -1174,7 +1174,7 @@
         featureHighlightMesh = new THREE.Mesh(
           highlightGeo,
           new THREE.MeshBasicMaterial({
-            color: 0x80ff80,
+            color: 0x20ff20,
             transparent: true,
             opacity: 0.5,
             side: THREE.DoubleSide,
@@ -1269,7 +1269,7 @@
 
         if (!mouse) mouse = new THREE.Vector2();
 
-        const HIGHLIGHT_COLOR = new THREE.Color( 0x80ff80 );
+        const HIGHLIGHT_COLOR = new THREE.Color( 0x20ff20 );
 
         mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
         mouse.y = -( event.clientY / window.innerHeight ) * 2 + 1;
@@ -1305,20 +1305,124 @@
         const featureMetadataList = [];
         const seenProperties = new Set(); // Track unique property combinations
 
-        // 1. Add basic IFC info, device dependent
+        // DYNAMIC GEOSPATIAL EXTRACTION
+        // We look for globally defined Map Conversions and CRS structures in the model.
+        try {
+          let geoRefClass = 'Geospatial Reference (Projected Grid)';
+          let geoProps = null;
+          let gpsProps = null;
+
+          // 1. TRY IFCMAPCONVERSION PATH FIRST (UTM/GK code)
+          const mapConversions = await mgr.getAllItemsOfType( 0, web_ifc.IFCMAPCONVERSION, true );
+
+          if (mapConversions?.length > 0) {
+            const conversion = mapConversions[ 0 ];
+            const getIfcValue = ( prop ) => prop?._representationValue ?? prop?.value ?? prop?._internalValue;
+
+            let crsName = 'Projected CRS';
+            const crsTargetId = conversion.TargetCRS?.value ?? conversion.TargetCRS;
+
+            if (crsTargetId) {
+              const crsElement = await mgr.getItemProperties( 0, parseInt( crsTargetId ) );
+              crsName = crsElement?.Name?.value || crsElement?.Name || 'Projected CRS';
+            }
+
+            geoProps = {
+              'Coordinate System': crsName,
+              'Easting (X)': getIfcValue( conversion.Eastings ) ?? 'N/A',
+              'Northing (Y)': getIfcValue( conversion.Northings ) ?? 'N/A',
+              'Orthometric Height (Z)': getIfcValue( conversion.OrthogonalHeight ) ?? getIfcValue( conversion.OrthometricHeight ) ?? 'N/A',
+              'Map Rotation Vector X': getIfcValue( conversion.XAxisAbscissa ) ?? 'N/A',
+              'Map Rotation Vector Y': getIfcValue( conversion.XAxisOrdinate ) ?? 'N/A',
+              'Scale Factor': getIfcValue( conversion.Scale ) ?? '1.0 ( Default )'
+            };
+          }
+          // 2. FALLBACK: TRY IFCRIGIDOPERATION PATH
+          else {
+            const rigidOperations = await mgr.getAllItemsOfType( 0, web_ifc.IFCRIGIDOPERATION, true );
+
+            if (rigidOperations?.length > 0) {
+              const operation = rigidOperations[ 0 ];
+              geoRefClass = 'Geospatial Reference (Geographic Transformation)';
+
+              // In IfcRigidOperation, the arguments contain raw values or wrapped values
+              const opX = operation.FirstCoordinate?.value ?? operation.FirstCoordinate;   // Longitude factor
+              const opY = operation.SecondCoordinate?.value ?? operation.SecondCoordinate; // Latitude factor
+              const opZ = operation.Height?.value ?? operation.Height;                     // Height offset
+
+              let crsName = 'Geographic CRS';
+              const crsTargetId = operation.TargetCRS?.value ?? operation.TargetCRS;
+
+              if (crsTargetId) {
+                const crsElement = await mgr.getItemProperties( 0, parseInt( crsTargetId ) );
+                crsName = crsElement?.Name?.value || crsElement?.Name || "EPSG:4258";
+              }
+
+              geoProps = {
+                'Coordinate System': crsName,
+                'Origin Longitude (X)': opX ?? 'N/A',
+                'Origin Latitude (Y)': opY ?? 'N/A',
+                'Height Anchor (Z)': opZ ?? 'N/A'
+              };
+
+              // Generate the clean user-facing GPS data from the operation values
+              if (opY && opX) {
+                gpsProps = {
+                  'Latitude': `${opY.toFixed( 6 )}° N`,
+                  'Longitude': `${opX.toFixed( 6 )}° E`,
+                  'Elevation': opZ ?? 'N/A'
+                };
+              }
+            }
+          }
+
+          // Push to metadata array if we found something
+          if (geoProps) {
+            featureMetadataList.push( { class: geoRefClass, properties: geoProps } );
+          }
+
+          // 3. Fallback standard Site-based GPS processor if RigidOperation didn't create it
+          if (!geoProps) {
+            // If neither MapConversion nor RigidOperation was discovered, it's a local file
+            geoRefClass = 'Geospatial Reference (Local Grid)';
+
+            geoProps = {
+              'Coordinate System': 'Not Georeferenced / Local',
+              'Measurement Unit': 'Millimeter ( SI Unit )',
+              'Grid Layout Engine': 'Active ( IfcGrid Defined )'
+            };
+
+            gpsProps = {
+              'Latitude': 'N/A (Local Grid Only)',
+              'Longitude': 'N/A (Local Grid Only)',
+              'Elevation': '0.00 (Relative Origin)'
+            };
+
+            featureMetadataList.unshift(
+              { class: geoRefClass, properties: geoProps },
+              { class: 'Geodetic Position (GPS)', properties: gpsProps }
+            );
+          }
+        } catch ( geoError ) {
+          console.warn( 'Error resolving geographic operations: ', geoError );
+        }
+
+        // Add basic IFC info, device dependent
         if (!isMobile) {
-          const locationPath = spatialMap[ expressId ] || 'External / Unassigned';
+          const level = spatialMap[ expressId ] || 'External / Unassigned';
 
           featureMetadataList.push({
             class: "IFC Location",
-            properties: { 'Hierarchy': locationPath }
+            properties: { 'Hierarchy': level }
           });
         }
 
         const properties = {};
         properties[ 'Express ID' ] = expressId;
         properties[ 'Global ID' ] = schema?.GlobalId?.value || 'N/A';
-        if (typeFeatures?.length === 0 && schema?.Name?.value) properties[ 'Schema Name' ] = schema.Name.value;
+
+        if (schema?.Name?.value) properties[ 'Name' ] = schema.Name.value;
+        if (schema?.ObjectType?.value) properties[ 'Type Object' ] = schema.ObjectType.value;
 
         featureMetadataList.push({
           class: 'IFC Identity',
