@@ -248,7 +248,11 @@
           <option title="GLB - GL Transmission Format binary regular export" value="glb" onclick="export_gltf( true );">GLB</option>
           <option title="GLB - GL Transmission Format binary regular export with DRACO compression" value="glbdraco" onclick="export_gltf( true, true, false );">GLB_d</option>
           <option title="GLB - GL Transmission Format binary regular export with Meshopt compression" value="glbmeshopt" onclick="export_gltf( true, false, true );">GLB_m</option>
+          <option title="GLB - GL Transmission Format binary regular export with metadata" value="glbmeta" onclick="export_gltf( true, false, false, true );">GLB_meta</option>
+          <option title="GLB - GL Transmission Format binary regular export with DRACO compression and metadata" value="glbdracometa" onclick="export_gltf( true, true, false, true );">GLB_d_meta</option>
+          <option title="GLB - GL Transmission Format binary regular export with Meshopt compression and metadata" value="glbmeshoptmeta" onclick="export_gltf( true, false, true, true );">GLB_m_meta</option>
           <option title="GLTF - GL Transmission Format ascii regular export" value="gltf" onclick="export_gltf();">GLTF</option>
+          <option title="GLTF - GL Transmission Format ascii regular export with metadata" value="gltfmeta" onclick="export_gltf( false, false, false, true );">GLTF_meta</option>
           <option title="JSON - Three.js Format" value="json" onclick="export_json();">JSON</option>
           <option title="OBJ - Wavefront Technologies 3D Format" value="obj" onclick="export_obj();">OBJ</option>
           <option title="PLY - Polygon File Format ascii" value="ply" onclick="export_ply( false );">PLY_a</option>
@@ -669,6 +673,8 @@
           }
 
           gizmo.update();
+
+          mouse_wheel = true;
         }
       }
 
@@ -754,6 +760,7 @@
           ww = window.innerWidth;
           wh = window.innerHeight;
 
+          renderer.setPixelRatio( window.devicePixelRatio < 1.5 ? window.devicePixelRatio : 2.0 );
           renderer.setSize( ww, wh );
 
           camera.aspect = ww / wh;
@@ -802,7 +809,7 @@
     </script>
 
     <script>
-      function start_export() {
+      async function start_export( gltf_export = false, metadata = false ) {
         if (!link) {
           link = document.createElement( 'a' );
           link.style.display = 'none';
@@ -810,6 +817,7 @@
         }
 
         render_requested = false;
+
         document.getElementById('export_names').selectedIndex = 0;
         document.getElementById('div_message').style.display = 'none';
         document.getElementById('fixed_menu').style.display = 'none';
@@ -822,6 +830,39 @@
         document.getElementById('right_gui_position').style.display = 'none';
 
         set_filename();
+
+        let geo, export_clone;
+
+        if (ex_ifc_obj.geometry.groups?.length > 0) {
+          const { mergeGroups } = await import( 'three/addons/utils/BufferGeometryUtils.min.js' );
+          let nonIndexedGeo = ex_ifc_obj.geometry.toNonIndexed();
+          geo = mergeGroups( nonIndexedGeo );
+          nonIndexedGeo.dispose();
+        } else {
+          geo = ex_ifc_obj.geometry.clone()
+        }
+
+        let materials = ex_ifc_obj.material;
+
+        if (gltf_export) {
+          if (metadata) console.log( 'Exporting IFC metadata to JSON...' );
+
+          materials = ex_ifc_obj.material.map( m => new THREE.MeshStandardMaterial({
+            uuid: m.uuid,
+            color: m.color,
+            opacity: m.opacity,
+            transparent: m.transparent,
+            metalness: 0.1,
+            roughness: 0.8
+          }));
+        }
+
+        export_clone = new THREE.Mesh( geo, materials );
+        export_clone.geometry.computeBoundingSphere();
+        export_clone.geometry.computeBoundingBox();
+        export_clone.geometry.userData = {};
+
+        return export_clone;
       }
 
       function set_filename() {
@@ -838,12 +879,18 @@
         }
       }
 
-      async function process_zip( ext = '' ) {
+      async function process_zip( ext = '', export_clone ) {
         await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 9 } } ).then( function( zipped_file ) {
           link.href = URL.createObjectURL( zipped_file );
           URL.revokeObjectURL( zipped_file );
           link.download = filename + ext + '.zip';
           link.click();
+
+          if (export_clone) {
+            if (export_clone.geometry) export_clone.geometry.dispose();
+            if (export_clone.material) export_clone.material.forEach( m => m.dispose() );
+            export_clone = null;
+          }
 
           finish_export();
         });
@@ -881,15 +928,15 @@
 
       async function export_bim() {
         if (ifc_obj) {
-          await start_export();
+          const export_clone = await start_export();
 
           const { BIMExporter } = await import( '../static/jsm/exporters/BIMExporter.min.js' );
 
           let bim_exporter = new BIMExporter( manager );
 
-          await bim_exporter.parse( ex_ifc_obj.clone(), async function( dotbim ) {
+          await bim_exporter.parse( export_clone, async function( dotbim ) {
             zip.file( filename + '.bim', dotbim );
-            await process_zip( '_BIM' );
+            await process_zip( '_BIM', export_clone );
           }, function( error ) { handle_export_error( error ); } );
         }
       }
@@ -902,7 +949,7 @@
       }
 
       async function export_gcode() {
-        await start_export();
+        const export_clone = await start_export();
 
         const printer = document.getElementById('printer_select').value || 'Ender3';
         const filament = document.getElementById('filament_select').value || 'GenericPLA';
@@ -913,15 +960,15 @@
 
         let gcode_exporter = new GcodeExporter( manager );
 
-        await gcode_exporter.parse( ex_ifc_obj.clone(), async function( gcode ) {
+        await gcode_exporter.parse( export_clone, async function( gcode ) {
           zip.file( filename + '.gcode', gcode );
-          await process_zip( '_GCODE' );
+          await process_zip( '_GCODE', export_clone );
         }, function( error ) { handle_export_error( error ); }, options );
       }
 
       async function export_obj() {
         if (ifc_obj) {
-          await start_export();
+          const export_clone = await start_export();
 
           const { OBJExporter } = await import( '../static/jsm/exporters/OBJExporter.min.js' );
 
@@ -929,7 +976,7 @@
 
           let options = { filename: filename };
 
-          await obj_exporter.parse( ex_ifc_obj.clone(), async function( exported ) {
+          await obj_exporter.parse( export_clone, async function( exported ) {
             zip.file( filename + '.obj', exported[ 'obj' ] );
 
             if (exported[ 'mtl' ]) {
@@ -942,15 +989,15 @@
                   let blob = await new Blob( [ tex.data ], { type: 'image/png' } );
                   zip.file( `${ tex.name }.${ tex.ext }`, blob );
 
-                  if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ' );
+                  if (processed_index === exported[ 'tex' ].length - 1) await process_zip( '_OBJ', export_clone );
 
                   processed_index += 1;
                 });
               } else {
-                await process_zip( '_OBJ' );
+                await process_zip( '_OBJ', export_clone );
               }
             } else {
-              await process_zip( '_OBJ' );
+              await process_zip( '_OBJ', export_clone );
             }
           }, function( error ) { handle_export_error( error ); }, options );
         }
@@ -958,13 +1005,13 @@
 
       async function export_ply( binary = false ) {
         if (ifc_obj) {
-          await start_export();
+          const export_clone = await start_export();
 
           const { PLYExporter } = await import( '../static/jsm/exporters/PLYExporter.min.js' );
 
           let ply_exporter = new PLYExporter( manager );
 
-          ply_exporter.parse( ex_ifc_obj.clone(), async function( json ) {
+          ply_exporter.parse( export_clone, async function( json ) {
             let blob;
 
             if (binary === true) {
@@ -976,7 +1023,7 @@
 
             zip.file( filename + '.ply', blob );
 
-            await process_zip( binary === true ? '_PLY_binary' : '_PLY_ascii' );
+            await process_zip( binary === true ? '_PLY_binary' : '_PLY_ascii', export_clone );
 
           }, { binary: binary, littleEndian: true });
         }
@@ -984,30 +1031,30 @@
 
       async function export_stl() {
         if (ifc_obj) {
-          await start_export();
+          const export_clone = await start_export();
 
           const { STLExporter } = await import( '../static/jsm/exporters/STLExporter.min.js' );
 
           let stl_exporter = new STLExporter( manager );
 
-          let string = stl_exporter.parse( ex_ifc_obj.clone() ).split( ',' );
+          let string = stl_exporter.parse( export_clone ).split( ',' );
           let blob = new Blob( [ string ], { type: 'text/plain' } );
 
           zip.file( filename + '.stl', blob );
 
-          await process_zip( '_STL' );
+          await process_zip( '_STL', export_clone );
         }
       }
 
       async function export_dae() {
         if (ifc_obj) {
-          await start_export();
+          const export_clone = await start_export();
 
           const { ColladaExporter } = await import( '../static/jsm/exporters/ColladaExporter.min.js' );
 
           let dae_exporter = new ColladaExporter( manager );
 
-          let result = await dae_exporter.parse( ex_ifc_obj.clone() );
+          let result = await dae_exporter.parse( export_clone );
 
           zip.file( filename + '.dae', result.data );
 
@@ -1024,22 +1071,188 @@
               processed_index += 1;
             });
           } else {
-            await process_zip( '_DAE' );
+            await process_zip( '_DAE', export_clone );
           }
         }
       }
 
-      async function export_gltf( binary = false, draco = false, meshopt = false ) {
+      // Helper block to flatten nested Web-IFC material properties into an object keyed by Express ID
+      function parseMaterials( materials ) {
+        const cleanMaterials = {};
+        if (!materials || !Array.isArray( materials )) return cleanMaterials;
+
+        for ( const mat of materials ) {
+          // Case 1: The material is a set/layer assembly made of constituent parts (like a cavity wall)
+          if (mat.MaterialConstituents && Array.isArray( mat.MaterialConstituents )) {
+            for ( const constituent of mat.MaterialConstituents ) {
+              // Look for the inner Material object, or fall back to the wrapper constituent item
+              const target = constituent.Material || constituent;
+              const id = target.expressID;
+              const name = target.Name?.value;
+
+              if (id && name) cleanMaterials[ 'expressID ' + id ] = name;
+            }
+          }
+          // Case 2: It's a standard layer set or profile layer
+          else if (mat.MaterialLayers && Array.isArray( mat.MaterialLayers )) {
+            for ( const layer of mat.MaterialLayers ) {
+              const target = layer.Material || layer;
+              const id = target.expressID;
+              const name = target.Name?.value;
+
+              if (id && name) cleanMaterials[ 'expressID ' + id ] = name;
+            }
+          }
+          // Case 3: It's a different standard layer set or profile layer
+          else if (mat.Materials || mat.ForLayerSet?.Materials) {
+            const mat_set = mat.Materials || mat.ForLayerSet?.MaterialLayers;
+
+            for ( const layer of mat_set ) {
+              const target = layer.Material || layer;
+              const id = target.expressID;
+              const name = target.Name?.value;
+
+              if (id && name) cleanMaterials[ 'expressID ' + id ] = name;
+            }
+          }
+          // Case 4: It's just a single raw material item without nested layers
+          else {
+            const id = mat.expressID;
+            const name = mat.Name?.value;
+
+            if (id && name) cleanMaterials[ 'expressID ' + id ] = name;
+          }
+        }
+
+        return cleanMaterials;
+      }
+
+      // Helper block to clean up nested Web-IFC property set maps into raw arrays
+      function parsePropertySets( propertySets ) {
+
+        const cleanPropertySets = {};
+        if (!propertySets) return cleanPropertySets;
+
+        for ( const pset of propertySets ) {
+          const psetName = pset.Name?.value || "Property Set";
+          cleanPropertySets[ psetName ] = {};
+
+          if (pset.HasProperties) {
+            for ( const prop of pset.HasProperties ) {
+              const propName = prop.Name?.value;
+              const propValue = prop.NominalValue?.value; 
+
+              if (propName !== undefined && propValue !== undefined) {
+                cleanPropertySets[ psetName ][ propName ] = propValue;
+              }
+            }
+          }
+        }
+
+        return cleanPropertySets;
+      }
+
+      // Helper block to clean up nested Web-IFC type features maps into raw arrays
+      function parseTypeFeatures( typeFeatures ) {
+        const cleanTypeFeatures = {};
+        if (!typeFeatures) return cleanTypeFeatures;
+
+        for ( const feat of typeFeatures ) {
+          cleanTypeFeatures[ 'Type Name' ] = feat.Name?.value || 'N/A';
+          cleanTypeFeatures[ 'Type Tag' ] = feat.Tag?.value || 'N/A';;
+        }
+
+        return cleanTypeFeatures;
+      }
+
+      async function export_gltf( binary = false, draco = false, meshopt = false, meta = false ) {
         if (ifc_obj) {
-          await start_export();
+          const export_clone = await start_export( true, meta );
 
           const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
           let gltf_exporter = new GLTFExporter( manager );
-
           let options = { binary: binary };
 
-          gltf_exporter.parse( ex_ifc_obj.clone(), async json => {
+          // If metadata is requested, process the subsets and populate dictionary
+          if (meta) {
+            const metadata_dict = {};
+            const mgr = ifc_loader.ifcManager;
+            const modelID = ifc_obj.modelID ?? 0;
+            const categories = Object.keys( filtered_categories );
+            const api = mgr.ifcAPI; // Direct access to low-level fast WebAssembly maps
+
+            console.time( 'IFC to GLB Bulk Metadata Export completed in' );
+
+            // Macro task yield handler to prevent UI freezes on massive databases
+            const yieldToBrowser = () => new Promise( resolve => setTimeout( resolve, 0 ) );
+
+            // ==========================================
+            // EXTRACTION LOOP UTILIZING NATIVE MACROS
+            // ==========================================
+
+            let processedCounter = 0;
+
+            for ( const key of categories ) {
+              const subsetKey = `0 - DEFAULT - ${ key }`;
+              const subsetRecord = mgr.subsets.subsets[ subsetKey ];
+
+              if (subsetRecord?.mesh?.geometry?.index?.count > 0) {
+                const expressIDs = subsetRecord.ids; 
+                if (!expressIDs) continue;
+
+                for ( const expressID of expressIDs ) {
+                  processedCounter++;
+
+                  // Yield to browser execution stack dynamically every 200 records to keep UI responsive
+                  if (processedCounter % 200 === 0) await yieldToBrowser();
+
+                  try {
+                    // 1. Fetch raw item attributes instantly (Sync)
+                    const itemProperties = api.GetLine(modelID, expressID, false);
+                    if (!itemProperties) continue;
+
+                    // 2. Fetch properties concurrently for this element
+                    // We must await these as the api.properties methods return Promises in 0.0.77
+                    const [ propertySets, typeFeatures, materials ] = await Promise.all([
+                      api.properties.getPropertySets( modelID, expressID, true ).catch( () => [] ),
+                      api.properties.getTypeProperties( modelID, expressID, true ).catch( () => null ),
+                      api.properties.getMaterialsProperties( modelID, expressID, true ).catch( () => null )
+                    ]);
+
+                    // 3. Convert numerical type into an official IFC string definition (Sync)
+                    const rawTypeName = api.GetNameFromTypeCode( itemProperties.type ) || '';
+
+                    // 4. Map securely into the dictionary
+                    metadata_dict[ expressID ] = {
+                      GlobalID: itemProperties.GlobalId?.value || '',
+                      Location: !isMobile ? ( spatialMap[ expressID ] || 'External / Unassigned' ) : 'External / Unassigned',
+                      IfcType: rawTypeName.toUpperCase(),
+                      PropertySets: propertySets ? parsePropertySets( propertySets ) : {},
+                      TypeFeatures: typeFeatures ? parseTypeFeatures( Array.isArray( typeFeatures ) ? typeFeatures : [ typeFeatures ] ) : {}, 
+                      Materials: materials ? parseMaterials( materials ) : {}
+                    };
+                  } catch ( err ) {
+                    console.warn( `Could not extract properties for Express ID: ${expressID}`, err );
+                  }
+                }
+              }
+            }
+
+            console.timeEnd( 'IFC to GLB Bulk Metadata Export completed in' );
+            console.log( 'Exporting main IFC model...' );
+
+            // Append the standalone metadata JSON file directly to zip container
+            const meta_string = JSON.stringify( metadata_dict, null, 2 );
+            zip.file( 'metadata.json', new Blob( [ meta_string ], { type: 'application/json' } ) );
+
+            // Inject _EXPRESSID mapping into the actual GLTF clone nodes for raycaster
+            export_clone.traverse( ( child ) => {
+              if (child.isMesh) child.userData = { _EXPRESSID: "SUBSET_MESH" }; 
+            });
+          }
+
+          gltf_exporter.parse( export_clone, async json => {
             let blob;
 
             if (binary === true) {
@@ -1063,14 +1276,19 @@
               let str = '_GLB';
               if (draco === true) str += '_DRACO';
               else if (meshopt === true) str += '_MESHOPT';
+              if (meta) str += '_METADATA';
 
-              await process_zip( str );
+              await process_zip( str, export_clone );
             } else {
               let string = JSON.stringify( json, null, 2 );
               blob = new Blob( [ string ], { type: 'text/plain' } );
 
               zip.file( filename + '.gltf', blob );
-              await process_zip( '_GLTF' );
+
+              let str = '_GLB';
+              if (meta) str += '_METADATA';
+
+              await process_zip( '_GLTF', export_clone );
             }
           }, function( error ) { handle_export_error( error ); }, options);
         }
@@ -1078,7 +1296,7 @@
 
       async function export_assimp( format = 'fbx' ) {
         if (ifc_obj) {
-          await start_export();
+          const export_clone = await start_export();
 
           const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
@@ -1086,7 +1304,7 @@
 
           let options = { binary: true, maxTextureSize: 1024 };
 
-          gltf_exporter.parse( ex_ifc_obj.clone(), async function( json ) {
+          gltf_exporter.parse( export_clone, async function( json ) {
             // Use ASSIMPJS to export files
             assimpjs().then( async function( ajs ) {
               let result = ajs.ConvertFile( filename, format, new Uint8Array( json ), undefined, undefined );
@@ -1119,7 +1337,7 @@
               result = null;
               resultFile = null;
 
-              await process_zip( '_' + format.toUpperCase() );
+              await process_zip( '_' + format.toUpperCase(), export_clone );
             });
           }, function( error ) { handle_export_error( error ); }, options );
         }
@@ -1127,20 +1345,20 @@
 
       async function export_json() {
         if (ifc_obj) {
-          await start_export();
+          const export_clone = await start_export();
 
-          let json = JSON.stringify( structuredClone( ex_ifc_obj.clone().toJSON() ) );
+          let json = JSON.stringify( structuredClone( export_clone.toJSON() ) );
           let blob = new Blob( [ json ], { type: 'text/plain' } );
 
           zip.file( filename + '.json', blob );
 
-          await process_zip( '_JSON' );
+          await process_zip( '_JSON', export_clone );
         }
       }
 
       async function export_3dm() {
         if (ifc_obj) {
-          await start_export();
+          const export_clone = await start_export();
 
           const { Rhino3dmExporter } = await import( '../static/jsm/exporters/3DMExporter.min.js' );
 
@@ -1148,19 +1366,19 @@
 
           let options = { vertexColorsCorrection: 0 };
 
-          rhino_exporter.parse( ex_ifc_obj.clone(), async function( arrayBuffer ) {
+          rhino_exporter.parse( export_clone, async function( arrayBuffer ) {
             let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
 
             zip.file( filename + '.3dm', blob );
 
-            await process_zip( '_3DM' );
+            await process_zip( '_3DM', export_clone );
           }, function( error ) { handle_export_error( error ); }, options );
         }
       }
 
       async function export_amf() {
         if (ifc_obj) {
-          await start_export();
+          const export_clone = await start_export();
 
           const { AMFExporter } = await import( '../static/jsm/exporters/AMFExporter.min.js' );
 
@@ -1168,19 +1386,19 @@
 
           let options = { filename: filename };
 
-          amf_exporter.parse( ex_ifc_obj.clone(), async function( arrayBuffer ) {
+          amf_exporter.parse( export_clone, async function( arrayBuffer ) {
             let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
 
             zip.file( filename + '.amf', blob );
 
-            await process_zip( '_AMF' );
+            await process_zip( '_AMF', export_clone );
           }, function( error ) { handle_export_error( error ); }, options );
         }
       }
 
       async function export_3mf() {
         if (ifc_obj) {
-          await start_export();
+          const export_clone = await start_export();
 
           const { ThreeMFExporter } = await import( '../static/jsm/exporters/3MFExporter.min.js' );
 
@@ -1190,12 +1408,12 @@
 
           let options = { upAxis: 'Y_UP', thumbnail: thumbnail };
 
-          tmf_exporter.parse( ex_ifc_obj.clone(), async function( arrayBuffer ) {
+          tmf_exporter.parse( export_clone, async function( arrayBuffer ) {
             let blob = new Blob( [ arrayBuffer ], { type: 'application/octet-stream' } );
 
             zip.file( filename + '.3mf', blob );
 
-            await process_zip( '_3MF' );
+            await process_zip( '_3MF', export_clone );
           }, function( error ) { handle_export_error( error ); }, options );
         }
       }
@@ -1233,7 +1451,7 @@
 
       async function export_usdz() {
         if (ifc_obj) {
-          await start_export();
+          const export_clone = await start_export( true );
 
           const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
           const { GLTFLoader } = await import( '../static/jsm/loaders/GLTFLoader.min.js' );
@@ -1242,7 +1460,7 @@
 
           let glb_options = { binary: true, maxTextureSize: 1024 };
 
-          gltf_exporter.parse( ex_ifc_obj.clone(), async function( json ) {
+          gltf_exporter.parse( export_clone, async function( json ) {
             let blob = new Blob( [ await simplify( new Uint8Array( json ) ) ], { type: 'application/octet-stream' } );
 
             new GLTFLoader().load( URL.createObjectURL( blob ), async function( gltf ) {
@@ -1259,7 +1477,7 @@
 
                 zip.file( filename + '.usdz', blob );
 
-                await process_zip( '_USDZ' );
+                await process_zip( '_USDZ', export_clone );
               }, function( error ) { handle_export_error( error ); }, usdz_options );
             });
           }, function( error ) { handle_export_error( error ); }, glb_options );
@@ -3535,7 +3753,7 @@
         featureHighlightMesh = new THREE.Mesh(
           highlightGeo,
           new THREE.MeshBasicMaterial({
-            color: 0x80ff80,
+            color: 0x20ff20,
             transparent: true,
             opacity: 0.5,
             side: THREE.DoubleSide,
@@ -3630,7 +3848,7 @@
 
         if (!mouse) mouse = new THREE.Vector2();
 
-        const HIGHLIGHT_COLOR = new THREE.Color( 0x80ff80 );
+        const HIGHLIGHT_COLOR = new THREE.Color( 0x20ff20 );
 
         mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
         mouse.y = -( event.clientY / window.innerHeight ) * 2 + 1;
@@ -4132,7 +4350,7 @@
         const { WebIO } = await import( '@gltf-transform/core' );
         const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
         const { MeshoptSimplifier } = await import( 'meshoptimizer' );
-        const { dedup, flatten, instance, join, palette, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
+        const { dedup, flatten, instance, join, palette, partition, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
 
@@ -4147,6 +4365,7 @@
           weld(),
           simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
           prune(),
+          partition(),
           sparse( { ratio: 0.2 } )
         );
 
@@ -4164,7 +4383,7 @@
         const { WebIO } = await import( '@gltf-transform/core' );
         const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
         const { MeshoptSimplifier } = await import( 'meshoptimizer' );
-        const { dedup, flatten, instance, join, palette, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
+        const { dedup, flatten, instance, join, palette, partition, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
 
@@ -4183,6 +4402,7 @@
           weld(),
           simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
           prune(),
+          partition(),
           sparse( { ratio: 0.2 } )
         );
 
@@ -4209,7 +4429,7 @@
         const { WebIO } = await import( '@gltf-transform/core' );
         const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
         const { MeshoptEncoder, MeshoptSimplifier } = await import( 'meshoptimizer' );
-        const { dedup, flatten, instance, join, meshopt, palette, prune, resample, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
+        const { dedup, flatten, instance, join, meshopt, palette, partition, prune, resample, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         await MeshoptEncoder.ready;
 
@@ -4230,6 +4450,7 @@
           weld(),
           simplify( { simplifier: MeshoptSimplifier, ratio: 0.0, error: 0.0001, lockBorder: true } ),
           prune(),
+          partition(),
           sparse( { ratio: 0.2 } ),
           meshopt( { encoder: MeshoptEncoder, level: 'high' } )
         );
@@ -4517,7 +4738,7 @@
 
       async function render() {
         if (document.getElementById('animation_progress').style.display === 'none') {
-          if (render_requested === true) requestAnimationFrame( render );
+          if (render_requested) requestAnimationFrame( render );
         }
 
         if (ifc_obj) {
@@ -4525,7 +4746,7 @@
             progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
 
             // Reset ifc_obj rotational values
-            if (reset_rotation === true) {
+            if (reset_rotation) {
               ifc_obj.rotation.set( 0, 0, 0 );
               reset_rotation = false;
             }
@@ -4571,7 +4792,7 @@
             renderer.clear();
             renderer.render( scene, camera );
 
-            if (gizmo && gizmo.enabled === true) gizmo.render();
+            if (gizmo && gizmo.enabled) gizmo.render();
           }
         }
       }
