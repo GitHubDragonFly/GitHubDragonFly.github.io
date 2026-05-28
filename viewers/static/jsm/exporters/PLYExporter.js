@@ -419,6 +419,8 @@ class PLYExporter {
 
 				normalMatrixWorld.getNormalMatrix( mesh.matrixWorld );
 
+				let j = 0;
+
 				// form each line
 				for ( let i = 0, l = vertices.count; i < l; i ++ ) {
 
@@ -473,7 +475,7 @@ class PLYExporter {
 					}
 
 					// Color information
-					if ( includeColors === true ) {
+					if ( includeColors ) {
 
 						if ( colors != null ) {
 
