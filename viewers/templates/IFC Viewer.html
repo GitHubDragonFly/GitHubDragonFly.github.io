@@ -100,7 +100,7 @@
       var initial_transparency, initial_transparency_array;
       var selected_ifc_file, selected_ifc_url_file, selected_url_file = '';
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
-      var raycaster, mouse, mouseDownPos, spatialStructure, spatialMap;
+      var raycaster, mouse, mouseDownPos, spatialStructure, spatialMap, safeGeometry;
       var pickedObject, featureHighlightMesh, hasMetadata, click_listener_added = false;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
@@ -833,13 +833,21 @@
 
         let geo, export_clone;
 
-        if (ex_ifc_obj.geometry.groups?.length > 0) {
+        if (safeGeometry.groups?.length > 0) {
           const { mergeGroups } = await import( 'three/addons/utils/BufferGeometryUtils.min.js' );
-          let nonIndexedGeo = ex_ifc_obj.geometry.toNonIndexed();
+
+          // 1. Convert to non-indexed layout first
+          let nonIndexedGeo = safeGeometry.toNonIndexed();
+
+          // 2. Filter out the empty groups, fixing groups with count: 0
+          // Copy the groups to avoid mutating the original safeGeometry
+          nonIndexedGeo.groups = safeGeometry.groups.filter( group => group.count > 0 );
+
+          // 3. mergeGroups can safely optimize the remaining valid groups
           geo = mergeGroups( nonIndexedGeo );
-          nonIndexedGeo.dispose();
+          geo.computeVertexNormals();
         } else {
-          geo = ex_ifc_obj.geometry.clone();
+          geo = safeGeometry.clone();
         }
 
         let materials = ex_ifc_obj.material;
@@ -847,20 +855,32 @@
         if (gltf_export) {
           if (metadata) console.log( 'Exporting IFC metadata to JSON...' );
 
-          materials = ex_ifc_obj.material.map( m => new THREE.MeshStandardMaterial({
-            uuid: m.uuid,
-            color: m.color,
-            opacity: m.opacity,
-            transparent: m.transparent,
-            metalness: 0.1,
-            roughness: 0.8
-          }));
+          materials = ex_ifc_obj.material.map( m => {
+            let safeOpacity = m.opacity;
+
+            if (m.transparent && safeOpacity === 0) safeOpacity = 0.3; 
+
+            return new THREE.MeshStandardMaterial({
+              uuid: m.uuid,
+              side: m.side,
+              color: m.color,
+              opacity: safeOpacity,
+              transparent: m.transparent,
+              metalness: m.transparent ? 0.9 : 0.05,
+              roughness: m.transparent ? 0.1 : 0.8,
+              depthWrite: m.transparent ? false : true
+            });
+          });
         }
 
         export_clone = new THREE.Mesh( geo, materials );
-        export_clone.geometry.center();
         export_clone.geometry.computeBoundingSphere();
         export_clone.geometry.computeBoundingBox();
+        export_clone.updateWorldMatrix( true, true );
+
+        // Remove any extra data
+        for ( const key of Object.keys( export_clone.geometry.userData ) ) delete export_clone.geometry.userData[ key ];
+
         export_clone.geometry.userData = {};
 
         return export_clone;
@@ -3283,6 +3303,8 @@
         ifc_loader.load( URL.createObjectURL( selected_ifc_file ), function( object ) {
           URL.revokeObjectURL( selected_ifc_file );
 
+          safeGeometry = object.geometry.clone();
+
           ifc_obj = new THREE.Object3D();
           ex_ifc_obj = object;
 
@@ -3332,6 +3354,8 @@
           }
 
           ifc_loader.load( selected_ifc_url_file, function( object ) {
+            safeGeometry = object.geometry.clone();
+
             ifc_obj = new THREE.Object3D();
             ex_ifc_obj = object;
 
@@ -5298,6 +5322,11 @@
         }
 
         ex_ifc_obj = undefined;
+
+        if (safeGeometry) {
+          safeGeometry.dispose();
+          safeGeometry = null;
+        }
 
         renderer.clear();
 
