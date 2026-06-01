@@ -3230,57 +3230,34 @@
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it hopefully comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( Obj );
-        let size = bounding_box.getSize( new THREE.Vector3() );
-        let center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        // Move to the center
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length() ) ) );
+        camera.lookAt( center );
 
-        if (center.x !== 0) Obj.translateX( center.x );
-        if (center.y !== 0) Obj.translateY( center.y );
-        if (center.z !== 0) Obj.translateZ( center.z );
+        // Center root
+        Obj.position.sub( center );
 
-        // Scale according to window width / height, whichever is greater
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist );
+        camera.lookAt( 0, 0, 0 );
 
-        if (ww > wh) {
-          Obj.scale.multiplyScalar( ( wh / size.y ) * 0.15 );
-        } else {
-          Obj.scale.multiplyScalar( ( ww / size.x ) * 0.15 );
-        }
-
-        // Get center coordinates and move to the center again
-
-        bounding_box.setFromObject( Obj );
-        size = bounding_box.getSize( new THREE.Vector3() );
-        center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
-
-        if (center.x !== 0) Obj.translateX( center.x );
-        if (center.y !== 0) Obj.translateY( center.y );
-        if (center.z !== 0) Obj.translateZ( center.z );
-
-        // Scale again and re-center if the model's width / height is greater than the screen's width / height
-
-        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
-          Obj.scale.multiplyScalar( ( ww / (ww > wh ? size.x : size.y) ) );
-
-          bounding_box.setFromObject( Obj );
-          size = bounding_box.getSize( new THREE.Vector3() );
-          center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
-
-          if (center.x !== 0) Obj.translateX( center.x );
-          if (center.y !== 0) Obj.translateY( center.y );
-          if (center.z !== 0) Obj.translateZ( center.z );
-        }
-
-        // Set the camera's z distance
-
-        camera.position.z = bounding_box.max.z + 250;
+        // ========================================================
+        // POST-CENTERING ADJUSTMENT
+        // ========================================================
+        // Now that the model is sitting safely at (0,0,0), we no longer 
+        // need a 100-million unit far plane. We tighten it dynamically!
+        camera.near = 0.1;
+        camera.far = dist * 4;
         camera.updateProjectionMatrix();
 
-        mouse_wheel = true;
+        resize();
       }
 
       function set_model_scale( scale ) {
@@ -3829,7 +3806,7 @@
         if (grid === undefined) grid = new THREE.GridHelper( 200, 200, 'yellow' );
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.05, 1e8 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -3939,95 +3916,64 @@
               object_is_points = true;
             }
 
-            if (Array.isArray( child.material )) {
-              let child_count_array = 1;
+            const mats = Array.isArray( child.material ) ? child.material : [ child.material ];
+            let child_count_array = 1;
 
-              initial_opacity_array[ child.name ] = {};
-              initial_transparency_array[ child.name ] = {};
-              original_color_array[ child.name ] = {};
-              original_side_array[ child.name ] = {};
-              original_vertex_color_array[ child.name ] = {};
+            initial_opacity_array[ child.name ] = {};
+            initial_transparency_array[ child.name ] = {};
+            original_color_array[ child.name ] = {};
+            original_side_array[ child.name ] = {};
+            original_vertex_color_array[ child.name ] = {};
 
-              child.material.forEach( mtrl => {
-                set_texture_colorSpace( mtrl );
+            mats.forEach( m => {
+              set_texture_colorSpace( m );
 
-                if (mtrl.isMeshPhysicalMaterial === true) physical_mtl = true;
+              if (m.isMeshPhysicalMaterial === true) physical_mtl = true;
 
-                if ((mtrl.aoMap || mtrl.lightMap) && child.geometry.attributes.uv1 === undefined &&
-                  child.geometry.attributes.uv !== undefined) {
-
-                  child.geometry.setAttribute( 'uv1', child.geometry.attributes.uv );
-                }
-
-                if (mtrl.aoMap) mtrl.aoMap.channel = 1;
-                if (mtrl.lightMap) mtrl.lightMap.channel = 1;
-
-                // Enable post processing button
-                if (mtrl.emissiveMap || (mtrl.emissive && (mtrl.emissive.r !== 0 ||
-                  mtrl.emissive.g !== 0 || mtrl.emissive.b !== 0))) {
-
-                  document.getElementById('btn_bloom').disabled = false;
-                  emissive_present = true;
-                }
-
-                if (! mtrl.isMeshStandardMaterial) {
-                  mtrl.castShadow = true;
-                  mtrl.receiveShadow = true;
-                }
-
-                mtrl.vertexColors = child.geometry.hasAttribute( 'color' );
-
-                if (child.isPoints) mtrl.size = isMobile === true ? 0.8 : 1.25;
-
-                initial_opacity_array[ child.name ][ child_count_array ] = mtrl.opacity;
-                initial_transparency_array[ child.name ][ child_count_array ] = mtrl.transparent;
-                original_color_array[ child.name ][ child_count_array ] = new THREE.Color( mtrl.color );
-                original_side_array[ child.name ][ child_count_array ] = mtrl.side;
-                original_vertex_color_array[ child.name ][ child_count_array ] = mtrl.vertexColors;
-
-                mtrl.needsUpdate = true;
-
-                child_count_array += 1;
-              });
-            } else {
-              set_texture_colorSpace( child.material );
-
-              if (child.material.isMeshPhysicalMaterial === true) physical_mtl = true;
-
-              if ((child.material.aoMap || child.material.lightMap) && child.geometry.attributes.uv1 === undefined &&
+              if ((m.aoMap || m.lightMap) && child.geometry.attributes.uv1 === undefined &&
                 child.geometry.attributes.uv !== undefined) {
 
                 child.geometry.setAttribute( 'uv1', child.geometry.attributes.uv );
               }
 
-              if (child.material.aoMap) child.material.aoMap.channel = 1;
-              if (child.material.lightMap) child.material.lightMap.channel = 1;
+              if (m.aoMap) m.aoMap.channel = 1;
+              if (m.lightMap) m.lightMap.channel = 1;
 
               // Enable post processing button
-              if (child.material.emissiveMap || (child.material.emissive && (child.material.emissive.r !== 0 ||
-                child.material.emissive.g !== 0 || child.material.emissive.b !== 0))) {
+              if (m.emissiveMap || (m.emissive && (m.emissive.r !== 0 ||
+                m.emissive.g !== 0 || m.emissive.b !== 0))) {
 
                 document.getElementById('btn_bloom').disabled = false;
                 emissive_present = true;
               }
 
-              if (! child.material.isMeshStandardMaterial) {
-                child.material.castShadow = true;
-                child.material.receiveShadow = true;
+              if (!m.isMeshStandardMaterial) {
+                m.castShadow = true;
+                m.receiveShadow = true;
               }
 
-              child.material.vertexColors = child.geometry.hasAttribute( 'color' );
+              m.vertexColors = child.geometry.hasAttribute( 'color' );
 
-              if (child.isPoints) child.material.size = isMobile === true ? 0.8 : 1.25;
+              if (child.isPoints) m.size = isMobile === true ? 0.8 : 1.25;
 
-              initial_opacity[ child.name ] = child.material.opacity;
-              initial_transparency[ child.name ] = child.material.transparent;
-              original_color[ child.name ] = new THREE.Color( child.material.color );
-              original_side[ child.name ] = child.material.side;
-              original_vertex_colors[ child.name ] = child.material.vertexColors;
+              if (mats.length > 1) {
+                initial_opacity_array[ child.name ][ child_count_array ] = m.opacity;
+                initial_transparency_array[ child.name ][ child_count_array ] = m.transparent;
+                original_color_array[ child.name ][ child_count_array ] = new THREE.Color( m.color );
+                original_side_array[ child.name ][ child_count_array ] = m.side;
+                original_vertex_color_array[ child.name ][ child_count_array ] = m.vertexColors;
+              } else {
+                initial_opacity[ child.name ] = m.opacity;
+                initial_transparency[ child.name ] = m.transparent;
+                original_color[ child.name ] = new THREE.Color( m.color );
+                original_side[ child.name ] = m.side;
+                original_vertex_colors[ child.name ] = m.vertexColors;
+              }
 
-              child.material.needsUpdate = true;
-            }
+              m.needsUpdate = true;
+
+              child_count_array += 1;
+            });
           }
 
           child_count += 1;
@@ -4474,8 +4420,7 @@
       async function finish_loading() {
         enable_disable( false );
 
-        set_initial_scale();
-        resize();
+        frame_camera();
 
         Obj.traverse( function( child ) {
           if (child.isMesh || child.isPoints || child.isLine) {
@@ -5629,10 +5574,8 @@
       }
 
       async function render() {
-        if (render_requested === true) requestAnimationFrame( render );
-
         if (Obj) {
-          if (first_run === true || mouse_down === true || mouse_wheel === true || reset_rotation === true ||
+          if (first_run || mouse_down || mouse_wheel || reset_rotation ||
             rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
 
             // Reset Obj rotational values
@@ -5653,7 +5596,7 @@
             // If it might be slow to render initially
             if (first_run === true) {
               fr_count ++;
-              if (fr_count > 10) {
+              if (fr_count > 15) {
                 mouse_wheel = true;
                 first_run = false;
                 fr_count = 0;
@@ -5661,7 +5604,7 @@
               }
             } else {
               if (mouse_wheel === true) {
-                if (count > 5) {
+                if (count > 10) {
                   mouse_wheel = false;
                   count = 0;
                 } else {
@@ -5679,6 +5622,8 @@
             if (bloom_enabled === false) renderer.render( scene, camera );
           }
         }
+
+        if (render_requested) requestAnimationFrame( render );
       }
 
       async function reset_only() {
