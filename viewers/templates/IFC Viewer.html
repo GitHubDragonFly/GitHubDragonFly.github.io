@@ -22,6 +22,8 @@
           if ((event.target.src || '').includes('jquery')) {
             alert('jQuery failed to load. Limited functionality. Check your internet connection!');
           }
+
+          if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
         }
       }, true); // The 'true' here is vital; it enables the "capturing" phase
 
@@ -36,6 +38,8 @@
           column: colno,    // Column number
           errorObj: error   // The actual Error object (includes stack trace)
         });
+
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
 
         // Returning 'true' prevents the error from showing up in the browser console
         return false; 
@@ -889,9 +893,9 @@
 
       function set_filename() {
         if (selected_ifc_file !== null) {
-          filename = selected_ifc_file.name.substring( 0, selected_ifc_file.name.lastIndexOf('.') );
+          filename = selected_ifc_file.name.substring( 0, selected_ifc_file.name.lastIndexOf( '.' ) );
         } else {
-          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') );
+          filename = selected_url_file.substring( selected_url_file.lastIndexOf( '/' ) + 1, selected_url_file.lastIndexOf( '.' ) );
         }
 
         if (!filename || filename === '') {
@@ -1098,10 +1102,199 @@
         }
       }
 
+      async function getProjectLengthUnit( mgr ) {
+        try {
+          // 1. Find the project instance
+          const projects = await mgr.getAllItemsOfType( 0, web_ifc.IFCPROJECT, true );
+          if (!projects || projects.length === 0) return 'Millimeter (Assumed)';
+
+          const project = projects[ 0 ];
+          const unitAssignmentId = project.UnitsInContext?.value ?? project.UnitsInContext;
+          if (!unitAssignmentId) return 'Millimeter ( Assumed )';
+
+          // 2. Fetch the Unit Assignment
+          const unitAssignment = await mgr.getItemProperties( 0, parseInt( unitAssignmentId ) );
+          const unitIds = unitAssignment.Units || [];
+
+          for (const unitRef of unitIds) {
+            const unitId = unitRef.value ?? unitRef;
+            const unitProps = await mgr.getItemProperties( 0, parseInt( unitId ) );
+
+            // 3. Check if it is a LENGTHUNIT
+            if (unitProps.UnitType?.value === 'LENGTHUNIT') {
+              // If it's a standard SI Unit (Meter, Millimeter, etc.)
+              if (unitProps.Name?.value) {
+                let prefix = unitProps.Prefix?.value || ''; // e.g., "MILLI"
+                let name = unitProps.Name.value;            // e.g., "METER"
+
+                // Format nicely: MILLI + METER -> Millimeter
+                let fullName = ( prefix + name ).toLowerCase();
+                return fullName.charAt( 0 ).toUpperCase() + fullName.slice( 1 );
+              }
+
+              // If it's an imperial/conversion-based unit (Foot, Inch)
+              if (unitProps.Name) {
+                return unitProps.Name; // Returns text like "FOOT" or "INCH"
+              }
+            }
+          }
+        } catch ( err ) {
+          console.warn( 'Could not extract project unit: ', err );
+        }
+
+        return 'Millimeter (Fallback)';
+      }
+
+      // Crawler using duck-typing footprint matches
+      async function findExtrusionSolidDeep( mgr, modelId, expressId ) {
+        if (!expressId) return null;
+
+        try {
+          const node = await mgr.getItemProperties( modelId, parseInt( expressId ) );
+          if (!node) return null;
+
+          // Direct Match: If it has both SweptArea and Depth properties, it's our extrusion!
+          if (node.SweptArea !== undefined && node.Depth !== undefined) {
+            return node;
+          }
+
+          // Trace Boolean Operations
+          if (node.FirstOperand) {
+            const firstId = node.FirstOperand.value ?? node.FirstOperand;
+            const result = await findExtrusionSolidDeep( mgr, modelId, firstId );
+            if (result) return result;
+          }
+
+          // Trace Mapped References
+          if (node.MappingSource) {
+            const mapSourceId = node.MappingSource.value ?? node.MappingSource;
+            const mapSource = await mgr.getItemProperties( modelId, parseInt( mapSourceId ) );
+            const mappedRepId = mapSource?.MappedRepresentation?.value ?? mapSource?.MappedRepresentation;
+            const result = await findExtrusionSolidDeep( mgr, modelId, mappedRepId );
+            if (result) return result;
+          }
+
+          // Trace deep item lists
+          if (Array.isArray( node.Items )) {
+            for ( const itemRef of node.Items ) {
+              const nextId = itemRef.value ?? itemRef;
+              const result = await findExtrusionSolidDeep( mgr, modelId, nextId );
+              if (result) return result;
+            }
+          }
+        } catch ( e ) {
+          // Structural skip
+        }
+
+        return null;
+      }
+
+      async function extractExtrusionData( mgr, modelId, geomItem ) {
+        const depth = geomItem.Depth?._representationValue ?? geomItem.Depth?.value ?? geomItem.Depth;
+        const profileId = geomItem.SweptArea?.value ?? geomItem.SweptArea;
+        let profileProps = {};
+
+        if (profileId) {
+          const profile = await mgr.getItemProperties( modelId, parseInt( profileId ) );
+          const pType = profile.__type || profile.name || 'Standard Footprint';
+
+          let xDim = profile.XDim?._representationValue ?? profile.XDim?.value ?? profile.XDim;
+          let yDim = profile.YDim?._representationValue ?? profile.YDim?.value ?? profile.YDim;
+
+          // Force fallback: If dimensions are missing, look for structural sub-curves or points directly
+          if (( xDim === undefined || xDim === null ) && ( yDim === undefined || yDim === null )) {
+            // Check for an outer curve reference (standard for arbitrary profiles)
+            const outerCurveId = profile.OuterCurve?.value ?? profile.OuterCurve;
+            let targetNode = profile;
+
+            if (outerCurveId) {
+              targetNode = await mgr.getItemProperties( modelId, parseInt( outerCurveId ) );
+            }
+
+            // Collect points from wherever they might be sitting in this profile node tree
+            const points = targetNode.Points || targetNode.Polygon || targetNode.Segments || [];
+            let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+
+            if (points.length > 0) {
+              for ( const ptRef of points ) {
+                const ptId = ptRef.value ?? ptRef;
+                const pt = await mgr.getItemProperties( modelId, parseInt( ptId ) );
+                if (!pt) continue;
+
+                // Some nodes have coordinates directly, some are nested inside segments/points
+                const coords = pt.Coordinates || pt.Location?.Coordinates || [];
+                const cx = coords[ 0 ]?._representationValue ?? coords[ 0 ]?.value ?? coords[ 0 ];
+                const cy = coords[ 1 ]?._representationValue ?? coords[ 1 ]?.value ?? coords[ 1 ];
+
+                if (typeof cx === 'number' && typeof cy === 'number') {
+                  if (cx < minX) minX = cx;
+                  if (cx > maxX) maxX = cx;
+                  if (cy < minY) minY = cy;
+                  if (cy > maxY) maxY = cy;
+                }
+              }
+            }
+
+            if (minX !== Infinity) {
+              xDim = maxX - minX;
+              yDim = maxY - minY;
+            }
+          }
+
+          profileProps = {
+            'Profile Width (X)': xDim ?? 'N/A',
+            'Profile Depth (Y)': yDim ?? 'N/A',
+            'Profile Shape': pType
+          };
+        }
+
+        return {
+          'Extrusion Depth': depth,
+          ...profileProps
+        };
+      }
+
+      async function getExtrusionProperties( mgr, modelId, expressId ) {
+        try {
+          const elementProps = await mgr.getItemProperties( modelId, expressId );
+          const shapeRepresentationId = elementProps.Representation?.value ?? elementProps.Representation;
+          if (!shapeRepresentationId) return null;
+
+          const prodShape = await mgr.getItemProperties( modelId, parseInt( shapeRepresentationId ) );
+          const repIds = prodShape.Representations || [];
+
+          for ( const repRef of repIds ) {
+            const repId = repRef.value ?? repRef;
+            const representation = await mgr.getItemProperties( modelId, parseInt( repId ) );
+
+            // 1. Look for the structural body representation
+            if (representation.RepresentationType?.value === 'SweptSolid' || representation.RepresentationIdentifier?.value === 'Body') {
+              const items = representation.Items || [];
+
+              for ( const itemRef of items ) {
+                const itemId = itemRef.value ?? itemRef;
+                const solid = await findExtrusionSolidDeep( mgr, modelId, itemId );
+
+                if (solid) {
+                  return await extractExtrusionData( mgr, modelId, solid );
+                }
+              }
+            }
+          }
+        } catch (err) {
+          console.warn( 'Could not extract extrusion geometry: ', err );
+        }
+
+        return null;
+      }
+
       async function parseGeospatialContext( mgr, modelID, api ) {
+        const activeUnit = await getProjectLengthUnit( mgr ); 
+
         const geoContext = {
-          Type: "None",
-          CoordinateSystem: "Not Georeferenced / Local",
+          CoordinateSystem: 'Not Georeferenced',
+          MeasurementUnit: `${activeUnit}`,
+          Type: 'None',
           Properties: {}
         };
 
@@ -1128,8 +1321,9 @@
                 crsName = crsElement?.Name?.value || crsElement?.Name || 'Projected CRS';
               }
 
-              geoContext.Type = 'Projected Grid';
               geoContext.CoordinateSystem = crsName;
+              geoContext.MeasurementUnit = `${activeUnit}`;
+              geoContext.Type = 'Projected Grid';
 
               geoContext.Properties = {
                 EastingX: getIfcValue( conversion.Eastings ) ?? 'N/A',
@@ -1162,8 +1356,9 @@
                 crsName = crsElement?.Name?.value || crsElement?.Name || 'Geographic CRS';
               }
 
-              geoContext.Type = 'Geographic Transformation';
               geoContext.CoordinateSystem = crsName;
+              geoContext.MeasurementUnit = `${activeUnit}`;
+              geoContext.Type = 'Geographic Transformation';
 
               geoContext.Properties = {
                 OriginLongitudeX: opX ?? 'N/A',
@@ -1181,7 +1376,7 @@
 
             if (grids?.length > 0) {
               geoContext.Type = 'Local Engineering Grid';
-              geoContext.Properties = { LayoutEngine: 'Active ( IfcGrid Defined )' };
+              geoContext.Properties = { LayoutEngine: 'Active (IfcGrid Defined)' };
               return geoContext;
             }
           }
@@ -1276,13 +1471,38 @@
           const psetName = pset.Name?.value || "Property Set";
           cleanPropertySets[ psetName ] = {};
 
-          if (pset.HasProperties) {
+          if (pset.HasProperties && Array.isArray( pset.HasProperties )) {
             for ( const prop of pset.HasProperties ) {
               const propName = prop.Name?.value;
               const propValue = prop.NominalValue?.value; 
 
               if (propName !== undefined && propValue !== undefined) {
                 cleanPropertySets[ psetName ][ propName ] = propValue;
+              }
+            }
+          }
+
+          // Handle Base Quantities (IfcElementQuantity)
+          if (pset.Quantities && Array.isArray( pset.Quantities )) {
+            for ( const quant of pset.Quantities ) {
+              const key = quant.Name?.value;
+              let val = undefined;
+
+              // Determine unit type purely by structural property footprint
+              if (quant.LengthValue !== undefined && quant.LengthValue !== null) {
+                val = quant.LengthValue.value ?? quant.LengthValue;
+              } else if (quant.AreaValue !== undefined && quant.AreaValue !== null) {
+                val = quant.AreaValue.value ?? quant.AreaValue;
+              } else if (quant.VolumeValue !== undefined && quant.VolumeValue !== null) {
+                val = quant.VolumeValue.value ?? quant.VolumeValue;
+              } else {
+                // Fallback handlers for weights, counts, or basic un-typed properties
+                val = quant.WeightValue?.value ?? quant.CountValue?.value ?? quant.value;
+              }
+
+              if (key && val !== undefined) {
+                const cleanVal = (typeof val === 'number') ? Number( val.toFixed( 4 ) ) : val;
+                cleanPropertySets[ psetName ][ key ] = cleanVal;
               }
             }
           }
@@ -1302,6 +1522,36 @@
         }
 
         return cleanTypeFeatures;
+      }
+
+      // Helper block to clean up extrusion parameters into readable geometry profiles
+      function parseExtrusion( extrusionGeom ) {
+        const cleanExtrusion = {};
+        if (!extrusionGeom) return cleanExtrusion;
+
+        if (extrusionGeom[ 'Extrusion Depth' ] && extrusionGeom[ 'Extrusion Depth' ] !== 'N/A') {
+          cleanExtrusion[ 'Extrusion Depth' ] = typeof extrusionGeom[ 'Extrusion Depth' ] === 'number'
+            ? Number( extrusionGeom[ 'Extrusion Depth' ].toFixed( 2 ) )
+            : extrusionGeom[ 'Extrusion Depth' ];
+        }
+
+        if (extrusionGeom[ 'Profile Width (X)' ] && extrusionGeom[ 'Profile Width (X)' ] !== 'N/A') {
+          cleanExtrusion[ 'Profile Width (X)' ] = typeof extrusionGeom[ 'Profile Width (X)' ] === 'number'
+            ? Number( extrusionGeom[ 'Profile Width (X)' ].toFixed( 2 ) )
+            : extrusionGeom[ 'Profile Width (X)' ];
+        }
+
+        if (extrusionGeom[ 'Profile Depth (Y)' ] && extrusionGeom[ 'Profile Depth (Y)' ] !== 'N/A') {
+          cleanExtrusion[ 'Profile Depth (Y)' ] = typeof extrusionGeom[ 'Profile Depth (Y)' ] === 'number'
+            ? Number( extrusionGeom[ 'Profile Depth (Y)' ].toFixed( 2 ) )
+            : extrusionGeom[ 'Profile Depth (Y)' ];
+        }
+
+        if (extrusionGeom[ 'Profile Shape Engine' ]) {
+          cleanExtrusion[ 'Profile Shape' ] = extrusionGeom[ 'Profile Shape Engine' ];
+        }
+
+        return cleanExtrusion;
       }
 
       async function export_gltf( binary = false, draco = false, meshopt = false, meta = false ) {
@@ -1354,36 +1604,166 @@
 
                   try {
                     // 1. Fetch raw item attributes instantly (Sync)
-                    const itemProperties = api.GetLine(modelID, expressID, false);
+                    const itemProperties = api.GetLine( modelID, expressID, false );
                     if (!itemProperties) continue;
 
                     // 2. Fetch properties concurrently for this element
                     // We must await these as the api.properties methods return Promises in 0.0.77
-                    const [ propertySets, typeFeatures, materials ] = await Promise.all([
+                    const [ propertySets, typeFeatures, materials, extrusionGeom ] = await Promise.all([
                       api.properties.getPropertySets( modelID, expressID, true ).catch( () => [] ),
                       api.properties.getTypeProperties( modelID, expressID, true ).catch( () => null ),
-                      api.properties.getMaterialsProperties( modelID, expressID, true ).catch( () => null )
+                      api.properties.getMaterialsProperties( modelID, expressID, true ).catch( () => null ),
+                      getExtrusionProperties( mgr, modelID, expressID )
                     ]);
 
-                    // 3. Convert numerical type into an official IFC string definition (Sync)
+                    // 3. Initialize specialized buckets for Asset & Facilities Management
+                    const assetManagement = {};
+
+                    if (propertySets) {
+                      for ( const pset of propertySets ) {
+                        const psetName = pset.Name?.value || '';
+
+                        if (pset.HasProperties) {
+                          for ( const prop of pset.HasProperties ) {
+                            const propName = prop.Name?.value;
+                            const propValue = prop.NominalValue?.value;
+                            if (propName === undefined || propValue === undefined) continue;
+
+                            // Capture Manufacturer / Vendor Data
+                            if (psetName === 'Pset_ManufacturerTypeInformation' || psetName.includes( 'Identity Data' )) {
+                              if ([ 'Manufacturer', 'ModelLabel', 'ModelNumber', 'ProductionYear', 'SerialNumber' ].includes( propName ) || propName.includes( 'Vendor' )) {
+                                assetManagement[ 'VendorInfo' ] = {};
+                                assetManagement.VendorInfo[ propName ] = propValue;
+                              }
+                            }
+
+                            // Capture Warranty & Maintenance Lifecycles
+                            if (psetName === 'Pset_Warranty' || psetName.includes( 'Maintenance' ) || psetName.includes( 'Operational' )) {
+                              if ([ 'WarrantyPeriod', 'WarrantyStartDate', 'ExpectedLife', 'AssetIdentifier', 'ServiceLifeDuration' ].includes( propName )) {
+                                assetManagement[ 'Maintenance' ] = {};
+                                assetManagement.Maintenance[ propName ] = propValue;
+                              }
+                            }
+
+                            // Capture Cost / Financial Parameters (Great for client presentations & procurement)
+                            if (psetName.includes( 'Cost' ) || psetName.includes( 'Phasing' ) || psetName.includes( 'Financial' )) {
+                              if ([ 'CostValue', 'ReplacementCost', 'PurchaseDate', 'AssetAccountingType' ].includes( propName ) || propName.includes( 'Cost' )) {
+                                assetManagement[ 'Financials' ] = {};
+                                assetManagement.Financials[ propName ] = propValue;
+                              }
+                            }
+                          }
+                        }
+                      }
+                    }
+
+                    // Process Scheduling Map
+                    const scheduleMap = {}; // Key: Element ExpressID -> Value: Task Timeline Data
+
+                    try {
+                      const targetRelAssignType = web_ifc.IFCRELASSIGNSTOPRODUCT;
+                      const targetTaskType = web_ifc.IFCTASK;
+
+                      if (targetRelAssignType && targetTaskType) {
+                        const assignments = await mgr.getAllItemsOfType( 0, targetRelAssignType, true );
+
+                        for ( const rel of assignments ) {
+                          // 1. The physical building asset/product is in 'RelatingProduct'
+                          const productTarget = rel.RelatingProduct;
+                          const relatedProductID = productTarget?.value ?? productTarget;
+
+                          // 2. The managing task(s) are listed inside the 'RelatedObjects' array
+                          const relatedObjects = rel.RelatedObjects;
+
+                          if (relatedProductID && Array.isArray( relatedObjects ) && relatedObjects.length > 0) {
+                            // Loop through any tasks assigned to this physical product
+                            for ( const obj of relatedObjects ) {
+                              const taskID = obj?.value ?? obj;
+                              if (!taskID) continue;
+
+                              // Fetch the raw Task row directly from WebAssembly memory
+                              const taskRow = api.GetLine( 0, parseInt( taskID ), false );
+
+                              // Verify it's actually an IFCTASK type line
+                              if (taskRow && taskRow.type === targetTaskType) {
+                                let timeline = { 
+                                  TaskName: taskRow.Name?.value || 'Unassigned Task', 
+                                  Start: 'N/A', 
+                                  End: 'N/A' 
+                                };
+
+                                // Get the TaskTime pointer link
+                                const taskTimeId = taskRow.TaskTime?.value || taskRow.TaskTime;
+
+                                if (taskTimeId) {
+                                  const timeRow = api.GetLine( 0, parseInt( taskTimeId ), false );
+
+                                  if (timeRow) {
+                                    // Read whichever scheduling fields are populated in this IFC version
+                                    timeline.Start = timeRow.EarlyStart?.value || timeRow.ScheduleStart?.value || 'N/A';
+                                    timeline.End = timeRow.EarlyFinish?.value || timeRow.ScheduleFinish?.value || 'N/A';
+                                  }
+                                }
+
+                                // Map the physical entity ExpressID directly to its execution timeline data!
+                                scheduleMap[ parseInt( relatedProductID ) ] = timeline;
+                              }
+                            }
+                          }
+                        }
+                      }
+                    } catch ( scheduleErr ) {
+                      console.warn( 'Could not successfully map 4D schedule vectors: ', scheduleErr );
+                    }
+
+                    let executionSchedule = scheduleMap[ expressID ];
+
+                    if (!isMobile) {
+                      // Check if this expressID matches a schedule row directly
+                      if (!executionSchedule) {
+                        // If it doesn't match directly, trace up the spatial structure
+                        // (e.g., if expressID is a sub-mesh geometry piece of Wall #4 #429)
+                        // We can look up pre-calculated spatialMap
+
+                        // Let's do a quick fallback lookup using web-ifc properties
+                        // spatialMap is keyed by expressID, so we can leverage it
+                        const spatialParentName = spatialMap[ expressID ];
+
+                        // Look for a partial match in our schedule names or IDs
+                        for ( const [ prodId, schedData ] of Object.entries( scheduleMap ) ) {
+                          if (schedData.TaskName === spatialParentName || expressID == prodId) {
+                            executionSchedule = schedData;
+                            break;
+                          }
+                        }
+                      }
+                    }
+
+                    if (!executionSchedule) executionSchedule = scheduleMap;
+
+                    // 4. Convert numerical type into an official IFC string definition (Sync)
                     const rawTypeName = api.GetNameFromTypeCode( itemProperties.type ) || '';
 
-                    // 4. Map securely into the dictionary
+                    // 5. Map securely into the dictionary
                     metadata_dict[ expressID ] = {
                       GlobalID: itemProperties.GlobalId?.value || '',
                       Location: !isMobile ? ( spatialMap[ expressID ] || 'External / Unassigned' ) : 'External / Unassigned',
                       IfcType: rawTypeName.toUpperCase(),
 
-                      // 🌟 ENHANCEMENT: Attach system spatial references directly here
+                      // Attach system spatial references
                       GeospatialContext: {
-                        Type: globalGeoContext.Type,
                         CoordinateSystem: globalGeoContext.CoordinateSystem,
+                        MeasurementUnit: globalGeoContext.MeasurementUnit,
+                        Type: globalGeoContext.Type,
                         Properties: globalGeoContext.Properties
                       },
 
-                      PropertySets: propertySets ? parsePropertySets( propertySets ) : {},
-                      TypeFeatures: typeFeatures ? parseTypeFeatures( Array.isArray( typeFeatures ) ? typeFeatures : [ typeFeatures ] ) : {}, 
-                      Materials: materials ? parseMaterials( materials ) : {}
+                      PropertySets: propertySets ? parsePropertySets( propertySets ) : undefined,
+                      TypeFeatures: typeFeatures ? parseTypeFeatures( Array.isArray( typeFeatures ) ? typeFeatures : [ typeFeatures ] ) : undefined, 
+                      Materials: materials ? parseMaterials( materials ) : undefined,
+                      Extrusion: extrusionGeom ? parseExtrusion( extrusionGeom ) : undefined,
+                      AssetManagement: Object.entries( assetManagement ).length > 0 ? assetManagement : undefined,
+                      ScheduleMap: Object.entries( executionSchedule ).length > 0 ? executionSchedule : undefined
                     };
                   } catch ( err ) {
                     console.warn( `Could not extract properties for Express ID: ${expressID}`, err );
@@ -1449,7 +1829,7 @@
 
       async function export_assimp( format = 'fbx' ) {
         if (ifc_obj) {
-          const export_clone = await start_export();
+          const export_clone = await start_export( true );
 
           const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
@@ -3337,7 +3717,7 @@
         });
       }
 
-      function loadURLFile() {
+      async function loadURLFile() {
         if (selected_url_file !== '') {
           if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
             selected_ifc_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
@@ -3352,6 +3732,18 @@
           if (selected_ifc_url_file === null) {
             handle_error( 'Unsupported URL file!' );
             return;
+          }
+
+          // Git LFS Check
+          const response = await fetch( selected_ifc_url_file, { headers: { 'Range': 'bytes=0-149' } } );
+
+          if (response.status === 206) {
+            const text = await response.text();
+
+            if ( text.includes( 'git-lfs.github.com' ) ) {
+              handle_error( 'The URL points to a Git LFS pointer, not the actual file. Download it manually and load it locally!' );
+              return;
+            }
           }
 
           ifc_loader.load( selected_ifc_url_file, function( object ) {
@@ -4031,57 +4423,43 @@
 
         const mgr = ifc_loader.ifcManager;
 
-        const [ schema, meshFeatures, typeFeatures, materials ] = await Promise.all([
+        const [ schema, meshFeatures, typeFeatures, materials, extrusionGeom ] = await Promise.all([
           mgr.getItemProperties( 0, expressId ),
           mgr.getPropertySets( 0, expressId, true ),
           mgr.getTypeProperties( 0, expressId, true ),
-          mgr.getMaterialsProperties( 0, expressId, true )
+          mgr.getMaterialsProperties( 0, expressId, true ),
+          getExtrusionProperties( mgr, 0, expressId )
         ]);
 
         const featureMetadataList = [];
         const seenProperties = new Set(); // Track unique property combinations
 
-        async function getProjectLengthUnit() {
-          try {
-            // 1. Find the project instance
-            const projects = await mgr.getAllItemsOfType( 0, web_ifc.IFCPROJECT, true );
-            if (!projects || projects.length === 0) return 'Millimeter ( Assumed )';
+        // Define a dictionary to match suffixes based on what activeUnit returns
+        const unitMap = {
+          length: 'mm',
+          area: 'm²',
+          volume: 'm³'
+        };
 
-            const project = projects[ 0 ];
-            const unitAssignmentId = project.UnitsInContext?.value ?? project.UnitsInContext;
-            if (!unitAssignmentId) return 'Millimeter ( Assumed )';
+        const activeUnit = await getProjectLengthUnit( mgr ); 
+        const lowerUnit = activeUnit.toLowerCase();
 
-            // 2. Fetch the Unit Assignment
-            const unitAssignment = await mgr.getItemProperties( 0, parseInt( unitAssignmentId ) );
-            const unitIds = unitAssignment.Units || [];
-
-            for (const unitRef of unitIds) {
-              const unitId = unitRef.value ?? unitRef;
-              const unitProps = await mgr.getItemProperties( 0, parseInt( unitId ) );
-
-              // 3. Check if it is a LENGTHUNIT
-              if (unitProps.UnitType?.value === 'LENGTHUNIT') {
-                // If it's a standard SI Unit (Meter, Millimeter, etc.)
-                if (unitProps.Name?.value) {
-                  let prefix = unitProps.Prefix?.value || ''; // e.g., "MILLI"
-                  let name = unitProps.Name.value;            // e.g., "METER"
-
-                  // Format nicely: MILLI + METER -> Millimeter
-                  let fullName = ( prefix + name ).toLowerCase();
-                  return fullName.charAt( 0 ).toUpperCase() + fullName.slice( 1 );
-                }
-
-                // If it's an imperial/conversion-based unit (Foot, Inch)
-                if (unitProps.Name) {
-                  return unitProps.Name; // Returns text like "FOOT" or "INCH"
-                }
-              }
-            }
-          } catch ( err ) {
-            console.warn( 'Could not extract project unit: ', err );
-          }
-
-          return 'Millimeter ( Fallback )';
+        if (lowerUnit.includes( 'milli' )) {
+          unitMap.length = 'mm';
+          unitMap.area = 'm²';
+          unitMap.volume = 'm³';
+        } else if (lowerUnit.includes( 'meter' ) || lowerUnit.includes( 'metre' )) {
+          unitMap.length = 'm';
+          unitMap.area = 'm²';
+          unitMap.volume = 'm³';
+        } else if (lowerUnit.includes( 'foot' ) || lowerUnit.includes( 'feet' )) {
+          unitMap.length = 'ft';
+          unitMap.area = 'ft²';
+          unitMap.volume = 'ft³';
+        } else if (lowerUnit.includes( 'inch' )) {
+          unitMap.length = 'in';
+          unitMap.area = 'in²';
+          unitMap.volume = 'in³';
         }
 
         // DYNAMIC GEOSPATIAL EXTRACTION
@@ -4108,6 +4486,7 @@
 
             geoProps = {
               'Coordinate System': crsName,
+              'Measurement Unit': `${activeUnit}`,
               'Easting (X)': getIfcValue( conversion.Eastings ) ?? 'N/A',
               'Northing (Y)': getIfcValue( conversion.Northings ) ?? 'N/A',
               'Orthometric Height (Z)': getIfcValue( conversion.OrthogonalHeight ) ?? getIfcValue( conversion.OrthometricHeight ) ?? 'N/A',
@@ -4139,6 +4518,7 @@
 
               geoProps = {
                 'Coordinate System': crsName,
+                'Measurement Unit': `${activeUnit}`,
                 'Origin Longitude (X)': opX ?? 'N/A',
                 'Origin Latitude (Y)': opY ?? 'N/A',
                 'Height Anchor (Z)': opZ ?? 'N/A'
@@ -4165,19 +4545,16 @@
             // If neither MapConversion nor RigidOperation was discovered, it's a local file
             geoRefClass = 'Geospatial Reference ( Local Grid )';
 
-            // DYNAMICALLY FETCH THE UNIT
-            const projectUnit = await getProjectLengthUnit();
-
             geoProps = {
               'Coordinate System': 'Not Georeferenced',
-              'Measurement Unit': `${projectUnit}`,
-              'Grid Layout Engine': 'Active ( IfcGrid Defined )'
+              'Measurement Unit': `${activeUnit}`,
+              'Grid Layout': 'Active (IfcGrid Defined)'
             };
 
             gpsProps = {
-              'Latitude': 'N/A ( Local Grid Only )',
-              'Longitude': 'N/A ( Local Grid Only )',
-              'Elevation': '0.00 ( Relative Origin )'
+              'Latitude': 'N/A (Local Grid Only)',
+              'Longitude': 'N/A (Local Grid Only)',
+              'Elevation': '0.00 (Relative Origin)'
             };
 
             featureMetadataList.unshift(
@@ -4216,17 +4593,101 @@
           const className = prefix + ( pset.Name?.value || 'Unnamed Pset' );
           const properties = {};
 
-          if (Array.isArray( pset.HasProperties )) {
+          if (pset.HasProperties && Array.isArray( pset.HasProperties )) {
             pset.HasProperties.forEach( prop => {
               const key = prop.Name?.value;
-              const val = prop.NominalValue?.value ?? prop.Value?.value ?? prop.value;
+              const lowerKey = key.toLowerCase();
+              let val = undefined;
+              let unitType = null;
 
-              if (key) {
+              // Determine unit type purely by structural property footprint
+              if (prop.LengthValue !== undefined && prop.LengthValue !== null) {
+                val = prop.LengthValue.value ?? prop.LengthValue;
+                unitType = 'length';
+              } else if (prop.AreaValue !== undefined && prop.AreaValue !== null) {
+                val = prop.AreaValue.value ?? prop.AreaValue;
+                unitType = 'area';
+              } else if (prop.VolumeValue !== undefined && prop.VolumeValue !== null) {
+                val = prop.VolumeValue.value ?? prop.VolumeValue;
+                unitType = 'volume';
+              } else {
+                if (lowerKey.includes( 'length' ) || lowerKey.includes( 'width' ) || lowerKey.includes( 'height' ) || lowerKey.includes( 'distance' )) {
+                  unitType = 'length';
+                } else if (lowerKey.includes( 'area' )) {
+                  unitType = 'area';
+                } else if (lowerKey.includes( 'volume' )) {
+                  unitType = 'volume';
+                }
+
+                // Fallback handlers for weights, counts, or basic un-typed properties
+                val = prop.WeightValue?.value ?? prop.CountValue?.value ?? prop.NominalValue?.value ?? prop.Value?.value ?? prop.value;
+              }
+
+              if (key && val !== undefined) {
+                if (typeof val === 'number' && val !== 0) {
+                  val = Number( val.toFixed( 4 ) );
+
+                  // Safely append units using structural mapping types
+                  if (unitType === 'volume') {
+                    val = `${val} ${unitMap.volume}`;
+                  } else if (unitType === 'area') {
+                    val = `${val} ${unitMap.area}`;
+                  } else if (unitType === 'length') {
+                    val = `${val} ${unitMap.length}`;
+                  }
+                }
+
                 // Create a unique fingerprint: 'PsetName-Key-Value'
                 const fingerprint = `${pset.Name?.value}-${key}-${val}`;
 
                 if (!seenProperties.has( fingerprint )) {
                   properties[ key ] = val ?? 'N/A';
+                  seenProperties.add( fingerprint );
+                }
+              }
+            });
+          }
+
+          // Handle Base Quantities (IfcElementQuantity)
+          if (pset.Quantities && Array.isArray( pset.Quantities )) {
+            pset.Quantities.forEach( quant => {
+              const key = quant.Name?.value;
+              let val = undefined;
+              let unitType = null;
+
+              // Determine unit type purely by structural property footprint
+              if (quant.LengthValue !== undefined && quant.LengthValue !== null) {
+                val = quant.LengthValue.value ?? quant.LengthValue;
+                unitType = 'length';
+              } else if (quant.AreaValue !== undefined && quant.AreaValue !== null) {
+                val = quant.AreaValue.value ?? quant.AreaValue;
+                unitType = 'area';
+              } else if (quant.VolumeValue !== undefined && quant.VolumeValue !== null) {
+                val = quant.VolumeValue.value ?? quant.VolumeValue;
+                unitType = 'volume';
+              } else {
+                // Fallback handlers for weights, counts, or basic un-typed properties
+                val = quant.WeightValue?.value ?? quant.CountValue?.value ?? quant.value;
+              }
+
+              if (key && val !== undefined) {
+                if (typeof val === 'number' && val !== 0) {
+                  val = Number( val.toFixed( 4 ) );
+
+                  // Safely append units using structural mapping types
+                  if (unitType === 'volume') {
+                    val = `${val} ${unitMap.volume}`;
+                  } else if (unitType === 'area') {
+                    val = `${val} ${unitMap.area}`;
+                  } else if (unitType === 'length') {
+                    val = `${val} ${unitMap.length}`;
+                  }
+                }
+
+                const fingerprint = `${pset.Name?.value}-${key}-${val}`;
+
+                if (!seenProperties.has( fingerprint )) {
+                  properties[ key ] = typeof val === 'number' ? Number( val.toFixed( 4 ) ) : ( val ?? 'N/A' );
                   seenProperties.add( fingerprint );
                 }
               }
@@ -4295,6 +4756,118 @@
           });
         }
 
+        // Process Extrusion Geometry Profile
+        if (extrusionGeom) {
+          const geoClass = 'IFC Procedural Geometry ( Extrusion )';
+          const formattedProps = {};
+
+          // Append dynamic unit mappings to the raw geometric numbers
+          if (extrusionGeom[ 'Extrusion Depth' ]) {
+            formattedProps[ 'Extrusion Depth' ] = `${Number( extrusionGeom[ 'Extrusion Depth' ].toFixed( 4 ) )} ${unitMap.length}`;
+          }
+
+          if (extrusionGeom[ 'Profile Width (X)' ] !== 'N/A') {
+            formattedProps[ 'Profile Width (X)' ] = `${Number( extrusionGeom[ 'Profile Width (X)' ].toFixed( 4 ) )} ${unitMap.length}`;
+          }
+
+          if (extrusionGeom[ 'Profile Depth (Y)' ] !== 'N/A') {
+            formattedProps[ 'Profile Depth (Y)' ] = `${Number( extrusionGeom[ 'Profile Depth (Y)' ].toFixed( 4 ) )} ${unitMap.length}`;
+          }
+
+          if (extrusionGeom[ 'Profile Shape Engine' ]) {
+            formattedProps[ 'Profile Shape' ] = extrusionGeom[ 'Profile Shape Engine' ];
+          }
+
+          featureMetadataList.push( { class: geoClass, properties: formattedProps } );
+        }
+
+        // Process Scheduling Map
+        const scheduleMap = {}; // Key: Element ExpressID -> Value: Task Timeline Data
+
+        try {
+          const targetRelAssignType = web_ifc.IFCRELASSIGNSTOPRODUCT;
+          const targetTaskType = web_ifc.IFCTASK;
+
+          if (targetRelAssignType && targetTaskType) {
+            const assignments = await mgr.getAllItemsOfType( 0, targetRelAssignType, true );
+
+            for ( const rel of assignments ) {
+              // 1. The physical building asset/product is in 'RelatingProduct'
+              const productTarget = rel.RelatingProduct;
+              const relatedProductID = productTarget?.value ?? productTarget;
+
+              // 2. The managing task(s) are listed inside the 'RelatedObjects' array
+              const relatedObjects = rel.RelatedObjects;
+
+              if (relatedProductID && Array.isArray( relatedObjects ) && relatedObjects.length > 0) {
+                // Loop through any tasks assigned to this physical product
+                for ( const obj of relatedObjects ) {
+                  const taskID = obj?.value ?? obj;
+                  if (!taskID) continue;
+
+                  // Fetch the raw Task row directly from WebAssembly memory
+                  const taskRow = mgr.ifcAPI.GetLine( 0, parseInt( taskID ), false );
+
+                  // Verify it's actually an IFCTASK type line
+                  if (taskRow && taskRow.type === targetTaskType) {
+                    let timeline = { 
+                      TaskName: taskRow.Name?.value || 'Unassigned Task', 
+                      Start: 'N/A', 
+                      End: 'N/A' 
+                    };
+
+                    // Get the TaskTime pointer link
+                    const taskTimeId = taskRow.TaskTime?.value || taskRow.TaskTime;
+
+                    if (taskTimeId) {
+                      const timeRow = mgr.ifcAPI.GetLine( 0, parseInt( taskTimeId ), false );
+
+                      if (timeRow) {
+                        // Read whichever scheduling fields are populated in this IFC version
+                        timeline.Start = timeRow.EarlyStart?.value || timeRow.ScheduleStart?.value || 'N/A';
+                        timeline.End = timeRow.EarlyFinish?.value || timeRow.ScheduleFinish?.value || 'N/A';
+                      }
+                    }
+
+                    // Map the physical entity ExpressID directly to its execution timeline data!
+                    scheduleMap[ parseInt( relatedProductID ) ] = timeline;
+                  }
+                }
+              }
+            }
+          }
+        } catch ( scheduleErr ) {
+          console.warn( 'Could not successfully map 4D schedule vectors: ', scheduleErr );
+        }
+
+        let executionSchedule = scheduleMap[ expressId ];
+
+        if (!isMobile) {
+          // Check if this expressID matches a schedule row directly
+          if (!executionSchedule) {
+            // If it doesn't match directly, trace up the spatial structure
+            // (e.g., if expressID is a sub-mesh geometry piece of Wall #4 #429)
+            // We can look up pre-calculated spatialMap
+
+            // Let's do a quick fallback lookup using web-ifc properties
+            // spatialMap is keyed by expressID, so we can leverage it
+            const spatialParentName = spatialMap[ expressId ]; 
+
+            // Look for a partial match in our schedule names or IDs
+            for ( const [ prodId, schedData ] of Object.entries( scheduleMap ) ) {
+              if (schedData.TaskName === spatialParentName || expressId == prodId) {
+                executionSchedule = schedData;
+                break;
+              }
+            }
+          }
+
+          if (!executionSchedule) executionSchedule = scheduleMap;
+
+          if (Object.entries( executionSchedule ).length > 0)
+            featureMetadataList.push( { class: 'Schedule Map', properties: { ...executionSchedule } } );
+        }
+
         if (featureMetadataList.length > 0) {
           if (pickedObject.isMesh) highlightFeature( expressId, 'expressID' );
 
@@ -4302,13 +4875,12 @@
             { featureMetadata: featureMetadataList },
             event,
             schema,
-            pickedObject.name,
-            false
+            pickedObject.name || 'Mesh_' + expressId
           );
         }
       }
 
-      async function showUiPanel( data, event, schema = null, meshName = '', tilesetMetadataOnly = false, type = '' ) {
+      async function showUiPanel( data, event, schema = null, meshName = '' ) {
         const card = document.getElementById('metadata-card');
         if (!card) return;
 
@@ -4459,81 +5031,14 @@
         // --- HTML Assembly ---
         let html = '';
         let show_copy_to_clipboard = true;
-        const tileset = tilesetMetadataOnly ? ifc_obj.userData?.tileset : data?.tileset;
 
-        // 1. Tileset Section
-        if (tileset?.class) {
-          html += `<div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
-                     <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">TILESET: ${tileset.class}</div>
-                   </div>`;
-
-          if (tileset.properties) {
-            for ( const [ key, val ] of Object.entries( tileset.properties ) ) {
-              html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${resolveValue( tileset.class, key, val )}</span></div>`;
-            }
-          }
-        } else if (tilesetMetadataOnly) {
-          show_copy_to_clipboard = false;
-          const description = (type === 'Box3Helper') ? 'No Data (turn off bounding box)' : 'No Data';
-          html += `<div style="color: #fff; font-size: 11px;">${description}</div>`;
-        }
-
-        // 2. Feature / Tile / Group / Content Sections
-        if (data && !tilesetMetadataOnly) {
-          if (tileset) html += '<br>';
-
-          // Tile Class
-          if (data.tile?.class) {
-            html += `<div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
-                       <div style="font-size: 10px; color: #00d4ff;">TILE: ${data.tile.class}</div>
-                     </div>`;
-
-            for ( const [ k, v ] of Object.entries( data.tile.properties || {} ) ) {
-              html += `<div class="prop-row"><span class="prop-label">${k}:</span><span class="prop-value">${resolveValue( data.tile.class, k, v )}</span></div>`;
-            }
-
-            html += '<br>';
-          }
-
+        // Feature Section
+        if (data) {
           if (meshName) {
             html += `<div style="font-size: 12px; font-weight: bold; color: #fff;">Selected: ${meshName}</div><br>`;
           }
 
-          // Group Metadata - Maybe entries like color, priority...
-
-          if (data.group?.class) {
-            html += `
-              <div style="border-bottom: 1px solid #555; margin-bottom: 6px; padding-bottom: 6px;">
-                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.group.class}</div>
-              </div>`;
-
-            if (data.group.properties) {
-              for ( const [ key, val ] of Object.entries( data.group.properties ) ) {
-                const display = resolveValue( data.group.class, key, val );
-                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
-              }
-            }
-
-            html += `<br>`;
-          }
-
-          // Content Metadata - Maybe entries like vertices, materials...
-
-          if (data.content?.class) {
-            html += `
-              <div style="border-bottom: 1px solid #555; margin-bottom: 8px; padding-bottom: 6px;">
-                <div style="font-size: 10px; color: #00d4ff; letter-spacing: 0.5px;">${data.content.class}</div>
-              </div>`;
-
-            if (data.content.properties) {
-              for ( const [ key, val ] of Object.entries( data.content.properties ) ) {
-                const display = resolveValue( data.content.class, key, val );
-                html += `<div class="prop-row"><span class="prop-label">${key}:</span><span class="prop-value">${display}</span></div>`;
-              }
-            }
-          }
-
-          // Feature Metadata (Structural Metadata)
+          // Feature Metadata
           if (data.featureMetadata) {
             const fms = Array.isArray( data.featureMetadata ) ? data.featureMetadata : [ data.featureMetadata ];
 
@@ -4551,7 +5056,7 @@
           }
         }
 
-        // 3. Clipboard Button
+        // Clipboard Button
         if (show_copy_to_clipboard) {
           html += `
             <div style="padding-top: 8px; border-top: 1px solid #444; text-align: center;">
