@@ -7,23 +7,72 @@
     <link rel="stylesheet" href="../static/css/desktop-viewers-webgpu.css">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
-    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE: ' + event.reason );
+      });
+    </script>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/",
-          "three-viewport-gizmo": "https://cdn.jsdelivr.net/npm/three-viewport-gizmo@1.0.1/dist/three-viewport-gizmo.min.js",
-          "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/decode.min.js",
-          "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/encode.min.js",
-          "@monogrid/gainmap-js/libultrahdr": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/libultrahdr.min.js",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/",
+          "three-viewport-gizmo": "https://cdn.jsdelivr.net/npm/three-viewport-gizmo@2.2.0/dist/three-viewport-gizmo.min.js",
+          "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.4.0/dist/decode.min.js",
+          "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.4.0/dist/encode.min.js",
+          "@monogrid/gainmap-js/libultrahdr": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.4.0/dist/libultrahdr.min.js",
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@3.10.1",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@3.10.1",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@3.10.1",
-          "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.24.0/meshopt_encoder.module.min.js",
-          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.24.0/meshopt_simplifier.module.min.js",
-          "ktx2-encoder": "https://esm.sh/ktx2-encoder@0.1.1",
+          "ktx2-encoder": "https://cdn.jsdelivr.net/npm/ktx2-encoder@0.5.1/dist/web/index.min.js",
+          "ktx-parse": "https://cdn.jsdelivr.net/npm/ktx-parse@1.1.0/dist/ktx-parse.esm.min.js",
+          "meshoptimizer": "https://esm.sh/meshoptimizer@1.1.1",
           "@jsquash/avif": "https://esm.sh/@jsquash/avif@2.1.1",
           "bitmap2vector": "https://esm.sh/bitmap2vector@0.0.4",
           "svgo": "https://esm.sh/svgo@3.3.2"
@@ -35,23 +84,23 @@
     <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
 
     <!-- For encoding GLB with draco compression -->
-    <script src="https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <!-- For encoding image to HDR format -->
     <script src="../static/js/hdrpng/hdrpng.min.js" defer></script>
 
     <script>
       var THREE, renderer, render_requested, scene, loader, texture_loader, dds_loader;
-      var ktx2_loader, tiff_loader, tga_loader, exr_loader, rgbe_loader, hdrJPGLoader;
+      var ktx2_loader, tiff_loader, tga_loader, exr_loader, hdr_loader, hdrJPGLoader;
       var manager, camera, controls, gizmo, mouse_down, mouse_wheel, events_initialized;
       var img_obj, gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
       var grid, polar_grid, grid_visible, polar_grid_visible, slider_height = 0;
       var ambientLight, directionalLight, filename, zip, count = 0, isMobile, isNewiPad;
       var ww = window.innerWidth, wh = window.innerHeight, mime_type, isKTX2, bounding_box;
-      var uSync, strU8, local_files, zip_file, unzipped_files, filesMap, bgnd_linear_gradient;
+      var uSync, strU8, local_files, zip_file, unzipped_files, bgnd_linear_gradient;
       var rot_x = 0, rot_y = 0, rot_z = 0, gif_export, bg_flip, scene_bgnd, hdrjpg_texture;
-      var url_displayed = false, url_loading = false, menu_location_bottom = false;
-      var selected_img_file, selected_url_file = '', equi_enabled, wireframe_enabled;
+      var url_displayed = false, url_loading = false, menu_location_bottom = false, filesMap;
+      var selected_img_file, selected_url_file = '', equi_enabled, wireframe_enabled, init_running = false;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
@@ -62,11 +111,11 @@
     </script>
 
     <script type="module">
-      import * as three_js from "three";
-      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { unzipSync, strToU8 } from "three/addons/libs/fflate.module.min.js";
+      import * as threejs from 'three';
+      import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+      import { unzipSync, strToU8 } from 'three/addons/libs/fflate.module.min.js';
 
-      THREE = three_js;
+      THREE = threejs;
       uSync = unzipSync;
       strU8 = strToU8;
 
@@ -75,7 +124,7 @@
 
       texture_loader = new THREE.TextureLoader( manager );
 
-      gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
+      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
       set_gui_position();
     </script>
 
@@ -109,18 +158,18 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>IMG2MESH Viewer (r178)</title>
+    <title>IMG2MESH Viewer (r184)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm" id="fm1">
-        <button id="btn_desktop" title="Open Desktop Version" style="display: none;" onclick="switch_to_desktop();">D</button>
-        <button title="Get remote image via URL" id="btn_url" onclick="show_url()" style="min-width: 38px;">URL</button>
+        <button id="btn_desktop" title="Open Desktop Version" style="display: none; background-color: transparent;" onclick="switch_to_desktop();">D</button>
+        <button title="Get remote image via URL" id="btn_url" onclick="show_url()" style="min-width: 38px; background-color: transparent;">URL</button>
         <label for="btn_url" title="Get remote image via URL"></label>
-        <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
+        <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px; background-color: transparent;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="btn_file_input" title="Browse Local Files"></label>
         <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".zip, .dds, .dib, .exr, .hdr, .ico, .ktx2, .tga, .tif, .tiff, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" />
-        <button title="Background Image" id="btn_file_image_input" style="display: none; min-width: 54px;" onclick="document.getElementById('file_image_input').click();">BGND</button>
+        <button title="Background Image" id="btn_file_image_input" style="display: none; background-color: transparent; min-width: 54px;" onclick="document.getElementById('file_image_input').click();">BGND</button>
         <label for="btn_file_image_input" title="Background Image"></label>
         <input type="file" id="file_image_input" style="display: none;" onchange="set_scene_image();" accept=".exr, .hdr, .ktx2, .tif, .tiff, image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" />
         <button title="Y-Flip Background Image" id="btn_bg_flip" onclick="set_bg_flip();" style="display: none; background-color: transparent; color: blue;" disabled>Y</button>
@@ -382,6 +431,26 @@
         $('#btn_desktop')[ 0 ].style.display = 'none';
       }
 
+      function set_gizmo_position() {
+        if (gizmo) {
+          gizmo._domElement.style.top = '';
+
+          if (menu_location_bottom === false) {
+            gizmo._domElement.style.bottom = `calc(env(safe-area-inset-bottom) + 15px)`;
+          } else {
+            let menu_height = parseInt( $('#fixed_menu').outerHeight( true ) ) || 0;
+            let total_offset = menu_height + 15;
+            let dynamic_bottom = `calc(env(safe-area-inset-bottom) + ${total_offset}px)`;
+
+            gizmo._domElement.style.bottom = dynamic_bottom;
+          }
+
+          gizmo.update();
+
+          mouse_wheel = true;
+        }
+      }
+
       function set_gui_position() {
         if (menu_location_bottom === false) {
           let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
@@ -405,8 +474,6 @@
         }
 
         resize();
-
-        mouse_wheel = true;
       }
 
       function load_url_file() {
@@ -435,6 +502,7 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
         window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; mouse_wheel = true; }, false);
@@ -443,13 +511,16 @@
           if (progress.value === 0) {
             if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
               controls.listenToKeyEvents( window );
+              activeKeys.add( event.key ); // Track this key
               mouse_wheel = true;
             }
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
           if (progress.value === 0) {
-            if (arrow_keys.some( k => k === event.key )) {
+            activeKeys.delete( event.key ); // Remove this key
+
+            if (controls && activeKeys.size === 0) {
               controls.stopListenToKeyEvents();
               mouse_wheel = false;
             }
@@ -458,7 +529,7 @@
       }
 
       function resize() {
-        if (window.fullScreen || document.fullscreenElement || document.mozFullScreenElement ||
+        if (document.fullscreenElement || document.mozFullScreenElement ||
           document.msFullscreenElement || document.webkitFullscreenElement) {
 
           document.getElementById('btn_full_screen').style.backgroundColor = '#FFFF00';
@@ -477,7 +548,7 @@
           camera.aspect = ww / wh;
           camera.updateProjectionMatrix();
 
-          if (gizmo) gizmo.update();
+          if (gizmo) set_gizmo_position();
 
           set_gui_position();
 
@@ -494,8 +565,6 @@
           document.msFullscreenElement ? document.msExitFullscreen() : document.body.msRequestFullscreen();
         } else if (document.webkitFullscreenEnabled) {
           document.webkitFullscreenElement ? document.webkitExitFullscreen() : document.body.webkitRequestFullscreen();
-        } else if (window.fullScreen) {
-          // Do nothing. This fullscreen mode was triggered with F11 key press and requires the same again.
         }
       }
 
@@ -514,13 +583,8 @@
           document.getElementById('btn_menu_location').style.backgroundColor = '#FFFF00';
         }
 
-        if (gizmo) {
-          gizmo._domElement.style.top = menu_location_bottom === true ? 0 : '';
-          gizmo._domElement.style.bottom = menu_location_bottom === true ? '' : 0;
-          gizmo.update();
-        }
-
         set_gui_position();
+        set_gizmo_position();
 
         mouse_wheel = true;
       }
@@ -539,7 +603,7 @@
 
         if (gizmo) gizmo.enabled = false;
 
-        if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'none';
+        if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'none';
 
         set_filename();
       }
@@ -581,7 +645,7 @@
 
         if (gizmo) gizmo.enabled = true;
 
-        if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'block';
+        if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'block';
 
         render_requested = true;
         mouse_wheel = true;
@@ -600,7 +664,7 @@
         if (img_obj) {
           await start_export();
 
-          const { OBJExporter } = await import( "../static/jsm/exporters/OBJExporter.min.js" );
+          const { OBJExporter } = await import( '../static/jsm/exporters/OBJExporter.min.js' );
 
           let obj_exporter = new OBJExporter( manager );
 
@@ -639,7 +703,7 @@
         if (img_obj) {
           await start_export();
 
-          const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+          const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
           let gltf_exporter = new GLTFExporter( manager );
 
@@ -703,7 +767,7 @@
         if (img_obj) {
           await start_export();
 
-          const { USDZExporter } = await import( "../static/jsm/exporters/USDZExporter.min.js" );
+          const { USDZExporter } = await import( '../static/jsm/exporters/USDZExporter.min.js' );
 
           let usdz_exporter = new USDZExporter( manager );
 
@@ -723,7 +787,7 @@
         if (img_obj) {
           await start_export();
 
-          const { Rhino3dmExporter } = await import( "../static/jsm/exporters/3DMExporter.min.js" );
+          const { Rhino3dmExporter } = await import( '../static/jsm/exporters/3DMExporter.min.js' );
 
           let rhino_exporter = new Rhino3dmExporter( manager );
 
@@ -744,7 +808,7 @@
 
         await start_export();
 
-        const { GLTFExporter } = await import( "../static/jsm/exporters/GLTFExporter.min.js" );
+        const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
         let gltf_exporter = new GLTFExporter( manager );
 
@@ -1444,7 +1508,7 @@
             });
           } else if (fn_uc.endsWith('.TIF') || fn_uc.endsWith('.TIFF')) {
             if (tiff_loader === undefined) {
-              const { TIFFLoader } = await import( "three/addons/loaders/TIFFLoader.min.js" );
+              const { TIFFLoader } = await import( 'three/addons/loaders/TIFFLoader.min.js' );
               tiff_loader = new TIFFLoader( manager );
             }
 
@@ -1473,9 +1537,9 @@
             });
           } else if (fn_uc.endsWith('.KTX2')) {
             if (ktx2_loader === undefined) {
-              const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
+              const { KTX2Loader } = await import( 'three/addons/loaders/KTX2Loader.min.js' );
               ktx2_loader = new KTX2Loader( manager );
-              ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/libs/basis/" );
+              ktx2_loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/basis/' );
               ktx2_loader.detectSupport( renderer );
               await ktx2_loader.init();
             }
@@ -1518,18 +1582,18 @@
 
             if (fn_uc.endsWith('.EXR')) {
               if (exr_loader === undefined) {
-                const { EXRLoader } = await import( "three/addons/loaders/EXRLoader.min.js" );
+                const { EXRLoader } = await import( 'three/addons/loaders/EXRLoader.min.js' );
                 exr_loader = new EXRLoader( manager );
               }
 
               hd_loader = exr_loader;
             } else {
-              if (rgbe_loader === undefined) {
-                const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
-                rgbe_loader = new RGBELoader( manager );
+              if (hdr_loader === undefined) {
+                const { HDRLoader } = await import( 'three/addons/loaders/HDRLoader.min.js' );
+                hdr_loader = new HDRLoader( manager );
               }
 
-              hd_loader = rgbe_loader;
+              hd_loader = hdr_loader;
             }
 
             let image = await hd_loader.loadAsync( URL.createObjectURL( fii ));
@@ -1560,8 +1624,8 @@
 
               await set_bgenv_message( true );
             } else {
-              const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
-              const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
+              const { compress, encode, findTextureMinMax } = await import( '@monogrid/gainmap-js/encode' );
+              const { encodeJPEGMetadata } = await import( '@monogrid/gainmap-js/libultrahdr' );
 
               // Encode a Gain map from EXR or HDR file
               // See the code example at: https://github.com/MONOGRID/gainmap-js
@@ -1756,57 +1820,34 @@
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it hopefully comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( img_obj );
-        let size = bounding_box.getSize( new THREE.Vector3() );
-        let center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        // Move to the center
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length() ) ) );
+        camera.lookAt( center );
 
-        if (center.x !== 0) img_obj.translateX( center.x );
-        if (center.y !== 0) img_obj.translateY( center.y );
-        if (center.z !== 0) img_obj.translateZ( center.z );
+        // Center root
+        img_obj.position.sub( center );
 
-        // Scale according to window width / height, whichever is greater
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = maxDim + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist );
+        camera.lookAt( 0, 0, 0 );
 
-        if (ww > wh) {
-          img_obj.scale.multiplyScalar( ( wh / size.y ) * 0.15 );
-        } else {
-          img_obj.scale.multiplyScalar( ( ww / size.x ) * 0.15 );
-        }
-
-        // Get center coordinates and move to the center again
-
-        bounding_box.setFromObject( img_obj );
-        size = bounding_box.getSize( new THREE.Vector3() );
-        center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
-
-        if (center.x !== 0) img_obj.translateX( center.x );
-        if (center.y !== 0) img_obj.translateY( center.y );
-        if (center.z !== 0) img_obj.translateZ( center.z );
-
-        // Scale again and re-center if the model's width / height is greater than the screen's width / height
-
-        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
-          img_obj.scale.multiplyScalar( ww / (ww > wh ? size.x : size.y) );
-
-          bounding_box.setFromObject( img_obj );
-          size = bounding_box.getSize( new THREE.Vector3() );
-          center = bounding_box.getCenter( new THREE.Vector3() ).multiplyScalar( -1 );
-
-          if (center.x !== 0) img_obj.translateX( center.x );
-          if (center.y !== 0) img_obj.translateY( center.y );
-          if (center.z !== 0) img_obj.translateZ( center.z );
-        }
-
-        // Set the camera's z distance
-
-        camera.position.z = bounding_box.max.z + 250;
+        // ========================================================
+        // POST-CENTERING ADJUSTMENT
+        // ========================================================
+        // Now that the model is sitting safely at (0,0,0), we no longer 
+        // need a 100-million unit far plane. We tighten it dynamically!
+        camera.near = 0.1;
+        camera.far = dist * 10;
         camera.updateProjectionMatrix();
 
-        mouse_wheel = true;
+        resize();
       }
 
       function radio_changed() {
@@ -1875,8 +1916,8 @@
         mouse_wheel = true;
       }
 
-      function quick_x_rotation( angle ) {
-        img_obj.rotateX( Math.PI * parseFloat( angle ) );
+      function quick_x_rotation() {
+        img_obj.rotateX( - Math.PI / 2.0 );
 
         set_grid_y();
         set_polar_grid_y();
@@ -2019,7 +2060,7 @@
           tex = await convert( url );
           tex.minFilter = tex.magFilter = THREE.LinearFilter;
           tex.flipY = true;
-        } else if (loader === exr_loader || loader === rgbe_loader) {
+        } else if (loader === exr_loader || loader === hdr_loader) {
           tex = await convert( url, true );
           tex.magFilter = THREE.LinearFilter;
           tex.minFilter = THREE.NearestMipmapLinearFilter;
@@ -2067,14 +2108,14 @@
 
           if (fn_uc.endsWith( '.TIF' ) || fn_uc.endsWith( '.TIFF' )) {
             if (tiff_loader === undefined) {
-              const { TIFFLoader } = await import( "three/addons/loaders/TIFFLoader.min.js" );
+              const { TIFFLoader } = await import( 'three/addons/loaders/TIFFLoader.min.js' );
               tiff_loader = new TIFFLoader( manager );
             }
 
             loader = tiff_loader;
           } else if (fn_uc.endsWith( '.TGA' )) {
             if (tga_loader === undefined) {
-              const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
+              const { TGALoader } = await import( 'three/addons/loaders/TGALoader.min.js' );
               tga_loader = new TGALoader( manager );
             }
 
@@ -2083,9 +2124,9 @@
             isKTX2 = true;
 
             if (ktx2_loader === undefined) {
-              const { KTX2Loader } = await import( "three/addons/loaders/KTX2Loader.min.js" );
+              const { KTX2Loader } = await import( 'three/addons/loaders/KTX2Loader.min.js' );
               ktx2_loader = new KTX2Loader( manager );
-              ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/libs/basis/" );
+              ktx2_loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/basis/' );
               ktx2_loader.detectSupport( renderer );
               await ktx2_loader.init();
             }
@@ -2093,21 +2134,21 @@
             loader = ktx2_loader;
           } else if (fn_uc.endsWith( '.EXR' )) {
             if (exr_loader === undefined) {
-              const { EXRLoader } = await import( "three/addons/loaders/EXRLoader.min.js" );
+              const { EXRLoader } = await import( 'three/addons/loaders/EXRLoader.min.js' );
               exr_loader = new EXRLoader( manager );
             }
 
             loader = exr_loader;
           } else if (fn_uc.endsWith( '.HDR' )) {
-            if (rgbe_loader === undefined) {
-              const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
-              rgbe_loader = new RGBELoader();
+            if (hdr_loader === undefined) {
+              const { HDRLoader } = await import( 'three/addons/loaders/HDRLoader.min.js' );
+              hdr_loader = new HDRLoader();
             }
 
-            loader = rgbe_loader;
+            loader = hdr_loader;
           } else if (fn_uc.endsWith( '.DDS' )) {
             if (dds_loader === undefined) {
-              const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
+              const { DDSLoader } = await import( 'three/addons/loaders/DDSLoader.min.js' );
               dds_loader = new DDSLoader( manager );
             }
 
@@ -2227,6 +2268,8 @@
           await reset_all( true );
         }
 
+        init_running = true;
+
         enable_disable( true );
 
         if (zip === undefined) zip = new JSZip();
@@ -2275,6 +2318,7 @@
         bounding_box = new THREE.Box3();
 
         console.time( 'Loading Time' );
+
         document.body.style.backgroundImage = 'none';
         document.getElementById('div_error').style.display = 'none';
         document.getElementById('div_loading').style.display = 'block';
@@ -2296,7 +2340,7 @@
         }
 
         if (hdrJPGLoader === undefined) {
-          const { HDRJPGLoader } = await import( "@monogrid/gainmap-js/decode" );
+          const { HDRJPGLoader } = await import( '@monogrid/gainmap-js/decode' );
           hdrJPGLoader = new HDRJPGLoader( renderer );
         }
 
@@ -2352,7 +2396,7 @@
         //scene.add( new THREE.AxesHelper( 50 ) );
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.05, 1e8 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -2373,22 +2417,22 @@
         }
 
         if (controls === undefined) {
-          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+          const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
 
           controls = new OrbitControls( camera, renderer.domElement );
+          controls.enableZoom = true;
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.6;
           controls.rotateSpeed = 0.6;
           controls.keyPanSpeed = 0.6; 
           controls.panSpeed = 0.6;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.05;
           //controls.enableKeys = false;
-          //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
         }
 
         if (zip_file !== null) {
@@ -2476,17 +2520,16 @@
       }
 
       async function finish_loading() {
-        enable_disable( false );
+        frame_camera();
 
-        set_initial_scale();
-        resize();
+        enable_disable( false );
 
         // Skip gizmo creation on mobile devices
         if (isMobile === false && gizmo === undefined) {
-          const { ViewportGizmo } = await import( "three-viewport-gizmo" );
+          const { ViewportGizmo } = await import( 'three-viewport-gizmo' );
 
           gizmo = new ViewportGizmo( camera, renderer, {
-            placement: menu_location_bottom === true ? 'top-right' : 'bottom-right',
+            placement: 'bottom-right',
             sphere: { color: 'transparent' }
           } );
 
@@ -2496,6 +2539,9 @@
         }
 
         console.timeEnd( 'Loading Time' );
+
+        init_running = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_message').style.display = 'none';
 
@@ -2525,6 +2571,8 @@
         }
 
         if (gui) set_gui_position();
+
+        init_running = false;
 
         console.timeEnd( 'Loading Time' );
         console.log( 'Error loading model!' );
@@ -2572,10 +2620,10 @@
       /* Simplify */
 
       async function simplify( arrayBuffer ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
-        const { dedup, flatten, join, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
+        const { WebIO } = await import( '@gltf-transform/core' );
+        const { MeshoptSimplifier } = await import( 'meshoptimizer' );
+        const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
+        const { dedup, flatten, join, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
 
@@ -2603,10 +2651,10 @@
       /* Encode with draco compression - geometry */
 
       async function draco_compress( arrayBuffer ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
-        const { dedup, flatten, join, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
+        const { WebIO } = await import( '@gltf-transform/core' );
+        const { MeshoptSimplifier } = await import( 'meshoptimizer' );
+        const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
+        const { dedup, flatten, join, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
 
@@ -2649,11 +2697,10 @@
       /* Encode with meshopt compression - geometry, morphs, animations */
 
       async function meshopt_compress( arrayBuffer ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
-        const { MeshoptEncoder } = await import( "meshoptimizer_encoder" );
-        const { MeshoptSimplifier } = await import( "meshoptimizer_simplifier" );
-        const { dedup, flatten, join, meshopt, prune, simplify, sparse, weld } = await import( "@gltf-transform/functions" );
+        const { WebIO } = await import( '@gltf-transform/core' );
+        const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
+        const { MeshoptEncoder, MeshoptSimplifier } = await import( 'meshoptimizer' );
+        const { dedup, flatten, join, meshopt, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         await MeshoptEncoder.ready;
 
@@ -2696,9 +2743,9 @@
       /* Export texture only as either of AVIF, EXR, PNG, SVG, WEBP or KTX2 */
 
       async function texture_only_export( arrayBuffer, tex_fmt, tex_flip ) {
-        const { WebIO } = await import( "@gltf-transform/core" );
-        const { dedup } = await import( "@gltf-transform/functions" );
-        const { ALL_EXTENSIONS } = await import( "@gltf-transform/extensions" );
+        const { WebIO } = await import( '@gltf-transform/core' );
+        const { dedup } = await import( '@gltf-transform/functions' );
+        const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
 
         const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
 
@@ -2727,7 +2774,7 @@
           texture.setMimeType( mime_type );
 
           if (tex_fmt.startsWith( 'ktx' )) {
-            const { encodeToKTX2 } = await import( "ktx2-encoder" );
+            const { encodeToKTX2 } = await import( 'ktx2-encoder' );
 
             const size = data[ 2 ];
 
@@ -2942,7 +2989,7 @@
             } else if (!compress_supported.some( ext => mime_type.endsWith( ext ) )) {
               blob = new Blob( [ data[ 0 ] ], { type: 'image/' + fmt } );
             } else {
-              const { compressTexture } = await import( "@gltf-transform/functions" );
+              const { compressTexture } = await import( '@gltf-transform/functions' );
 
               await compressTexture( texture, { targetFormat: fmt } );
               blob = new Blob( [ texture.getImage() ], { type: 'image/' + fmt } );
@@ -3247,10 +3294,10 @@
 
       async function render() {
         if (document.getElementById('animation_progress').style.display === 'none') {
-          if (render_requested === true) requestAnimationFrame( render );
+          if (render_requested) requestAnimationFrame( render );
         }
 
-        if (mouse_down === true || mouse_wheel === true || progress.value > 0 ||
+        if (mouse_down || mouse_wheel || progress.value > 0 ||
           rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
 
           if (img_obj) {
@@ -3268,8 +3315,8 @@
               }
             }
 
-            if (mouse_wheel === true) {
-              if (count > 5) {
+            if (mouse_wheel) {
+              if (count > 30) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -3282,7 +3329,7 @@
             renderer.clear();
             renderer.render( scene, camera );
 
-            if (gizmo && gizmo.enabled === true) gizmo.render();
+            if (gizmo && gizmo.enabled) gizmo.render();
           }
         }
       }
