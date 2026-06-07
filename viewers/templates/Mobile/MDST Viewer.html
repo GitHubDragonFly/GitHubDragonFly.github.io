@@ -7,6 +7,59 @@
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running || render_requested) {
+            handle_error( 'RESOURCE ERROR' );
+          } else {
+            document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE: ' + event.reason );
+      });
+    </script>
+
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
@@ -26,8 +79,8 @@
       var renderer, scene, camera, render_requested;
       var gui, embroidery, guiColors, isMobile;
       var controls, mouse_down, mouse_wheel;
-      var bgnd_linear_gradient, texture_maps;
-      var events_initialized, zip, count = 0;
+      var bgnd_linear_gradient, texture_maps, count = 0;
+      var events_initialized, zip, init_running = false;
       var ambientLight, directionalLight, bounding_box;
       var ww = window.innerWidth, wh = window.innerHeight;
       var selected_dst_file, selected_url_file = '', normalMap;
@@ -139,7 +192,7 @@
       }
 
       function show_url() {
-        if (url_displayed === true) {
+        if (url_displayed) {
           url_displayed = false;
           document.getElementById('url').style.display = 'none';
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
@@ -314,7 +367,7 @@
           scene.background = null;
         }
 
-        if (bgnd_linear_gradient === true) {
+        if (bgnd_linear_gradient) {
           bgnd_linear_gradient = false;
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
         } else {
@@ -406,7 +459,7 @@
       }
 
       async function init() {
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+        if (!url_loading && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
           embroidery.resetInProgress = true;
@@ -419,6 +472,8 @@
 
           await reset_all( true );
         }
+
+        init_running = true;
 
         enable_disable( true );
 
@@ -438,7 +493,7 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
-        if (url_loading === false) {
+        if (!url_loading) {
           // Loaded file
           var fi = document.getElementById('file_input');
 
@@ -479,7 +534,7 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.05, 1e8 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -623,14 +678,17 @@
 
         enable_disable( false );
 
+        init_running = false;
+
         console.timeEnd( 'Loading Time' );
+
         document.getElementById('div_loading').style.display = 'none';
 
         render_requested = true;
         mouse_wheel = true;
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info, 1000 ) );
+        if (!isMobile) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
       function log_info() {
@@ -646,20 +704,22 @@
         render_requested = false;
         enable_disable( true );
 
+        init_running = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
       }
 
       async function render() {
         if (embroidery.mesh) {
-          if (mouse_down === true || mouse_wheel === true) {
+          if (mouse_down || mouse_wheel) {
             controls.update();
 
             renderer.clear();
             renderer.render( scene, camera );
 
-            if (mouse_wheel === true) {
-              if (count > 5) {
+            if (mouse_wheel) {
+              if (count > 30) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -669,7 +729,7 @@
           }
         }
 
-        if (render_requested === true) requestAnimationFrame( render );
+        if (render_requested) requestAnimationFrame( render );
       }
 
       async function reset_all( reset = false ) {
@@ -686,7 +746,7 @@
         }
 
         // Reset the view
-        if (reset === true) {
+        if (reset) {
           controls.reset();
           set_back_color();
         } else {
@@ -747,7 +807,7 @@
           }
         });
 
-        if (isMobile === false) {
+        if (!isMobile) {
           renderer.info.reset();
           renderer.resetState();
         }
@@ -779,7 +839,7 @@
 
       function disabled_changed() {
         $('button').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -791,7 +851,7 @@
         });
 
         $('input[type=color]').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });

@@ -7,6 +7,59 @@
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running || render_requested) {
+            handle_error( 'RESOURCE ERROR' );
+          } else {
+            document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE: ' + event.reason );
+      });
+    </script>
+
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
@@ -26,7 +79,7 @@
       var ambientLight, directionalLight, flat_shading_enabled, wireframe_enabled;
       var ww = window.innerWidth, wh = window.innerHeight, bounding_box, count = 0;
       var selected_amf_file, selected_amf_url_file, selected_url_file = '', isMobile;
-      var url_displayed = false, url_loading = false, vertex_colors_enabled;
+      var url_displayed = false, url_loading = false, vertex_colors_enabled, init_running = false;
     </script>
 
     <script type="module">
@@ -117,7 +170,7 @@
       }
 
       function show_url() {
-        if (url_displayed === true) {
+        if (url_displayed) {
           url_displayed = false;
           document.getElementById('url').style.display = 'none';
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
@@ -137,6 +190,7 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
         window.addEventListener( 'pointerup', (event) => { mouse_down = false; mouse_wheel = true; }, false);
@@ -144,11 +198,14 @@
         window.addEventListener( 'keydown', ( event ) => {
           if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
             controls.listenToKeyEvents( window );
+            activeKeys.add( event.key ); // Track this key
             mouse_wheel = true;
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
-          if (arrow_keys.some( k => k === event.key )) {
+          activeKeys.delete( event.key ); // Remove this key
+
+          if ( controls && activeKeys.size === 0 ) {
             controls.stopListenToKeyEvents();
             mouse_wheel = false;
           }
@@ -187,32 +244,38 @@
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( amf_obj );
-        let size = bounding_box.getSize(new THREE.Vector3());
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        if ( size.y > 1 ) {
-          amf_obj.scale.multiplyScalar( 50 / size.y );
-        } else if ( size.y > 0.02 ) {
-          amf_obj.scale.multiplyScalar( 25 / size.y );
-        } else if ( size.y > 0.01 ) {
-          amf_obj.scale.multiplyScalar( 10 / size.y );
-        } else {
-          amf_obj.scale.multiplyScalar( 1 / size.y )
-        }
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        camera.lookAt( center );
 
-        bounding_box.setFromObject( amf_obj );
-        let center = bounding_box.getCenter(new THREE.Vector3());
+        // Center root
+        amf_obj.position.sub( center );
 
-        controls.target.set( center.x, center.y, center.z );
+        // Frame camera to root
+        const maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = (maxDim < 0.05 ? 0.05 : maxDim) + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist );
+        camera.lookAt( 0, 0, 0 );
 
-        mouse_wheel = true;
+        // ========================================================
+        // POST-CENTERING ADJUSTMENT
+        // ========================================================
+        // Now that the model is sitting safely at (0,0,0), we no longer 
+        // need a 100-million unit far plane. We tighten it dynamically!
+        camera.near = maxDim < 0.05 ? maxDim : 0.05;
+        camera.far = dist * 5;
+        camera.updateProjectionMatrix();
+
+        resize();
       }
 
       async function init() {
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+        if (!url_loading && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
           mouse_wheel = true;
@@ -221,6 +284,8 @@
 
           await reset_all( true );
         }
+
+        init_running = true;
 
         enable_disable( true );
 
@@ -240,7 +305,7 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
-        if (url_loading === false) {
+        if (!url_loading) {
           // Loaded file
           var fi = document.getElementById('file_input');
 
@@ -279,7 +344,7 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.05, 1e8 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -293,22 +358,22 @@
         }
 
         if (controls === undefined) {
-          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+          const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
 
           controls = new OrbitControls( camera, renderer.domElement );
+          controls.enableZoom = true;
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.5;
           controls.rotateSpeed = 0.5;
           controls.keyPanSpeed = 0.5; 
           controls.panSpeed = 0.5;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.3;
           //controls.enableKeys = false;
-          //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
         }
 
         if (scene.environment === null) {
@@ -363,17 +428,13 @@
               vertex_colors_enabled = true;
             }
 
-            if (Array.isArray( child.material )) {
-              child.material.forEach( mtl => {
-                mtl.side = THREE.DoubleSide;
-                mtl.flatShading = flat_shading_enabled;
-                mtl.vertexColors = vertex_colors_enabled;
-              });
-            } else {
-              child.material.side = THREE.DoubleSide;
-              child.material.flatShading = flat_shading_enabled;
-              child.material.vertexColors = vertex_colors_enabled;
-            }
+            const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
+
+            mtls.forEach( m => {
+              m.side = THREE.DoubleSide;
+              m.flatShading = flat_shading_enabled;
+              m.vertexColors = vertex_colors_enabled;
+            });
           }
         });
 
@@ -403,12 +464,14 @@
       }
 
       async function finish_loading() {
-        set_initial_scale();
-        resize();
+        frame_camera();
 
         enable_disable( false );
 
+        init_running = false;
+
         console.timeEnd( 'Loading Time' );
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
 
@@ -416,7 +479,7 @@
         mouse_wheel = true;
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info, 1000 ) );
+        if (!isMobile) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
       function log_info() {
@@ -432,6 +495,8 @@
         render_requested = false;
         enable_disable( true );
 
+        init_running = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
       }
@@ -443,7 +508,7 @@
       }
 
       function set_flat() {
-        if (flat_shading_enabled === true) {
+        if (flat_shading_enabled) {
           document.getElementById('btn_flat').style.backgroundColor = 'transparent';
           flat_shading_enabled = false;
         } else {
@@ -452,17 +517,14 @@
         }
 
         amf_obj.traverse( function( child ) {
-    	    if (child.isMesh && child.material) {
-            if (Array.isArray( child.material )) {
-              child.material.forEach( mtl => {
-                mtl.flatShading = flat_shading_enabled;
-                mtl.needsUpdate = true;
-              });
-            } else {
-              child.material.flatShading = flat_shading_enabled;
-              child.material.needsUpdate = true;
-            }
-    		  }
+          if (child.isMesh && child.material) {
+            const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
+
+            mtls.forEach( m => {
+              m.flatShading = flat_shading_enabled;
+              m.needsUpdate = true;
+            });
+          }
 
           mouse_wheel = true;
         });
@@ -470,7 +532,7 @@
 
       function show_wireframe() {
         if (amf_obj) {
-          if (wireframe_enabled === true) {
+          if (wireframe_enabled) {
             wireframe_enabled = false;
             document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
           } else {
@@ -480,13 +542,11 @@
 
           amf_obj.traverse( function( child ) {
             if (child.isMesh) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.wireframe = wireframe_enabled;
-                });
-              } else {
-                child.material.wireframe = wireframe_enabled;
-              }
+              const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
+
+              mtls.forEach( m => {
+                m.wireframe = wireframe_enabled;
+              });
             }
 
             mouse_wheel = true;
@@ -496,14 +556,14 @@
 
       async function render() {
         if (amf_obj) {
-          if (mouse_down === true || mouse_wheel === true) {
+          if (mouse_down || mouse_wheel) {
             controls.update();
 
             renderer.clear();
             renderer.render( scene, camera );
 
-            if (mouse_wheel === true) {
-              if (count > 5) {
+            if (mouse_wheel) {
+              if (count > 30) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -513,7 +573,7 @@
           }
         }
 
-        if (render_requested === true) requestAnimationFrame( render );
+        if (render_requested) requestAnimationFrame( render );
       }
 
       async function reset_all( reset = false ) {
@@ -531,7 +591,7 @@
         }
 
         // Reset the view
-        if (reset === true) {
+        if (reset) {
           controls.reset();
           set_back_color();
         } else {
@@ -569,26 +629,21 @@
 
         renderer.clear();
 
-        if (flat_shading_enabled === true) await set_flat();
-        if (wireframe_enabled === true) await show_wireframe();
+        if (flat_shading_enabled) await set_flat();
+        if (wireframe_enabled) await show_wireframe();
 
         amf_obj.traverse( ( child ) => {
           if (child.isMesh) {
             if (child.material) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                 mtl.dispose();
-                });
-              } else {
-                child.material.dispose();
-              }
+              const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
+              mtls.forEach( m => m.dispose() );
             }
 
             child.geometry.dispose();
           }
         });
 
-        if (isMobile === false) {
+        if (!isMobile) {
           renderer.info.reset();
           renderer.resetState();
         }
@@ -618,7 +673,7 @@
 
       function disabled_changed() {
         $('button').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -630,7 +685,7 @@
         });
 
         $('input[type=color]').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });

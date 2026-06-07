@@ -23,7 +23,7 @@
             alert('jQuery failed to load. Limited functionality. Check your internet connection!');
           }
 
-          if (init_running === true) {
+          if (init_running || render_requested) {
             handle_error( 'RESOURCE ERROR' );
           } else {
             document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
@@ -43,6 +43,8 @@
           errorObj: error   // The actual Error object (includes stack trace)
         });
 
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
         // Returning 'true' prevents the error from showing up in the browser console
         return false; 
       };
@@ -54,7 +56,7 @@
         // event.promise is the promise that failed
         // event.reason is usually the error object or message
 
-        if (init_running === true) handle_error( 'UNHANDLED PROMISE: ' + event.reason );
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE: ' + event.reason );
       });
     </script>
 
@@ -308,7 +310,7 @@
       }
 
       function show_url() {
-        if (url_displayed === true) {
+        if (url_displayed) {
           url_displayed = false;
           document.getElementById('url').style.display = 'none';
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
@@ -390,7 +392,7 @@
           (selected_gltf_file !== null) ? loadFile() : ( (selected_draco_file !== null) ? loadDRACO() : loadURLFile() );
         }
 
-        if (dds_flip === true) {
+        if (dds_flip) {
           document.getElementById('btn_dds_flip').style.backgroundColor = 'lightgreen';
         } else {
           document.getElementById('btn_dds_flip').style.backgroundColor = 'transparent';
@@ -418,7 +420,7 @@
         const center = bounding_box.getCenter( new THREE.Vector3() );
         const size = bounding_box.getSize( new THREE.Vector3() );
 
-        default_camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        default_camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length() ) ) );
         default_camera.lookAt( center );
 
         // Center root
@@ -426,10 +428,19 @@
 
         // Frame camera to root
         const maxDim = Math.max( size.x, size.y, size.z );
-        const fov = THREE.MathUtils.degToRad( camera.fov );
-        const dist = maxDim + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        const fov = THREE.MathUtils.degToRad( default_camera.fov );
+        const dist = (maxDim < 0.05 ? 0.05 : maxDim) + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
         default_camera.position.set( 0, 0, dist );
         default_camera.lookAt( 0, 0, 0 );
+
+        // ========================================================
+        // POST-CENTERING ADJUSTMENT
+        // ========================================================
+        // Now that the model is sitting safely at (0,0,0), we no longer 
+        // need a 100-million unit far plane. We tighten it dynamically!
+        default_camera.near = maxDim < 0.05 ? maxDim :0.05;
+        default_camera.far = dist * 5;
+        default_camera.updateProjectionMatrix();
 
         resize();
       }
@@ -453,7 +464,7 @@
       }
 
       function switch_variant() {
-        if (variants_available === true) {
+        if (variants_available) {
           if (current_variant === variants.length - 1) {
             current_variant = 0;
           } else {
@@ -473,7 +484,7 @@
       }
 
       function animate_gltf() {
-        if (animation_running === true) {
+        if (animation_running) {
           animation_mixer.clipAction( animations[ current_animation ] ).stop();
           animation_mixer.clipAction( animations[ current_animation ] ).reset();
 
@@ -495,7 +506,7 @@
       }
 
       async function init() {
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+        if (!url_loading && document.getElementById('file_input').files.length === 0) return;
 
         if (scene !== undefined) {
           mouse_wheel = true;
@@ -580,7 +591,7 @@
           return url;
         });
 
-        if (url_loading === false) {
+        if (!url_loading) {
           let image_extensions = [ '.AVIF', '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF', '.KTX2',
             '.PCX', '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
 
@@ -669,7 +680,7 @@
         await new Promise( resolve => {
           loader.load( file_url, function( data ) {
             // Revoke URL if local file was loaded
-            if (from_url === false) URL.revokeObjectURL( file );
+            if (!from_url) URL.revokeObjectURL( file );
 
             if (data.startsWith( 'glTF' )) {
               let u8array = new TextEncoder().encode( data );
@@ -700,7 +711,7 @@
 
         // Use ASSIMPJS to load files - some models might take time to load
         await assimpjs().then( async function( ajs ) {
-          if (from_url === true) {
+          if (from_url) {
             Promise.all( assimp_files.map( ( file, index ) => fetch( fetched_files[ index ] ) )).then( ( responses ) => {
               return Promise.all( responses.map( ( res ) => res.arrayBuffer() ) );
             }).then ( ( arrayBuffers ) => { parse_and_load( arrayBuffers ) });
@@ -716,7 +727,7 @@
             if (assimp_files.length === 1) {
               // for a single file
               try {
-                result = ajs.ConvertFile( (from_url === true) ? assimp_files[ 0 ] : local_files[ 0 ].name, 'glb2', new Uint8Array( arrayBuffers[ 0 ] ), undefined, undefined );
+                result = ajs.ConvertFile( from_url ? assimp_files[ 0 ] : local_files[ 0 ].name, 'glb2', new Uint8Array( arrayBuffers[ 0 ] ), undefined, undefined );
               } catch ( error ) {
                 console.timeEnd( 'Assimp Loading Time' );
                 handle_error( error );
@@ -727,7 +738,7 @@
               let fileList = new ajs.FileList();
 
               for ( let i = 0; i < assimp_files.length; i++ ) {
-                fileList.AddFile( (from_url === true) ? assimp_files[ i ] : local_files[ i ].name, new Uint8Array( arrayBuffers[ i ] ) );
+                fileList.AddFile( from_url ? assimp_files[ i ] : local_files[ i ].name, new Uint8Array( arrayBuffers[ i ] ) );
               }
 
               // convert file list to ASSIMPJS "glb2" format
@@ -798,7 +809,7 @@
           gltf_loader.register( parser => new gltf_VideoTextureExtension( parser, THREE ) );
         }
 
-        if (vrm === true && vrm_registered === false) {
+        if (vrm && !vrm_registered) {
           const { VRMLoaderPlugin } = await import( 'https://cdn.jsdelivr.net/npm/@pixiv/three-vrm@3.1.1/lib/three-vrm.module.min.js' );
           gltf_loader.register( ( parser ) => { return new VRMLoaderPlugin( parser ); });
           vrm_registered = true;
@@ -826,7 +837,7 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.05, 1e9 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.05, 1e8 );
           camera.position.set( 0, 0, 250 );
         }
 
@@ -898,7 +909,7 @@
       }
 
       function loadFile() {
-        let lfile = assimp_load === true ? selected_gltf_file : ( local_files ? local_files[ selected_gltf_file ] : null );
+        let lfile = assimp_load ? selected_gltf_file : ( local_files ? local_files[ selected_gltf_file ] : null );
 
         if (lfile === null) {
           handle_error( 'No valid file selected!' );
@@ -979,7 +990,7 @@
               if (child.isMesh) {
                 if (child.isSkinnedMesh) child.frustumCulled = false;
 
-                if (variants_available === true && child.material && child.userData.gltfExtensions) {
+                if (variants_available && child.material && child.userData.gltfExtensions) {
                   variant_materials[ child.id ] = {};
                   const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
 
@@ -1718,7 +1729,7 @@
           featureHighlightMesh = new THREE.Mesh(
             highlightGeo,
             new THREE.MeshBasicMaterial({
-              color: 0x80ff80,
+              color: 0x20ff20,
               transparent: true,
               opacity: 0.5,
               depthTest: true,
@@ -1799,7 +1810,7 @@
         featureHighlightMesh = new THREE.Mesh(
           highlightGeo,
           new THREE.MeshBasicMaterial({
-            color: 0x80ff80,
+            color: 0x20ff20,
             transparent: true,
             opacity: 0.5,
             side: THREE.DoubleSide,
@@ -1850,7 +1861,7 @@
         const highlightGeo = new THREE.BoxGeometry( boxSize, boxSize, boxSize );
 
         const highlightMat = new THREE.MeshBasicMaterial({
-          color: 0x80ff80,
+          color: 0x20ff20,
           transparent: true,
           opacity: 0.8,
           depthTest: false // Makes it visible even if partially buried in other points
@@ -1906,7 +1917,7 @@
 
         // 3. Construct Point Material
         const pointMat = new THREE.PointsMaterial();
-        pointMat.color.setHex( 0x80ff80 );
+        pointMat.color.setHex( 0x20ff20 );
         pointMat.size = 0.15;               // Adjust based on model scale
         pointMat.sizeAttenuation = true;   // Dots get smaller with zoom out
         pointMat.transparent = true;
@@ -1962,7 +1973,7 @@
         // Note: Standard LineBasicMaterial doesn't support 'linewidth' > 1 in many browsers (WebGL limitation)
         // But we'll use a bright color and depthTest: false to make it pop.
         const highlightMat = new THREE.LineBasicMaterial({
-          color: 0x80ff80,
+          color: 0x20ff20,
           linewidth: 5, // Works on some systems, ignored on others
           transparent: true,
           opacity: 1.0,
@@ -2058,7 +2069,7 @@
 
         if (!mouse) mouse = new THREE.Vector2();
 
-        const HIGHLIGHT_COLOR = new THREE.Color( 0x80ff80 );
+        const HIGHLIGHT_COLOR = new THREE.Color( 0x20ff20 );
 
         mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
         mouse.y = -( event.clientY / window.innerHeight ) * 2 + 1;
@@ -3109,7 +3120,7 @@
       }
 
       function set_flat() {
-        if (flat_shading_enabled === true) {
+        if (flat_shading_enabled) {
           document.getElementById('btn_flat').style.backgroundColor = 'transparent';
           flat_shading_enabled = false;
         } else {
@@ -3121,26 +3132,21 @@
           if (child.isMesh) {
             mouse_wheel = true;
 
-            if (Array.isArray( child.material )) {
-              child.material.forEach( m => {
-                if (!m.isShaderMaterial) {
-                  m.flatShading = flat_shading_enabled;
-                  m.needsUpdate = true;
-                }
-              });
-            } else {
-              if (!child.material.isShaderMaterial) {
-                child.material.flatShading = flat_shading_enabled;
-                child.material.needsUpdate = true;
+            const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
+
+            mtls.forEach( m => {
+              if (!m.isShaderMaterial) {
+                m.flatShading = flat_shading_enabled;
+                m.needsUpdate = true;
               }
-            }
+            });
           }
         });
       }
 
       function show_wireframe() {
         if (gltf_obj) {
-          if (wireframe_enabled === true) {
+          if (wireframe_enabled) {
             wireframe_enabled = false;
             document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
           } else {
@@ -3152,13 +3158,8 @@
       	    if (child.isMesh) {
               mouse_wheel = true;
 
-              if (Array.isArray( child.material )) {
-                child.material.forEach( m => {
-                  m.wireframe = wireframe_enabled;
-                });
-              } else {
-                child.material.wireframe = wireframe_enabled;
-              }
+              const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
+              mtls.forEach( m => m.wireframe = wireframe_enabled );
             }
       	  });
         }
@@ -3186,7 +3187,7 @@
                 clock.update( timestamp );
                 const s = 0.01 * Math.PI * Math.sin( Math.PI * clock.elapsedTime );
 
-                if (fr_count > 25) {
+                if (fr_count > 30) {
                   current_vrm.humanoid.resetNormalizedPose();
                 } else {
                   Object.keys( current_vrm.humanoid._normalizedHumanBones.humanBones ).forEach( key => {
@@ -3198,7 +3199,7 @@
                 current_vrm.update( clock.getDelta() );
               }
 
-              if (fr_count > 25) {
+              if (fr_count > 30) {
                 mouse_wheel = true;
                 first_run = false;
                 fr_count = 0;
@@ -3206,7 +3207,7 @@
               }
             } else {
               if (mouse_wheel) {
-                if (count > 15) {
+                if (count > 30) {
                   mouse_wheel = false;
                   count = 0;
                 } else {
@@ -3221,7 +3222,7 @@
       }
 
       async function reset_all( reset = false ) {
-        if (dds_flip === false && reset === false) set_dds_flip();
+        if (!dds_flip && !reset) set_dds_flip();
 
         document.getElementById('back_color').value = '#000000';
         document.getElementById('dli_val').innerText = 1;
@@ -3241,7 +3242,7 @@
         parser = null;
 
         // Reset the view
-        if (reset === true) {
+        if (reset) {
           controls.reset();
           set_back_color();
 
@@ -3344,9 +3345,9 @@
                 child.skeleton.boneTexture.dispose();
 
             if (child.material) {
-              const mtl = Array.isArray( child.material ) ? child.material : [ child.material ];
+              const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-              mtl.forEach( m => {
+              mtls.forEach( m => {
                 if (m.uniforms) {
                   Object.keys( m.uniforms ).forEach( ( key ) => {
                     if (m.uniforms[ key ].value) {
@@ -3393,7 +3394,7 @@
 
         THREE.Cache.clear();
 
-        if (isMobile === false) {
+        if (!isMobile) {
           renderer.info.reset();
           renderer.resetState();
         }
@@ -3430,7 +3431,7 @@
 
       function disabled_changed() {
         $('button').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -3442,7 +3443,7 @@
         });
 
         $('input[type=color]').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });

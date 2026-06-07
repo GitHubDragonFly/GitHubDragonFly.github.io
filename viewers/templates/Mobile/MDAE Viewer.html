@@ -23,7 +23,7 @@
             alert('jQuery failed to load. Limited functionality. Check your internet connection!');
           }
 
-          if (init_running === true) {
+          if (init_running || render_requested) {
             handle_error( 'RESOURCE ERROR' );
           } else {
             document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
@@ -43,6 +43,8 @@
           errorObj: error   // The actual Error object (includes stack trace)
         });
 
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
         // Returning 'true' prevents the error from showing up in the browser console
         return false; 
       };
@@ -54,7 +56,7 @@
         // event.promise is the promise that failed
         // event.reason is usually the error object or message
 
-        if (init_running === true) handle_error( 'UNHANDLED PROMISE: ' + event.reason );
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE: ' + event.reason );
       });
     </script>
 
@@ -190,7 +192,7 @@
       }
 
       function show_url() {
-        if (url_displayed === true) {
+        if (url_displayed) {
           url_displayed = false;
           document.getElementById('url').style.display = 'none';
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
@@ -210,6 +212,7 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
         window.addEventListener( 'pointerup', (event) => { mouse_down = false; mouse_wheel = true; }, false);
@@ -217,11 +220,14 @@
         window.addEventListener( 'keydown', ( event ) => {
           if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
             controls.listenToKeyEvents( window );
+            activeKeys.add( event.key ); // Track this key
             mouse_wheel = true;
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
-          if (arrow_keys.some( k => k === event.key )) {
+          activeKeys.delete( event.key ); // Remove this key
+
+          if (controls && activeKeys.size === 0) {
             controls.stopListenToKeyEvents();
             mouse_wheel = false;
           }
@@ -274,15 +280,24 @@
         // Frame camera to root
         const maxDim = Math.max( size.x, size.y, size.z );
         const fov = THREE.MathUtils.degToRad( camera.fov );
-        const dist = maxDim + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        const dist = (maxDim < 0.05 ? 0.05 : maxDim) + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
         camera.position.set( 0, 0, dist );
         camera.lookAt( 0, 0, 0 );
+
+        // ========================================================
+        // POST-CENTERING ADJUSTMENT
+        // ========================================================
+        // Now that the model is sitting safely at (0,0,0), we no longer 
+        // need a 100-million unit far plane. We tighten it dynamically!
+        camera.near = maxDim < 0.05 ? maxDim :0.05;
+        camera.far = dist * 5;
+        camera.updateProjectionMatrix();
 
         resize();
       }
 
       function dae_animations() {
-        if (animation_running === true) {
+        if (animation_running) {
           animation_mixer.clipAction( animations[ current_animation ] ).stop();
           animation_mixer.clipAction( animations[ current_animation ] ).reset();
 
@@ -304,7 +319,7 @@
       }
 
       async function init() {
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+        if (!url_loading && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
           mouse_wheel = true;
@@ -362,7 +377,7 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
-        if (url_loading === false) {
+        if (!url_loading) {
           let image_extensions = [ '.BMP', '.DDS', '.DIB', '.GIF', '.JPG', '.JPEG', '.JFIF', '.KTX2',
             '.PJPEG', '.PJP', '.PNG', '.SVG', '.TGA', '.WEBP' ];
 
@@ -417,7 +432,7 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.01, 1e9 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.05, 1e8 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -506,7 +521,7 @@
 
                               extra = value1.profile.technique.extra;
 
-                              if (extra !== undefined && extra.technique !== undefined && isEmpty( extra.technique ) === false) {
+                              if (extra !== undefined && extra.technique !== undefined && !isEmpty( extra.technique )) {
                                 technique = extra.technique;
 
                                 texture.wrapS = technique.wrapU ? THREE.RepeatWrapping : THREE.ClampToEdgeWrapping;
@@ -798,7 +813,7 @@
           if (child.isMesh) object_is_mesh = true;
         });
 
-        if (object_is_mesh === false) {
+        if (!object_is_mesh) {
           document.getElementById('btn_wireframe').disabled = true;
           disabled_changed();
         }
@@ -823,7 +838,7 @@
         mouse_wheel = true;
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info, 1000 ) );
+        if (!isMobile) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
       function log_info() {
@@ -884,7 +899,7 @@
           }
         });
 
-        if (kinematics_running === true) {
+        if (kinematics_running) {
           kinematicsTween.start();
           setTimeout( setupTween, duration );
         }
@@ -903,7 +918,7 @@
 
       function show_wireframe() {
         if (dae_obj) {
-          if (wireframe_enabled === true) {
+          if (wireframe_enabled) {
             wireframe_enabled = false;
             document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
           } else {
@@ -943,7 +958,7 @@
             renderer.render( scene, camera );
 
             if (mouse_wheel) {
-              if (count > 5) {
+              if (count > 30) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -953,7 +968,7 @@
           }
         }
 
-        if (render_requested === true) requestAnimationFrame( render );
+        if (render_requested) requestAnimationFrame( render );
       }
 
       async function reset_all( reset = false ) {
@@ -972,7 +987,7 @@
         }
 
         // Reset the view
-        if (reset === true) {
+        if (reset) {
           controls.reset();
           set_back_color();
         } else {
@@ -1023,7 +1038,7 @@
           animation_mixer.uncacheRoot( animation_mixer.getRoot() );
         }
 
-        if (wireframe_enabled === true) await show_wireframe();
+        if (wireframe_enabled) await show_wireframe();
 
         scene.remove( dae_obj );
         renderer.clear();
@@ -1066,7 +1081,7 @@
           }
         });
 
-        if (isMobile === false) {
+        if (!isMobile) {
           renderer.info.reset();
           renderer.resetState();
         }
@@ -1104,7 +1119,7 @@
         $('button').each( function() {
           mouse_wheel = true;
 
-          if (this.disabled === false) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -1116,7 +1131,7 @@
         });
 
         $('input[type=color]').each( function() {
-          if (this.disabled === false) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
