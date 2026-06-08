@@ -7,16 +7,69 @@
     <link rel="stylesheet" href="../static/css/desktop-viewers.css">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
-    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running || render_requested) {
+            handle_error( 'RESOURCE ERROR' );
+          } else {
+            document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/",
-          "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/decode.min.js",
-          "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/encode.min.js",
-          "@monogrid/gainmap-js/libultrahdr": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/libultrahdr.min.js"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/",
+          "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.4.0/dist/decode.min.js",
+          "@monogrid/gainmap-js/encode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.4.0/dist/encode.min.js",
+          "@monogrid/gainmap-js/libultrahdr": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.4.0/dist/libultrahdr.min.js"
         }
       }
     </script>
@@ -28,7 +81,7 @@
     <script src="https://cdn.jsdelivr.net/npm/pcx-js@1.1.0/js/pcx.min.js"></script>
 
     <script>
-      var file_loader, texture_loader, rgbe_loader, basis_loader, exr_loader, hdrJPGLoader;
+      var file_loader, texture_loader, hdr_loader, basis_loader, exr_loader, hdrJPGLoader;
       var ktx_loader, ktx2_loader, lottie_loader, lottie, tga_loader, dds_loader;
       var THREE, fflate, renderer, css_renderer, css2d_renderer, css2d_object;
       var manager, scene, camera, mesh, render_requested, count = 0;
@@ -36,11 +89,12 @@
       var controls, orb_controls, gizmo, orb_controls_gizmo;
       var ambientLight, hemisphereLight, spotLight, directionalLight;
       var grid, polar_grid, grid_visible, polar_grid_visible;
-      var ww = window.innerWidth,	wh = window.innerHeight;
+      var ww = window.innerWidth, wh = window.innerHeight;
       var enable_opacity, mesh_flipped, slider_height = 0;
       var previous_scale = '1', bounding_box, bgnd_linear_gradient;
       var texture_files, current_texture, previous_texture, css_object_in_scene;
-      var selected_url_file = '', url_loading = false, url_displayed = false, menu_location_bottom = false;
+      var selected_url_file = '', url_loading = false, url_displayed = false;
+      var menu_location_bottom = false, init_running = false;
 
       const factor = 0.85;
 
@@ -50,22 +104,22 @@
     </script>
 
     <script type="module">
-      import * as three_js from "three";
-      import * as fflate_js from "three/addons/libs/fflate.module.min.js";
-      import { WorkerPool } from "three/addons/utils/WorkerPool.min.js";
-      import { KTXLoader } from "three/addons/loaders/KTXLoader.min.js";
-      import { KTX2Loader } from "three/addons/loaders/KTX2Loader.min.js";
-      import { BasisTextureLoader } from "../static/jsm/loaders/BasisTextureLoader.js";
-      import { OrbitControls } from "../static/jsm/controls/OrbitControls.js";
-      import { OrbitControlsGizmo } from "../static/jsm/controls/OrbitControlsGizmo.js";
+      import * as threejs from 'three';
+      import * as fflatejs from 'three/addons/libs/fflate.module.min.js';
+      import { WorkerPool } from 'three/addons/utils/WorkerPool.min.js';
+      import { KTXLoader } from 'three/addons/loaders/KTXLoader.min.js';
+      import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.min.js';
+      import { BasisTextureLoader } from '../static/jsm/loaders/BasisTextureLoader.js';
+      import { OrbitControls } from '../static/jsm/controls/OrbitControls.js';
+      import { OrbitControlsGizmo } from '../static/jsm/controls/OrbitControlsGizmo.js';
 
-      THREE = three_js;
-      fflate = fflate_js;
+      THREE = threejs;
+      fflate = fflatejs;
 
       manager = new THREE.LoadingManager();
 
       ktx2_loader = new KTX2Loader( manager );
-      ktx2_loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/libs/basis/" );
+      ktx2_loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/basis/' );
 
       manager.addHandler( /\.ktx2$/i, ktx2_loader );
 
@@ -75,7 +129,7 @@
       file_loader.setResponseType( 'arraybuffer' );
 
       basis_loader = new BasisTextureLoader( manager );
-      basis_loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/libs/basis/' );
+      basis_loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/basis/' );
 
       manager.addHandler(/\.basis$/i, basis_loader);
 
@@ -120,7 +174,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>Texture Viewer (r178)</title>
+    <title>Texture Viewer (r184)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -133,7 +187,7 @@
         <input type="file" id="file_image_input" style="display: none;" accept="image/avif, image/bmp, image/gif, image/jpeg, image/png, image/svg+xml, image/webp" onchange="set_scene_image();" disabled />
         <button title="Toggle Gradient Color Background" id="btn_bgnd_linear_gradient" style="display: none; background-color: transparent; color: blue;" onclick="set_bgnd_linear_gradient();" disabled>G</button>
         <button title="Image Opacity - double click to enable/disable" id="btn_dc_opacity" class="dropdown" style="display: none; border: 1px solid blue; -webkit-border-radius: 2px; border-radius: 2px;" ondblclick="set_opacity();" onclick="show_hide_dropdown_opacity();" disabled>O
-          <div id="dc_opacity" class="dropdown-content" style="display: none;" onfocusout="if (enable_opacity === true) hide_dropdown_opacity();">
+          <div id="dc_opacity" class="dropdown-content" style="display: none;" onfocusout="if (enable_opacity) hide_dropdown_opacity();">
             <input type="range" orient="vertical" id="img_opacity" min="0" max="1" step="0.05" value="1" onkeydown="return_false();" oninput="set_img_opacity();" disabled />
             <span id="opacity_val">1</span>
           </div>
@@ -215,7 +269,7 @@
         if ($('#dc_x')[ 0 ].style.display === 'none') {
           $('#dc_x').fadeIn();
 
-          if (menu_location_bottom === true) {
+          if (menu_location_bottom) {
             if (slider_height === 0) slider_height = (-24 - $('#position_x').height() - $('#x_val').height()).toString() + 'px';
             $('#dc_x')[ 0 ].style.marginTop = slider_height;
           } else {
@@ -236,7 +290,7 @@
         if ($('#dc_y')[ 0 ].style.display === 'none') {
           $('#dc_y').fadeIn();
 
-          if (menu_location_bottom === true) {
+          if (menu_location_bottom) {
             if (slider_height === 0) slider_height = (-24 - $('#position_y').height() - $('#y_val').height()).toString() + 'px';
             $('#dc_y')[ 0 ].style.marginTop = slider_height;
           } else {
@@ -257,7 +311,7 @@
         if ($('#dc_z')[ 0 ].style.display === 'none') {
           $('#dc_z').fadeIn();
 
-          if (menu_location_bottom === true) {
+          if (menu_location_bottom) {
             if (slider_height === 0) slider_height = (-24 - $('#position_z').height() - $('#z_val').height()).toString() + 'px';
             $('#dc_z')[ 0 ].style.marginTop = slider_height;
           } else {
@@ -278,7 +332,7 @@
         if ($('#dc_ali')[ 0 ].style.display === 'none') {
           $('#dc_ali').fadeIn();
 
-          if (menu_location_bottom === true) {
+          if (menu_location_bottom) {
             if (slider_height === 0) slider_height = (-24 - $('#ambient_light_intensity').height() - $('#ali_val').height()).toString() + 'px';
             $('#dc_ali')[ 0 ].style.marginTop = slider_height;
           } else {
@@ -299,7 +353,7 @@
         if ($('#dc_dli')[ 0 ].style.display === 'none') {
           $('#dc_dli').fadeIn();
 
-          if (menu_location_bottom === true) {
+          if (menu_location_bottom) {
             if (slider_height === 0) slider_height = (-24 - $('#directional_light_intensity').height() - $('#dli_val').height()).toString() + 'px';
             $('#dc_dli')[ 0 ].style.marginTop = slider_height;
           } else {
@@ -320,7 +374,7 @@
         if ($('#dc_sli')[ 0 ].style.display === 'none') {
           $('#dc_sli').fadeIn();
 
-          if (menu_location_bottom === true) {
+          if (menu_location_bottom) {
             if (slider_height === 0) slider_height = (-24 - $('#spot_light_intensity').height() - $('#sli_val').height()).toString() + 'px';
             $('#dc_sli')[ 0 ].style.marginTop = slider_height;
           } else {
@@ -341,7 +395,7 @@
         if ($('#dc_scale')[ 0 ].style.display === 'none') {
           $('#dc_scale').fadeIn();
 
-          if (menu_location_bottom === true) {
+          if (menu_location_bottom) {
             if (slider_height === 0) slider_height = (-24 - $('#img_scale').height() - $('#scale_val').height()).toString() + 'px';
             $('#dc_scale')[ 0 ].style.marginTop = slider_height;
           } else {
@@ -359,7 +413,7 @@
       function show_dropdown_opacity() {
         $('#dc_opacity').fadeIn();
 
-        if (menu_location_bottom === true) {
+        if (menu_location_bottom) {
           if (slider_height === 0) slider_height = (-24 - $('#img_opacity').height() - $('#opacity_val').height()).toString() + 'px';
           $('#dc_opacity')[ 0 ].style.marginTop = slider_height;
         } else {
@@ -374,7 +428,7 @@
       function hide_dropdown_opacity() { $('#dc_opacity').fadeOut(); mouse_wheel = true; }
 
       function show_hide_dropdown_opacity() {
-        if (enable_opacity === true) {
+        if (enable_opacity) {
           $('#dc_opacity')[ 0 ].style.display === 'none' ? show_dropdown_opacity() : hide_dropdown_opacity();
         }
 
@@ -384,9 +438,9 @@
       function return_false() { return false; }
 
       function show_url() {
-        if (url_displayed === true) {
+        if (url_displayed) {
           document.getElementById('url').style.display = 'none';
-          document.getElementById('fm2').style.width = isMobile === true ? '99%' : 'calc(100% - 86px)';
+          document.getElementById('fm2').style.width = isMobile ? '99%' : 'calc(100% - 86px)';
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
           url_displayed = false;
         } else {
@@ -427,7 +481,7 @@
       }
 
       function resize() {
-        if (window.fullScreen || document.fullscreenElement || document.mozFullScreenElement ||
+        if (document.fullscreenElement || document.mozFullScreenElement ||
           document.msFullscreenElement || document.webkitFullscreenElement) {
 
           document.getElementById('btn_full_screen').style.backgroundColor = '#FFFF00';
@@ -435,10 +489,10 @@
           document.getElementById('btn_full_screen').style.backgroundColor = 'transparent';
         }
 
-        if (typeof $ !== 'undefined' && isMobile === false) {
+        if (typeof $ !== 'undefined' && !isMobile) {
           let fm1_bottom = ( parseInt( $('#fm1').outerHeight( true ) ) );
 
-          if (url_displayed === true) {
+          if (url_displayed) {
             document.getElementById('url').style.width = fm1_bottom > 70 ? '99%' : 'calc(100% - 86px)';
 
             let url_bottom = ( fm1_bottom + parseInt( $('#url').outerHeight( true ) ) );
@@ -473,13 +527,11 @@
           document.msFullscreenElement ? document.msExitFullscreen() : document.body.msRequestFullscreen();
         } else if (document.webkitFullscreenEnabled) {
           document.webkitFullscreenElement ? document.webkitExitFullscreen() : document.body.webkitRequestFullscreen();
-        } else if (window.fullScreen) {
-          // Do nothing. This fullscreen mode was triggered with F11 key press and requires the same again.
         }
       }
 
       function change_menu_location() {
-        if (menu_location_bottom === true) {
+        if (menu_location_bottom) {
           menu_location_bottom = false;
           document.getElementById('fixed_menu').style.top = 0;
           document.getElementById('fixed_menu').style.bottom = '';
@@ -518,7 +570,7 @@
 
       function set_opacity() {
         if (mesh) {
-          if (enable_opacity === true) {
+          if (enable_opacity) {
             enable_opacity = false;
             document.getElementById('img_opacity').value = 1;
             document.getElementById('img_opacity').disabled = true;
@@ -580,7 +632,7 @@
       }
 
       function set_bgnd_linear_gradient() {
-        if (bgnd_linear_gradient === true) {
+        if (bgnd_linear_gradient) {
           scene.background = null;
           bgnd_linear_gradient = false;
           document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
@@ -893,7 +945,7 @@
       }
 
       async function init() {
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+        if (!url_loading && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
           if (texture_files.length > 0) {
@@ -913,6 +965,8 @@
           gizmo = undefined;
         }
 
+        init_running = true;
+
         enable_disable( true );
 
         document.body.style.backgroundImage = 'none';
@@ -926,36 +980,36 @@
         document.getElementById('btn_polar_grid').style.backgroundColor = '#d1cefc';
 
         if (tga_loader === undefined) {
-          const { TGALoader } = await import( "three/addons/loaders/TGALoader.min.js" );
+          const { TGALoader } = await import( 'three/addons/loaders/TGALoader.min.js' );
           tga_loader = new TGALoader( manager );
           manager.addHandler( /\.tga$/i, tga_loader );
         }
 
         if (dds_loader === undefined) {
-          const { DDSLoader } = await import( "three/addons/loaders/DDSLoader.min.js" );
+          const { DDSLoader } = await import( 'three/addons/loaders/DDSLoader.min.js' );
           dds_loader = new DDSLoader( manager );
           manager.addHandler( /\.dds$/i, dds_loader );
         }
 
         if (exr_loader === undefined) {
-          const { EXRLoader } = await import( "three/addons/loaders/EXRLoader.min.js" );
+          const { EXRLoader } = await import( 'three/addons/loaders/EXRLoader.min.js' );
           exr_loader = new EXRLoader( manager );
           manager.addHandler( /\.exr$/i, exr_loader );
         }
 
-        if (rgbe_loader === undefined) {
-          const { RGBELoader } = await import( "three/addons/loaders/RGBELoader.min.js" );
-          rgbe_loader = new RGBELoader();
+        if (hdr_loader === undefined) {
+          const { HDRLoader } = await import( 'three/addons/loaders/HDRLoader.min.js' );
+          hdr_loader = new HDRLoader();
         }
 
         if (lottie_loader === undefined) {
-          const { LottieLoader } = await import( "three/addons/loaders/LottieLoader.min.js" );
+          const { LottieLoader } = await import( 'three/addons/loaders/LottieLoader.min.js' );
           lottie_loader = new LottieLoader( manager );
           lottie_loader.setQuality( 2 );
         }
 
         if (css2d_renderer === undefined) {
-          const { CSS2DObject, CSS2DRenderer } = await import( "three/addons/renderers/CSS2DRenderer.min.js" );
+          const { CSS2DObject, CSS2DRenderer } = await import( 'three/addons/renderers/CSS2DRenderer.min.js' );
 
           css2d_object = CSS2DObject;
           css2d_renderer = CSS2DRenderer;
@@ -1014,7 +1068,7 @@
           css_renderer.domElement.style.pointerEvents = 'none';
         }
 
-        if (url_loading === false) {
+        if (!url_loading) {
           var fi = document.getElementById('file_input');
 
           for (let i = 0; i < fi.files.length; i++) {
@@ -1186,7 +1240,7 @@
             }
             else if (fn_uc.endsWith('.HDR')) {
               await new Promise( resolve => {
-                rgbe_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( texture ) {
+                hdr_loader.load( URL.createObjectURL( fi.files[ i ] ), async function( texture ) {
                   URL.revokeObjectURL( fi.files[ i ] );
 
                   resolve( await new Promise( res => {
@@ -1270,7 +1324,7 @@
                   let strings = await new TextDecoder().decode( new Uint8Array( file_data, 0, 250 ) ).split( '\n' );
                   let animated_webp = ( strings[ 1 ] && ( strings[ 1 ].indexOf( 'ANIM' ) !== - 1 || strings[ 1 ].indexOf( 'ANMF' ) !== - 1 ));
 
-                  if (animated_webp === true) {
+                  if (animated_webp) {
                     let img_element = document.createElement( 'img' );
 
                     img_element.onload = () => {
@@ -1453,7 +1507,7 @@
         if (polar_grid === undefined) polar_grid = new THREE.PolarGridHelper( 100, 10 );
         if (grid === undefined) grid = new THREE.GridHelper( 200, 200, 'yellow' );
 
-        camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.5, 2500 );
+        camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.5, 5000 );
         camera.position.set( 0, 0, 250 );
         scene.add( camera );
 
@@ -1491,7 +1545,7 @@
         //controls.minDistance = 2;
         //controls.maxDistance = 500;
 
-        if (isMobile === false) {
+        if (!isMobile) {
           if (gizmo === undefined) {
             gizmo = new orb_controls_gizmo( controls, {
               size: 65,
@@ -1504,7 +1558,7 @@
               fontWeight: 'bold'
             });
 
-            document.getElementById('gizmo').addEventListener( 'click', ( event ) => { mouse_down = true; }, false);
+            document.getElementById('gizmo').addEventListener( 'click', ( event ) => { mouse_down = true; count = 0; }, false);
             document.getElementById('gizmo').appendChild( gizmo.domElement );
           }
         }
@@ -1730,7 +1784,7 @@
 
                 let animated_webp = ( b64_string.indexOf( 'ANIM' ) !== - 1 || b64_string.indexOf( 'ANMF' ) !== - 1 );
 
-                if (animated_webp === true) {
+                if (animated_webp) {
                   let img_element = document.createElement( 'img' );
 
                   img_element.onload = () => {
@@ -1858,7 +1912,7 @@
             case '#?':
             case '㼣':
               await new Promise( resolve => {
-                rgbe_loader.load( 'data:image/x.hdr;base64,' + str, async function( texture ) {
+                hdr_loader.load( 'data:image/x.hdr;base64,' + str, async function( texture ) {
                   resolve( await new Promise( res => {
                     load_hdrjpg( texture )
                     .then( tex => {
@@ -1952,7 +2006,7 @@
                     let strings = await new TextDecoder().decode( new Uint8Array( file_data, 0, 250 ) ).split( '\n' );
                     let animated_webp = ( strings[ 1 ] && ( strings[ 1 ].indexOf( 'ANIM' ) !== - 1 || strings[ 1 ].indexOf( 'ANMF' ) !== - 1 ));
 
-                    if (animated_webp === true) {
+                    if (animated_webp) {
                       let img_element = document.createElement( 'img' );
 
                       img_element.onload = () => {
@@ -2084,7 +2138,7 @@
                 });
               } else if (url_uc.endsWith('.HDR')) {
                 await new Promise( resolve => {
-                  rgbe_loader.load( url, async function( texture ) {
+                  hdr_loader.load( url, async function( texture ) {
                     resolve( await new Promise( res => {
                       load_hdrjpg( texture )
                       .then( tex => {
@@ -2280,7 +2334,7 @@
                   let strings = await new TextDecoder().decode( new Uint8Array( file_data, 0, 250 ) ).split( '\n' );
                   let animated_webp = ( strings[ 1 ] && ( strings[ 1 ].indexOf( 'ANIM' ) !== - 1 || strings[ 1 ].indexOf( 'ANMF' ) !== - 1 ));
 
-                  if (animated_webp === true) {
+                  if (animated_webp) {
                     let img_element = document.createElement( 'img' );
 
                     img_element.onload = () => {
@@ -2412,7 +2466,7 @@
               });
             } else if (url_uc.endsWith('.HDR')) {
               await new Promise( resolve => {
-                rgbe_loader.load( selected_url_file, async function( texture ) {
+                hdr_loader.load( selected_url_file, async function( texture ) {
                   resolve( await new Promise( res => {
                     load_hdrjpg( texture )
                     .then( tex => {
@@ -2566,7 +2620,7 @@
       }
 
       async function finish_loading() {
-        if (document.getElementById('btn_textures').disabled === false) {
+        if (!document.getElementById('btn_textures').disabled) {
           document.getElementById('btn_textures').style.backgroundColor = 'lightgreen';
           document.getElementById('div_error').style.display = 'none';
 
@@ -2574,10 +2628,12 @@
 
           set_texture();
 
+          init_running = false;
+
           render_requested = true;
           render();
 
-          if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+          if (!isMobile) await new Promise( resolve => setTimeout( log_info, 1000 ) );
         }
       }
 
@@ -2598,6 +2654,8 @@
           gizmo.dispose();
         }
 
+        init_running = false;
+
         document.body.style.backgroundImage = 'none';
         document.getElementById('div_error').style.display = 'block';
         document.getElementById('div_error').style.color = 'red';
@@ -2605,7 +2663,7 @@
       }
 
       function show_polar_grid() {
-        if (polar_grid_visible === true) {
+        if (polar_grid_visible) {
           scene.remove( polar_grid );
           polar_grid_visible = false;
           document.getElementById('btn_polar_grid').style.backgroundColor = '#d1cefc';
@@ -2624,7 +2682,7 @@
       }
 
       function show_grid() {
-        if (grid_visible === true) {
+        if (grid_visible) {
           scene.remove( grid );
           grid_visible = false;
           document.getElementById('btn_grid').style.backgroundColor = '#d1cefc';
@@ -2686,9 +2744,9 @@
             }
 
             if (texture_files[ current_texture ].isAnimation === true) {
-              if (isMobile === false) document.getElementById('gizmo').style.display = 'none';
+              if (!isMobile) document.getElementById('gizmo').style.display = 'none';
 
-              if (css_object_in_scene === true) {
+              if (css_object_in_scene) {
                 mesh.remove( texture_files[ previous_texture ].tex );
                 mesh.add( texture_files[ current_texture ].tex );
               } else {
@@ -2706,7 +2764,7 @@
 
               enable_usable_controls( false );
             } else if (texture_files[ current_texture ].isVideo === true) {
-              if (isMobile === false) document.getElementById('gizmo').style.display = 'none';
+              if (!isMobile) document.getElementById('gizmo').style.display = 'none';
 
               if (texture_files[ previous_texture ] && texture_files[ previous_texture ].isVideo) {
                 let video_element = document.getElementById( 'video' );
@@ -2729,7 +2787,7 @@
 
               enable_usable_controls( false );
             } else if (texture_files[ current_texture ].isHDR === true) {
-              if (isMobile === false) document.getElementById('gizmo').style.display = '';
+              if (!isMobile) document.getElementById('gizmo').style.display = '';
 
               await reset_only( false, true );
               enable_disable( true );
@@ -2746,7 +2804,7 @@
               controls.enabled = true;
               enable_usable_controls( true );
             } else {
-              if (isMobile === false) document.getElementById('gizmo').style.display = '';
+              if (!isMobile) document.getElementById('gizmo').style.display = '';
 
               if (texture_files[ previous_texture ] &&
                 (texture_files[ previous_texture ].isAnimation === true ||
@@ -2762,7 +2820,7 @@
               mesh.traverse( function( child ) {
                 if (child.isMesh) {
                   if (texture_files[ current_texture ].flip === true) {
-                    if (mesh_flipped === false) { mesh.rotation.x += Math.PI; mesh_flipped = true; }
+                    if (!mesh_flipped) { mesh.rotation.x += Math.PI; mesh_flipped = true; }
 
                     if (texture_files[ current_texture ].tex) {
                       if (!texture_files[ current_texture ].tex.isDataTexture) {
@@ -2784,7 +2842,7 @@
                       set_plane_scale( child.material.map );
                     }
                   } else {
-                    if (mesh_flipped === true) { mesh.rotation.x += Math.PI; mesh_flipped = false; }
+                    if (mesh_flipped) { mesh.rotation.x += Math.PI; mesh_flipped = false; }
 
                     if (texture_files[ current_texture ].tex) {
                       texture_files[ current_texture ].tex.colorSpace = THREE.SRGBColorSpace;
@@ -2826,8 +2884,8 @@
       }
 
       async function load_hdrjpg( hd_tex ) {
-        const { compress, encode, findTextureMinMax } = await import( "@monogrid/gainmap-js/encode" );
-        const { encodeJPEGMetadata } = await import( "@monogrid/gainmap-js/libultrahdr" );
+        const { compress, encode, findTextureMinMax } = await import( '@monogrid/gainmap-js/encode' );
+        const { encodeJPEGMetadata } = await import( '@monogrid/gainmap-js/libultrahdr' );
 
         // Encode a Gain map from EXR or HDR file
         // See the code example at: https://github.com/MONOGRID/gainmap-js
@@ -2887,12 +2945,12 @@
 
             let tex = await texture.toDataTexture();
 
-            if (isMobile === true && (tex.image.width > M2K || tex.image.height > M2K)) {
+            if (isMobile && (tex.image.width > M2K || tex.image.height > M2K)) {
               const repeat_x = tex.image.width / M2K;
               const repeat_y = tex.image.height / M2K;
 
               tex.repeat.set( repeat_x, repeat_y );
-            } else if (isNewiPad === true && (tex.image.width > I8K || tex.image.height > I8K)) {
+            } else if (isNewiPad && (tex.image.width > I8K || tex.image.height > I8K)) {
               const repeat_x = tex.image.width / I8K;
               const repeat_y = tex.image.height / I8K;
 
@@ -2942,7 +3000,7 @@
       function enable_usable_controls( btn_reset_only = false ) {
         document.getElementById('reset').disabled = false;
 
-        if (btn_reset_only === false) {
+        if (!btn_reset_only) {
           document.getElementById('back_color').disabled = false;
           document.getElementById('file_image_input').disabled = false;
           document.getElementById('btn_bgnd_linear_gradient').disabled = false;
@@ -2954,22 +3012,22 @@
       }
 
       function render() {
-        if (render_requested === true) { requestAnimationFrame( render ); }
+        if (render_requested) { requestAnimationFrame( render ); }
 
-        if (css_object_in_scene === true || lottie === true || mouse_down === true || mouse_wheel === true) {
+        if (css_object_in_scene || lottie || mouse_down || mouse_wheel) {
           if (scene) {
             controls.update();
-            if (gizmo) gizmo.update();
-
-            if (css_object_in_scene === true) css_renderer.render( scene, camera );
+            if (css_object_in_scene) css_renderer.render( scene, camera );
 
             if (mesh) {
               renderer.clear();
               renderer.render( scene, camera );
             }
 
-            if (mouse_wheel === true) {
-              if (count > 5) {
+            if (gizmo) gizmo.update();
+
+            if (mouse_wheel) {
+              if (count > 30) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -2981,8 +3039,8 @@
       }
 
       async function reset_only( full_reset = false, hdr = false ) {
-        if (polar_grid_visible === true) show_polar_grid();
-        if (grid_visible === true) show_grid();
+        if (polar_grid_visible) show_polar_grid();
+        if (grid_visible) show_grid();
 
         if (scene) {
           if (scene.background) {
@@ -2993,20 +3051,20 @@
           if (mesh) {
             scene.remove( mesh );
 
-            if (css_object_in_scene === true) {
+            if (css_object_in_scene) {
               mesh.remove( texture_files[ current_texture ].tex );
               document.body.removeChild( css_renderer.domElement );
               css_object_in_scene = false;
             }
 
-            if (mesh_flipped === true) { mesh.rotation.x += Math.PI; mesh_flipped = false; }
+            if (mesh_flipped) { mesh.rotation.x += Math.PI; mesh_flipped = false; }
 
             if (mesh.material && mesh.material.map) mesh.material.map.dispose();
             if (mesh.material) mesh.material.dispose();
             if (mesh.geometry) mesh.geometry.dispose();
           }
 
-          if (isMobile === false) {
+          if (!isMobile) {
             renderer.info.reset();
             renderer.resetState();
           }
@@ -3021,12 +3079,12 @@
           video_element.style.display = 'none';
         }
 
-        if (hdr === false) {
+        if (!hdr) {
           await loadPlane();
           await reset_all( true );
         }
 
-        if (full_reset === true) {
+        if (full_reset) {
           current_texture = -1;
           set_texture();
         }
@@ -3066,7 +3124,7 @@
         if (controls) controls.enabled = true;
 
         // Reset the view
-        if (reset === true) {
+        if (reset) {
           if (controls) controls.reset();
           if (mesh) mesh.position.set( 0, 0, 0 );
           spotLight.position.set( 0, 0, 25 );
@@ -3095,7 +3153,7 @@
               if (mesh.material) mesh.material.dispose();
               if (mesh.geometry) mesh.geometry.dispose();
 
-              if (css_object_in_scene === true) {
+              if (css_object_in_scene) {
                 mesh.remove( texture_files[ current_texture ].tex );
                 document.body.removeChild( css_renderer.domElement );
                 css_object_in_scene = false;
@@ -3169,12 +3227,12 @@
         isNewiPad = (/iPad/.test( navigator.platform ) && (/Mac OS X/i.test( navigator.userAgent ))) ||
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
 
-        isMobile = (isNewiPad === false) && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
+        isMobile = !isNewiPad && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
           (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
 
         $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
 
-        if (isMobile === false) {
+        if (!isMobile) {
           $('#fm1')[ 0 ].style.width = 'calc(100% - 86px)';
           $('#fm2')[ 0 ].style.width = 'calc(100% - 86px)';
           $('#url')[ 0 ].style.width = 'calc(100% - 86px)';
@@ -3197,7 +3255,7 @@
 
       function disabled_changed() {
         $('button').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -3209,7 +3267,7 @@
         });
 
         $('input[type=color]').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
@@ -3222,9 +3280,9 @@
       }
 
       function grid_changed() {
-        if (grid_visible === true) {
+        if (grid_visible) {
           $('#btn_polar_grid').unbind('mouseenter mouseleave');
-        } else if (polar_grid_visible === true) {
+        } else if (polar_grid_visible) {
           $('#btn_grid').unbind('mouseenter mouseleave');
         } else {
           if ($._data($('#btn_grid')[ 0 ], 'events') === undefined) {
