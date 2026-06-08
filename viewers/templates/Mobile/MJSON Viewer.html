@@ -7,13 +7,66 @@
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
-    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running || render_requested) {
+            handle_error( 'RESOURCE ERROR' );
+          } else {
+            document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
         }
       }
     </script>
@@ -25,8 +78,8 @@
       var renderer, scene, camera, mesh, render_requested, wireframe_enabled;
       var animations, animation_mixer, animation_running, current_animation;
       var controls, mouse_down, mouse_wheel, events_initialized;
-      var merge_vertices, ambientLight, directionalLight;
-      var ww = window.innerWidth, wh = window.innerHeight, count = 0;
+      var merge_vertices, ambientLight, directionalLight, count = 0;
+      var ww = window.innerWidth, wh = window.innerHeight, init_running = false;
       var loader, fd, material, textures, buffer_geometry, bounding_box, isMobile;
       var selected_json_file, selected_url_file = '', flat_shading_enabled, texture_maps;
       var url_displayed = false, url_loading = false, vertex_colors_enabled, object_is_mesh, clock;
@@ -56,7 +109,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>JSON Viewer (r182)</title>
+    <title>JSON Viewer (r184)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -128,7 +181,7 @@
       }
 
       function show_url() {
-        if (url_displayed === true) {
+        if (url_displayed) {
           url_displayed = false;
           document.getElementById('url').style.display = 'none';
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
@@ -148,6 +201,7 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
         window.addEventListener( 'pointerup', (event) => { mouse_down = false; mouse_wheel = true; }, false);
@@ -155,11 +209,14 @@
         window.addEventListener( 'keydown', ( event ) => {
           if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
             controls.listenToKeyEvents( window );
+            activeKeys.add( event.key ); // Track this key
             mouse_wheel = true;
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
-          if (arrow_keys.some( k => k === event.key )) {
+          activeKeys.delete( event.key ); // Remove this key
+
+          if ( controls && activeKeys.size === 0 ) {
             controls.stopListenToKeyEvents();
             mouse_wheel = false;
           }
@@ -198,66 +255,38 @@
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it hopefully comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( mesh );
-        let size = bounding_box.getSize( new THREE.Vector3() );
-        let center = bounding_box.getCenter( new THREE.Vector3() );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        // Move to the center
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length() ) ) );
+        camera.lookAt( center );
 
-        if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
+        // Center root
+        mesh.position.sub( center );
 
-        // Scale according to window width / height, whichever is greater
+        // Frame camera to root
+        let maxDim = Math.max( size.x, size.y, size.z );
+        const fov = THREE.MathUtils.degToRad( camera.fov );
+        const dist = (maxDim < 0.05 ? 0.05 : maxDim) + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist );
+        camera.lookAt( 0, 0, 0 );
 
-        if (ww > wh) {
-          mesh.scale.multiplyScalar( ( wh / size.y ) * 0.175 );
-        } else {
-          mesh.scale.multiplyScalar( ( ww / size.x ) * 0.175 );
-        }
-
-        // Get center coordinates and move to the center again
-
-        bounding_box.setFromObject( mesh );
-        size = bounding_box.getSize( new THREE.Vector3() );
-        center = bounding_box.getCenter( new THREE.Vector3() );
-
-        if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
-
-        // Scale again and re-center if the model's width / height is greater than the screen's width / height
-
-        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
-          mesh.scale.multiplyScalar( ( ww / (ww > wh ? size.x : size.y) ) );
-
-          bounding_box.setFromObject( mesh );
-          size = bounding_box.getSize( new THREE.Vector3() );
-          center = bounding_box.getCenter( new THREE.Vector3() );
-
-          if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
-          if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
-          if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
-        }
-
-        // Set the camera's z distance
-
-        camera.position.z = bounding_box.max.z + 175;
+        // ========================================================
+        // POST-CENTERING ADJUSTMENT
+        // ========================================================
+        // Now that the model is sitting safely at (0,0,0), we no longer 
+        // need a 100-million unit far plane. We tighten it dynamically!
+        camera.near = maxDim < 0.05 ? maxDim : 0.05;
+        camera.far = dist * 5;
         camera.updateProjectionMatrix();
 
-        bounding_box.setFromObject( mesh );
-        center = bounding_box.getCenter( new THREE.Vector3() );
-
-        controls.target.set( center.x, center.y, center.z );
-
-        mouse_wheel = true;
+        resize();
       }
 
       function json_animation() {
-        if (animation_running === true) {
+        if (animation_running) {
           animation_mixer.clipAction( animations[ current_animation ] ).stop();
           animation_mixer.clipAction( animations[ current_animation ] ).reset();
 
@@ -281,7 +310,7 @@
       }
 
       async function init() {
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+        if (!url_loading && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
           mouse_wheel = true;
@@ -291,10 +320,12 @@
           await reset_all( true );
         }
 
+        init_running = true;
+
         enable_disable( true );
 
         if (merge_vertices === undefined) {
-          const { mergeVertices } = await import( "three/addons/utils/BufferGeometryUtils.min.js" );
+          const { mergeVertices } = await import( 'three/addons/utils/BufferGeometryUtils.min.js' );
           merge_vertices = mergeVertices;
         }
 
@@ -331,7 +362,7 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
-        if (url_loading === false) {
+        if (!url_loading) {
           // Loaded file
           let fi = document.getElementById('file_input');
 
@@ -370,7 +401,7 @@
 
           if (fd.geometries) {
             for (const geometry of fd.geometries) {
-              if (geometry.type.indexOf( 'Buffer' ) > -1 && geometry.type.startsWith( 'Buffer' ) === false) {
+              if (geometry.type.indexOf( 'Buffer' ) > -1 && !geometry.type.startsWith( 'Buffer' )) {
                 geometry.type = geometry.type.replace( 'Buffer', '' );
 
                 if (geometry.type === 'PlaneGeometry') {
@@ -403,7 +434,10 @@
           document.body.appendChild( renderer.domElement );
         }
 
-        if (clock === undefined) clock = new THREE.Clock();
+        if (clock === undefined) {
+          clock = new THREE.Timer();
+          clock.connect( document );
+        }
 
         if (scene === undefined) scene = new THREE.Scene();
         if (mesh === undefined) mesh = new THREE.Object3D();
@@ -411,7 +445,7 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.05, 1e8 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -432,22 +466,22 @@
         }
 
         if (controls === undefined) {
-          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+          const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
 
           controls = new OrbitControls( camera, renderer.domElement );
+          controls.enableZoom = true;
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.5;
           controls.rotateSpeed = 0.5;
           controls.keyPanSpeed = 0.5; 
           controls.panSpeed = 0.5;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.3;
           //controls.enableKeys = false;
-          //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
         }
 
         if (material === undefined) {
@@ -489,7 +523,7 @@
 
       function loadFile() {
         if (selected_json_file !== null) {
-          if (buffer_geometry === true) {
+          if (buffer_geometry) {
             try {
               loader.load( URL.createObjectURL( selected_json_file ), addFileInScene,
               function( xhr ) { }, // onProgress
@@ -516,11 +550,11 @@
       }
 
       async function addFileInScene( object ) {
-        if (selected_json_file !== null && buffer_geometry === true) {
+        if (selected_json_file !== null && buffer_geometry) {
           URL.revokeObjectURL( selected_json_file );
         }
 
-        if (buffer_geometry === true) {
+        if (buffer_geometry) {
           object.deleteAttribute( 'normal' );
           object = merge_vertices( object, 1e-6 );
           object.computeVertexNormals();
@@ -535,7 +569,7 @@
           mesh = object;
         }
 
-        if (buffer_geometry === true || (mesh.material && mesh.isPoints === undefined)) {
+        if (buffer_geometry || (mesh.material && mesh.isPoints === undefined)) {
           mesh.name = 'mesh_0';
 
           if (mesh.geometry.attributes.color && mesh.geometry.attributes.color.array.length > 0) {
@@ -597,18 +631,18 @@
 
               if (child.material) {
                 if (Array.isArray( child.material )) {
-                  child.material.forEach( mtl => {
+                  child.material.forEach( m => {
                     if (child.isPoints) {
-                      mtl.size = (isMobile === true) ? 0.8 : 1.0;
+                      m.size = isMobile ? 0.8 : 1.0;
                     } else {
-                      set_texture_options( mtl );
+                      set_texture_options( m );
                     }
 
-                    mtl.needsUpdate = true;
+                    m.needsUpdate = true;
                   });
                 } else {
                   if (child.isPoints) {
-                    child.material.size = (isMobile === true) ? 0.8 : 1.0;
+                    child.material.size = isMobile ? 0.8 : 1.0;
                   } else {
                     set_texture_options( child.material );
                   }
@@ -622,7 +656,7 @@
 
         await new Promise( resolve => setTimeout( resolve, 100 ) );
 
-        if (bones_exist === true) {
+        if (bones_exist) {
           skeleton_helper = new THREE.SkeletonHelper( mesh );
 
           skeleton_helper.bones.forEach( ( bone, index ) => {
@@ -706,7 +740,7 @@
 
           if (fd.geometries) {
             for (const geometry of fd.geometries) {
-              if (geometry.type.indexOf( 'Buffer' ) > -1 && geometry.type.startsWith( 'Buffer' ) === false) {
+              if (geometry.type.indexOf( 'Buffer' ) > -1 && !geometry.type.startsWith( 'Buffer' )) {
                 geometry.type = geometry.type.replace( 'Buffer', '' );
                 old_geometry_type = true;
 
@@ -720,7 +754,7 @@
 
           // Launch loading of the selected file, addFileInScene is the callback when it's ready
           try {
-            if (old_geometry_type === true) {
+            if (old_geometry_type) {
               loader.parse( fd, addFileInScene,
               function( xhr ) { }, // onProgress
               function ( error ) { handle_error( error ); }); // onError
@@ -831,25 +865,27 @@
       }
 
       async function finish_loading() {
-        set_initial_scale();
-        resize();
+        frame_camera();
 
         enable_disable( false );
 
-        if (object_is_mesh === false) {
+        if (!object_is_mesh) {
           document.getElementById('btn_flat').disabled = true;
           document.getElementById('btn_wireframe').disabled = true;
           disabled_changed();
         }
 
+        init_running = false;
+
         console.timeEnd( 'Loading Time' );
+
         document.getElementById('div_loading').style.display = 'none';
 
         render_requested = true;
         mouse_wheel = true;
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+        if (!isMobile) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
       function log_info() {
@@ -865,13 +901,15 @@
         render_requested = false;
         enable_disable( true );
 
+        init_running = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
       }
 
       function show_skeleton() {
-        if (skeleton_visible === true) {
-          if (skeleton_demo === true) {
+        if (skeleton_visible) {
+          if (skeleton_demo) {
             // Run the demo with the skeleton visible
             skeleton_demo = false;
             skeleton_demo_running = true;
@@ -881,7 +919,7 @@
               document.getElementById('btn_animate').disabled = true;
               skeleton_animation_changed();
             }
-          } else if (skeleton_demo_running === true) {
+          } else if (skeleton_demo_running) {
             // Stop the demo and hide the skeleton, the demo will remain available
             // Animations, if present, will control the demo availability when turned ON / OFF
             skeleton_demo_running = false;
@@ -924,7 +962,7 @@
       }
 
       function set_flat() {
-        if (flat_shading_enabled === true) {
+        if (flat_shading_enabled) {
           document.getElementById('btn_flat').style.backgroundColor = 'transparent';
           flat_shading_enabled = false;
         } else {
@@ -953,7 +991,7 @@
 
       function show_wireframe() {
         if (mesh) {
-          if (wireframe_enabled === true) {
+          if (wireframe_enabled) {
             wireframe_enabled = false;
             document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
           } else {
@@ -979,12 +1017,11 @@
         }
       }
 
-      async function render() {
+      async function render( timestamp ) {
         if (mesh) {
-          if (animation_running === true || mouse_down === true || mouse_wheel === true ||
-            (skeleton_demo === false && skeleton_demo_running === true)) {
+          if (animation_running || mouse_down || mouse_wheel || (!skeleton_demo && skeleton_demo_running)) {
 
-            if (skeleton_demo === false && skeleton_demo_running === true) {
+            if (!skeleton_demo && skeleton_demo_running) {
               skeleton_helper.bones.forEach( bone => {
                 if (sk_count < 500) {
                   bone.rotation.x += 0.0005;
@@ -1004,7 +1041,10 @@
               sk_count ++;
               if (sk_count > 1000) sk_count = 0;
             } else {
-              if (animation_running === true) animation_mixer.update( clock.getDelta() );
+              if (animation_running) {
+                clock.update( timestamp );
+                animation_mixer.update( clock.getDelta() );
+              }
             }
 
             controls.update();
@@ -1012,8 +1052,8 @@
             renderer.clear();
             renderer.render( scene, camera );
 
-            if (mouse_wheel === true) {
-              if (count > 5) {
+            if (mouse_wheel) {
+              if (count > 30) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -1023,7 +1063,7 @@
           }
         }
 
-        if (render_requested === true) requestAnimationFrame( render );
+        if (render_requested) requestAnimationFrame( render );
       }
 
       async function reset_all( reset = false ) {
@@ -1042,7 +1082,7 @@
         }
 
         // Reset the view
-        if (reset === true) {
+        if (reset) {
           controls.reset();
           set_back_color();
         } else {
@@ -1093,12 +1133,12 @@
           animation_mixer.uncacheRoot( animation_mixer.getRoot() );
         }
 
-        if (wireframe_enabled === true) await show_wireframe();
+        if (wireframe_enabled) await show_wireframe();
 
         if (skeleton_helper) {
           skeleton_demo_running = false;
 
-          if (skeleton_visible === true) {
+          if (skeleton_visible) {
             scene.remove( skeleton_helper );
             skeleton_visible = false;
           }
@@ -1186,7 +1226,7 @@
         material.dispose();
         material = undefined;
 
-        if (isMobile === false) {
+        if (!isMobile) {
           renderer.info.reset();
           renderer.state.reset();
         }
@@ -1223,7 +1263,7 @@
 
       function disabled_changed() {
         $('button').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -1235,7 +1275,7 @@
         });
 
         $('input[type=color]').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
@@ -1248,7 +1288,7 @@
       }
 
       function skeleton_animation_changed() {
-        if ($('#btn_animate')[ 0 ].disabled === true) {
+        if ($('#btn_animate')[ 0 ].disabled) {
           $('#btn_animate').unbind('mouseenter mouseleave');
         } else {
           $('#btn_animate').hover(

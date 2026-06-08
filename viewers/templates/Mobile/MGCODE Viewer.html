@@ -7,13 +7,66 @@
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
-    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running || render_requested) {
+            handle_error( 'RESOURCE ERROR' );
+          } else {
+            document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
         }
       }
     </script>
@@ -23,17 +76,17 @@
     <script>
       var THREE, manager, renderer, scene, gcode_loader, gcode_obj;
       var camera, controls, path, path_visible, render_requested;
-      var mouse_down, mouse_wheel, events_initialized, isMobile;
-      var ww = window.innerWidth, wh = window.innerHeight;
+      var mouse_down, mouse_wheel, events_initialized, init_running = false;
+      var ww = window.innerWidth, wh = window.innerHeight, isMobile;
       var url_displayed = false, url_loading = false, count = 0;
       var selected_gcode_file, selected_url_file = '', bounding_box;
     </script>
 
     <script type="module">
-      import * as three_js from "three";
-      import { GCodeLoader } from "../../static/jsm/loaders/GCodeLoader.min.js";
+      import * as threejs from 'three';
+      import { GCodeLoader } from '../../static/jsm/loaders/GCodeLoader.min.js';
 
-      THREE = three_js;
+      THREE = threejs;
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
@@ -48,7 +101,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>GCODE Viewer (r182)</title>
+    <title>GCODE Viewer (r184)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -64,7 +117,7 @@
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Path" id="btn_path" onclick="show_path()" style="min-width: 40px;" disabled>path</button>
         <label for="btn_path" title="Path"></label>
-        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="background-color: transparent; min-width: 15px;">&#x2191</button>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="background-color: transparent; min-width: 15px;">&#x2191</button>
         <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
       </div>
       <div class="fm" id="url" style="display: none;">
@@ -89,7 +142,7 @@
       }
 
       function show_url() {
-        if (url_displayed === true) {
+        if (url_displayed) {
           url_displayed = false;
           document.getElementById('url').style.display = 'none';
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
@@ -199,13 +252,13 @@
         mouse_wheel = true;
       }
 
-      function quick_x_rotation( angle ) {
-        gcode_obj.rotateX( Math.PI * parseFloat( angle ) );
+      function quick_x_rotation() {
+        gcode_obj.rotateX( - Math.PI / 2.0 );
         mouse_wheel = true;
       }
 
       async function init() {
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+        if (!url_loading && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
           mouse_wheel = true;
@@ -214,6 +267,8 @@
 
           await reset_all( true );
         }
+
+        init_running = true;
 
         enable_disable( true );
 
@@ -231,7 +286,7 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
-        if (url_loading === false) {
+        if (!url_loading) {
           // Loaded file
           let fi = document.getElementById('file_input');
           let fn_uc = fi.files[ 0 ].name.toUpperCase();
@@ -271,28 +326,28 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.05, 1e8 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
 
         if (controls === undefined) {
-          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+          const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
 
           controls = new OrbitControls( camera, renderer.domElement );
+          controls.enableZoom = true;
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.5;
           controls.rotateSpeed = 0.5;
           controls.keyPanSpeed = 0.5; 
           controls.panSpeed = 0.5;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.3;
           //controls.enableKeys = false;
-          //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
         }
 
         // Load GCODE file
@@ -353,12 +408,14 @@
         set_initial_scale();
         resize();
 
+        init_running = false;
+
         render_requested = true;
         mouse_wheel = true;
         count = 0;
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 100 ) );
+        if (!isMobile) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
       function log_info() {
@@ -374,12 +431,14 @@
         render_requested = false;
         enable_disable( true );
 
+        init_running = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
       }
 
       function show_path() {
-        if (path_visible === true) {
+        if (path_visible) {
           path_visible = false;
           gcode_obj.remove( path );
           document.getElementById('btn_path').style.backgroundColor = 'transparent';
@@ -394,14 +453,14 @@
 
       async function render() {
         if (gcode_obj) {
-          if (mouse_down === true || mouse_wheel === true) {
+          if (mouse_down || mouse_wheel) {
             controls.update();
 
             renderer.clear();
             renderer.render( scene, camera );
 
-            if (mouse_wheel === true) {
-              if (count > 5) {
+            if (mouse_wheel) {
+              if (count > 30) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -411,7 +470,7 @@
           }
         }
 
-        if (render_requested === true) requestAnimationFrame( render );
+        if (render_requested) requestAnimationFrame( render );
       }
 
       async function reset_all( reset = false ) {
@@ -420,7 +479,7 @@
         document.getElementById('btn_path').style.backgroundColor = 'transparent';
 
         // Reset the view
-        if (reset === true) {
+        if (reset) {
           controls.reset();
           set_back_color();
         } else {
@@ -453,7 +512,7 @@
 
         renderer.clear();
 
-        if (path_visible === true) await show_path();
+        if (path_visible) await show_path();
 
         gcode_obj.traverse( ( child ) => {
           if (child.isLine) {
@@ -469,7 +528,7 @@
           }
         });
 
-        if (isMobile === false) {
+        if (!isMobile) {
           renderer.info.reset();
           renderer.resetState();
         }
@@ -496,7 +555,7 @@
 
       function disabled_changed() {
         $('button').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -508,7 +567,7 @@
         });
 
         $('input[type=color]').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });

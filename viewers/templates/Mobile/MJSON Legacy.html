@@ -6,6 +6,59 @@
     <meta name="description" content="Legacy Viewer for three.js and Assimp formats: JS, JSON">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running || render_requested) {
+            handle_error( 'RESOURCE ERROR' );
+          } else {
+            document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
@@ -19,7 +72,7 @@
       var ambientLight, directionalLight, bounding_box, isMobile;
       var ww = window.innerWidth, wh = window.innerHeight;
       var fd, material, textures, flat_shading_enabled;
-      var selected_json_file, selected_url_file = '';
+      var selected_json_file, selected_url_file = '', init_running = false;
       var url_displayed = false, url_loading = false, wireframe_enabled;
       var bones, bones_exist, skeleton_demo_running, sk_count, vertex_colors_enabled;
       var skeleton, skeleton_helper, skeleton_visible, skeleton_demo_available;
@@ -179,7 +232,7 @@
         <input type="color" title="Background Color" id="back_color" onchange="set_back_color();" disabled />
         <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
-            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="30" step="0.05" value="1" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
+            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="5" step="0.01" value="1" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
             <span id="dli_val">1</span>
           </div>
         </button>
@@ -192,7 +245,7 @@
         <label for="btn_skeleton" title="Skeleton"></label>
         <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
         <label for="btn_wireframe" title="Wireframe"></label>
-        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="min-width: 15px;" disabled>&#x2191</button>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
         <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
       </div>
       <div class="fm" id="url" style="display: none;">
@@ -235,7 +288,7 @@
       }
 
       function show_url() {
-        if (url_displayed === true) {
+        if (url_displayed) {
           url_displayed = false;
           document.getElementById('url').style.display = 'none';
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
@@ -255,6 +308,7 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
         window.addEventListener( 'pointerup', (event) => { mouse_down = false; mouse_wheel = true; }, false);
@@ -262,11 +316,14 @@
         window.addEventListener( 'keydown', ( event ) => {
           if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
             controls.listenToKeyEvents( window );
+            activeKeys.add( event.key ); // Track this key
             mouse_wheel = true;
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
-          if (arrow_keys.some( k => k === event.key )) {
+          activeKeys.delete( event.key ); // Remove this key
+
+          if ( controls && activeKeys.size === 0 ) {
             controls.stopListenToKeyEvents();
             mouse_wheel = false;
           }
@@ -305,66 +362,38 @@
         mouse_wheel = true;
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it hopefully comes to view
-
+      function frame_camera() {
         bounding_box.setFromObject( mesh );
-        let size = bounding_box.getSize( new THREE.Vector3() );
-        let center = bounding_box.getCenter( new THREE.Vector3() );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        const size = bounding_box.getSize( new THREE.Vector3() );
 
-        // Move to the center
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length() ) ) );
+        camera.lookAt( center );
 
-        if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
+        // Center root
+        mesh.position.sub( center );
 
-        // Scale according to window width / height, whichever is greater
+        // Frame camera to root
+        let maxDim = Math.max( size.x, size.y, size.z );
+        const fov = ( camera.fov * Math.PI / 180 );
+        const dist = (maxDim < 0.05 ? 0.05 : maxDim) + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
+        camera.position.set( 0, 0, dist );
+        camera.lookAt( 0, 0, 0 );
 
-        if (ww > wh) {
-          mesh.scale.multiplyScalar( ( wh / size.y ) * 0.175 );
-        } else {
-          mesh.scale.multiplyScalar( ( ww / size.x ) * 0.175 );
-        }
-
-        // Get center coordinates and move to the center again
-
-        bounding_box.setFromObject( mesh );
-        size = bounding_box.getSize( new THREE.Vector3() );
-        center = bounding_box.getCenter( new THREE.Vector3() );
-
-        if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
-        if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
-        if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
-
-        // Scale again and re-center if the model's width / height is greater than the screen's width / height
-
-        if ( (ww > wh && size.x > ww) || (wh > ww && size.y > wh) ) {
-          mesh.scale.multiplyScalar( ( ww / (ww > wh ? size.x : size.y) ) );
-
-          bounding_box.setFromObject( mesh );
-          size = bounding_box.getSize( new THREE.Vector3() );
-          center = bounding_box.getCenter( new THREE.Vector3() );
-
-          if (center.x !== 0) mesh.translateX( center.x * ( - 1 ) );
-          if (center.y !== 0) mesh.translateY( center.y * ( - 1 ) );
-          if (center.z !== 0) mesh.translateZ( center.z * ( - 1 ) );
-        }
-
-        // Set the camera's z distance
-
-        camera.position.z = bounding_box.max.z + 200;
+        // ========================================================
+        // POST-CENTERING ADJUSTMENT
+        // ========================================================
+        // Now that the model is sitting safely at (0,0,0), we no longer 
+        // need a 100-million unit far plane. We tighten it dynamically!
+        camera.near = maxDim < 0.05 ? maxDim : 0.05;
+        camera.far = dist * 5;
         camera.updateProjectionMatrix();
 
-        bounding_box.setFromObject( mesh );
-        center = bounding_box.getCenter( new THREE.Vector3() );
-
-        controls.target.set( center.x, center.y, center.z );
-
-        mouse_wheel = true;
+        resize();
       }
 
       function json_animation() {
-        if (animation_running === true) {
+        if (animation_running) {
           animation_mixer.clipAction( animations[ current_animation ] ).stop();
           animation_mixer.clipAction( animations[ current_animation ] ).reset();
 
@@ -388,7 +417,7 @@
       }
 
       async function init() {
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+        if (!url_loading && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
           mouse_wheel = true;
@@ -398,14 +427,16 @@
           await reset_all( true );
         }
 
+        init_running = true;
+
         enable_disable( true );
 
         if (!window.__THREE__) {
-          await import( "https://cdn.jsdelivr.net/npm/three@0.111.0/build/three.min.js" );
-          await import( "../../static/js/utils/BufferGeometryUtils.js" );
-          await import( "../../static/js/legacy/LegacyJSONLoader.min.js" );
-          await import( "../../static/js/legacy/AssimpJSONLoader.min.js" );
-          await import( "../../static/js/legacy/OrbitControls.min.js" );
+          await import( 'https://cdn.jsdelivr.net/npm/three@0.111.0/build/three.min.js' );
+          await import( '../../static/js/utils/BufferGeometryUtils.js' );
+          await import( '../../static/js/legacy/LegacyJSONLoader.min.js' );
+          await import( '../../static/js/legacy/AssimpJSONLoader.min.js' );
+          await import( '../../static/js/legacy/OrbitControls.min.js' );
         }
 
         if (manager === undefined) {
@@ -420,13 +451,13 @@
         }
 
         if (tga_loader === undefined) {
-          if (!THREE.TGALoader) await import( "../../static/js/TGALoader.js" );
+          if (!THREE.TGALoader) await import( '../../static/js/TGALoader.js' );
           tga_loader = new THREE.TGALoader( manager );
           manager.addHandler( /\.tga$/i, tga_loader );
         }
 
         if (dds_loader === undefined) {
-          if (!THREE.DDSLoader) await import( "../../static/js/DDSLoader.js" );
+          if (!THREE.DDSLoader) await import( '../../static/js/DDSLoader.js' );
           dds_loader = new THREE.DDSLoader( manager );
           manager.addHandler( /\.dds$/i, dds_loader );
         }
@@ -477,7 +508,7 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
-        if (url_loading === false) {
+        if (!url_loading) {
           // Loaded file
           var fi = document.getElementById('file_input');
 
@@ -569,7 +600,7 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.05, 1e8 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -590,19 +621,19 @@
         }
 
         if (controls === undefined) {
-          controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls = new THREE.OrbitControls( camera, renderer.domElement );
+          controls.enableZoom = true;
           controls.zoomSpeed = 0.6;
           controls.rotateSpeed = 0.6;
           controls.keyPanSpeed = 0.6; 
           controls.panSpeed = 0.6;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.3;
           //controls.enableKeys = false;
-          //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
         }
 
         if (material === undefined) {
@@ -626,7 +657,7 @@
 
       function loadFile() {
         if (selected_json_file) {
-          if (model_is_object === true) {
+          if (model_is_object) {
             // Add local image blob URLs
             if (fd.images && fd.images.length > 0) {
               fd.images.forEach( ( img, index ) => {
@@ -671,7 +702,7 @@
 
                 // Check if this is coming from assimp_loader and try using json_loader instead
 
-                if (model_is_assimp === true) {
+                if (model_is_assimp) {
                   loader = json_loader;
                   model_is_assimp = false;
                   texturePath = undefined;
@@ -725,7 +756,7 @@
         mesh = object.clone();
 
         mesh.traverse( ( child ) => {
-          if (child.isMesh === true || child.isPoints === true) {
+          if (child.isMesh || child.isPoints) {
             if (child.geometry.type !== 'BufferGeometry') {
               try {
                 child.geometry = new THREE.BufferGeometry().fromGeometry( child.geometry );
@@ -747,8 +778,8 @@
               vertex_colors_enabled = true;
             }
 
-            if (child.isMesh === true) {
-              if (child.isSkinnedMesh === true) child.frustumCulled = false;
+            if (child.isMesh) {
+              if (child.isSkinnedMesh) child.frustumCulled = false;
             } else {
               object_is_points = true;
               child.sortPoints = true;
@@ -758,7 +789,7 @@
             if (child.material) {
               if (Array.isArray( child.material )) {
                 child.material.forEach( mtl => {
-                  if (child.isPoints) mtl.size = isMobile === true ? 1 : 0.6;
+                  if (child.isPoints) mtl.size = isMobile ? 1 : 0.6;
                   mtl.vertexColors = vertex_colors_enabled;
                   mtl.format = THREE.RGBAFormat;
                   mtl.side = THREE.DoubleSide;
@@ -767,7 +798,7 @@
                   mtl.needsUpdate = true;
                 });
               } else {
-                if (child.isPoints) child.material.size = isMobile === true ? 1 : 0.6;
+                if (child.isPoints) child.material.size = isMobile ? 1 : 0.6;
                 child.material.vertexColors = vertex_colors_enabled;
                 child.material.format = THREE.RGBAFormat;
                 child.material.side = THREE.DoubleSide;
@@ -797,8 +828,8 @@
       }
 
       async function addFileInScene( object ) {
-        if (model_is_assimp === true || buffer_geometry === true) {
-          if (buffer_geometry === true) {
+        if (model_is_assimp || buffer_geometry) {
+          if (buffer_geometry) {
             object.computeBoundingBox();
             object.computeBoundingSphere();
 
@@ -813,7 +844,7 @@
           } else {
             mesh = object.clone();
 
-            if (object.has_points_or_lines === false && object.has_bones === false) {
+            if (!object.has_points_or_lines && !object.has_bones) {
               let merged_geometries;
 
               try {
@@ -847,11 +878,11 @@
           // Check if animations exist
           if (object.animations) {
             // Check if the model has any bones
-            if (object.has_bones === true) {
+            if (object.has_bones) {
               let skinned_model = new THREE.Object3D();
 
               mesh.traverse( child => {
-                if (child.isMesh === true) {
+                if (child.isMesh) {
                   if (child.geometry.bones) {
                     let geometry = child.geometry;
                     let mesh_material = child.material;
@@ -910,13 +941,13 @@
           }
 
           mesh.traverse( function( child ) {
-            if (child.isMesh === true || child.isPoints === true) {
-              if (child.geometry.attributes && child.geometry.attributes.color && child.geometry.attributes.color.array.length > 0) {
+            if (child.isMesh || child.isPoints) {
+              if (child.geometry.attributes?.color?.array.length > 0) {
                 vertex_colors_enabled = true;
               }
 
-              if (child.isMesh === true) {
-                if (child.isSkinnedMesh === true) child.frustumCulled = false;
+              if (child.isMesh) {
+                if (child.isSkinnedMesh) child.frustumCulled = false;
               } else {
                 object_is_points = true;
                 child.sortPoints = true;
@@ -926,7 +957,7 @@
               if (child.material) {
                 if (Array.isArray( child.material )) {
                   child.material.forEach( mtl => {
-                    if (child.isPoints) mtl.size = isMobile === true ? 1 : 0.6;
+                    if (child.isPoints) mtl.size = isMobile ? 1 : 0.6;
                     mtl.vertexColors = vertex_colors_enabled;
                     mtl.format = THREE.RGBAFormat;
                     mtl.side = THREE.DoubleSide;
@@ -935,7 +966,7 @@
                     mtl.needsUpdate = true;
                   });
                 } else {
-                  if (child.isPoints) child.material.size = isMobile === true ? 1 : 0.6;
+                  if (child.isPoints) child.material.size = isMobile ? 1 : 0.6;
                   child.material.vertexColors = vertex_colors_enabled;
                   child.material.format = THREE.RGBAFormat;
                   child.material.side = THREE.DoubleSide;
@@ -998,7 +1029,7 @@
             }
           }
 
-          if (bones_exist === true) {
+          if (bones_exist) {
             document.getElementById('btn_skeleton').disabled = false;
 
             let root = new THREE.Object3D(), previous_index = -1, current_index, next_index;
@@ -1062,23 +1093,23 @@
             mesh.normalizeSkinWeights();
           }
 
-          if ((object.materials && object.materials.length > 0 && object.materials[ 0 ].vertexColors === true) ||
-            (object.geometry.attributes.color && object.geometry.attributes.color.array.length > 0)) {
+          if ((object.materials?.length > 0 && object.materials[ 0 ].vertexColors) ||
+            (object.geometry.attributes.color?.array.length > 0)) {
 
             vertex_colors_enabled = true;
           }
 
           await new Promise( resolve => setTimeout( resolve, 100 )); // adjust timing if necessary
 
-          if (mesh.material && mesh.isPoints !== undefined && mesh.isPoints === false) {
+          if (mesh.material && mesh.isPoints !== undefined && !mesh.isPoints) {
             if (Object.getOwnPropertyNames( textures ).length > 0) {
-              mesh.material.forEach( mtl => {
-                mtl.vertexColors = vertex_colors_enabled;
-                mtl.format = THREE.RGBAFormat;
-                mtl.side = THREE.DoubleSide;
-                mtl.flatShading = false;
+              mesh.material.forEach( m => {
+                m.vertexColors = vertex_colors_enabled;
+                m.format = THREE.RGBAFormat;
+                m.side = THREE.DoubleSide;
+                m.flatShading = false;
 
-                mtl.needsUpdate = true;
+                m.needsUpdate = true;
               });
             } else {
               mesh.material.vertexColors = vertex_colors_enabled;
@@ -1090,8 +1121,8 @@
             }
           } else {
             mesh.traverse( function( child ) {
-              if (child.isMesh === true || child.isPoints === true) {
-                if (child.isMesh === true) {
+              if (child.isMesh || child.isPoints) {
+                if (child.isMesh) {
                   if (child.isSkinnedMesh) child.frustumCulled = false;
                 } else {
                   object_is_points = true;
@@ -1102,7 +1133,7 @@
                 if (child.material) {
                   if (Array.isArray( child.material )) {
                     child.material.forEach( mtl => {
-                      if (child.isPoints) mtl.size = isMobile === true ? 1 : 0.6;
+                      if (child.isPoints) mtl.size = isMobile ? 1 : 0.6;
                       mtl.vertexColors = vertex_colors_enabled;
                       mtl.format = THREE.RGBAFormat;
                       mtl.side = THREE.DoubleSide;
@@ -1111,7 +1142,7 @@
                       mtl.needsUpdate = true;
                     });
                   } else {
-                    if (child.isPoints) child.material.size = isMobile === true ? 1 : 0.6;
+                    if (child.isPoints) child.material.size = isMobile ? 1 : 0.6;
                     child.material.vertexColors = vertex_colors_enabled;
                     child.material.format = THREE.RGBAFormat;
                     child.material.side = THREE.DoubleSide;
@@ -1221,7 +1252,7 @@
             function ( error ) { // onError
               // Check if this is coming from assimp_loader and try using json_loader instead
 
-              if (model_is_assimp === true) {
+              if (model_is_assimp) {
                 loader = json_loader;
                 model_is_assimp = false;
                 texturePath = undefined;
@@ -1265,12 +1296,11 @@
       }
 
       async function finish_loading() {
-        set_initial_scale();
-        resize();
+        frame_camera();
 
         enable_disable( false );
 
-        if (object_is_points === true) {
+        if (object_is_points) {
           document.getElementById('btn_flat').disabled = true;
           document.getElementById('btn_wireframe').disabled = true;
           disabled_changed();
@@ -1294,14 +1324,17 @@
           }
         });
 
+        init_running = false;
+
         console.timeEnd( 'Loading Time' );
+
         document.getElementById('div_loading').style.display = 'none';
 
         render_requested = true;
         mouse_wheel = true;
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+        if (!isMobile) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
       function log_info() {
@@ -1316,6 +1349,8 @@
         mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
+
+        init_running = false;
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
@@ -1348,8 +1383,8 @@
       }
 
       function show_skeleton() {
-        if (skeleton_visible === true) {
-          if (skeleton_demo_available === true) {
+        if (skeleton_visible) {
+          if (skeleton_demo_available) {
             // Run the demo with the skeleton visible
             skeleton_demo_available = false;
             skeleton_demo_running = true;
@@ -1359,7 +1394,7 @@
               document.getElementById('btn_animate').disabled = true;
               skeleton_animation_changed();
             }
-          } else if (skeleton_demo_running === true) {
+          } else if (skeleton_demo_running) {
             // Stop the demo and hide the skeleton, the demo will remain available
             // Animations, if present, will control the demo availability when turned ON / OFF
             skeleton_demo_running = false;
@@ -1384,20 +1419,20 @@
           skeleton_visible = true;
           scene.add( skeleton_helper );
           document.getElementById('btn_skeleton').style.backgroundColor = 'lightgreen';
-          if (animation_running === false) { skeleton_demo_available = true; sk_count = 0; }
+          if (!animation_running) { skeleton_demo_available = true; sk_count = 0; }
         }
 
         mouse_wheel = true;
       }
 
-      function quick_x_rotation( angle ) {
-        mesh.rotateX( Math.PI * parseFloat( angle ) );
+      function quick_x_rotation() {
+        mesh.rotateX( - Math.PI / 2.0 );
 
         mouse_wheel = true;
       }
 
       function set_flat() {
-        if (flat_shading_enabled === true) {
+        if (flat_shading_enabled) {
           document.getElementById('btn_flat').style.backgroundColor = 'transparent';
           flat_shading_enabled = false;
         } else {
@@ -1408,15 +1443,12 @@
         mesh.traverse( function( child ) {
           if (child.isMesh) {
             if (child.material) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.flatShading = flat_shading_enabled;
-                  mtl.needsUpdate = true;
-                });
-              } else {
-                child.material.flatShading = flat_shading_enabled;
-                child.material.needsUpdate = true;
-              }
+              const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
+
+              mtls.forEach( m => {
+                m.flatShading = flat_shading_enabled;
+                m.needsUpdate = true;
+              });
             }
           }
 
@@ -1426,7 +1458,7 @@
 
       function show_wireframe() {
         if (mesh) {
-          if (wireframe_enabled === true) {
+          if (wireframe_enabled) {
             wireframe_enabled = false;
             document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
           } else {
@@ -1437,13 +1469,8 @@
           mesh.traverse( function( child ) {
             if (child.isMesh){
               if (child.material) {
-                if (Array.isArray( child.material )) {
-                  child.material.forEach( mtl => {
-                    mtl.wireframe = wireframe_enabled;
-                  });
-                } else {
-                  child.material.wireframe = wireframe_enabled;
-                }
+                const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
+                mtls.forEach( m => m.wireframe = wireframe_enabled );
               }
             }
 
@@ -1454,10 +1481,9 @@
 
       async function render() {
         if (mesh) {
-          if (animation_running === true || mouse_down === true || mouse_wheel === true ||
-            (skeleton_demo_available === false && skeleton_demo_running === true)) {
+          if (animation_running || mouse_down || mouse_wheel || (!skeleton_demo_available && skeleton_demo_running)) {
 
-            if (skeleton_demo_available === false && skeleton_demo_running === true) {
+            if (!skeleton_demo_available && skeleton_demo_running) {
               mesh.traverse( child => {
                 if (child.isSkinnedMesh) {
                   child.skeleton.bones.forEach( bone => {
@@ -1482,7 +1508,7 @@
                 }
               });
             } else {
-              if (animation_running === true) animation_mixer.update( clock.getDelta() );
+              if (animation_running) animation_mixer.update( clock.getDelta() );
             }
 
             controls.update();
@@ -1490,8 +1516,8 @@
             renderer.clear();
             renderer.render( scene, camera );
 
-            if (mouse_wheel === true) {
-              if (count > 5) {
+            if (mouse_wheel) {
+              if (count > 30) {
                 mouse_wheel = false;
                 count = 0;
               } else {
@@ -1501,14 +1527,13 @@
           }
         }
 
-        if (render_requested === true) requestAnimationFrame( render );
+        if (render_requested) requestAnimationFrame( render );
       }
 
       async function reset_all( reset = false ) {
         document.getElementById('back_color').value = '#000000';
         document.getElementById('dli_val').innerText = 1;
         document.getElementById('directional_light_intensity').value = 1;
-        document.getElementById('btn_url').style.backgroundColor = 'transparent';
         document.getElementById('btn_flat').style.backgroundColor = 'transparent';
         document.getElementById('btn_animate').style.backgroundColor = 'transparent';
         document.getElementById('btn_skeleton').style.backgroundColor = 'transparent';
@@ -1521,7 +1546,7 @@
         }
 
         // Reset the view
-        if (reset === true) {
+        if (reset) {
           controls.reset();
           set_back_color();
         } else {
@@ -1540,6 +1565,7 @@
           mouse_wheel = true;
 
           document.getElementById('file_input').value = '';
+          document.getElementById('btn_url').style.backgroundColor = 'transparent';
           document.getElementById('div_error').style.display = 'none';
           document.getElementById('btn_animate').disabled = true;
           document.getElementById('btn_skeleton').disabled = true;
@@ -1567,12 +1593,12 @@
           animation_mixer.uncacheRoot( animation_mixer.getRoot() );
         }
 
-        if (wireframe_enabled === true) await show_wireframe();
+        if (wireframe_enabled) await show_wireframe();
 
         if (skeleton_helper) {
           skeleton_demo_running = false;
 
-          if (skeleton_visible === true) {
+          if (skeleton_visible) {
             scene.remove( skeleton_helper );
             skeleton_visible = false;
           }
@@ -1590,61 +1616,34 @@
                 child.skeleton.boneTexture.dispose();
 
             if (child.material) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  if (mtl.uniforms) {
-                    Object.keys( mtl.uniforms ).forEach( ( key ) => {
-                      if (mtl.uniforms[ key ].value) {
-                        if (Array.isArray( mtl.uniforms[ key ].value ) && mtl.uniforms[ key ].value.length > 0) {
-                          mtl.uniforms[ key ].value.forEach( val => {
-                            if (val.type && val.type === 1009)
-                              val.dispose();
-                          });
-                        } else {
-                          if (mtl.uniforms[ key ].value.type && mtl.uniforms[ key ].value.type === 1009)
-                            mtl.uniforms[ key ].value.dispose();
-                        }
-                      }
-                    });
-                  } else {
-                    for (const prop in mtl) {
-                      texture_maps.forEach( tex_map => {
-                        if (prop === tex_map) {
-                          if (mtl[ prop ]) mtl[ prop ].dispose();
-                        }
-                      });
-                    };
-                  }
+              const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                  mtl.dispose();
-                });
-              } else {
-                if (child.material.uniforms) {
-                  Object.keys( child.material.uniforms ).forEach( ( key ) => {
-                    if (child.material.uniforms[ key ].value) {
-                      if (Array.isArray( child.material.uniforms[ key ].value ) && child.material.uniforms[ key ].value.length > 0) {
-                        child.material.uniforms[ key ].value.forEach( val => {
-                          if (val.type && val.type === 1009)
-                            val.dispose();
+              mtls.forEach( m => {
+                if (m.uniforms) {
+                  Object.keys( m.uniforms ).forEach( ( key ) => {
+                    if (m.uniforms[ key ].value) {
+                      if (Array.isArray( m.uniforms[ key ].value ) && m.uniforms[ key ].value.length > 0) {
+                        m.uniforms[ key ].value.forEach( val => {
+                          if (val.type && val.type === 1009) val.dispose();
                         });
                       } else {
-                        if (child.material.uniforms[ key ].value.type && child.material.uniforms[ key ].value.type === 1009)
-                          child.material.uniforms[ key ].value.dispose();
+                        if (m.uniforms[ key ].value.type && m.uniforms[ key ].value.type === 1009)
+                          m.uniforms[ key ].value.dispose();
                       }
                     }
                   });
                 } else {
-                  for (const prop in child.material) {
+                  for (const prop in m) {
                     texture_maps.forEach( tex_map => {
                       if (prop === tex_map) {
-                        if (child.material[ prop ]) child.material[ prop ].dispose();
+                        if (m[ prop ]) m[ prop ].dispose();
                       }
                     });
                   };
                 }
 
-                child.material.dispose();
-              }
+                m.dispose();
+              });
             }
 
             child.geometry.dispose();
@@ -1660,7 +1659,7 @@
         material.dispose();
         material = undefined;
 
-        if (isMobile === false) {
+        if (!isMobile) {
           renderer.info.reset();
           renderer.state.reset();
         }
@@ -1697,7 +1696,7 @@
 
       function disabled_changed() {
         $('button').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -1709,7 +1708,7 @@
         });
 
         $('input[type=color]').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
@@ -1722,7 +1721,7 @@
       }
 
       function skeleton_animation_changed() {
-        if ($('#btn_animate')[ 0 ].disabled === true) {
+        if ($('#btn_animate')[ 0 ].disabled) {
           $('#btn_animate').unbind('mouseenter mouseleave');
         } else {
           $('#btn_animate').hover(
