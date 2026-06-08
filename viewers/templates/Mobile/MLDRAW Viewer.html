@@ -12,7 +12,7 @@
       window.addEventListener( 'error', function ( event ) {
         // We check if the target has a 'src' or 'href' to identify it as a resource
         if (event.target.src || event.target.href) {
-          console.error( 'RESOURCE ERROR:', {
+          console.error( 'RESOURCE ERROR: ', {
             element: event.target.tagName,
             url: event.target.src || event.target.href,
             html: event.target.outerHTML
@@ -21,6 +21,12 @@
           // If the failed resource is jQuery, show the alert immediately
           if ((event.target.src || '').includes('jquery')) {
             alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running || render_requested) {
+            handle_error( 'RESOURCE ERROR' );
+          } else {
+            document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
           }
         }
       }, true); // The 'true' here is vital; it enables the "capturing" phase
@@ -37,18 +43,20 @@
           errorObj: error   // The actual Error object (includes stack trace)
         });
 
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
         // Returning 'true' prevents the error from showing up in the browser console
         return false; 
       };
 
       // Unhandled Promise Rejections (Async Errors)
       window.addEventListener( 'unhandledrejection', function ( event ) {
-        console.warn( 'UNHANDLED PROMISE:', event.reason );
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
 
         // event.promise is the promise that failed
         // event.reason is usually the error object or message
 
-        if (init_running === true) handle_error( 'UNHANDLED PROMISE' + event.reason );
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
       });
     </script>
 
@@ -57,8 +65,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.183.1/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.183.1/examples/jsm/"
+          "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/"
         }
       }
     </script>
@@ -79,10 +87,10 @@
     </script>
 
     <script type="module">
-      import * as three_js from "three";
-      import { LDrawLoader } from "three/addons/loaders/LDrawLoader.min.js";
+      import * as threejs from 'three';
+      import { LDrawLoader } from 'three/addons/loaders/LDrawLoader.min.js';
 
-      THREE = three_js;
+      THREE = threejs;
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true }
@@ -98,7 +106,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>LDRAW Viewer (r183)</title>
+    <title>LDRAW Viewer (r184)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -174,7 +182,7 @@
       }
 
       function show_url() {
-        if (url_displayed === true) {
+        if (url_displayed) {
           url_displayed = false;
           document.getElementById('url').style.display = 'none';
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
@@ -193,7 +201,7 @@
       function clear_url() { document.getElementById('url_entry').value = ''; }
 
       function show_library_url() {
-        if (library_url_displayed === true) {
+        if (library_url_displayed) {
           document.getElementById('library_url').style.display = 'none';
           document.getElementById('btn_library').style.backgroundColor = 'transparent';
           library_url_displayed = false;
@@ -236,6 +244,7 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', (event) => { mouse_down = true; }, false);
         window.addEventListener( 'pointerup', (event) => { mouse_down = false; mouse_wheel = true; }, false);
@@ -243,11 +252,14 @@
         window.addEventListener( 'keydown', ( event ) => {
           if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
             controls.listenToKeyEvents( window );
+            activeKeys.add( event.key ); // Track this key
             mouse_wheel = true;
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
-          if (arrow_keys.some( k => k === event.key )) {
+          activeKeys.delete( event.key ); // Remove this key
+
+          if (controls && activeKeys.size === 0) {
             controls.stopListenToKeyEvents();
             mouse_wheel = false;
           }
@@ -303,13 +315,21 @@
         const dist = maxDim + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
         camera.position.set( 0, 0, dist );
         camera.lookAt( 0, 0, 0 );
+
+        // ========================================================
+        // POST-CENTERING ADJUSTMENT
+        // ========================================================
+        // Now that the model is sitting safely at (0,0,0), we no longer 
+        // need a 100-million unit far plane. We tighten it dynamically!
+        camera.near = 0.5;
+        camera.far = dist * 5;
+        camera.updateProjectionMatrix();
+
         resize();
       }
 
       async function init() {
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
-
-        init_running = true;
+        if (!url_loading && document.getElementById('file_input').files.length === 0) return;
 
         if (scene) {
           mouse_wheel = true;
@@ -318,6 +338,8 @@
 
           await reset_all( true );
         }
+
+        init_running = true;
 
         enable_disable( true );
 
@@ -335,7 +357,7 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
-        if (url_loading === false) {
+        if (!url_loading) {
           // Loaded file
           let fi = document.getElementById('file_input');
           let fn_uc = fi.files[ 0 ].name.toUpperCase();
@@ -377,7 +399,7 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.5, 1e8 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -398,22 +420,22 @@
         }
 
         if (controls === undefined) {
-          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+          const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
 
           controls = new OrbitControls( camera, renderer.domElement );
+          controls.enableZoom = true;
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.5;
           controls.rotateSpeed = 0.5;
           controls.keyPanSpeed = 0.5; 
           controls.panSpeed = 0.5;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.3;
           //controls.enableKeys = false;
-          //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
         }
 
         if (scene.environment === null) {
@@ -436,9 +458,9 @@
           });
         }
 
-        if (ldraw_set === false) {
+        if (!ldraw_set) {
           if (parseFloat( THREE.REVISION ) > 169.0) {
-            const { LDrawConditionalLineMaterial } = await import( "three/addons/materials/LDrawConditionalLineMaterial.min.js" );
+            const { LDrawConditionalLineMaterial } = await import( 'three/addons/materials/LDrawConditionalLineMaterial.min.js' );
             ldraw_loader.setConditionalLineMaterial( LDrawConditionalLineMaterial );
           }
 
@@ -526,15 +548,17 @@
 
         ldraw_obj.traverse( function( child ) {
           if (child.isMesh) {
-            if (Array.isArray( child.material )) {
-              child.material.forEach( mtl => {
-                mtl.side = THREE.DoubleSide;
-                mtl.wireframeLinewidth = 1.0;
-              });
-            } else {
-              child.material.side = THREE.DoubleSide;
-              child.material.wireframeLinewidth = 1.0;
-            }
+            const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
+            mtls.forEach( m => {
+              m.side = THREE.DoubleSide;
+              m.wireframeLinewidth = 1.0;
+
+              if (m.transparent) {
+                m.polygonOffset = true;
+                m.polygonOffsetFactor = -1;
+                m.polygonOffsetUnits = -1;
+              }
+            });
           }
         });
 
@@ -569,7 +593,7 @@
 
         init_running = false;
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info, 1000 ) );
+        if (!isMobile) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
       function log_info() {
@@ -594,7 +618,7 @@
       }
 
       function construction_steps_direction() {
-        if (count_up === false) {
+        if (!count_up) {
           c_steps = 0;
           count_up = true;
           document.getElementById('btn_construction_steps_direction').innerHTML = '&#x2191';
@@ -612,7 +636,7 @@
       }
 
       function construction_steps() {
-        (count_up === true) ? c_steps ++ : c_steps --;
+        count_up ? c_steps ++ : c_steps --;
 
         if (c_steps === ldraw_obj.userData.numBuildingSteps - 1) {
           count_up = false;
@@ -631,7 +655,7 @@
 
       function update_object_visibility() {
         ldraw_obj.traverse( child => {
-          if (child.isGroup === true) {
+          if (child.isGroup) {
             child.visible = child.userData.buildingStep <= c_steps;
             mouse_wheel = true;
           }
@@ -640,7 +664,7 @@
 
       function show_wireframe() {
         if (ldraw_obj) {
-          if (wireframe_enabled === true) {
+          if (wireframe_enabled) {
             wireframe_enabled = false;
             document.getElementById('btn_wireframe').style.backgroundColor = 'transparent';
           } else {
@@ -652,13 +676,8 @@
             mouse_wheel = true;
 
             if (child.isMesh) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.wireframe = wireframe_enabled;
-                });
-              } else {
-                child.material.wireframe = wireframe_enabled;
-              }
+              const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
+              mtls.forEach( m => m.wireframe = wireframe_enabled );
             }
       	  });
         }
@@ -666,13 +685,13 @@
 
       async function render() {
         if (ldraw_obj) {
-          if (mouse_down === true || mouse_wheel === true) {
+          if (mouse_down || mouse_wheel) {
             controls.update();
 
             renderer.clear();
             renderer.render( scene, camera );
 
-            if (mouse_wheel === true) {
+            if (mouse_wheel) {
               if (count > 5) {
                 mouse_wheel = false;
                 count = 0;
@@ -683,7 +702,7 @@
           }
         }
 
-        if (render_requested === true) requestAnimationFrame( render );
+        if (render_requested) requestAnimationFrame( render );
       }
 
       async function reset_all( reset = false ) {
@@ -694,8 +713,6 @@
         document.getElementById('btn_construction_steps').style.backgroundColor = 'transparent';
         document.getElementById('btn_construction_steps_direction').style.backgroundColor = 'transparent';
 
-        init_running = false;
-
         if (scene) {
           if (directionalLight) {
             set_directional_light_intensity();
@@ -703,7 +720,7 @@
         }
 
         // Reset the view
-        if (reset === true) {
+        if (reset) {
           controls.reset();
           set_back_color();
         } else {
@@ -747,55 +764,36 @@
 
         renderer.clear();
 
-        if (wireframe_enabled === true) await show_wireframe();
+        if (wireframe_enabled) await show_wireframe();
 
         ldraw_obj.traverse( function( child ) {
           if (child.isMesh || child.isLineSegments) {
-            if (Array.isArray( child.material )) {
-              child.material.forEach( mtl => {
-                if (mtl.uniforms) {
-                  Object.keys( mtl.uniforms ).forEach( ( key ) => {
-                    if (mtl.uniforms[ key ].value) {
-                      if (Array.isArray( mtl.uniforms[ key ].value ) && mtl.uniforms[ key ].value.length > 0) {
-                        mtl.uniforms[ key ].value.forEach( val => {
-                          if (val.type && val.type === 1009)
-                            val.dispose();
-                        });
-                      } else {
-                        if (mtl.uniforms[ key ].value.type && mtl.uniforms[ key ].value.type === 1009)
-                          mtl.uniforms[ key ].value.dispose();
-                      }
-                    }
-                  });
-                }
+            const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                mtl.dispose();
-              });
-            } else {
-              if (child.material.uniforms) {
-                Object.keys( child.material.uniforms ).forEach( ( key ) => {
-                  if (child.material.uniforms[ key ].value) {
-                    if (Array.isArray( child.material.uniforms[ key ].value ) && child.material.uniforms[ key ].value.length > 0) {
-                      child.material.uniforms[ key ].value.forEach( val => {
-                        if (val.type && val.type === 1009)
-                          val.dispose();
+            mtls.forEach( m => {
+              if (m.uniforms) {
+                Object.keys( m.uniforms ).forEach( ( key ) => {
+                  if (m.uniforms[ key ].value) {
+                    if (Array.isArray( m.uniforms[ key ].value ) && m.uniforms[ key ].value.length > 0) {
+                      m.uniforms[ key ].value.forEach( val => {
+                        if (val.type && val.type === 1009) val.dispose();
                       });
                     } else {
-                      if (child.material.uniforms[ key ].value.type && child.material.uniforms[ key ].value.type === 1009)
-                        child.material.uniforms[ key ].value.dispose();
+                      if (m.uniforms[ key ].value.type && m.uniforms[ key ].value.type === 1009)
+                        m.uniforms[ key ].value.dispose();
                     }
                   }
                 });
               }
 
-              child.material.dispose();
-            }
+              m.dispose();
+            });
 
             child.geometry.dispose();
           }
         });
 
-        if (isMobile === false) {
+        if (!isMobile) {
           renderer.info.reset();
           renderer.resetState();
         }
@@ -830,7 +828,7 @@
 
       function disabled_changed() {
         $('button').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -842,7 +840,7 @@
         });
 
         $('input[type=color]').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px whitesmoke'; });
