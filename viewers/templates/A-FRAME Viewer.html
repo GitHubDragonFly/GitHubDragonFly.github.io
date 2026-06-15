@@ -4,7 +4,51 @@
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="A-Frame Viewer - Single Model or Scene">
+    <link rel="stylesheet" href="../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
+
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+      });
+    </script>
 
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
@@ -14,7 +58,20 @@
           "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/",
           "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/",
-          "meshoptimizer_decoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_decoder.module.min.js"
+          "meshoptimizer": "https://esm.sh/meshoptimizer@1.1.1"
+        }
+      }
+    </script>
+
+    <script>
+      // Workaround for Immersive Web Emulator XRWebGLBinding crash
+      if (typeof XRWebGLBinding !== 'undefined' && XRWebGLBinding.prototype) {
+        try {
+          // Deleting this property forces Three.js to fallback to standard WebXR rendering
+          delete XRWebGLBinding.prototype.createProjectionLayer;
+          console.log( 'Successfully bypassed XRWebGLBinding compatibility issue' );
+        } catch ( e ) {
+          console.warn( 'Could not patch XRWebGLBinding: ', e);
         }
       }
     </script>
@@ -22,111 +79,12 @@
     <script src="https://cdn.jsdelivr.net/npm/aframe@1.7.1/dist/aframe-v1.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
-    <style>
-      body, html {
-        position: relative;
-        display: block;
-        width: 100%;
-        min-height: 100vh;
-        border: 0;
-        padding: 0;
-        margin: 0;
-        overflow: hidden;
-      }
-
-      button {
-        background-color: transparent;
-        border: 1px solid blue;
-        -webkit-border-radius: 3px;
-        border-radius: 3px;
-        text-align: center;
-        vertical-align: middle;
-        margin: 2px 2px 2px 0;
-        min-width: 20px;
-        height: 22px;
-        padding: 1px;
-      }
-
-      label {
-        vertical-align: middle;
-        height: 22px;
-        margin: 2px 0 2px 0;
-      }
-
-      input[type=file] {
-        vertical-align: middle;
-        margin: 2px 0 2px 0;
-        max-width: 160px;
-      }
-
-      input[type=text] {
-        vertical-align: middle;
-        margin: 2px 2px 2px 0;
-      }
-
-      select {
-        vertical-align: middle;
-        border: 1px solid blue;
-        -webkit-border-radius: 3px;
-        border-radius: 3px;
-        background: none;
-        min-width: 72px;
-        height: 22px;
-        color: blue;
-      }
-
-      .error_msg {
-        background-color: transparent;
-        position: absolute;
-        text-align: center;
-        font-size: x-large;
-        display: none;
-        color: red;
-        width: 240px;
-        height: 240px;
-        top: 50%;
-        left: 50%;
-        margin-left: -127px;
-        padding: 10px;
-        border: none;
-      }
-
-      .loading_msg {
-        background-color: transparent;
-        color: greenyellow;
-        position: absolute;
-        text-align: center;
-        font-size: large;
-        display: none;
-        height: 240px;
-        width: 240px;
-        top: 50%;
-        left: 50%;
-        margin-left: -127px;
-        padding: 10px;
-        border: none;
-      }
-
-      .fm {
-        color: navy;
-        width: calc(100% - 12px);
-        border: 1px solid navy;
-        -webkit-border-radius: 2px;
-        border-radius: 2px;
-        padding: 4px;
-        margin: 1px;
-      }
-
-      .fixed-menu {
-        background-color: whitesmoke;
-        width: calc(100% - 2px);
-        display: inline-block;
-        position: fixed;
-        padding: 1px;
-        z-index: 1;
-        margin: 0;
-      }
-    </style>
+    <script>
+      var selected_url_file = '', url_displayed = false, url_loading = false;
+      var manager, loaded_model, material, extension, animations, vertex_colors;
+      var texture_maps, isMobile, activeMixers = [], raycaster, mouse;
+      var mouseDownPos, pickedObject;
+    </script>
 
     <!-- Using A-Frame Library from: https://aframe.io -->
 
@@ -136,7 +94,9 @@
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
         <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" id="file_input" name="file" onchange="init()" accept=".bim, .dae, .fbx, .glb, .gltf, .ply, .usd, .usda, .usdc, .usdz" />
+        <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
+        <label for="btn_file_input" title="Browse Local Files"></label>
+        <input type="file" id="file_input" style="display: none;" onchange="init()" accept=".bim, .dae, .fbx, .glb, .gltf, .ply, .usd, .usda, .usdc, .usdz" />
         <select title="Scale" id="model_scale" disabled>
           <option title="Model Scale" value="scale" selected disabled>Scale</option>
           <option title="Scale 0.05x" value="0.05x" onclick="set_model_scale( '0.05x' );">0.05x</option>
@@ -158,8 +118,18 @@
       </div>
     </div>
 
-    <a-scene id="a_scene">
-      <a-sky color="#000325"></a-sky>
+    <a-scene id="a_scene" scene-animation-runner vr-session-monitor webxr="referenceSpaceType: local-floor; requiredFeatures: local-floor; optionalFeatures: local-floor;">
+      <a-sky color="#87CEEB"></a-sky>
+
+      <a-light type="ambient" color="#FFF" intensity="1.5" position="1 1 1"></a-light>
+      <a-light type="directional" color="#FFF" intensity="3.0" position="-1 1 1"></a-light>
+
+      <a-entity id="rig" position="0 1.6 4" wheel-zoom>
+        <a-camera look-controls wasd-controls position="0 1.6 0"></a-camera>
+        <a-entity id="model-container" manual-model-raycast raycast-listen position="0 0 -3"></a-entity>
+        <a-entity laser-controls="hand: right" raycaster="objects: .raycastable"></a-entity>
+        <a-entity laser-controls="hand: left" raycaster="objects: .raycastable"></a-entity>
+      </a-entity>
     </a-scene>
 
     <div id="div_error" class="error_msg">E R R O R !</div>
@@ -185,42 +155,191 @@
 
       function clear_url() { document.getElementById('url_entry').value = ''; }
 
+      function clear_highlight() {
+        if (pickedObject?.material?._isCloned && pickedObject?.userData?.originalMaterial) {
+          pickedObject.material.dispose();
+          pickedObject.material = pickedObject.userData.originalMaterial;
+
+          const mtls = Array.isArray( pickedObject.userData.originalMaterial )
+            ? pickedObject.userData.originalMaterial
+            : [ pickedObject.userData.originalMaterial ];
+
+          mtls.forEach( m => m.dispose() );
+          delete pickedObject.userData.originalMaterial;
+        }
+      }
+
       function initialize_event_listeners() {
-        const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
-        const activeKeys = new Set();
+        window.addEventListener( 'pointerdown', ( event ) => {
+          mouseDownPos.x = event.clientX;
+          mouseDownPos.y = event.clientY;
+        }, false);
 
-        window.addEventListener( 'pointerdown', ( event ) => {}, false);
-        window.addEventListener( 'pointerup', ( event ) => {}, false);
-        window.addEventListener( 'wheel', ( event ) => {}, false);
-        window.addEventListener( 'keydown', ( event ) => {
-          if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
-            controls.listenToKeyEvents( window );
-            activeKeys.add( event.key ); // Track this key
+        window.addEventListener( 'pointerup', ( event ) => {
+          // Calculate how far the mouse moved
+          const deltaX = Math.abs( event.clientX - mouseDownPos.x );
+          const deltaY = Math.abs( event.clientY - mouseDownPos.y );
+
+          // If moved more than 5 pixels, it was likely a camera drag, not a click
+          if (deltaX > 5 || deltaY > 5) return;
+
+          clear_highlight();
+
+          if (event.target.closest( '#fixed_menu' )) return;
+
+          // 1. Safety check: make sure a model is actually loaded
+          if (!loaded_model) return;
+
+          // 2. Calculate normalized mouse coordinates (-1 to +1) for the viewport
+          mouse.x = ( event.clientX / window.innerWidth ) * 2 - 1;
+          mouse.y = - ( event.clientY / window.innerHeight ) * 2 + 1;
+
+          // 3. Grab the active camera from the A-Frame scene component
+          const sceneEl = document.getElementById( 'a_scene' );
+          const camera = sceneEl ? sceneEl.camera : null;
+
+          if (camera) {
+            // 4. Project the ray from the camera lens through the mouse point
+            raycaster.setFromCamera( mouse, camera );
+
+            // 5. Check intersections. 'true' tells three.js to look deep into sub-meshes
+            const intersects = raycaster.intersectObject( loaded_model, true );
+
+            if (intersects.length > 0) {
+              const hit = intersects[ 0 ];
+              pickedObject = hit.object;
+
+              console.log( 'Clicked Part Name: ', pickedObject.name );
+
+              // Read baked-in file metadata
+              if (pickedObject.userData && Object.entries( pickedObject.userData ).length > 0) {
+                console.log( '--- Metadata Found --- ', pickedObject.userData );
+              }
+
+              // --- OPTIONAL TEST ACTION ---
+              // Change the clicked sub-mesh material color to neon red to prove it works
+              if (pickedObject.material) {
+                // If the material is shared, clone it so only the clicked piece gets colored
+                if (!pickedObject.material._isCloned) {
+                  if (!pickedObject.userData.originalMaterial) {
+                    pickedObject.userData.originalMaterial = pickedObject.material;
+                  }
+
+                  pickedObject.material = Array.isArray( pickedObject.material )
+                    ? pickedObject.material[ 0 ].clone()
+                    : pickedObject.material.clone();
+
+                  pickedObject.material._isCloned = true;
+                }
+
+                pickedObject.material.color.setHex( 0xff0000 );
+                pickedObject.material.needsUpdate = true;
+              }
+            }
           }
         }, false);
-        window.addEventListener( 'keyup', ( event ) => {
-          activeKeys.delete( event.key ); // Remove this key
 
-          if ( controls && activeKeys.size === 0 ) {
-            controls.stopListenToKeyEvents();
-          }
-        }, false);
+        window.addEventListener( 'wheel', ( event ) => {}, false );
       }
     </script>
 
     <script>
-      var selected_url_file = '', url_displayed = false, url_loading = false;
-      var manager, loaded_model, material, extension, vertex_colors;
-      var texture_maps, isMobile, events_initialized;
-
       function set_model_scale( scale ) {
         document.getElementById('model_scale').selectedIndex = 0;
-
         loaded_model.scale.multiplyScalar( parseFloat( scale.slice( 0, -1 ) ) );
       }
 
       function quick_x_rotation() {
         loaded_model.rotateX( - Math.PI / 2.0 );
+      }
+
+      function clear_current_animations() {
+        // Stop all active clips before clearing references
+        activeMixers.forEach( mixer => {
+          mixer.stopAllAction();
+
+          for ( let i = 0; i < animations.length; i++ ) {
+            mixer.uncacheAction( animations[ i ] );
+            mixer.uncacheClip( animations[ i ] );
+          }
+
+          mixer.uncacheRoot( mixer.getRoot() );
+        });
+
+        animations = [];
+        activeMixers = [];
+      }
+
+      function normalize_and_center_global_model() {
+        if (!loaded_model) return;
+
+        // Reset the parent wrapper's transformations so calculations start at true zero
+        loaded_model.scale.set( 1, 1, 1 );
+        loaded_model.position.set( 0, 0, 0 );
+        loaded_model.rotation.set( 0, 0, 0 );
+        loaded_model.updateMatrixWorld( true );
+
+        // Create a clean bounding box
+        const box = new THREE.Box3();
+        let hasVisibleMesh = false;
+
+        // Traversal: ONLY measure active visual Meshes/Points (ignores hidden cameras, bones, and lights)
+        loaded_model.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            // Compute bounding settings for this specific geometry if not ready
+            if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+
+            // Expand our master bounding box to include this mesh
+            box.expandByObject( child );
+            hasVisibleMesh = true;
+          }
+        });
+
+        // Fallback: If no meshes were found in traversal, fallback to the entire object structure
+        if (!hasVisibleMesh) {
+          box.setFromObject( loaded_model );
+        }
+
+        const size = new THREE.Vector3();
+        const center = new THREE.Vector3();
+        box.getSize( size );
+        box.getCenter( center );
+
+        // 3. Fallback protection if model dimensions are zero
+        const maxDimension = Math.max( size.x, size.y, size.z );
+
+        if (maxDimension === 0) {
+          console.warn( 'Model size calculated as 0. Resetting to defaults.' );
+          loaded_model.scale.set( 1, 1, 1 );
+          loaded_model.position.set( 0, 1.6, -3 );
+          return;
+        }
+
+        // 4. Scale down/up so the visible asset is exactly 2 A-Frame meters wide/tall
+        const targetSize = 2.0; 
+        const scaleFactor = targetSize / maxDimension;
+        loaded_model.scale.set( scaleFactor, scaleFactor, scaleFactor );
+
+        // 5. Center and shift the model up to eye-level (1.6) and forward (-3)
+        const targetX = ( center.x * scaleFactor );
+        const targetY = 1.6 - ( center.y * scaleFactor );
+        const targetZ = -3 - ( center.z * scaleFactor );
+
+        if (!isNaN( targetX ) && !isNaN( targetY ) && !isNaN( targetZ )) {
+          loaded_model.position.set( targetX, targetY, targetZ );
+        } else {
+          loaded_model.position.set( 0, 1.6, -3 );
+        }
+
+        const mc = document.getElementById( 'model-container' );
+
+        // Set raw Three.js object to the entity
+        mc.setObject3D( 'mesh', loaded_model );
+
+        // Tell A-Frame the object changed so the raycaster updates!
+        mc.emit( 'model-loaded' , { type: 'mesh' } );
+
+        return;
       }
 
       async function load_model( url = '', extension = '' ) {
@@ -229,10 +348,14 @@
           return;
         }
 
-        const { LoadingManager } = await import( 'three' );
-        manager = new LoadingManager(); 
+        //await clear_current_animations();
 
-        let scene = document.getElementById('a_scene').object3D;
+        if (loaded_model === undefined) loaded_model = new THREE.Object3D();
+
+        if (raycaster === undefined) raycaster = new THREE.Raycaster();
+        if (mouse === undefined) mouse = new THREE.Vector2();
+
+        initialize_event_listeners();
 
         await new Promise( async resolve => {
           switch ( extension ) {
@@ -242,7 +365,7 @@
               const bim_loader = new BIMLoader( manager );
 
               bim_loader.load( url, function( bim_meshes ) {
-                loaded_model = bim_meshes;
+                loaded_model.add( bim_meshes );
                 loaded_model.name = 'loaded_model';
 
                 loaded_model.traverse( ( child ) => {
@@ -254,27 +377,22 @@
 
                     vertex_colors = child.geometry.hasAttribute( 'color' );
 
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        set_texture_colorSpace( mtl );
-                        mtl.vertexColors = vertex_colors;
-                        mtl.side = THREE.DoubleSide;
-                        mtl.flatShading = true;
+                    const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                        mtl.needsUpdate = true;
-                      });
-                    } else {
-                      set_texture_colorSpace( child.material );
-                      child.material.vertexColors = vertex_colors;
-                      child.material.side = THREE.DoubleSide;
-                      child.material.flatShading = true;
+                    mtls.forEach( m => {
+                      set_texture_colorSpace( m );
+                      m.vertexColors = vertex_colors;
+                      m.side = THREE.DoubleSide;
+                      m.flatShading = true;
 
-                      child.material.needsUpdate = true;
-                    }
+                      m.needsUpdate = true;
+                    });
                   }
                 });
 
-                resolve( scene.add( loaded_model ) );
+                normalize_and_center_global_model();
+
+                resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
               }, function ( error ) { handle_error( error ); }); // onError
 
@@ -286,7 +404,7 @@
               const dae_loader = new ColladaLoader( manager );
 
               dae_loader.load( url, function( collada ) {
-                loaded_model = collada.scene;
+                loaded_model.add( collada.scene );
                 loaded_model.name = 'loaded_model';
 
                 loaded_model.traverse( ( child ) => {
@@ -298,27 +416,22 @@
 
                     vertex_colors = child.geometry.hasAttribute( 'color' );
 
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        set_texture_colorSpace( mtl );
-                        mtl.vertexColors = vertex_colors;
-                        mtl.side = THREE.DoubleSide;
-                        mtl.flatShading = false;
+                    const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                        mtl.needsUpdate = true;
-                      });
-                    } else {
-                      set_texture_colorSpace( child.material );
-                      child.material.vertexColors = vertex_colors;
-                      child.material.side = THREE.DoubleSide;
-                      child.material.flatShading = false;
+                    mtls.forEach( m => {
+                      set_texture_colorSpace( m );
+                      m.vertexColors = vertex_colors;
+                      m.side = THREE.DoubleSide;
+                      m.flatShading = false;
 
-                      child.material.needsUpdate = true;
-                    }
+                      m.needsUpdate = true;
+                    });
                   }
                 });
 
-                resolve( scene.add( loaded_model ) );
+                normalize_and_center_global_model();
+
+                resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
               }, function ( error ) { handle_error( error ); }); // onError
 
@@ -338,8 +451,16 @@
               manager.addHandler( /\.tga$/i, dds_loader );
 
               fbx_loader.load( url, function( fbx_scene ) {
-                loaded_model = fbx_scene;
+                loaded_model.add( fbx_scene );
                 loaded_model.name = 'loaded_model';
+
+                if (fbx_scene.animations?.length > 0) {
+                  animations = fbx_scene.animations;
+                  const mixer = new THREE.AnimationMixer( loaded_model );
+                  const action = mixer.clipAction( fbx_scene.animations[ 0 ] );
+                  action.play();
+                  activeMixers.push( mixer );
+                }
 
                 loaded_model.traverse( ( child ) => {
                   if (child.isMesh || child.isPoints) {
@@ -350,25 +471,21 @@
 
                     vertex_colors = child.geometry.hasAttribute( 'color' );
 
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        set_texture_colorSpace( mtl );
-                        mtl.vertexColors = vertex_colors;
-                        mtl.side = THREE.DoubleSide;
+                    const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                        mtl.needsUpdate = true;
-                      });
-                    } else {
-                      set_texture_colorSpace( child.material );
-                      child.material.vertexColors = vertex_colors;
-                      child.material.side = THREE.DoubleSide;
+                    mtls.forEach( m => {
+                      set_texture_colorSpace( m );
+                      m.vertexColors = vertex_colors;
+                      m.side = THREE.DoubleSide;
 
-                      child.material.needsUpdate = true;
-                    }
+                      m.needsUpdate = true;
+                    });
                   }
                 });
 
-                resolve( scene.add( loaded_model ) );
+                normalize_and_center_global_model();
+
+                resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
               }, function ( error ) { handle_error( error ); }); // onError
 
@@ -376,7 +493,7 @@
 
             case '.GLB':
             case '.GLTF':
-              const { MeshoptDecoder } = await import( 'meshoptimizer_decoder' );
+              const { MeshoptDecoder } = await import( 'meshoptimizer' );
               const { KTX2Loader } = await import( 'three/addons/loaders/KTX2Loader.min.js' );
               const { DRACOLoader } = await import( 'three/addons/loaders/DRACOLoader.min.js' );
               const { GLTFLoader } = await import( '../static/jsm/loaders/GLTFLoader.js' );
@@ -398,10 +515,24 @@
               gltf_loader.setMeshoptDecoder( MeshoptDecoder );
 
               gltf_loader.load( url, function( gltf ) {
-                loaded_model = gltf.scene;
+                loaded_model.add( gltf.scene );
                 loaded_model.name = 'loaded_model';
 
-                resolve( scene.add( loaded_model ) );
+                if (gltf.animations?.length > 0) {
+                  animations = gltf.animations;
+                  const mixer = new THREE.AnimationMixer( loaded_model );
+
+                  // Play the first animation clip found by default
+                  const action = mixer.clipAction( gltf.animations[ 0 ] );
+                  action.play();
+
+                  // Push to global array so the loop runner updates it
+                  activeMixers.push( mixer );
+                }
+
+                normalize_and_center_global_model();
+
+                resolve( finish_loading() );
 
                 gltf_loader.dracoLoader.dispose();
                 gltf_loader.ktx2Loader.dispose();
@@ -428,20 +559,23 @@
 
                   material.vertexColors = vertex_colors;
 
-                  loaded_model = new THREE.Mesh( geometry, material );
+                  loaded_model.add( new THREE.Mesh( geometry, material ) );
                 } else {
                   let points_material = new THREE.PointsMaterial( { size: 0.35, transparent: true, blending: THREE.AdditiveBlending } );
 
                   points_material.vertexColors = vertex_colors;
 
-                  loaded_model = new THREE.Points( geometry, points_material );
-                  loaded_model.sizeAttenuation = true;
-                  loaded_model.sortPoints = true;
+                  const p_model = new THREE.Points( geometry, points_material );
+                  p_model.sizeAttenuation = true;
+                  p_model.sortPoints = true;
+                  loaded_model.add( p_model );
                 }
 
                 loaded_model.name = 'loaded_model';
 
-                resolve( scene.add( loaded_model ) );
+                normalize_and_center_global_model();
+
+                resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
               }, function ( error ) { handle_error( error ); }); // onError
 
@@ -456,14 +590,27 @@
               const usd_loader = new USDLoader( manager );
 
               usd_loader.load( url, function( usd ) {
-                loaded_model = usd;
+                loaded_model.add( usd );
                 loaded_model.name = 'loaded_model';
+
+                if (usd.animations?.length > 0) {
+                  animations = usd.animations;
+                  const mixer = new THREE.AnimationMixer( loaded_model );
+
+                  // Play the first animation clip found
+                  const action = mixer.clipAction( usd.animations[ 0 ] );
+                  action.play();
+
+                  activeMixers.push( mixer );
+                }
+
+                normalize_and_center_global_model();
 
                 loaded_model.traverse( ( child ) => {
                   if (child.isMesh) {
-                    const mats = Array.isArray( child.material ) ? child.material : [ child.material ];
+                    const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                    mats.forEach( m => {
+                    mtls.forEach( m => {
                       set_texture_colorSpace( m );
                       m.side = THREE.DoubleSide;
                       m.flatShading = false;
@@ -472,7 +619,7 @@
                   }
                 });
 
-                resolve( scene.add( loaded_model ) );
+                resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
               }, function ( error ) { handle_error( error ); }); // onError
 
@@ -483,15 +630,20 @@
 
           }
         });
-
-        finish_loading();
       }
 
       async function init() {
-        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
-        if (manager === undefined) manager = new THREE.LoadingManager();
+        if (!url_loading && document.getElementById('file_input').files.length === 0) return;
 
-        if (loaded_model === undefined) loaded_model = new THREE.Object3D();
+        document.getElementById('btn_load').disabled = true;
+        document.getElementById('btn_file_input').disabled = true;
+
+        if (manager === undefined) {
+          const { LoadingManager } = await import( 'three' );
+          manager = new LoadingManager();
+        }
+
+        await reset_all( true );
 
         if (material === undefined) {
           material = new THREE.MeshPhongMaterial( {
@@ -506,7 +658,7 @@
           });
         }
 
-        reset_all( true );
+        mouseDownPos = { x: 0, y: 0 };
 
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
@@ -515,7 +667,7 @@
 
         const model_extensions = [ '.BIM', '.DAE', '.FBX', '.GLB', '.GLTF', '.PLY', '.USD', '.USDA', '.USDC', '.USDZ' ];
 
-        if (url_loading === false) {
+        if (!url_loading) {
           // Load local model file
           let fi = document.getElementById('file_input');
 
@@ -656,8 +808,16 @@
       }
 
       function finish_loading() {
+        const scene = document.getElementById( 'a_scene' ).object3D;
+        scene.add( loaded_model );
+
         console.timeEnd( 'Loading Time' );
+
         enable_disable( false );
+
+        document.getElementById('btn_load').disabled = false;
+        document.getElementById('btn_file_input').disabled = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'none';
       }
@@ -667,11 +827,14 @@
         console.log( 'Error loading model!' );
         console.log( error );
 
+        document.getElementById('btn_load').disabled = false;
+        document.getElementById('btn_file_input').disabled = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
       }
 
-      function reset_all( no_reload = false ) {
+      async function reset_all( no_reload = false ) {
         if (no_reload === false) {
           document.getElementById('file_input').value = '';
           document.getElementById('url_entry').value = '';
@@ -685,11 +848,13 @@
         vertex_colors = false;
         extension = '';
 
-        let scene = document.getElementById('a_scene').object3D;
+        let scene = document.getElementById( 'a_scene' ).object3D;
 
         if (scene) {
+          await clear_current_animations();
+
           if (loaded_model && loaded_model.name === 'loaded_model') {
-            scene.remove( loaded_model );
+            if (loaded_model.parent) loaded_model.parent.remove( loaded_model );
 
             if (loaded_model.skeleton && loaded_model.skeleton.boneTexture)
               loaded_model.skeleton.boneTexture.dispose();
@@ -700,19 +865,18 @@
                   child.skeleton.boneTexture.dispose();
 
                 if (child.material) {
-                  const mats = Array.isArray( child.material ) ? child.material : [ child.material ];
+                  const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                  mats.forEach( m => {
+                  mtls.forEach( m => {
                     if (m.uniforms) {
                       Object.keys( m.uniforms ).forEach( ( key ) => {
                         if (m.uniforms[ key ].value) {
                           if (Array.isArray( m.uniforms[ key ].value ) && m.uniforms[ key ].value.length > 0) {
                             m.uniforms[ key ].value.forEach( val => {
-                              if (val.type && val.type === 1009)
-                                val.dispose();
+                              if (val && typeof val === 'object' && val.type === 1009) val.dispose();
                             });
                           } else {
-                            if (m.uniforms[ key ].value.type && m.uniforms[ key ].value.type === 1009)
+                            if (m.uniforms[ key ]?.value?.type === 1009)
                               m.uniforms[ key ].value.dispose();
                           }
                         }
@@ -734,6 +898,8 @@
                 child.geometry.dispose();
               }
             });
+
+            loaded_model = undefined;
           }
         }
       }
@@ -766,11 +932,157 @@
         }
 
         document.getElementById('model_scale').selectedIndex = 0;
+
+        AFRAME.registerComponent( 'vr-session-monitor', {
+          init: function() {
+            const sceneEl = this.el;
+
+            sceneEl.addEventListener( 'exit-vr', function () {
+              console.log( 'The VR session has ended, forced renderer resize' );
+
+              // 1. Wait a tiny fraction of a second for the DOM to settle back into 2D mode
+              setTimeout( () => {
+                // 2. Dispatch a global resize event that A-Frame's core listens to
+                window.dispatchEvent( new Event( 'resize' ) );
+
+                // 3. Optional: Direct fallback to force the Three.js renderer to match the window
+                if (sceneEl.renderer) {
+                  sceneEl.renderer.setSize( window.innerWidth, window.innerHeight );
+                }
+              }, 100); // 100ms is usually the sweet spot
+            });
+          }
+        });
+
+        // Register an A-Frame component to serve as global loop runner
+        AFRAME.registerComponent( 'scene-animation-runner', {
+          tick: function ( time, timeDelta ) {
+            if (activeMixers.length === 0) return;
+
+            // Convert A-Frame's millisecond delta to three.js seconds delta
+            const delta = timeDelta / 1000; 
+
+            // Update every running animation mixer in the scene
+            for ( let i = 0; i < activeMixers.length; i++ ) {
+              activeMixers[ i ].update( delta );
+            }
+          }
+        });
+
+        AFRAME.registerComponent( 'manual-model-raycast', {
+          init: function() {
+            // Listen for when custom loading logic is complete
+            this.el.addEventListener( 'model-loaded', () => {
+              // 1. Ensure the entity has the raycastable class
+              this.el.classList.add( 'raycastable' );
+
+              // 2. FORCE the scene's raycaster system to refresh its object list
+              if (this.el.sceneEl && this.el.sceneEl.systems.raycaster) {
+                this.el.sceneEl.systems.raycaster.refreshObjects();
+                console.log( 'Raycaster refreshed for manually loaded model!' );
+              }
+            });
+          }
+        });
+
+        AFRAME.registerComponent( 'raycast-listen', {
+          init: function () {
+            // Listen for the passive event on the model itself
+            this.el.addEventListener( 'raycaster-intersected', ( evt ) => {
+              const sceneEl = this.el.sceneEl;
+
+              if (!sceneEl.is( 'vr-mode' )) {
+                // Ignoring 2D/mouse intersection
+                return;
+              }
+
+              console.log('Laser hit the model!');
+
+              // The event detail contains the raycaster component that hit it
+              const raycasterEl = evt.detail.el; 
+
+              // Example: Change the laser color to red on hover
+              raycasterEl.setAttribute( 'raycaster', 'lineColor', '#ff0000' );
+
+              const raycasterComponent = raycasterEl.components.raycaster;
+
+              // Get the raw Three.js intersection details for this specific target
+              const intersection = raycasterComponent.getIntersection( this.el );
+
+              if (intersection) {
+                console.log('Exact 3D Hit Point:', intersection.point); 
+                console.log('Distance from controller:', intersection.distance);
+              }
+            });
+
+            // Clean up when the laser leaves!
+            this.el.addEventListener( 'raycaster-intersected-cleared', ( evt ) => {
+              console.log( 'Laser left the model' );
+
+              const raycasterEl = evt.detail.el;
+              // Reset laser color back to default
+              raycasterEl.setAttribute( 'raycaster', 'lineColor', '#cccccc' );
+            });
+          }
+        });
+
+        AFRAME.registerComponent( 'wheel-zoom', {
+          schema: {
+            speed: { type: 'number', default: 0.2 },
+            minZ: { type: 'number', default: 1.0 },
+            maxZ: { type: 'number', default: 12.0 },
+            damping: { type: 'number', default: 0.15 } // Lower = smoother/slower slide, Higher = snappier
+          },
+
+          init: function () {
+            // 1. Set up tracking vectors using Three.js instances provided by A-Frame
+            this.currentPosition = new THREE.Vector3();
+            this.el.object3D.position.copy(this.el.getAttribute('position'));
+
+            // TargetZ holds where the camera *wants* to go
+            this.targetZ = this.el.object3D.position.z;
+
+            this.onWheel = this.onWheel.bind( this );
+            this.el.sceneEl.canvas.addEventListener( 'wheel', this.onWheel );
+          },
+
+          onWheel: function ( event ) {
+            event.preventDefault();
+
+            let zoomDirection = event.deltaY > 0 ? 1 : -1;
+
+            // Update intended target position
+            this.targetZ += zoomDirection * this.data.speed;
+
+            // Constrain the target within min/max boundaries
+            this.targetZ = Math.max(this.data.minZ, Math.min(this.data.maxZ, this.targetZ));
+          },
+
+          // The tick function runs automatically on every single frame rendering pass
+          tick: function (time, timeDelta) {
+            let currentZ = this.el.object3D.position.z;
+
+            // If we haven't reached our target yet, smoothly slide towards it
+            if (Math.abs( currentZ - this.targetZ ) > 0.001) {
+              // Linear interpolation formula: current + (target - current) * damping
+              let newZ = currentZ + ( this.targetZ - currentZ ) * this.data.damping;
+
+              // Apply the raw transformation directly to the underlying Three.js object
+              this.el.object3D.position.z = newZ;
+            }
+          },
+
+          remove: function () {
+            if (this.el.sceneEl.canvas) {
+              this.el.sceneEl.canvas.removeEventListener( 'wheel', this.onWheel );
+            }
+          }
+        });
       }
 
       function disabled_changed() {
         $('button').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -780,7 +1092,7 @@
         });
 
         $('select').each( function() {
-          if (this.disabled === false) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });

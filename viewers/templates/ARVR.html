@@ -4,7 +4,51 @@
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="AR / VR Viewer">
+    <link rel="stylesheet" href="../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
+
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+      });
+    </script>
 
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
@@ -13,9 +57,23 @@
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/",
+          "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/",
           "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.4.0/dist/decode.min.js",
-          "meshoptimizer_decoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_decoder.module.min.js",
+          "meshoptimizer": "https://esm.sh/meshoptimizer@1.1.1",
           "@tweenjs": "https://esm.sh/@tweenjs/tween.js@23.1.2"
+        }
+      }
+    </script>
+
+    <script>
+      // Workaround for Immersive Web Emulator XRWebGLBinding crash
+      if (typeof XRWebGLBinding !== 'undefined' && XRWebGLBinding.prototype) {
+        try {
+          // Deleting this property forces Three.js to fallback to standard WebXR rendering
+          delete XRWebGLBinding.prototype.createProjectionLayer;
+          console.log( 'Successfully bypassed XRWebGLBinding compatibility issue' );
+        } catch ( e ) {
+          console.warn( 'Could not patch XRWebGLBinding: ', e);
         }
       }
     </script>
@@ -26,10 +84,10 @@
       var ww = window.innerWidth, wh = window.innerHeight, bounding_box, rotation_enabled;
       var scene, camera, renderer, animations, animation_mixer, animation_running, current_animation;
       var ambientLight, directionalLight, events_initialized, isMobile, merge_vertices;
-      var device_controls, do_controls, controls, clock, texture_maps;
-      var ar_button, vr_button, controller, controllerGrip1, controllerGrip2;
-      var ar, ar_selected, ar_activated, vr, vr_selected, vr_activated, current_up;
-      var kinematics, kinematics_running, kinematicsTween, tween, tween_update, easing, duration;
+      var device_controls, do_controls, controls, clock, texture_maps, mouse, raycaster1, raycaster2, tempMatrix;
+      var ar_btn, vr_btn, factory, controller1, controller2, controllerGrip1, controllerGrip2;
+      var ar_OK, ar_selected, ar_active, vr_OK, vr_selected, vr_active, laserMaterial1, laserMaterial2, line1, line2;
+      var kinematics, kinematics_running, kinematicsTween, tween, tween_update, easing, duration, current_up;
 
       const target = {};
       const tweenParameters = {};
@@ -45,159 +103,19 @@
 
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
-    <style>
-      body, html {
-        background-color: whitesmoke;
-        position: relative;
-        display: block;
-        width: 100%;
-        min-height: 100vh;
-        border: 0;
-        padding: 0;
-        margin: 0;
-        overflow: hidden;
-      }
-
-      button {
-        background-color: transparent;
-        border: 1px solid blue;
-        -webkit-border-radius: 3px;
-        border-radius: 3px;
-        text-align: center;
-        vertical-align: middle;
-        margin: 2px 2px 2px 0;
-        min-width: 20px;
-        height: 22px;
-        padding: 1px;
-      }
-
-      label {
-        vertical-align: middle;
-        margin: 2px 0 2px 0;
-        height: 22px;
-      }
-
-      input[type=file] {
-        vertical-align: middle;
-        margin: 2px 0 2px 0;
-        max-width: 150px;
-      }
-
-      input[type=text] {
-        vertical-align: middle;
-        margin: 2px 2px 2px 0;
-      }
-
-      .dropdown {
-        background-color: transparent;
-        border: 1px solid #DEAF64;
-        -webkit-border-radius: 3px;
-        border-radius: 3px;
-        vertical-align: middle;
-        display: inline-block;
-        position: relative;
-        min-width: 40px;
-        font-size: 85%;
-        color: blue;
-        border: none;
-        padding: 1px;
-      }
-
-      .dropdown-content {
-        background-color: #FFFAD5;
-        border: 1px solid #DEAF64;
-        -webkit-border-radius: 3px;
-        border-radius: 3px;
-        position: absolute;
-        display: none;
-        margin-top: 2px;
-        z-index: 10;
-      }
-
-      select {
-        vertical-align: middle;
-        border: 1px solid blue;
-        -webkit-border-radius: 3px;
-        border-radius: 3px;
-        background: none;
-        min-width: 72px;
-        height: 22px;
-        color: blue;
-      }
-
-      .error_msg {
-        background-color: transparent;
-        position: absolute;
-        text-align: center;
-        font-size: x-large;
-        display: none;
-        color: red;
-        width: 50vw;
-        height: 50vh;
-        top: 50vh;
-        left: 25vw;
-        z-index: 2;
-        padding: 10px;
-        border: none;
-      }
-
-      .loading_msg {
-        background-color: transparent;
-        color: green;
-        position: absolute;
-        text-align: center;
-        font-size: x-large;
-        display: none;
-        width: 50vw;
-        height: 50vh;
-        top: 50vh;
-        left: 25vw;
-        z-index: 2;
-        padding: 10px;
-        border: none;
-      }
-
-      p.full_screen {
-        text-align: center;
-        content: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAA7DAAAOwwHHb6hkAAAAf0lEQVRIie1VQQ6AMAjb/x9M4IRePICoK7GLB5eQbElpCTAY7j6YRiUPAvvxbNMkN76XIDhSRKCdjhmB494hzzwngcoBIa/eASgisMgTBo4ODqCTAiSFrW6Biv8LfL/I1DbtfDRV9VLgjVFhZp59A4g+7JaM6yULh7IyWUYX2AAPDxz26GjX+gAAAABJRU5ErkJggg==);
-        margin: 1px 1px 1px 2px;
-        padding: 0;
-        width: 15px;
-        height: 15px;
-      }
-
-      .fm {
-        color: navy;
-        width: calc(100% - 12px);
-        border: 1px solid navy;
-        -webkit-border-radius: 2px;
-        border-radius: 2px;
-        padding: 4px;
-        margin: 1px;
-      }
-
-      .fixed-menu {
-        background-color: whitesmoke;
-        width: calc(100% - 2px);
-        display: inline-block;
-        position: fixed;
-        padding: 1px;
-        z-index: 1;
-        margin: 0;
-      }
-    </style>
-
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
     <!-- Using tween.js library: https://github.com/tweenjs/tween.js -->
     <!-- Using jQuery: https://github.com/jquery/jquery -->
 
     <title>AR / VR Viewer (r184)</title>
   </head>
-  <body onload="reset_all(); enable_disable( true ); document_ready();" onresize="resize();">
+  <body style="background-color: white;" onload="reset_all(); enable_disable( true ); document_ready();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm" id="fm1">
-        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" id="file_input" onchange="init()" accept=".3mf, .bim, .dae, .fbx, .glb, .gltf, .ply, .usd, .usda, .usdc, .usdz" />
+        <button title="URL of the remote 3D model" id="btn_url" onclick="show_url();" style="min-width: 34px;">URL</button>
+        <button title="Browse Local Files" id="btn_file_input" style="min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
+        <label for="btn_file_input" title="Browse Local Files"></label>
+        <input type="file" id="file_input" style="display: none;" onchange="init();" accept=".3mf, .bim, .dae, .fbx, .glb, .gltf, .ply, .usd, .usda, .usdc, .usdz" />
         <select title="Scale" id="model_scale" disabled>
           <option title="Model Scale" value="scale" selected disabled>Scale</option>
           <option title="Scale 0.05x" value="0.05x" onclick="set_model_scale( '0.05x' );">1/20</option>
@@ -211,13 +129,13 @@
           <option title="Scale 10x" value="10x" onclick="set_model_scale( '10x' );">10x</option>
           <option title="Scale 20x" value="20x" onclick="set_model_scale( '20x' );">20x</option>
         </select>
-        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="min-width: 15px;" disabled>&#x2191</button>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
         <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="min-width: 25px;" disabled>Eq</button>
         <button title="Switch Animation" id="btn_animate" onclick="animate_model();" style="min-width: 28px;" disabled>A</button>
         <button title="Toggle Auto Rotate" id="btn_rotate" onclick="set_rotation();" disabled>R</button>
-        <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();">DLi
+        <button title="Directional Light Intensity" id="btn_dc_dli" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" onclick="show_hide_dropdown_dli();" disabled>DLi
           <div id="dc_dli" class="dropdown-content" style="display: none;" onfocusout="hide_dropdown_dli();">
-            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="30" step="0.05" value="3" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
+            <input type="range" orient="vertical" id="directional_light_intensity" min="0" max="30" step="0.01" value="3" onkeydown="return_false();" oninput="set_directional_light_intensity();" disabled />
             <span id="dli_val">3</span>
           </div>
         </button>
@@ -234,7 +152,7 @@
     </div>
 
     <div id="div_error" class="error_msg">E R R O R !</div>
-    <div id="div_loading" class="loading_msg">Loading</div>
+    <div id="div_loading" class="loading_msg" style="color: green;">AR / VR Viewer</div>
 
     <script>
       function hide_dropdown_dli() { $('#dc_dli').fadeOut(); }
@@ -257,7 +175,7 @@
       function return_false() { return false; }
 
       function show_url() {
-        if (url_displayed === true) {
+        if (url_displayed) {
           url_displayed = false;
           document.getElementById('url').style.display = 'none';
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
@@ -332,7 +250,7 @@
 
     <script>
       function set_rotation() {
-        if (rotation_enabled === true) {
+        if (rotation_enabled) {
           rotation_enabled = false;
           document.getElementById('btn_rotate').style.backgroundColor = 'transparent';
         } else {
@@ -403,21 +321,39 @@
         }
 
         loaded_model.position.z = -50;
-        loaded_model.position.y = -15;
+        loaded_model.position.y = -10;
 
         bounding_box.setFromObject( loaded_model );
-        let center = bounding_box.getCenter( new THREE.Vector3() );
+        const center = bounding_box.getCenter( new THREE.Vector3() );
+        size = bounding_box.getSize( new THREE.Vector3() );
+
+        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length() ) ) );
 
         controls.target.set( center.x, center.y, center.z );
+
+        resize();
       }
 
       function set_model_scale( scale ) {
         document.getElementById('model_scale').selectedIndex = 0;
-        loaded_model.scale.multiplyScalar( parseFloat( scale.slice( 0, -1 ) ) );
+        const val = parseFloat( scale.slice( 0, -1 ) );
+        loaded_model.scale.multiplyScalar( val );
+        loaded_model.updateMatrix();
+        loaded_model.updateMatrixWorld( true );
+
+        // RECOMPUTE BOUNDING VOLUMES
+        loaded_model.traverse( ( child ) => {
+          if (child.isMesh) {
+            if (child.geometry) {
+              child.geometry.computeBoundingBox();
+              child.geometry.computeBoundingSphere();
+            }
+          }
+        });
       }
 
-      function quick_x_rotation( angle ) {
-        loaded_model.rotateX( Math.PI * parseFloat( angle ) );
+      function quick_x_rotation() {
+        loaded_model.rotateX( - Math.PI / 2.0 );
 
         switch ( current_up ) {
           case '-y':
@@ -442,7 +378,7 @@
       }
 
       function animate_model() {
-        if (animation_running === true) {
+        if (animation_running) {
           animation_mixer.clipAction( animations[ current_animation ] ).stop();
 
           if (current_animation === animations.length - 1) {
@@ -520,27 +456,22 @@
 
                     vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
 
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        mtl.vertexColors = vertex_colors;
-                        mtl.side = THREE.DoubleSide;
-                        mtl.flatShading = false;
+                    const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                        mtl.needsUpdate = true;
-                      });
-                    } else {
-                      child.material.vertexColors = vertex_colors;
-                      child.material.side = THREE.DoubleSide;
-                      child.material.flatShading = false;
+                    mtls.forEach( m => {
+                      set_texture_colorSpace( m );
+                      m.vertexColors = vertex_colors;
+                      m.side = THREE.DoubleSide;
+                      m.flatShading = false;
 
-                      child.material.needsUpdate = true;
-                    }
+                      m.needsUpdate = true;
+                    });
                   }
                 });
 
                 loaded_model.rotation.x -= Math.PI / 2;
 
-                resolve( scene.add( loaded_model ) );
+                resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
               }, function ( error ) { handle_error( error ); }); // onError
 
@@ -558,27 +489,20 @@
                   if (child.isMesh) {
                     vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
 
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        set_texture_colorSpace( mtl );
-                        mtl.vertexColors = vertex_colors;
-                        mtl.side = THREE.DoubleSide;
-                        mtl.flatShading = true;
+                    const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                        mtl.needsUpdate = true;
-                      });
-                    } else {
-                      set_texture_colorSpace( child.material );
-                      child.material.vertexColors = vertex_colors;
-                      child.material.side = THREE.DoubleSide;
-                      child.material.flatShading = true;
+                    mtls.forEach( m => {
+                      set_texture_colorSpace( m );
+                      m.vertexColors = vertex_colors;
+                      m.side = THREE.DoubleSide;
+                      m.flatShading = true;
 
-                      child.material.needsUpdate = true;
-                    }
+                      m.needsUpdate = true;
+                    });
                   }
                 });
 
-                resolve( scene.add( loaded_model ) );
+                resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
               }, function ( error ) { handle_error( error ); }); // onError
 
@@ -594,7 +518,7 @@
 
                 animations = collada.scene.animations;
 
-                if (animations && animations.length > 0) {
+                if (animations?.length > 0) {
                   document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
                   document.getElementById( 'btn_animate' ).disabled = false;
                   document.getElementById('btn_animate').innerHTML = 'A0';
@@ -608,33 +532,31 @@
                 loaded_model.traverse( ( child ) => {
                   if (child.isMesh || child.isPoints) {
                     vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
-                    let point_size = isMobile === true ? 0.7 : 1.25;
+                    const point_size = isMobile ? 0.7 : 1.25;
 
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        set_texture_colorSpace( mtl );
-                        if (child.isPoints) mtl.size = point_size;
-                        mtl.vertexColors = vertex_colors;
-                        mtl.side = THREE.DoubleSide;
-                        mtl.flatShading = false;
+                    const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                        mtl.needsUpdate = true;
-                      });
-                    } else {
-                      set_texture_colorSpace( child.material );
-                      if (child.isPoints) child.material.size = point_size;
-                      child.material.vertexColors = vertex_colors;
-                      child.material.side = THREE.DoubleSide;
-                      child.material.flatShading = false;
+                    mtls.forEach( m => {
+                      set_texture_colorSpace( m );
+                      if (child.isPoints) m.size = point_size;
+                      m.vertexColors = vertex_colors;
+                      m.side = THREE.DoubleSide;
+                      m.flatShading = false;
 
-                      child.material.needsUpdate = true;
-                    }
+                      if (m.transparent) {
+                        m.polygonOffset = true;
+                        m.polygonOffsetFactor = -1;
+                        m.polygonOffsetUnits = -2;
+                      }
+
+                      m.needsUpdate = true;
+                    });
                   }
                 });
 
                 kinematics = collada.kinematics;
 
-                if (!(animations && animations.length > 0) && Object.keys( kinematics ).length !== 0) {
+                if (!(animations?.length > 0) && Object.keys( kinematics ).length > 0) {
                   if (!tween) {
                     const { Easing, Tween, update } = await import( '@tweenjs' );
 
@@ -648,7 +570,7 @@
                   setupTween();
                 }
 
-                resolve( scene.add( loaded_model ) );
+                resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
               }, function ( error ) { handle_error( error ); }); // onError
 
@@ -672,7 +594,7 @@
 
                 animations = fbx_scene.animations;
 
-                if (animations && animations.length > 0) {
+                if (animations?.length > 0) {
                   document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
                   document.getElementById( 'btn_animate' ).disabled = false;
                   document.getElementById('btn_animate').innerHTML = 'A0';
@@ -686,29 +608,22 @@
                 loaded_model.traverse( ( child ) => {
                   if (child.isMesh || child.isPoints) {
                     vertex_colors = (child.geometry.hasAttribute( 'color' ) === true);
-                    let point_size = isMobile === true ? 1.0 : 1.5;
+                    const point_size = isMobile ? 1.0 : 1.5;
 
-                    if (Array.isArray( child.material )) {
-                      child.material.forEach( mtl => {
-                        set_texture_colorSpace( mtl );
-                        if (child.isPoints) mtl.size = point_size;
-                        mtl.vertexColors = vertex_colors;
-                        mtl.side = THREE.DoubleSide;
+                    const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                        mtl.needsUpdate = true;
-                      });
-                    } else {
-                      set_texture_colorSpace( child.material );
-                      if (child.isPoints) child.material.size = point_size;
-                      child.material.vertexColors = vertex_colors;
-                      child.material.side = THREE.DoubleSide;
+                    mtls.forEach( m => {
+                      set_texture_colorSpace( m );
+                      if (child.isPoints) m.size = point_size;
+                      m.vertexColors = vertex_colors;
+                      m.side = THREE.DoubleSide;
 
-                      child.material.needsUpdate = true;
-                    }
+                      m.needsUpdate = true;
+                    });
                   }
                 });
 
-                resolve( scene.add( loaded_model ) );
+                resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
               }, function ( error ) { handle_error( error ); }); // onError
 
@@ -716,7 +631,7 @@
 
             case '.GLB':
             case '.GLTF':
-              const { MeshoptDecoder } = await import( 'meshoptimizer_decoder' );
+              const { MeshoptDecoder } = await import( 'meshoptimizer' );
               const { KTX2Loader } = await import( 'three/addons/loaders/KTX2Loader.min.js' );
               const { DRACOLoader } = await import( 'three/addons/loaders/DRACOLoader.min.js' );
               const { GLTFLoader } = await import( '../static/jsm/loaders/GLTFLoader.min.js' );
@@ -742,7 +657,7 @@
 
                 animations = gltf.animations;
 
-                if (animations && animations.length > 0) {
+                if (animations?.length > 0) {
                   document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
                   document.getElementById( 'btn_animate' ).disabled = false;
                   document.getElementById('btn_animate').innerHTML = 'A0';
@@ -753,15 +668,13 @@
                   animation_running = true;
                 }
 
-                let point_size = isMobile === true ? 1.0 : 1.5;
+                const point_size = isMobile ? 1.0 : 1.5;
 
                 loaded_model.traverse( ( child ) => {
-                  if (child.isPoints) {
-                    child.material.size = point_size;
-                  }
+                  if (child.isPoints) child.material.size = point_size;
                 });
 
-                resolve( scene.add( loaded_model ) );
+                resolve( finish_loading() );
 
                 gltf_loader.dracoLoader.dispose();
                 gltf_loader.ktx2Loader.dispose();
@@ -789,15 +702,15 @@
 
                   loaded_model = new THREE.Mesh( geometry, material );
                 } else {
-                  let point_size = isMobile === true ? 0.1 : 0.2;
-                  let points_material = new THREE.PointsMaterial( { size: point_size, transparent: true, blending: THREE.AdditiveBlending } );
+                  const point_size = isMobile ? 0.1 : 0.2;
+                  const points_material = new THREE.PointsMaterial( { size: point_size, transparent: true, blending: THREE.AdditiveBlending } );
 
                   points_material.vertexColors = vertex_colors;
 
                   loaded_model = new THREE.Points( geometry, points_material );
                 }
 
-                resolve( scene.add( loaded_model ) );
+                resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
               }, function ( error ) { handle_error( error ); }); // onError
 
@@ -816,7 +729,7 @@
 
                 animations = usd.animations;
 
-                if (animations && animations.length > 0) {
+                if (animations?.length > 0) {
                   document.getElementById('btn_animate').style.backgroundColor = 'lightgreen';
                   document.getElementById( 'btn_animate' ).disabled = false;
                   document.getElementById('btn_animate').innerHTML = 'A0';
@@ -840,7 +753,7 @@
                   }
                 });
 
-                resolve( scene.add( loaded_model ) );
+                resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
               }, function ( error ) { handle_error( error ); }); // onError
 
@@ -851,14 +764,63 @@
 
           }
         });
+      }
 
-        finish_loading();
+      function checkLaserIntersections() {
+        if (!renderer.xr.isPresenting) return;
+
+        if (controller1) {
+          controller1.updateMatrixWorld( true );
+
+          tempMatrix.identity().extractRotation( controller1.matrixWorld );
+          raycaster1.ray.origin.setFromMatrixPosition( controller1.matrixWorld );
+          raycaster1.ray.direction.set( 0, 0, -1 ).applyMatrix4( tempMatrix );
+
+          const intersects = raycaster1.intersectObjects( [ loaded_model ], true );
+
+          if ( intersects.length > 0 ) {
+            // 🎯 HIT: Change laser line color to bright red or green
+            laserMaterial1.color.setHex( 0xFF0000 );
+
+            // Optional: Scale the visual line length so it stops exactly where it hits the model surface!
+            const hitDistance = intersects[ 0 ].distance;
+            line1.scale.z = hitDistance / 5; // Assumes baseline line geometry was 5 units long
+          } else {
+            // 💨 MISS: Reset laser to standard dull color
+            laserMaterial1.color.setHex( 0xBBBBBB );
+          }
+        }
+
+        if (controller2) {
+          controller2.updateMatrixWorld( true );
+
+          tempMatrix.identity().extractRotation( controller2.matrixWorld );
+          raycaster2.ray.origin.setFromMatrixPosition( controller2.matrixWorld );
+          raycaster2.ray.direction.set( 0, 0, -1 ).applyMatrix4( tempMatrix );
+
+          const intersects = raycaster2.intersectObjects( [ loaded_model ], true );
+
+          if ( intersects.length > 0 ) {
+            // 🎯 HIT: Change laser line color to bright red or green
+            laserMaterial2.color.setHex( 0xFF0000 );
+
+            // Optional: Scale the visual line length so it stops exactly where it hits the model surface!
+            const hitDistance = intersects[ 0 ].distance;
+            line2.scale.z = hitDistance / 5; // Assumes baseline line geometry was 5 units long
+          } else {
+            // 💨 MISS: Reset laser to standard dull color
+            laserMaterial2.color.setHex( 0xBBBBBB );
+          }
+        }
       }
 
       async function init() {
-        if (url_loading === false && document.getElementById( 'file_input' ).files.length === 0) return;
+        if (!url_loading && document.getElementById( 'file_input' ).files.length === 0) return;
 
-        if (rotation_enabled === true) set_rotation();
+        document.getElementById('btn_load').disabled = true;
+        document.getElementById('btn_file_input').disabled = true;
+
+        if (rotation_enabled) set_rotation();
 
         if (manager === undefined) manager = new THREE.LoadingManager();
 
@@ -866,6 +828,8 @@
           clock = new THREE.Timer();
           clock.connect( document );
         }
+
+        if (mouse === undefined) mouse = new THREE.Vector2();
 
         if (scene === undefined) {
           scene = new THREE.Scene();
@@ -875,7 +839,7 @@
         if (loaded_model === undefined) loaded_model = new THREE.Object3D();
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.01, 1e9 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 1e8 );
           camera.position.set( 0, 0, 0 );
           scene.add( camera );
         }
@@ -904,146 +868,217 @@
           renderer.toneMappingExposure = 1.5;
           renderer.setSize( ww, wh );
           renderer.shadowMap.enabled = true;
-          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.shadowMap.type = THREE.PCFShadowMap;
           renderer.autoClear = false;
 
           document.body.appendChild( renderer.domElement );
 
-          if (vr_button === undefined) {
+          // Baseline states
+          ar_selected = false;
+          ar_active = false;
+          vr_selected = false;
+          vr_active = false;
+          vr_OK = false;
+          ar_OK = false;
+
+          // 1. Check WebXR capabilities
+          if ('xr' in navigator) {
+            ar_OK = await navigator.xr.isSessionSupported( 'immersive-ar' );
+            vr_OK = await navigator.xr.isSessionSupported( 'immersive-vr' );
+          }
+
+          // 2. Build the correct UI button dynamically with combined features
+          if (vr_OK && vr_btn === undefined) {
+            vr_selected = true;
+
             const { VRButton } = await import( 'three/addons/webxr/VRButton.min.js' );
 
-            vr_button = await VRButton.createButton( renderer, { requiredFeatures: [ 'local-floor' ] } );
-            vr_button.style.color = 'red';
-            if (isMobile === true) vr_button.style.marginBottom = '50px';
+            // Setup all requested features upfront
+            vr_btn = VRButton.createButton( renderer, {
+              requiredFeatures: [ 'local-floor' ],
+              optionalFeatures: [ 'hand-tracking', 'depth-sensing', 'dom-overlay', 'hit-test', 'local' ]
+            });
 
-            document.body.appendChild( vr_button );
-          }
-
-          ar_selected = false;
-          ar_activated = false;
-          vr_selected = false;
-          vr_activated = false;
-
-          if ('xr' in navigator) {
-            ar = await navigator.xr.isSessionSupported( 'immersive-ar' );
-            vr = await navigator.xr.isSessionSupported( 'immersive-vr' );
-          }
-
-          // Logic to prefer VR over AR if both are available
-
-          if (vr === true || (vr === false && ar === false)) {
-            if (vr === true) vr_selected = true;
-
-            if (vr_button === undefined) {
-              const { VRButton } = await import( 'three/addons/webxr/VRButton.min.js' );
-
-              vr_button = await VRButton.createButton( renderer, {
-                optionalFeatures: [
-                  'hand-tracking',
-                  'depth-sensing',
-                  'dom-overlay',
-                  'hit-test',
-                  'local',
-                ]
-              });
-
-              vr_button.onclick = async function() {
-                if (vr === true) {
-                  if (device_controls.enabled === false) {
-                    device_controls.connect();
-                  } else {
-                    device_controls.disconnect();
-                    await set_initial_scale();
-                    resize();
-                  }
+            // Safely add device control connection logic WITHOUT destroying the WebXR session starter
+            vr_btn.addEventListener( 'click', () => {
+              if (device_controls && !controller1 && !controller2) {
+                if (!device_controls.enabled) {
+                  device_controls.connect();
+                } else {
+                  device_controls.disconnect();
                 }
               }
 
-              if (isMobile === true) vr_button.style.marginBottom = '50px';
-              vr_button.style.color = 'red';
+              resize();
+            });
 
-              document.body.appendChild( vr_button );
-            }
-          } else if (ar === true && ar_button === undefined) {
+            vr_btn.style.color = 'green';
+            vr_btn.style.minHeight = '40px';
+            vr_btn.style.verticalAlign = 'middle';
+            if (isMobile) vr_btn.style.marginBottom = '50px';
+
+            document.body.appendChild( vr_btn );
+          } else if (ar_OK && ar_btn === undefined) {
             ar_selected = true;
 
             const { ARButton } = await import( 'three/addons/webxr/ARButton.min.js' );
 
-            ar_button = await ARButton.createButton( renderer, {
-              optionalFeatures: [
-                'hand-tracking',
-                'depth-sensing',
-                'dom-overlay',
-                'hit-test',
-                'local',
-              ]
+            ar_btn = ARButton.createButton( renderer, {
+              optionalFeatures: [ 'hand-tracking', 'depth-sensing', 'dom-overlay', 'hit-test', 'local' ]
+            } );
+
+            ar_btn.addEventListener( 'click', () => {
+              if (device_controls && !controller1 && !controller2) {
+                if (!device_controls.enabled) {
+                  device_controls.connect();
+                } else {
+                  device_controls.disconnect();
+                }
+              }
+
+              resize();
             });
 
-            ar_button.onclick = async function() {
-              if (device_controls.enabled === false) {
-                device_controls.connect();
-              } else {
-                device_controls.disconnect();
-                await set_initial_scale();
-                resize();
+            ar_btn.style.color = 'green';
+            ar_btn.style.minHeight = '40px';
+            ar_btn.style.verticalAlign = 'middle';
+            if (isMobile) ar_btn.style.marginBottom = '50px';
+
+            document.body.appendChild( ar_btn );
+          }
+
+          // 3. Set up Controllers and RAYCASTING Targets
+          if (ar_OK || vr_OK) {
+            renderer.xr.enabled = true;
+
+            renderer.xr.addEventListener( 'sessionend', async () => {
+              // Reset the XR camera matrices first!
+              renderer.xr.getCamera().cameras.forEach( c => {
+                c.position.set( 0, 0, 0 );
+                c.quaternion.set( 0, 0, 0, 1 );
+              });
+
+              if (loaded_model.originalPosition) {
+                loaded_model.position.copy( loaded_model.originalPosition );
+              }
+
+              if (camera.originalPosition) {
+                camera.position.copy( camera.originalPosition );
+              }
+
+              if (camera.originalQuaternion) {
+                camera.quaternion.copy( camera.originalQuaternion );
+              }
+
+              // Fix the camera distortion
+              camera.near = 0.1;
+              camera.far = 1e8;
+              camera.fov = 60;
+
+              if (controls) controls.update();
+
+              // Force a clean render frame to clear any WebXR remnants
+              renderer.render( scene, camera );
+
+              await new Promise( resolve => setTimeout( resize, 50 ) );
+            });
+
+            if (raycaster1 === undefined) {
+              raycaster1 = new THREE.Raycaster();
+              raycaster1.params.Points.threshold = 0.05;
+            }
+
+            if (raycaster2 === undefined) {
+              raycaster2 = new THREE.Raycaster();
+              raycaster2.params.Points.threshold = 0.05;
+            }
+
+            if (tempMatrix === undefined) tempMatrix = new THREE.Matrix4();
+
+            if (laserMaterial1 === undefined) laserMaterial1 = new THREE.LineBasicMaterial({ color: 0xBBBBBB }); // Light gray by default
+            if (laserMaterial2 === undefined) laserMaterial2 = new THREE.LineBasicMaterial({ color: 0xBBBBBB }); // Light gray by default
+
+            function handleSelect( controller, raycstr, ctrlNumber ) {
+              if (!renderer.xr.isPresenting) return;
+
+              // Ensure matrices are accurate right at the moment of the click
+              tempMatrix.identity().extractRotation( controller.matrixWorld );
+              raycstr.ray.origin.setFromMatrixPosition( controller.matrixWorld );
+              raycstr.ray.direction.set( 0, 0, -1 ).applyMatrix4( tempMatrix );
+
+              const intersects = raycstr.intersectObjects( [ loaded_model ], true );
+
+              if ( intersects.length > 0 ) {
+                const hitInfo = intersects[ 0 ].object?.userData;
+                console.log( `Controller ${ctrlNumber} hit: `, hitInfo );
               }
             }
 
-            if (isMobile === true) ar_button.style.marginBottom = '50px';
-            ar_button.style.color = 'red';
+            // Event listeners as clean wrappers
+            function onTriggerSelect1() { handleSelect( controller1, raycaster1, 1 ); }
+            function onTriggerSelect2() { handleSelect( controller2, raycaster2, 2 ); }
 
-            document.body.appendChild( ar_button );
-          }
+            // Hand 0 (Typically Right or First active controller)
+            controller1 = renderer.xr.getController( 0 );
 
-          if (ar === true || vr === true) {
-            renderer.xr.enabled = true;
+            if (controller1) {
+              // 'selectstart' fires the exact millisecond the controller trigger is pulled down
+              controller1.addEventListener( 'selectstart', onTriggerSelect1 );
+              scene.add( controller1 );
+            }
 
-            if (controller === undefined) {
+            // Hand 1 (Typically Left or Second active controller)
+            controller2 = renderer.xr.getController( 1 );
+
+            if (controller2) {
+              // 'selectstart' fires the exact millisecond the controller trigger is pulled down
+              controller2.addEventListener( 'selectstart', onTriggerSelect2 );
+              scene.add( controller2 );
+            }
+
+            // Visual Mesh Controllers (Grips)
+            if (factory === undefined) {
               const { XRControllerModelFactory } = await import( 'three/addons/webxr/XRControllerModelFactory.min.js' );
-
-              // The XRControllerModelFactory will automatically fetch controller models
-              // that match what the user is holding as closely as possible. The models
-              // should be attached to the object returned from getControllerGrip in
-              // order to match the orientation of the held device.
-
-              controller = new XRControllerModelFactory();
+              factory = new XRControllerModelFactory();
 
               controllerGrip1 = renderer.xr.getControllerGrip( 0 );
 
               if (controllerGrip1) {
-                controllerGrip1.add( controller.createControllerModel( controllerGrip1 ) );
+                controllerGrip1.add( factory.createControllerModel( controllerGrip1 ) );
                 scene.add( controllerGrip1 );
               }
 
               controllerGrip2 = renderer.xr.getControllerGrip( 1 );
 
               if (controllerGrip2) {
-                controllerGrip2.add( controller.createControllerModel( controllerGrip2 ) );
+                controllerGrip2.add( factory.createControllerModel( controllerGrip2 ) );
                 scene.add( controllerGrip2 );
               }
             }
+
+            // 4. Add a visual laser line to the target controllers
+            const geometry = new THREE.BufferGeometry().setFromPoints( [ new THREE.Vector3( 0, 0, 0 ), new THREE.Vector3( 0, 0, -5 ) ] );
+            line1 = new THREE.Line( geometry, laserMaterial1 );
+            line2 = new THREE.Line( geometry, laserMaterial2 );
+
+            // Add line to both ray pointers
+            controller1.add( line1 );
+            controller2.add( line2 );
           }
 
+          // Orbit controls setup
           if (controls === undefined) {
             const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
-
             controls = new OrbitControls( camera, renderer.domElement );
+            controls.enableDamping = true;
             controls.enableZoom = true;
             controls.zoomToCursor = true;
-            controls.zoomSpeed = 0.5;
-            controls.rotateSpeed = 0.5;
-            controls.keyPanSpeed = 0.5; 
-            controls.panSpeed = 0.5;
-            controls.enableDamping = true;
-            controls.minDistance = 0;
-            controls.maxDistance = Infinity;
-            //controls.dampingFactor = 0.05;
-            //controls.enableKeys = false;
-            //controls.maxPolarAngle = 2.2;
-            //controls.minPolarAngle = 1.1;
           }
 
-          if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+          if (!events_initialized) { 
+            initialize_event_listeners(); 
+            events_initialized = true; 
+          }
         }
 
         if (material === undefined) {
@@ -1070,14 +1105,13 @@
 
         await reset_all( true );
 
-        document.getElementById('div_loading').style.display = 'block';
-        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+        document.getElementById('div_loading').innerText = 'Load & Visualize';
 
         enable_disable( true );
 
         const model_extensions = [ '.3MF', '.BIM', '.DAE', '.FBX', '.GLB', '.GLTF', '.PLY', '.USD', '.USDA', '.USDC', '.USDZ' ];
 
-        if (url_loading === false) {
+        if (!url_loading) {
           // Load local model file
           let fi = document.getElementById('file_input');
 
@@ -1104,7 +1138,7 @@
           document.getElementById('file_input').value = '';
           url_loading = false;
 
-          if (selected_url_file.indexOf( ',' ) > -1 || selected_url_file.indexOf( ';' ) > -1) {
+          if (selected_url_file.indexOf( ',' ) > -1 || selected_url_file.indexOf( ';' ) > -1 || selected_url_file.indexOf( ' ' ) > -1) {
             handle_error( 'Only a single URL is allowed!' );
             return;
           }
@@ -1219,6 +1253,17 @@
       }
 
       async function finish_loading() {
+        const box = new THREE.Box3().setFromObject( loaded_model );
+        const center = new THREE.Vector3();
+        box.getCenter( center );
+        loaded_model.pivot = center;
+
+        loaded_model.position.x -= center.x;
+        loaded_model.position.y -= center.y;
+        loaded_model.position.z -= center.z;
+
+        scene.add( loaded_model );
+
         loaded_model.name = 'loaded_model';
 
         loaded_model.traverse( ( child ) => {
@@ -1238,9 +1283,20 @@
         });
 
         await set_initial_scale();
-        resize();
 
-        if (ar === true || vr === true) {
+        if (!loaded_model.originalPosition) {
+          loaded_model.originalPosition = loaded_model.position.clone();
+        }
+
+        if (!camera.originalPosition) {
+          camera.originalPosition = camera.position.clone();
+        }
+
+        if (!camera.originalQuaternion) {
+          camera.originalQuaternion = camera.quaternion.clone();
+        }
+
+        if (ar_OK || vr_OK) {
           if (device_controls === undefined) {
             const { DeviceOrientationControls } = await import( '../static/jsm/controls/DeviceOrientationControls.min.js' );
             do_controls = DeviceOrientationControls;
@@ -1254,7 +1310,12 @@
         renderer.setAnimationLoop( render );
 
         console.timeEnd( 'Loading Time' );
+
         enable_disable( false );
+
+        document.getElementById('btn_load').disabled = false;
+        document.getElementById('btn_file_input').disabled = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'none';
       }
@@ -1264,12 +1325,57 @@
         console.log( 'Error loading model!' );
         console.log( error );
 
+        document.getElementById('btn_load').disabled = false;
+        document.getElementById('btn_file_input').disabled = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
       }
 
+      function render( timestamp ) {
+        if (loaded_model) {
+          if (animation_mixer) {
+            clock.update( timestamp );
+            animation_mixer.update( clock.getDelta() );
+          }
+
+          if (kinematics_running && kinematicsTween) tween_update();
+
+          if (rotation_enabled) {
+            switch ( current_up ) {
+              case '-y':
+                loaded_model.rotation.y -= 0.001;
+                break;
+
+              case 'y':
+                loaded_model.rotation.y += 0.001;
+                break;
+
+              case '-z':
+                loaded_model.rotation.z -= 0.001;
+                break;
+
+              case 'z':
+                loaded_model.rotation.z += 0.001;
+                break;
+
+              default:
+                break;
+            }
+          }
+
+          if (controls) controls.update();
+          if (device_controls && device_controls.enabled) device_controls.update();
+
+          renderer.clear();
+          renderer.render( scene, camera );
+
+          checkLaserIntersections();
+        }
+      }
+
       function reset_all( no_reload = false ) {
-        if (no_reload === false) {
+        if (!no_reload) {
           document.getElementById('file_input').value = '';
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
@@ -1277,8 +1383,6 @@
 
         document.getElementById('btn_animate').style.backgroundColor = 'transparent';
         document.getElementById('btn_animate').disabled = true;
-        document.getElementById('div_loading').innerHTML = '';
-        document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').innerHTML = '';
         document.getElementById('div_error').style.display = 'none';
         vertex_colors = false;
@@ -1288,7 +1392,7 @@
           if (loaded_model && loaded_model.name === 'loaded_model') {
             scene.remove( loaded_model );
 
-            if (kinematics_running === true && kinematicsTween) kinematicsTween.stop();
+            if (kinematics_running && kinematicsTween) kinematicsTween.stop();
 
             if (animation_mixer) {
               animation_mixer.stopAllAction();
@@ -1357,58 +1461,22 @@
       function enable_disable( disable = false ) {
         document.getElementById('directional_light_intensity').disabled = disable;
         document.getElementById('model_scale').disabled = disable;
+        document.getElementById('btn_dc_dli').disabled = disable;
+        document.getElementById('model_scale').disabled = disable;
         document.getElementById('btn_quick_x').disabled = disable;
         document.getElementById('btn_rotate').disabled = disable;
         document.getElementById('btn_equi').disabled = disable;
         disabled_changed();
       }
-
-      function render( timestamp ) {
-        if (loaded_model) {
-          if (animation_mixer) {
-            clock.update( timestamp );
-            animation_mixer.update( clock.getDelta() );
-          }
-
-          if (kinematics_running && kinematicsTween) tween_update();
-
-          if (rotation_enabled) {
-            switch ( current_up ) {
-              case '-y':
-                loaded_model.rotation.y -= 0.001;
-                break;
-
-              case 'y':
-                loaded_model.rotation.y += 0.001;
-                break;
-
-              case '-z':
-                loaded_model.rotation.z -= 0.001;
-                break;
-
-              case 'z':
-                loaded_model.rotation.z += 0.001;
-                break;
-
-              default:
-                break;
-            }
-          }
-
-          if (controls) controls.update();
-          if (device_controls && device_controls.enabled) device_controls.update();
-
-          renderer.clear();
-          renderer.render( scene, camera );
-        }
-      }
     </script>
 
     <script>
       function document_ready() {
-        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
-          (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
+        isNewiPad = (/iPad/.test( navigator.platform ) && (/Mac OS X/i.test( navigator.userAgent ))) ||
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        isMobile = !isNewiPad && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
 
         texture_maps = [
           'map', 'aoMap', 'alphaMap', 'bumpMap', 'displacementMap', 'envMap', 'lightMap', 'emissiveMap', 'normalMap',
@@ -1420,18 +1488,18 @@
         $('#model_scale').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
 
-        if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile === true) {
+        if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile) {
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
         }
 
         document.getElementById('model_scale').selectedIndex = 0;
 
-        if (isMobile === false) $('#btn_full_screen')[ 0 ].style.display = '';
+        if (!isMobile) $('#btn_full_screen')[ 0 ].style.display = '';
       }
 
       function disabled_changed() {
         $('button').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -1441,7 +1509,7 @@
         });
 
         $('select').each( function() {
-          if (this.disabled === false) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
