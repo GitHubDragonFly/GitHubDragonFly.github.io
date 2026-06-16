@@ -128,7 +128,7 @@
       </div>
     </div>
 
-    <a-scene id="a_scene" scene-animation-runner vr-session-monitor webxr="referenceSpaceType: local-floor; requiredFeatures: local-floor; optionalFeatures: local-floor;">
+    <a-scene id="a_scene" scene-animation-runner vr-session-monitor webxr="referenceSpaceType: local-floor; optionalFeatures: local-floor, bounded-floor;">
       <a-sky color="#87CEEB"></a-sky>
 
       <a-light type="ambient" color="#FFF" intensity="1.5" position="1 1 1"></a-light>
@@ -978,55 +978,46 @@
 
         document.getElementById('model_scale').selectedIndex = 0;
 
-        document.addEventListener( 'DOMContentLoaded', () => {
-          const sceneEl = document.querySelector('#a_scene');
-          const modelContainer = document.querySelector('#model-container');
-
-          sceneEl.addEventListener( 'exit-vr', () => {
-            // 1. Force the visibility flag to true just in case
-            modelContainer.setAttribute( 'visible', true );
-
-            // 2. Tell Three.js (the engine under A-Frame) to update the model's spatial matrix
-            if (modelContainer.object3D) {
-              modelContainer.object3D.visible = true;
-
-              // If the model is a GLTF, sometimes its children get stuck in a hidden state
-              modelContainer.object3D.traverse( ( child ) => {
-                if (child.isMesh) child.visible = true;
-              });
-            }
-
-            // 3. Minor trick: Gently nudge the camera position to force a browser redraw
-            const camera = document.querySelector( 'a-camera' );
-
-            if (camera) {
-              const currentPos = camera.getAttribute('position');
-              camera.setAttribute( 'position', {
-                x: currentPos.x, 
-                y: currentPos.y + 0.001, // A tiny fraction of a millimeter nudge
-                z: currentPos.z
-              });
-            }
-          });
-        });
-
         AFRAME.registerComponent( 'vr-session-monitor', {
           init: function() {
             const sceneEl = this.el;
 
-            sceneEl.addEventListener( 'exit-vr', function () {
-              console.log( 'The VR session has ended, forced renderer resize' );
+            sceneEl.addEventListener( 'exit-vr', function() {
+              console.log( 'The VR session has ended, fixing camera and forcing resize' );
 
-              // 1. Wait a tiny fraction of a second for the DOM to settle back into 2D mode
+              // 1. Grab our rig and camera entities
+              const rigEl = document.querySelector('#rig');
+              const cameraEl = document.querySelector('a-camera') || document.querySelector('[camera]');
+
+              // 2. Explicitly force-reset their positions to your desktop defaults
+              if (rigEl) {
+                rigEl.setAttribute( 'position', '0 1.6 4' );
+                rigEl.setAttribute( 'scale', '1 1 1' );
+              }
+
+              if (cameraEl) {
+                cameraEl.setAttribute( 'position', '0 1.6 0' );
+
+                // Reset look-controls tracking just in case it got stuck looking at the sky/floor
+                if (cameraEl.components[ 'look-controls' ]) {
+                  cameraEl.components['look-controls'].idToQuaternion = {};
+                  cameraEl.components['look-controls'].pitchObject.rotation.x = 0;
+                  cameraEl.components['look-controls'].yawObject.rotation.y = 0;
+                }
+              }
+
+              // 3. Wait a tiny fraction of a second for the DOM to settle back into 2D mode
               setTimeout( () => {
-                // 2. Dispatch a global resize event that A-Frame's core listens to
+                // Force the underlying Three.js matrices to recalculate the positions we just set
+                if (rigEl && rigEl.object3D) rigEl.object3D.updateMatrixWorld( true );
+                if (cameraEl && cameraEl.object3D) cameraEl.object3D.updateMatrixWorld( true );
+
                 window.dispatchEvent( new Event( 'resize' ) );
 
-                // 3. Optional: Direct fallback to force the Three.js renderer to match the window
                 if (sceneEl.renderer) {
                   sceneEl.renderer.setSize( window.innerWidth, window.innerHeight );
                 }
-              }, 100); // 100ms is usually the sweet spot
+              }, 100);
             });
           }
         });
