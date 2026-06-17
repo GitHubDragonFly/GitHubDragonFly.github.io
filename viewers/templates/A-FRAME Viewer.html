@@ -82,8 +82,7 @@
     <script>
       var selected_url_file = '', url_displayed = false, url_loading = false;
       var manager, loaded_model, material, extension, animations, vertex_colors;
-      var texture_maps, isMobile, activeMixers = [], raycaster, mouse;
-      var mouseDownPos, pickedObject;
+      var isMobile, activeMixers = [], raycaster, mouse, mouseDownPos, pickedObject;
     </script>
 
     <style>
@@ -93,6 +92,46 @@
         bottom: 20px !important;
         right: 20px !important;
         z-index: 99999 !important;
+      }
+
+      /* --- 1. Default Style for Landscape / Desktop (Hidden) --- */
+      #vr_message {
+        display: none;
+        position: absolute;
+        font-family: Monospace, Arial;
+        color: #d1cefc;
+        background: rgba(0, 0, 0, 0.85);
+        padding: 15px;
+        border-radius: 8px;
+        border: 1px solid #ff4a4a;
+        pointer-events: auto;
+        text-align: center;
+        --safe-bottom: calc(100vh - 100svh);
+        bottom: calc(var(--safe-bottom, env(safe-area-inset-bottom, 0px)) + 15px);
+        left: 5px;
+        right: 5px;
+      }
+
+      /* --- 2. Action Selectors (Triggered by JS classes on the body) --- */
+
+      /* Hides the VR button only when device is VR-capable AND in portrait */
+      .vr-capable.in-portrait .a-enter-vr {
+        display: none !important;
+      }
+
+      /* Displays the warning box only when device is VR-capable AND in portrait */
+      .vr-capable.in-portrait #vr_message {
+        display: block !important;
+      }
+
+      /* Warning text styling inside the visible box */
+      .orientation-warning .msg-text {
+        color: #ff4a4a;
+        font-weight: bold;
+      }
+
+      .orientation-warning .msg-text::before {
+        content: "🔄 Rotate your device for VR";
       }
     </style>
 
@@ -141,6 +180,8 @@
         <a-entity laser-controls="hand: left" raycaster="objects: .raycastable"></a-entity>
       </a-entity>
     </a-scene>
+
+    <div id="vr_message" class="orientation-warning"><span class="msg-text"></span></div>
 
     <div id="div_error" class="error_msg">E R R O R !</div>
     <div id="div_loading" class="loading_msg">Loading</div>
@@ -917,22 +958,15 @@
                       Object.keys( m.uniforms ).forEach( ( key ) => {
                         if (m.uniforms[ key ].value) {
                           if (Array.isArray( m.uniforms[ key ].value ) && m.uniforms[ key ].value.length > 0) {
-                            m.uniforms[ key ].value.forEach( val => {
-                              if (val && typeof val === 'object' && val.type === 1009) val.dispose();
-                            });
+                            m.uniforms[ key ].value.forEach( val => if (val?.isTexture) val.dispose() );
                           } else {
-                            if (m.uniforms[ key ]?.value?.type === 1009)
-                              m.uniforms[ key ].value.dispose();
+                            if (m.uniforms[ key ]?.value?.isTexture) m.uniforms[ key ].value.dispose();
                           }
                         }
                       });
                     } else {
                       for (const prop in m) {
-                        texture_maps.forEach( tex_map => {
-                          if (prop === tex_map) {
-                            if (m[ prop ]) m[ prop ].dispose();
-                          }
-                        });
+                        if (m[ prop ]?.isTexture) m[ prop ].dispose();
                       };
                     }
 
@@ -958,16 +992,11 @@
 
     <script>
       function document_ready() {
-        isMobile = (/iPad|iPhone|iPod/.test( navigator.platform )) ||
-          (/Android|webOS|iPhone|iPad|iPod|CriOS|BlackBerry|IEMobile|Opera Mini/i.test( navigator.userAgent )) ||
+        isNewiPad = (/iPad/.test( navigator.platform ) && (/Mac OS X/i.test( navigator.userAgent ))) ||
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
 
-        texture_maps = [
-          'map', 'aoMap', 'alphaMap', 'bumpMap', 'displacementMap', 'envMap', 'lightMap', 'emissiveMap', 'normalMap',
-          'metalnessMap', 'roughnessMap', 'anisotropyMap', 'clearcoatMap','clearcoatNormalMap', 'clearcoatRoughnessMap',
-          'iridescenceMap', 'iridescenceThicknessMap', 'sheenColorMap', 'sheenRoughnessMap', 'specularMap',
-          'specularColorMap', 'specularIntensityMap', 'thicknessMap', 'transmissionMap'
-        ];
+        isMobile = !isNewiPad && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
 
         $('#model_scale').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
@@ -1147,6 +1176,41 @@
             }
           }
         });
+
+        // 1. THE PORTRAIT TRACKING FUNCTION
+        function initOrientationTracker() {
+          function checkOrientation() {
+            const isPortrait = window.innerWidth < window.innerHeight;
+
+            if (isMobile && isPortrait) {
+              document.body.classList.add( 'in-portrait' );
+            } else {
+              document.body.classList.remove( 'in-portrait' );
+            }
+          }
+
+          // 2. RUN THE CHECK & ATTACH THE EVENT LISTENERS
+          if (navigator.xr && typeof navigator.xr.isSessionSupported === 'function') {
+            navigator.xr.isSessionSupported( 'immersive-vr' ).then( ( supported ) => {
+              if (supported || isMobile) {
+                document.body.classList.add( 'vr-capable' );
+                checkOrientation();
+                window.addEventListener( 'resize', checkOrientation );
+              }
+            });
+          } else if (isMobile) {
+            document.body.classList.add( 'vr-capable' );
+            checkOrientation();
+            window.addEventListener( 'resize', checkOrientation );
+          }
+        }
+
+        // Safety Check: If DOM is already interactive/complete, run immediately. Otherwise, wait.
+        if (document.readyState === 'loading') {
+          document.addEventListener( 'DOMContentLoaded', initOrientationTracker );
+        } else {
+          initOrientationTracker();
+        }
       }
 
       function disabled_changed() {
