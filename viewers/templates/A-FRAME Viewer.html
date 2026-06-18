@@ -114,6 +114,16 @@
 
       /* --- 2. Action Selectors (Triggered by JS classes on the body) --- */
 
+      /* While the model is loading, forcefully hide the VR button container */
+      .vr-loading-locked .a-enter-vr {
+        display: none !important;
+      }
+
+      /* ALSO hide the warning message during the loading phase */
+      .vr-loading-locked.vr-capable.in-portrait #vr_message {
+        display: none !important;
+      }
+
       /* Hides the VR button only when device is VR-capable AND in portrait */
       .vr-capable.in-portrait .a-enter-vr {
         display: none !important;
@@ -167,15 +177,17 @@
       </div>
     </div>
 
-    <a-scene id="a_scene" scene-animation-runner vr-session-monitor webxr="referenceSpaceType: local-floor; optionalFeatures: local-floor, bounded-floor;">
+    <a-scene id="a_scene" scene-animation-runner vr-session-monitor vr-button-gate vr-mode-ui="enabled: true;" webxr="referenceSpaceType: local-floor; optionalFeatures: local-floor, bounded-floor;">
       <a-sky color="#87CEEB"></a-sky>
 
       <a-light type="ambient" color="#FFF" intensity="1.5" position="1 1 1"></a-light>
       <a-light type="directional" color="#FFF" intensity="3.0" position="-1 1 1"></a-light>
 
       <a-entity id="rig" position="0 1.6 4" wheel-zoom>
-        <a-camera look-controls wasd-controls position="0 1.6 0"></a-camera>
+        <a-camera look-controls="magicWindowTrackingEnabled: false;" wasd-controls position="0 1.6 0"></a-camera>
+
         <a-entity id="model-container" manual-model-raycast raycast-listen position="0 0 -3"></a-entity>
+
         <a-entity laser-controls="hand: right" raycaster="objects: .raycastable"></a-entity>
         <a-entity laser-controls="hand: left" raycaster="objects: .raycastable"></a-entity>
       </a-entity>
@@ -184,7 +196,7 @@
     <div id="vr_message" class="orientation-warning"><span class="msg-text"></span></div>
 
     <div id="div_error" class="error_msg">E R R O R !</div>
-    <div id="div_loading" class="loading_msg">Loading</div>
+    <div id="div_loading" class="loading_msg">A-FRAME Viewer</div>
 
     <script>
       function show_url() {
@@ -591,7 +603,7 @@
               gltf_loader.setDRACOLoader( draco_loader );
               gltf_loader.setMeshoptDecoder( MeshoptDecoder );
 
-              gltf_loader.load( url, function( gltf ) {
+              gltf_loader.load( url, async function( gltf ) {
                 loaded_model.add( gltf.scene );
                 loaded_model.name = 'loaded_model';
 
@@ -607,7 +619,7 @@
                   activeMixers.push( mixer );
                 }
 
-                normalize_and_center_global_model();
+                await normalize_and_center_global_model();
 
                 resolve( finish_loading() );
 
@@ -885,18 +897,6 @@
       }
 
       function finish_loading() {
-        const box = new THREE.Box3().setFromObject( loaded_model );
-        const center = new THREE.Vector3();
-        box.getCenter( center );
-        loaded_model.pivot = center;
-
-        loaded_model.position.x -= center.x;
-        loaded_model.position.y += box.min.y / 2.0;
-        loaded_model.position.z -= center.z;
-
-        const scene = document.getElementById( 'a_scene' ).object3D;
-        scene.add( loaded_model );
-
         console.timeEnd( 'Loading Time' );
 
         enable_disable( false );
@@ -921,7 +921,7 @@
       }
 
       async function reset_all( no_reload = false ) {
-        if (no_reload === false) {
+        if (!no_reload) {
           document.getElementById('file_input').value = '';
           document.getElementById('url_entry').value = '';
           selected_url_file = '';
@@ -939,7 +939,7 @@
         if (scene) {
           await clear_current_animations();
 
-          if (loaded_model && loaded_model.name === 'loaded_model') {
+          if (loaded_model?.name === 'loaded_model') {
             if (loaded_model.parent) loaded_model.parent.remove( loaded_model );
 
             if (loaded_model.skeleton && loaded_model.skeleton.boneTexture)
@@ -1011,44 +1011,97 @@
           init: function() {
             const sceneEl = this.el;
 
-            sceneEl.addEventListener( 'exit-vr', function () {
-              console.log( 'Exited split-view VR. Re-centering camera...' );
+            this.resetCamera = function( reason ) {
+              console.log( `Executing strict hardware-sensor reset due to: ${reason}` );
 
               const cameraEl = document.querySelector('a-camera') || document.querySelector('[camera]');
               const rigEl = document.querySelector('#rig');
 
-              if (cameraEl) {
-                // 1. Strip the glitched look-controls entirely
-                cameraEl.removeAttribute( 'look-controls' );
+              if (cameraEl && cameraEl.components[ 'look-controls' ]) {
+                const lookControls = cameraEl.components[ 'look-controls' ];
 
-                // 2. Hard reset positions back to desktop standards
+                // 1. Force state updates back to flat-screen mode
+                if (cameraEl.object3D) cameraEl.object3D.matrixAutoUpdate = true;
+
+                // 2. Clear out the stale pose memory so it doesn't loop back
+                lookControls.hasSavedPose = false;
+
+                // 3. ZERO OUT THE MAGIC WINDOW GYRO CALCULATIONS
+                lookControls.magicWindowAbsoluteEuler.set( 0, 0, 0 );
+                lookControls.magicWindowDeltaEuler.set( 0, 0, 0 );
+                lookControls.previousMagicWindowYaw = 0; // Forces gyro recalibration next frame
+
+                // Force the internal device orientation controls to grab a fresh baseline
+                if (lookControls.magicWindowControls && typeof lookControls.magicWindowControls.update === 'function') {
+                  lookControls.magicWindowControls.update();
+                }
+
+                // 4. Reset manual touch/drag layers
+                lookControls.pitchObject.rotation.x = 0;
+                lookControls.yawObject.rotation.y = 0;
+
+                // 5. Force positions onto the absolute Three.js layers
+                if (cameraEl.object3D) {
+                  cameraEl.object3D.position.set( 0, 1.6, 0 );
+                  cameraEl.object3D.rotation.set( 0, 0, 0 );
+                }
+
                 cameraEl.setAttribute( 'position', '0 1.6 0' );
                 cameraEl.setAttribute( 'rotation', '0 0 0' );
 
                 if (rigEl) {
+                  if (rigEl.object3D) {
+                    rigEl.object3D.position.set( 0, 1.6, 4 );
+                    rigEl.object3D.rotation.set( 0, 0, 0 );
+                  }
+
                   rigEl.setAttribute( 'position', '0 1.6 4' );
                 }
 
-                // 3. Give a moment to process the removal, then reinstall fresh controls
-                setTimeout( () => {
-                  cameraEl.setAttribute( 'look-controls', {
-                    touchEnabled: true,
-                    magicWindowTrackingEnabled: true
-                  });
+                // 6. Recalculate projection matrices for the active window aspect ratio
+                if (cameraEl.components.camera && cameraEl.components.camera.camera) {
+                  const threeCamera = cameraEl.components.camera.camera;
+                  threeCamera.aspect = window.innerWidth / window.innerHeight;
+                  threeCamera.updateProjectionMatrix();
+                }
 
-                  // Force matrix update
-                  if (cameraEl.object3D) cameraEl.object3D.updateMatrixWorld( true );
-                  if (rigEl && rigEl.object3D) rigEl.object3D.updateMatrixWorld( true );
+                // 7. Final canvas layout rebuild
+                if (sceneEl.resize) sceneEl.resize();
 
-                  // Trigger the canvas resize fallback
-                  window.dispatchEvent( new Event( 'resize' ) );
+                if (sceneEl.renderer) {
+                  sceneEl.renderer.setSize( window.innerWidth, window.innerHeight, true );
+                }
 
-                  if (sceneEl.renderer) {
-                    sceneEl.renderer.setSize( window.innerWidth, window.innerHeight );
-                  }
-                }, 150);
+                if (sceneEl.object3D) sceneEl.object3D.updateMatrixWorld( true );
               }
+            };
+
+            // Listen for VR exit, but bypass the native execution race condition
+            sceneEl.addEventListener( 'exit-vr', () => {
+              // requestAnimationFrame forces our reset logic to run on the very next render tick,
+              // strictly AFTER look-controls has finished executing its native onExitVR routine.
+              requestAnimationFrame( () => { this.resetCamera( 'Exit VR Session (Post-Native)' ); });
             });
+          }
+        });
+
+        AFRAME.registerComponent( 'vr-button-gate', {
+          init: function () {
+            const sceneEl = this.el;
+            const modelContainer = document.querySelector('#model-container');
+
+            // 1. Immediately lock the VR button by adding the class to the body on boot
+            document.body.classList.add( 'vr-loading-locked' );
+            console.log( 'VR Button locked via CSS until model loading is complete.');
+
+            // 2. Listen for your custom loading event from normalize_and_center_global_model()
+            if (modelContainer) {
+              modelContainer.addEventListener( 'model-loaded', () => {
+                // Remove the lock class, returning control entirely back to your standard orientation CSS
+                document.body.classList.remove( 'vr-loading-locked' );
+                console.log( 'Model ready and centered. VR Button unlocked!' );
+              });
+            }
           }
         });
 
@@ -1075,7 +1128,7 @@
               this.el.classList.add( 'raycastable' );
 
               // 2. FORCE the scene's raycaster system to refresh its object list
-              if (this.el.sceneEl && this.el.sceneEl.systems.raycaster) {
+              if (this.el.sceneEl?.systems?.raycaster) {
                 this.el.sceneEl.systems.raycaster.refreshObjects();
                 console.log( 'Raycaster refreshed for manually loaded model!' );
               }
