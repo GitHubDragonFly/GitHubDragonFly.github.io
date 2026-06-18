@@ -243,11 +243,11 @@ Number Type Converter
 
 - Special notes about `AR / VR Viewer`:
   - Using slightly modified version of the three.js `DeviceOrientationControls`, last available in r133
-  - Currently highly experimental so it might work or it might not work properly or at all
+  - Currently a little bit experimental but it seems to work properly
   - My tests had it working with Chrome browser on both the desktop and an Android mobile phone:
-    - Either as a standard viewer or with AR / VR support
+    - Could be used either as a standard viewer or with AR / VR support
   - Supported import formats (single model or scene only):
-    - 3MF, BIM, DAE, FBX, GLB, GLTF, PLY, USDZ
+    - 3MF, BIM, DAE, FBX, GLB, GLTF, PLY, USD, USDA, USDC, USDZ
     - Local blobs and remote URL loading are supported
       - Local model files should be self-contained (embedded or binary)
   - Currently available features:
@@ -256,11 +256,13 @@ Number Type Converter
     - Equirectangular background
 
 - Special notes about `A-FRAME Viewer`:
-  - It is using [A-Frame Library / Framework](https://aframe.io) which makes it A-Frame specific
-  - It is currently highly experimental so not sure if everything works as it should be
-  - It is supposed to be used mainly on mobile devices supporting AR / VR
+  - Using [A-Frame Library / Framework](https://aframe.io) which makes it A-Frame specific
+  - Currently a little bit experimental but everything seems to work as it should be
+  - Supposed to be used mainly on mobile devices supporting AR / VR:
+    - Works fine in desktop browsers with Immersive WebXR extensions
+    - Not tested with any real VR hardware
   - Supported import formats (single model or scene only):
-    - BIM, DAE, FBX, GLB, GLTF, PLY, USDZ
+    - BIM, DAE, FBX, GLB, GLTF, PLY, USD, USDA, USDC, USDZ
     - Local blobs and remote URL loading are supported
       - Local model files should be self-contained (embedded or binary)
 
