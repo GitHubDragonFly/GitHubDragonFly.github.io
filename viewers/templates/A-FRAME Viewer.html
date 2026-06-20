@@ -118,6 +118,11 @@
 
       /* --- 2. Action Selectors (Triggered by JS classes on the body) --- */
 
+      /* If VR is not supported on this device/browser, permanently kill the button */
+      .vr-not-supported .a-enter-vr {
+        display: none !important;
+      }
+
       /* While the model is loading, forcefully hide the VR button container */
       .vr-loading-locked .a-enter-vr {
         display: none !important;
@@ -187,10 +192,10 @@
       <a-light type="ambient" color="#FFF" intensity="1.5" position="1 1 1"></a-light>
       <a-light type="directional" color="#FFF" intensity="3.0" position="-1 1 1"></a-light>
 
+      <a-entity id="model-container" manual-model-raycast raycast-listen position="0 0 1"></a-entity>
+
       <a-entity id="rig" wheel-zoom position="0 0 4">
         <a-camera look-controls="magicWindowTrackingEnabled: false;" wasd-controls position="0 1.6 0"></a-camera>
-
-        <a-entity id="model-container" manual-model-raycast raycast-listen position="0 0 -3"></a-entity>
 
         <a-entity laser-controls="hand: right" raycaster="objects: .raycastable"></a-entity>
         <a-entity laser-controls="hand: left" raycaster="objects: .raycastable"></a-entity>
@@ -367,12 +372,16 @@
           if (child.isMesh || child.isPoints) {
             // Compute bounding settings for this specific geometry if not ready
             if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+            child.geometry.computeBoundingSphere();
+            if (child.isMesh) child.raycast = THREE.Mesh.prototype.raycast;
 
             // Expand our master bounding box to include this mesh
             box.expandByObject( child );
             hasVisibleMesh = true;
           }
         });
+
+        loaded_model.updateMatrixWorld( true );
 
         // Fallback: If no meshes were found in traversal, fallback to the entire object structure
         if (!hasVisibleMesh) {
@@ -443,7 +452,7 @@
 
               const bim_loader = new BIMLoader( manager );
 
-              bim_loader.load( url, function( bim_meshes ) {
+              bim_loader.load( url, async function( bim_meshes ) {
                 loaded_model.add( bim_meshes );
                 loaded_model.name = 'loaded_model';
 
@@ -469,7 +478,7 @@
                   }
                 });
 
-                normalize_and_center_global_model();
+                await normalize_and_center_global_model();
 
                 resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
@@ -482,7 +491,7 @@
 
               const dae_loader = new ColladaLoader( manager );
 
-              dae_loader.load( url, function( collada ) {
+              dae_loader.load( url, async function( collada ) {
                 loaded_model.add( collada.scene );
                 loaded_model.name = 'loaded_model';
 
@@ -515,7 +524,7 @@
                   }
                 });
 
-                normalize_and_center_global_model();
+                await normalize_and_center_global_model();
 
                 resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
@@ -536,7 +545,7 @@
               const tga_loader = new TGALoader( manager );
               manager.addHandler( /\.tga$/i, dds_loader );
 
-              fbx_loader.load( url, function( fbx_scene ) {
+              fbx_loader.load( url, async function( fbx_scene ) {
                 loaded_model.add( fbx_scene );
                 loaded_model.name = 'loaded_model';
 
@@ -576,7 +585,7 @@
                   }
                 });
 
-                normalize_and_center_global_model();
+                await normalize_and_center_global_model();
 
                 resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
@@ -640,7 +649,7 @@
 
               const ply_loader = new PLYLoader( manager );
 
-              ply_loader.load( url, function( geometry ) {
+              ply_loader.load( url, async function( geometry ) {
                 (geometry.hasAttribute( 'color' )) ? vertex_colors = true : vertex_colors = false;
 
                 if ( geometry.index !== null ) {
@@ -666,7 +675,7 @@
 
                 loaded_model.name = 'loaded_model';
 
-                normalize_and_center_global_model();
+                await normalize_and_center_global_model();
 
                 resolve( finish_loading() );
               }, function ( xhr ) { // onProgress
@@ -682,7 +691,7 @@
 
               const usd_loader = new USDLoader( manager );
 
-              usd_loader.load( url, function( usd ) {
+              usd_loader.load( url, async function( usd ) {
                 loaded_model.add( usd );
                 loaded_model.name = 'loaded_model';
 
@@ -697,7 +706,7 @@
                   activeMixers.push( mixer );
                 }
 
-                normalize_and_center_global_model();
+                await normalize_and_center_global_model();
 
                 loaded_model.traverse( ( child ) => {
                   if (child.isMesh) {
@@ -739,13 +748,13 @@
         await reset_all( true );
 
         if (material === undefined) {
-          material = new THREE.MeshPhongMaterial( {
+          material = new THREE.MeshStandardMaterial( {
             side: THREE.DoubleSide,
             vertexColors: false,
-            specular: 0xA0A0A0,
-            flatShading: true,
-            color: 0xCFCFCF,
-            shininess: 30,
+            flatShading: false,
+            color: 0xEEEEEE,
+            roughness: 0.5,
+            metalness: 0.5,
             opacity: 1,
             fog: true
           });
@@ -1082,33 +1091,84 @@
               }
             };
 
-            // Listen for VR exit, but bypass the native execution race condition
+            sceneEl.addEventListener( 'enter-vr', () => {
+              console.log( 'Entering VR mode...' );
+
+              const session = sceneEl.xrSession;
+
+              if (session) {
+                // This fires the absolute millisecond the user clicks "Exit VR", BEFORE A-Frame breaks the tracking space
+                session.addEventListener( 'end', () => {
+                  console.log( 'Exiting VR mode...' );
+                  console.log( 'Rescuing model tracking data right now...' );
+                  this.forceSafeRelease();
+                });
+              }
+            });
+
+            // 2. Standard A-Frame cleanup fallback
             sceneEl.addEventListener( 'exit-vr', () => {
-              // requestAnimationFrame forces our reset logic to run on the very next render tick,
-              // strictly AFTER look-controls has finished executing its native onExitVR routine.
               requestAnimationFrame( () => {
                 this.resetCamera( 'Exit VR Session (Post-Native)' );
               });
             });
+
+            // Reusable routine that strips the model from the controller while preserving smooth spatial coords
+            this.forceSafeRelease = function() {
+              const modelContainer = document.querySelector('#model-container');
+              if (!modelContainer || !modelContainer.components[ 'raycast-listen' ]) return;
+
+              const dragComp = modelContainer.components[ 'raycast-listen' ];
+              if (!dragComp.isDragging) return;
+
+              console.log( 'Pre-emptively pulling model to world space...' );
+
+              // Capture absolute positions while the controller tracking is pristine
+              const worldPos = new THREE.Vector3();
+              const worldQuat = new THREE.Quaternion();
+              const worldScale = new THREE.Vector3();
+
+              modelContainer.object3D.matrixWorld.decompose( worldPos, worldQuat, worldScale );
+
+              // Sever the hierarchy bond smoothly
+              dragComp.isDragging = false;
+              dragComp.originalParent.add( modelContainer.object3D ); // Safely re-parents to scene root
+              dragComp.activeRaycasterEl = null;
+
+              // Put the pristine world metrics back onto the independent model
+              modelContainer.object3D.position.copy( worldPos );
+              modelContainer.object3D.quaternion.copy( worldQuat );
+              modelContainer.object3D.scale.copy( worldScale );
+
+              // Sync the DOM so A-Frame's HTML elements match up perfectly
+              modelContainer.setAttribute( 'position', `${worldPos.x} ${worldPos.y} ${worldPos.z}` );
+
+              modelContainer.object3D.updateMatrixWorld( true );
+              dragComp.originalParent.updateMatrixWorld( true );
+            };
           }
         });
 
         AFRAME.registerComponent( 'vr-button-gate', {
-          init: function () {
+          init: function() {
             const sceneEl = this.el;
-            const modelContainer = document.querySelector('#model-container');
+            const modelContainer = document.querySelector( '#model-container' );
 
-            // 1. Immediately lock the VR button by adding the class to the body on boot
-            document.body.classList.add( 'vr-loading-locked' );
-            console.log( 'VR Button locked via CSS until model loading is complete.');
+            // ONLY lock or manage states if the device is actually VR-capable
+            if (document.body.classList.contains( 'vr-capable' )) {
+              document.body.classList.add( 'vr-loading-locked' );
 
-            // 2. Listen for your custom loading event from normalize_and_center_global_model()
-            if (modelContainer) {
-              modelContainer.addEventListener( 'model-loaded', () => {
-                // Remove the lock class, returning control entirely back to your standard orientation CSS
-                document.body.classList.remove( 'vr-loading-locked' );
-                console.log( 'Model ready and centered. VR Button unlocked!' );
-              });
+              console.log( 'VR Button locked via CSS until model loading is complete.');
+
+              if (modelContainer) {
+                modelContainer.addEventListener( 'model-loaded', () => {
+                  document.body.classList.remove( 'vr-loading-locked' );
+                  console.log( 'Model ready, VR Button unlocked!' );
+                });
+              }
+            } else {
+              document.body.classList.add( 'vr-not-supported' );
+              console.log( 'Device is not VR capable' );
             }
           }
         });
@@ -1130,15 +1190,24 @@
 
         AFRAME.registerComponent( 'manual-model-raycast', {
           init: function() {
-            // Listen for when custom loading logic is complete
+            // Listen for custom loading event loaders fire (e.g., 'model-loaded')
             this.el.addEventListener( 'model-loaded', () => {
               // 1. Ensure the entity has the raycastable class
               this.el.classList.add( 'raycastable' );
 
-              // 2. FORCE the scene's raycaster system to refresh its object list
+              // 2. UNIVERSAL FIX: Traverse the model to ensure all child geometries 
+              // have updated bounding data (crucial for PLY and USD models)
+              this.el.object3D.traverse( ( child ) => {
+                if (child.isMesh || child.isPoints) {
+                  child.geometry.computeBoundingBox();
+                  child.geometry.computeBoundingSphere();
+                }
+              });
+
+              // 3. Force the scene's raycaster system to refresh its object list
               if (this.el.sceneEl?.systems?.raycaster) {
                 this.el.sceneEl.systems.raycaster.refreshObjects();
-                console.log( 'Raycaster refreshed for manually loaded model!' );
+                console.log( 'Raycaster refreshed for universally loaded model!' );
               }
             });
           }
@@ -1148,11 +1217,8 @@
           init: function() {
             this.activeRaycasterEl = null; 
             this.isDragging = false;
-
-            // Keep track of the original scene parent so we can put it back later
             this.originalParent = this.el.object3D.parent;
 
-            // Hover styling
             this.el.addEventListener( 'raycaster-intersected', ( evt ) => {
               evt.detail.el.setAttribute( 'raycaster', 'lineColor', '#ff0000' );
             });
@@ -1161,29 +1227,42 @@
               evt.detail.el.setAttribute( 'raycaster', 'lineColor', '#cccccc' );
             });
 
-            // Universal Click Handler
+            // Using 'click' accommodates the Emulator's "Press" button
             this.el.addEventListener( 'click', ( evt ) => {
               const controllerEl = evt.detail.cursorEl; 
               if (!controllerEl) return;
 
               if (!this.isDragging) {
-                // STATE 1: Lock onto object by attaching it directly to the controller
+                // Grab Object
                 this.activeRaycasterEl = controllerEl;
                 this.isDragging = true;
 
-                // Force Three.js to glue the model to the controller while keeping its visual position
+                this.el.object3D.updateMatrixWorld( true );
+                this.activeRaycasterEl.object3D.updateMatrixWorld( true );
                 this.activeRaycasterEl.object3D.attach( this.el.object3D );
-
-                //console.log( 'Attached to controller mesh natively!' );
               } else {
-                // STATE 2: Unlock object and return it to the world stage
-                this.isDragging = false;
+                // Release Object - STRICT CONTROLLER CHECK
+                if (controllerEl !== this.activeRaycasterEl) return; 
 
-                // Put it back under its original parent wrapper (the scene or rig)
+                this.isDragging = false;
                 this.originalParent.attach( this.el.object3D );
                 this.activeRaycasterEl = null;
 
-                console.log( 'Returned to world coordinates!' );
+                this.el.object3D.updateMatrixWorld( true );
+                this.originalParent.updateMatrixWorld( true );
+
+                // Clean out the cache immediately so the other hand can work
+                const raycasterEntities = this.el.sceneEl.querySelectorAll( '[raycaster]' );
+
+                raycasterEntities.forEach( el => {
+                  const raycasterComp = el.components.raycaster;
+
+                  if (raycasterComp) {
+                    raycasterComp.intersectedEls = [];
+                    raycasterComp.intersections = [];
+                    raycasterComp.refreshObjects();
+                  }
+                });
               }
             });
           }
@@ -1242,10 +1321,15 @@
           }
         });
 
-        // 1. THE PORTRAIT TRACKING FUNCTION
+        // THE PORTRAIT TRACKING FUNCTION
         function initOrientationTracker() {
           function checkOrientation() {
-            const isPortrait = window.innerWidth < window.innerHeight;
+            if (screen.orientation?.type) {
+              isPortrait = screen.orientation.type.includes( 'portrait' );
+            } else {
+              // Fallback for older browsers
+              isPortrait = window.matchMedia( '( orientation: portrait )' ).matches;
+            }
 
             if (isMobile && isPortrait) {
               document.body.classList.add( 'in-portrait' );
@@ -1254,23 +1338,44 @@
             }
           }
 
-          // 2. RUN THE CHECK & ATTACH THE EVENT LISTENERS
-          if (navigator.xr && typeof navigator.xr.isSessionSupported === 'function') {
-            navigator.xr.isSessionSupported( 'immersive-vr' ).then( ( supported ) => {
-              if (supported || isMobile) {
-                document.body.classList.add( 'vr-capable' );
-                checkOrientation();
-                window.addEventListener( 'resize', checkOrientation );
-              }
-            });
-          } else if (isMobile) {
+          // Helper to mark the DOM as capable and bind orientation listeners
+          function setCapable() {
             document.body.classList.add( 'vr-capable' );
             checkOrientation();
-            window.addEventListener( 'resize', checkOrientation );
+
+            // Use the modern orientationchange event if available, fallback to resize
+            if (screen.orientation) {
+              screen.orientation.addEventListener( 'change', checkOrientation );
+            } else {
+              window.addEventListener( 'resize', checkOrientation );
+            }
+          }
+
+          // Helper function to cleanly remove A-Frame's native button layout
+          function setUnsupported() {
+            document.body.classList.add( 'vr-not-supported' );
+            document.body.classList.remove( 'vr-capable' ); // Safety clear
+          }
+
+          // Check WebXR features natively
+          if (navigator.xr && typeof navigator.xr.isSessionSupported === 'function') {
+            // Check VR capabilities
+            navigator.xr.isSessionSupported( 'immersive-vr' ).then( vrSupported => {
+              if (vrSupported) {
+                setCapable();
+              } else if (isMobile) {
+                // The browser supports the WebXR API, but this specific device lacks the hardware/sensors
+                console.log( 'WebXR API present, but VR sessions not supported on this device' );
+                setUnsupported();
+              }
+            });
+          } else {
+            console.log( 'WebXR not supported by this browser' );
+            setUnsupported(); // <-- Turn off the button here too (e.g., Firefox Mobile)
           }
         }
 
-        // Safety Check: If DOM is already interactive/complete, run immediately. Otherwise, wait.
+        // Safety Check
         if (document.readyState === 'loading') {
           document.addEventListener( 'DOMContentLoaded', initOrientationTracker );
         } else {
