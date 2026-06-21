@@ -242,8 +242,7 @@ Number Type Converter
     - If the control is not disabled then it might show a red border around it (applicable to button, color and select controls)
 
 - Special notes about `AR / VR Viewer`:
-  - Using slightly modified version of the three.js `DeviceOrientationControls`, last available in r133
-  - Currently a little bit experimental but it seems to work properly
+  - Currently a little bit experimental but it seems to work properly for implemented features
   - My tests had it working with Chrome browser on both the desktop and an Android mobile phone:
     - Could be used either as a standard viewer or with AR / VR support
   - Supported import formats (single model or scene only):
@@ -257,7 +256,7 @@ Number Type Converter
 
 - Special notes about `A-FRAME Viewer`:
   - Using [A-Frame Library / Framework](https://aframe.io) which makes it A-Frame specific
-  - Currently a little bit experimental but everything seems to work as it should be
+  - Currently a little bit experimental but it seems to work properly for implemented features
   - Supposed to be used mainly on mobile devices supporting AR / VR:
     - Works fine in desktop browsers with Immersive WebXR extensions
     - Not tested with any real VR hardware
