@@ -371,34 +371,56 @@
         }
       }
 
-      function set_initial_scale() {
-        // Set the initial scale of the object so it hopefully comes to view
+      function normalize_and_center_global_model() {
+        if (!loaded_model || loaded_model.children.length === 0) return;
 
-        bounding_box.setFromObject( loaded_model );
-        let size = bounding_box.getSize( new THREE.Vector3() );
+        // 1. Reset the wrapper's transformations for clean calculations
+        loaded_model.scale.set( 1, 1, 1 );
+        loaded_model.position.set( 0, 0, 0 );
+        loaded_model.rotation.set( 0, 0, 0 );
+        loaded_model.updateMatrixWorld( true );
 
-        if ( size.y > 1 ) {
-          loaded_model.scale.multiplyScalar( 50 / size.y );
-        } else if ( size.y > 0.02 ) {
-          loaded_model.scale.multiplyScalar( 25 / size.y );
-        } else if ( size.y > 0.01 ) {
-          loaded_model.scale.multiplyScalar( 10 / size.y );
-        } else {
-          loaded_model.scale.multiplyScalar( 1 / size.y )
+        const box = new THREE.Box3();
+        let hasVisibleMesh = false;
+
+        // 2. Compute the bounding box of the meshes inside
+        loaded_model.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            if (!child.geometry.boundingBox) child.geometry.computeBoundingBox();
+            child.geometry.computeBoundingSphere();
+            if (child.isMesh) child.raycast = THREE.Mesh.prototype.raycast;
+
+            box.expandByObject( child );
+            hasVisibleMesh = true;
+          }
+        });
+
+        if (!hasVisibleMesh) {
+          box.setFromObject( loaded_model );
         }
 
-        loaded_model.position.z = -50;
-        loaded_model.position.y = -10;
+        let size = new THREE.Vector3();
+        let center = new THREE.Vector3();
+        box.getSize( size );
+        box.getCenter( center );
 
-        bounding_box.setFromObject( loaded_model );
-        const center = bounding_box.getCenter( new THREE.Vector3() );
-        size = bounding_box.getSize( new THREE.Vector3() );
+        const maxDimension = Math.max( size.x, size.y, size.z );
+        if (maxDimension === 0) return;
 
-        camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length() ) ) );
+        // 3. Scale the master wrapper group
+        const targetSize = 2.0; 
+        const scaleFactor = targetSize / maxDimension;
+        loaded_model.scale.set( scaleFactor, scaleFactor, scaleFactor );
 
-        controls.target.set( center.x, center.y, center.z );
+        // Shift the immediate imported assets inside the group by the negative center.
+        // This drags the actual geometry so its center sits exactly at loaded_model's (0,0,0) local origin.
+        loaded_model.children.forEach( ( importedAsset ) => {
+          importedAsset.position.sub( center );
+        });
 
-        resize();
+        // Place the master wrapper safely in front of the camera space
+        loaded_model.position.set( 0, 1.6, -4 );
+        loaded_model.updateMatrixWorld( true );
       }
 
       function set_model_scale( scale ) {
@@ -551,7 +573,7 @@
               const bim_loader = new BIMLoader( manager );
 
               bim_loader.load( url, function( bim_meshes ) {
-                loaded_model = bim_meshes;
+                loaded_model.add( bim_meshes );
 
                 loaded_model.traverse( ( child ) => {
                   if (child.isMesh) {
@@ -582,7 +604,7 @@
               const dae_loader = new ColladaLoader( manager );
 
               dae_loader.load( url, async function( collada ) {
-                loaded_model = collada.scene;
+                loaded_model.add( collada.scene );
 
                 animations = collada.scene.animations;
 
@@ -605,7 +627,7 @@
 
                     mtls.forEach( m => {
                       if (child.isMesh) set_texture_colorSpace( m );
-                      if (child.isPoints) m.size = isMobile ? 0.08 : 0.15;
+                      if (child.isPoints) m.size = isMobile ? 0.001 : 0.005;
                       m.vertexColors = vertex_colors;
                       m.side = THREE.DoubleSide;
                       m.flatShading = false;
@@ -657,7 +679,7 @@
               manager.addHandler( /\.tga$/i, dds_loader );
 
               fbx_loader.load( url, function( fbx_scene ) {
-                loaded_model = fbx_scene;
+                loaded_model.add( fbx_scene );
 
                 animations = fbx_scene.animations;
 
@@ -680,7 +702,7 @@
 
                     mtls.forEach( m => {
                       if (child.isMesh) set_texture_colorSpace( m );
-                      if (child.isPoints) m.size = isMobile ? 0.08 : 0.15;
+                      if (child.isPoints) m.size = isMobile ? 0.001 : 0.005;
                       m.vertexColors = vertex_colors;
                       m.side = THREE.DoubleSide;
 
@@ -725,7 +747,7 @@
               gltf_loader.setMeshoptDecoder( MeshoptDecoder );
 
               gltf_loader.load( url, function( gltf ) {
-                loaded_model = gltf.scene;
+                loaded_model.add( gltf.scene );
 
                 animations = gltf.animations;
 
@@ -741,7 +763,7 @@
                 }
 
                 loaded_model.traverse( ( child ) => {
-                  if (child.isPoints) child.material.size = isMobile ? 0.08 : 0.15;
+                  if (child.isPoints) child.material.size = isMobile ? 0.001 : 0.005;
                 });
 
                 resolve( finish_loading() );
@@ -759,7 +781,7 @@
               const ply_loader = new PLYLoader( manager );
 
               ply_loader.load( url, function( geometry ) {
-                vertex_colors = (geometry.hasAttribute( 'color' ) === true);
+                vertex_colors = geometry.hasAttribute( 'color' );
 
                 if ( geometry.index !== null ) {
                   geometry.deleteAttribute('normal');
@@ -770,13 +792,13 @@
 
                   material.vertexColors = vertex_colors;
 
-                  loaded_model = new THREE.Mesh( geometry, material );
+                  loaded_model.add( new THREE.Mesh( geometry, material ) );
                 } else {
-                  const points_material = new THREE.PointsMaterial( { size: isMobile ? 0.08 : 0.15, color: 0xcccccc, transparent: true, blending: THREE.AdditiveBlending } );
+                  let points_material = new THREE.PointsMaterial( { size: isMobile ? 0.001 : 0.005, color: 0xcccccc, transparent: true, blending: THREE.AdditiveBlending } );
 
                   points_material.vertexColors = vertex_colors;
 
-                  loaded_model = new THREE.Points( geometry, points_material );
+                  loaded_model.add( new THREE.Points( geometry, points_material ) );
                 }
 
                 resolve( finish_loading() );
@@ -794,7 +816,7 @@
               const usd_loader = new USDLoader( manager );
 
               usd_loader.load( url, function( usd ) {
-                loaded_model = usd;
+                loaded_model.add( usd );
 
                 animations = usd.animations;
 
@@ -809,12 +831,15 @@
                   animation_running = true;
                 }
 
+                vertex_colors = geometry.hasAttribute( 'color' );
+
                 loaded_model.traverse( ( child ) => {
                   if (child.isMesh) {
                     const mats = Array.isArray( child.material ) ? child.material : [ child.material ];
 
                     mats.forEach( m => {
                       set_texture_colorSpace( m );
+                      m.vertexColors = vertex_colors;
                       m.side = THREE.DoubleSide;
                       m.flatShading = false;
                       m.needsUpdate = true;
@@ -905,11 +930,15 @@
           scene.background = new THREE.Color();
         }
 
-        if (loaded_model === undefined) loaded_model = new THREE.Object3D();
+        if (loaded_model === undefined) {
+          loaded_model = new THREE.Group();
+          loaded_model.position.set( 0, 0, 1 );
+          scene.add( loaded_model );
+        }
 
         if (camera === undefined) {
           camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 1e8 );
-          camera.position.set( 0, 0, 0 );
+          camera.position.set( 0, 1.6, 0 );
           scene.add( camera );
         }
 
@@ -971,16 +1000,7 @@
             // Assign the utility class to override Three.js defaults via CSS
             vr_btn.classList.add( 'xr-button' );
 
-            // Safely add device control connection logic WITHOUT destroying the WebXR session starter
             vr_btn.addEventListener( 'click', () => {
-              if (device_controls && !controller1 && !controller2) {
-                if (!device_controls.enabled) {
-                  device_controls.connect();
-                } else {
-                  device_controls.disconnect();
-                }
-              }
-
               resize();
             });
 
@@ -1004,14 +1024,6 @@
             ar_btn.classList.add( 'xr-button' );
 
             ar_btn.addEventListener( 'click', () => {
-              if (device_controls && !controller1 && !controller2) {
-                if (!device_controls.enabled) {
-                  device_controls.connect();
-                } else {
-                  device_controls.disconnect();
-                }
-              }
-
               resize();
             });
 
@@ -1029,46 +1041,79 @@
             resize(); // Instantly checks if currently in portrait
 
             renderer.xr.enabled = true;
+            renderer.xr.setReferenceSpaceType('local-floor');
+
+            let vrDeltaY = 0;
+            let vrDeltaZ = 0;
 
             renderer.xr.addEventListener( 'sessionstart', () => {
-              loaded_model.position.y += 1.6;
-              loaded_model.position.z -= 3.0;
+              controls.enabled = false;
+              controls.reset();
+
+              // Calculate exactly how far the user zoomed or shifted on desktop 
+              // compared to the default VR spawn space
+              vrDeltaY = camera.position.y - 1.5;
+              vrDeltaZ = camera.position.z + 1.5; // tracking space is at z=0
+
+              // Apply the custom dynamic offset to the model wrapper
+              loaded_model.position.y += vrDeltaY;
+              loaded_model.position.z += vrDeltaZ;
             });
 
             renderer.xr.addEventListener( 'sessionend', async () => {
-              // Reset the XR camera matrices first!
+              // PRE-EMPTIVE MODEL RESCUE
+              // If the user was actively dragging the model when they hit "Exit VR"
+              if (activeGrabbedObject && activeController) {
+                console.log( 'Pre-emptively pulling model back to scene root...' );
+
+                // Smoothly disconnect from the controller and attach back to the main scene root,
+                // automatically preserving its exact world position, rotation, and scale.
+                scene.attach( activeGrabbedObject );
+
+                // Clear the global grab states safely
+                activeGrabbedObject = null;
+                activeController = null;
+              }
+
+              // CLEAR NATIVE XR CAMERA POSE REMNANTS
               renderer.xr.getCamera().cameras.forEach( c => {
                 c.position.set( 0, 0, 0 );
                 c.quaternion.set( 0, 0, 0, 1 );
               });
 
-              if (loaded_model.originalPosition) {
-                loaded_model.position.copy( loaded_model.originalPosition );
-              }
+              // HARD CAMERA RESET
+              if (loaded_model.originalPosition) loaded_model.position.copy( loaded_model.originalPosition );
+              if (loaded_model.originalScale) loaded_model.scale.copy( loaded_model.originalScale );
 
-              if (loaded_model.originalScale) {
-                loaded_model.scale.copy( loaded_model.originalScale );
-              }
+              // Wipe out any temporary VR rotation changes on the model wrapper
+              loaded_model.rotation.set( 0, 0, 0 );
 
-              if (camera.originalPosition) {
-                camera.position.copy( camera.originalPosition );
-              }
+              if (camera.originalPosition) camera.originalPosition.copy( camera.originalPosition );
+              if (camera.originalQuaternion) camera.quaternion.copy( camera.originalQuaternion );
 
-              if (camera.originalQuaternion) {
-                camera.quaternion.copy( camera.originalQuaternion );
-              }
-
-              // Fix the camera distortion
+              // RECALCULATE CANVAS PROJECTION
               camera.near = 0.1;
               camera.far = 1e8;
               camera.fov = 60;
+              camera.aspect = window.innerWidth / window.innerHeight;
+              camera.updateProjectionMatrix();
 
-              if (controls) controls.update();
+              // RESTORE ORBITCONTROLS
+              controls.enabled = true;
+              controls.target.copy( loaded_model.originalPosition || new THREE.Vector3( 0, 1.6, -4 ) );
+              controls.update();
 
-              // Force a clean render frame to clear any WebXR remnants
+              // CANVAS REBUILD & RENDER FLUSH
+              renderer.setSize( window.innerWidth, window.innerHeight, true );
+              scene.updateMatrixWorld( true );
               renderer.render( scene, camera );
 
-              await new Promise( resolve => setTimeout( resize, 50 ) );
+              // Small delay fallback to ensure the browser DOM has rearranged itself 
+              // after dropping the fullscreen WebXR layout
+              await new Promise( resolve => setTimeout( () => {
+                if (typeof resize === 'function') resize();
+                resolve();
+              }, 50 ) );
             });
 
             if (raycaster1 === undefined) {
@@ -1086,19 +1131,83 @@
             if (laserMaterial1 === undefined) laserMaterial1 = new THREE.LineBasicMaterial({ color: 0xBBBBBB }); // Light gray by default
             if (laserMaterial2 === undefined) laserMaterial2 = new THREE.LineBasicMaterial({ color: 0xBBBBBB }); // Light gray by default
 
+            // --- GLOBAL STATE TRACKERS ---
+            let activeGrabbedObject = null;
+            let activeController = null;
+
             function handleSelect( controller, raycstr, ctrlNumber ) {
               if (!renderer.xr.isPresenting) return;
 
-              // Ensure matrices are accurate right at the moment of the click
+              // STATE 1: Release the object if already holding it
+              if (activeGrabbedObject && activeController === controller) {
+                // Re-attach back to the main scene root, preserving its exact world spot
+                scene.attach( activeGrabbedObject );
+
+                activeGrabbedObject = null;
+                activeController = null;
+                console.log( `Controller ${ctrlNumber}: Released model back to scene root.` );
+                return;
+              }
+
+              // STATE 2: Grab the object if pointing at it
+              if (!activeGrabbedObject) {
+                // Dynamic ray setup from controller's current world position
+                const tempMatrix = new THREE.Matrix4();
+                tempMatrix.identity().extractRotation( controller.matrixWorld );
+
+                raycstr.ray.origin.setFromMatrixPosition( controller.matrixWorld );
+                raycstr.ray.direction.set( 0, 0, -1 ).applyMatrix4( tempMatrix );
+
+                // Check intersections against your loaded model wrapper
+                const intersects = raycstr.intersectObjects( [ loaded_model ], true );
+
+                if ( intersects.length > 0 ) {
+                  activeGrabbedObject = loaded_model; 
+                  activeController = controller;
+
+                  // Attach the model directly to the tracking controller.
+                  // Three.js seamlessly calculates the exact spatial offset between 
+                  // the controller and the model, locking it in mid-air.
+                  controller.attach( activeGrabbedObject );
+
+                  console.log( `Controller ${ctrlNumber}: Securely grabbed the model.` );
+                }
+              }
+            }
+
+            function processControllerRay( controller, raycstr, laserMaterial, lineMesh ) {
+              if (!controller) return;
+
+              // 🎯 ACTIVE DRAG MANIFESTATION
+              // If this controller is currently carrying the model, lock its appearance
+              if (activeGrabbedObject && activeController === controller) {
+                laserMaterial.color.setHex( 0xFF0000 ); // Keep laser red
+                // Do not alter lineMesh.scale.z here so it stays at its last captured length
+                return;
+              }
+
+              // Setup ray matrices for passive scanning
+              const tempMatrix = new THREE.Matrix4();
               tempMatrix.identity().extractRotation( controller.matrixWorld );
               raycstr.ray.origin.setFromMatrixPosition( controller.matrixWorld );
               raycstr.ray.direction.set( 0, 0, -1 ).applyMatrix4( tempMatrix );
 
-              const intersects = raycstr.intersectObjects( [ loaded_model ], true );
+              // If another hand is holding the model, don't let this laser interact with it
+              const targets = (activeGrabbedObject) ? [] : [ loaded_model ];
+              const intersects = raycstr.intersectObjects( targets, true );
 
-              if ( intersects.length > 0 ) {
-                const hitInfo = intersects[ 0 ].object?.userData;
-                console.log( `Controller ${ctrlNumber} hit: `, hitInfo );
+              if (intersects.length > 0) {
+                // 🎯 HOVERING OVER MODEL
+                laserMaterial.color.setHex( 0xFF0000 );
+                const hitDistance = intersects[ 0 ].distance;
+
+                // Scale the visual laser line to terminate exactly where it strikes the asset boundary
+                // Assumes base line geometry is 1 unit long. Adjust divisor if default line length varies.
+                lineMesh.scale.z = hitDistance;
+              } else {
+                // 💨 SCANNING VACANT SPACE
+                laserMaterial.color.setHex( 0xBBBBBB );
+                lineMesh.scale.z = 5; // Reset laser to default full pointer length (e.g. 5 meters)
               }
             }
 
@@ -1173,7 +1282,7 @@
           material = new THREE.MeshStandardMaterial( {
             side: THREE.DoubleSide,
             vertexColors: false,
-            flatShading: true,
+            flatShading: false,
             metalness: 0.6,
             roughness: 0.4,
             opacity: 1,
@@ -1341,37 +1450,24 @@
       }
 
       async function finish_loading() {
-        const box = new THREE.Box3().setFromObject( loaded_model );
-        const center = new THREE.Vector3();
-        box.getCenter( center );
-        loaded_model.pivot = center;
-
-        loaded_model.position.x -= center.x;
-        loaded_model.position.y -= center.y;
-        loaded_model.position.z -= center.z;
-
-        scene.add( loaded_model );
+        await normalize_and_center_global_model();
 
         loaded_model.name = 'loaded_model';
 
-        loaded_model.traverse( ( child ) => {
-          if (child.isMesh || child.isPoints) {
-            if (!child.geometry.attributes.normal) child.geometry.computeVertexNormals();
-            child.geometry.normalizeNormals();
-            child.geometry.computeBoundingBox();
-            child.geometry.computeBoundingSphere();
+        // Point the controls target straight at the center of the model (0, 1.6, -4)
+        controls.target.copy( loaded_model.position );
 
-            if (child.isSkinnedMesh) child.frustumCulled = false;
+        // Update the controls matrix to register the new layout
+        controls.update();
 
-            if (child.isPoints) {
-              child.sizeAttenuation = true;
-              child.sortPoints = true;
-            }
-          }
-        });
+        // Save states for resetting later
+        if (!loaded_model.originalPosition) loaded_model.originalPosition = loaded_model.position.clone();
+        if (!loaded_model.originalScale) loaded_model.originalScale = loaded_model.scale.clone();
+        if (!camera.originalPosition) camera.originalPosition = camera.position.clone();
+        if (!camera.originalQuaternion) camera.originalQuaternion = camera.quaternion.clone();
 
-        await set_initial_scale();
-
+        renderer.setAnimationLoop( render );
+  
         if (!loaded_model.originalPosition) {
           loaded_model.originalPosition = loaded_model.position.clone();
         }
@@ -1386,17 +1482,6 @@
 
         if (!camera.originalQuaternion) {
           camera.originalQuaternion = camera.quaternion.clone();
-        }
-
-        if (ar_OK || vr_OK) {
-          if (device_controls === undefined) {
-            const { DeviceOrientationControls } = await import( '../static/jsm/controls/DeviceOrientationControls.min.js' );
-            do_controls = DeviceOrientationControls;
-          } else {
-            device_controls.disconnect();
-          }
-
-          device_controls = new do_controls( loaded_model );
         }
 
         renderer.setAnimationLoop( render );
@@ -1459,8 +1544,7 @@
             }
           }
 
-          if (controls) controls.update();
-          if (device_controls && device_controls.enabled) device_controls.update();
+          controls.update();
 
           renderer.clear();
           renderer.render( scene, camera );
@@ -1532,12 +1616,18 @@
                     }
 
                     m.dispose();
+                    m = null;
                   });
                 }
 
                 child.geometry.dispose();
+                child.geometry = null;
               }
             });
+
+            loaded_model = new THREE.Group();
+            loaded_model.position.set( 0, 0, 1 );
+            scene.add( loaded_model );
 
             document.getElementById('directional_light_intensity').value = 3;
             set_directional_light_intensity();
