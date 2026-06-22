@@ -23,7 +23,7 @@
             alert('jQuery failed to load. Limited functionality. Check your internet connection!');
           }
 
-          if (init_running === true) handle_error( 'RESOURCE ERROR' );
+          if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
         }
       }, true); // The 'true' here is vital; it enables the "capturing" phase
 
@@ -39,6 +39,8 @@
           errorObj: error   // The actual Error object (includes stack trace)
         });
 
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
         // Returning 'true' prevents the error from showing up in the browser console
         return false; 
       };
@@ -50,7 +52,7 @@
         // event.promise is the promise that failed
         // event.reason is usually the error object or message
 
-        if (init_running === true) handle_error( 'UNHANDLED PROMISE: ' + event.reason );
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
       });
     </script>
 
@@ -69,10 +71,9 @@
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@3.10.1",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@3.10.1",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@3.10.1",
-          "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_encoder.module.min.js",
-          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_simplifier.module.min.js",
           "ktx2-encoder": "https://cdn.jsdelivr.net/npm/ktx2-encoder@0.5.1/dist/web/index.min.js",
           "ktx-parse": "https://cdn.jsdelivr.net/npm/ktx-parse@1.1.0/dist/ktx-parse.esm.min.js",
+          "meshoptimizer": "https://esm.sh/meshoptimizer@1.1.1",
           "@jsquash/avif": "https://esm.sh/@jsquash/avif@2.1.1"
         }
       }
@@ -85,7 +86,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
-      var THREE, fbx_loader, fbx_obj, texture_loader, ktx2_loader, tga_loader, dds_loader, bg_flip;
+      var THREE, textureUtils, fbx_loader, fbx_obj, texture_loader, ktx2_loader, tga_loader, dds_loader, bg_flip;
       var gif_loader, gif_writer, tiff_loader, exr_loader, hdr_loader, hdrJPGLoader, texture_maps, clock;
       var manager, animations, animation_mixer, animation_running, current_animation, render_requested;
       var renderer, scene, camera, edges, edges_visible, extras, current_extra, extra_running;
@@ -118,8 +119,10 @@
       import { GifLoader } from '../static/jsm/loaders/three-gif-loader/gif-loader.js';
       import { GifWriter } from '../static/jsm/libs/omggif/omggif.min.js';
       import { FBXLoader } from '../static/jsm/loaders/FBXLoader.min.js';
+      import * as WebGLTextureUtils from 'three/addons/utils/WebGLTextureUtils.js';
 
       THREE = threejs;
+      textureUtils = WebGLTextureUtils;
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
@@ -513,6 +516,26 @@
         }
       }
 
+      function set_gizmo_position() {
+        if (gizmo) {
+          gizmo._domElement.style.top = '';
+
+          if (menu_location_bottom === false) {
+            gizmo._domElement.style.bottom = `calc(env(safe-area-inset-bottom) + 15px)`;
+          } else {
+            let menu_height = parseInt( $('#fixed_menu').outerHeight( true ) ) || 0;
+            let total_offset = menu_height + 15;
+            let dynamic_bottom = `calc(env(safe-area-inset-bottom) + ${total_offset}px)`;
+
+            gizmo._domElement.style.bottom = dynamic_bottom;
+          }
+
+          gizmo.update();
+
+          mouse_wheel = true;
+        }
+      }
+
       function set_gui_position() {
         if (menu_location_bottom === false) {
           let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
@@ -536,8 +559,6 @@
         }
 
         resize();
-
-        mouse_wheel = true;
       }
 
       function load_url_file() {
@@ -549,6 +570,7 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
         window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; }, false);
@@ -557,13 +579,16 @@
           if (progress.value === 0) {
             if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
               controls.listenToKeyEvents( window );
+              activeKeys.add( event.key ); // Track this key
               mouse_wheel = true;
             }
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
           if (progress.value === 0) {
-            if (arrow_keys.some( k => k === event.key )) {
+            activeKeys.delete( event.key ); // Remove this key
+
+            if (controls && activeKeys.size === 0) {
               controls.stopListenToKeyEvents();
               mouse_wheel = false;
             }
@@ -591,7 +616,7 @@
           camera.aspect = ww / wh;
           camera.updateProjectionMatrix();
 
-          if (gizmo) gizmo.update();
+          if (gizmo) set_gizmo_position();
 
           set_gui_position();
 
@@ -626,13 +651,8 @@
           document.getElementById('btn_menu_location').style.backgroundColor = '#FFFF00';
         }
 
-        if (gizmo) {
-          gizmo._domElement.style.top = menu_location_bottom === true ? 0 : '';
-          gizmo._domElement.style.bottom = menu_location_bottom === true ? '' : 0;
-          gizmo.update();
-        }
-
         set_gui_position();
+        set_gizmo_position();
 
         mouse_wheel = true;
       }
@@ -655,7 +675,7 @@
 
         if (gizmo) gizmo.enabled = false;
 
-        if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
+        if (gui_set && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'none';
 
         set_filename();
       }
@@ -712,7 +732,7 @@
 
         if (gizmo) gizmo.enabled = true;
 
-        if (gui_set === true && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
+        if (gui_set && document.getElementById('equi').checked) document.getElementById('gui_position').style.display = 'block';
 
         render_requested = true;
         mouse_wheel = true;
@@ -926,8 +946,8 @@
           const { clone } = await import( 'three/addons/utils/SkeletonUtils.min.js' );
           const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
-          let gltf_exporter = new GLTFExporter( manager );
-
+          const gltf_exporter = new GLTFExporter( manager );
+          gltf_exporter.setTextureUtils( textureUtils );
           let options;
 
           if (animations.length > 0) {
@@ -995,8 +1015,8 @@
 
           const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
-          let gltf_exporter = new GLTFExporter( manager );
-
+          const gltf_exporter = new GLTFExporter( manager );
+          gltf_exporter.setTextureUtils( textureUtils );
           let options;
 
           if (animations.length > 0) {
@@ -1213,9 +1233,9 @@
           const { clone } = await import( 'three/addons/utils/SkeletonUtils.min.js' );
           const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
-          let gltf_exporter = new GLTFExporter( manager );
-
-          let options = {	binary: true };
+          const gltf_exporter = new GLTFExporter( manager );
+          gltf_exporter.setTextureUtils( textureUtils );
+          const options = { binary: true };
 
           gltf_exporter.parse( clone( fbx_obj ), async json => {
             try {
@@ -2375,6 +2395,15 @@
         camera.position.set( 0, 0, dist );
         camera.lookAt( 0, 0, 0 );
 
+        // ========================================================
+        // POST-CENTERING ADJUSTMENT
+        // ========================================================
+        // Now that the model is sitting safely at (0,0,0), we no longer 
+        // need a 100-million unit far plane. We tighten it dynamically!
+        camera.near = 0.1;
+        camera.far = dist * 4;
+        camera.updateProjectionMatrix();
+
         resize();
       }
 
@@ -2465,7 +2494,7 @@
       }
 
       function animate_fbx() {
-        if (animation_running === true) {
+        if (animation_running) {
           animation_mixer.clipAction( animations[ current_animation ] ).stop();
           animation_mixer.clipAction( animations[ current_animation ] ).reset();
 
@@ -2490,7 +2519,7 @@
       }
 
       function animate_extra() {
-        if (extra_running === true) {
+        if (extra_running) {
           if (current_extra === extras.length - 1) {
             fbx_obj.traverse( function( child ) {
               if (child.isMesh) {
@@ -2549,7 +2578,10 @@
       }
 
       async function init() {
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+        if (!url_loading && document.getElementById('file_input').files.length === 0) return;
+
+        document.getElementById('btn_load').disabled = true;
+        document.getElementById('file_input').disabled = true;
 
         document.getElementById('div_message').innerHTML = 'Loading ... ' + pw;
         document.getElementById('div_message').style.display = '';
@@ -2764,7 +2796,7 @@
         //scene.add( new THREE.AxesHelper( 50 ) );
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.01, 1e9 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 1e8 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -3003,9 +3035,9 @@
       }
 
       async function finish_loading() {
-        enable_disable( false );
-
         frame_camera();
+
+        enable_disable( false );
 
         let object_is_mesh = false;
 
@@ -3020,7 +3052,7 @@
           }
         });
 
-        if (object_is_mesh === false) {
+        if (!object_is_mesh) {
           document.getElementById('btn_flat').disabled = true;
           document.getElementById('edge_color').disabled = true;
           document.getElementById('btn_edges').disabled = true;
@@ -3040,7 +3072,7 @@
 
           gizmo.attachControls( controls );
 
-          gizmo._domElement.addEventListener( 'click', ( event ) => { if (progress.value === 0) mouse_wheel = true; }, false);
+          gizmo._domElement.addEventListener( 'click', ( event ) => { if (progress.value === 0) { mouse_wheel = true; count = 0; } }, false);
         }
 
         if (animations.length > 0) {
@@ -3052,12 +3084,17 @@
           disabled_changed();
         }
 
+        console.timeEnd( 'Loading Time' );
+
         init_running = false;
 
-        console.timeEnd( 'Loading Time' );
+        document.getElementById('btn_load').disabled = false;
+        document.getElementById('file_input').disabled = false;
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_message').style.display = 'none';
+
+        set_gizmo_position();
 
         render_requested = true;
         mouse_wheel = false;
@@ -3066,7 +3103,7 @@
         count = 0;
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info, 1000 ) );
+        if (!isMobile) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
       function log_info() {
@@ -3092,6 +3129,9 @@
         mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
+
+        document.getElementById('btn_load').disabled = false;
+        document.getElementById('file_input').disabled = false;
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
@@ -3215,8 +3255,8 @@
 
       async function draco_compress( arrayBuffer ) {
         const { WebIO } = await import( '@gltf-transform/core' );
+        const { MeshoptSimplifier } = await import( 'meshoptimizer' );
         const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
-        const { MeshoptSimplifier } = await import( 'meshoptimizer_simplifier' );
         const { dedup, flatten, instance, join, prune, resample, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
@@ -3270,8 +3310,7 @@
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( '@gltf-transform/core' );
         const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
-        const { MeshoptEncoder } = await import( 'meshoptimizer_encoder' );
-        const { MeshoptSimplifier } = await import( 'meshoptimizer_simplifier' );
+        const { MeshoptEncoder, MeshoptSimplifier } = await import( 'meshoptimizer' );
         const { dedup, flatten, instance, join, meshopt, prune, resample, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         await MeshoptEncoder.ready;
@@ -4175,7 +4214,7 @@
             // If it might be slow to render initially
             if (first_run) {
               fr_count ++;
-              if (fr_count > 10) {
+              if (fr_count > 30) {
                 mouse_wheel = true;
                 first_run = false;
                 fr_count = 0;
@@ -4183,7 +4222,7 @@
               }
             } else {
               if (mouse_wheel) {
-                if (count > 5) {
+                if (count > 30) {
                   mouse_wheel = false;
                   count = 0;
                 } else {

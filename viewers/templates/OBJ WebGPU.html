@@ -7,6 +7,55 @@
     <link rel="stylesheet" href="../static/css/desktop-viewers-webgpu.css">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
@@ -20,10 +69,9 @@
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@3.10.1",
           "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@3.10.1",
           "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@3.10.1",
-          "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_encoder.module.min.js",
-          "meshoptimizer_simplifier": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_simplifier.module.min.js",
           "ktx2-encoder": "https://cdn.jsdelivr.net/npm/ktx2-encoder@0.5.1/dist/web/index.min.js",
           "ktx-parse": "https://cdn.jsdelivr.net/npm/ktx-parse@1.1.0/dist/ktx-parse.esm.min.js",
+          "meshoptimizer": "https://esm.sh/meshoptimizer@1.1.1",
           "@jsquash/avif": "https://esm.sh/@jsquash/avif@2.1.1"
         }
       }
@@ -43,7 +91,7 @@
       var controls, renderer, _renderer, scene, camera, edges, edges_visible;
       var postProcessing, outputPass, scenePass, emissivePass, exr_or_hdr;
       var merge_vertices, equi_enabled, bloomPass, bloom_enabled, scene_bgnd;
-      var grid, polar_grid, grid_visible, polar_grid_visible;
+      var grid, polar_grid, grid_visible, polar_grid_visible, init_running = false;
       var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var tex_res, tex_flip, tex_fmt, texture_maps, bg_flip;
@@ -3253,8 +3301,8 @@
         // ========================================================
         // Now that the model is sitting safely at (0,0,0), we no longer 
         // need a 100-million unit far plane. We tighten it dynamically!
-        camera.near = 0.1;
-        camera.far = dist * 4;
+        camera.near = 0.05;
+        camera.far = dist * 10;
         camera.updateProjectionMatrix();
 
         resize();
@@ -3506,7 +3554,10 @@
       }
 
       async function init( reset = false, files = null ) {
-        if (reset === false && files === null && url_loading === false && document.getElementById('file_input').files.length === 0) return;
+        if (!reset && files === null && !url_loading && document.getElementById('file_input').files.length === 0) return;
+
+        document.getElementById('btn_load').disabled = true;
+        document.getElementById('file_input').disabled = true;
 
         document.getElementById('drop-container').style.display = 'none';
         document.getElementById('drop-container').style.background = 'rgba( 0, 0, 0, 1 )';
@@ -3531,6 +3582,8 @@
 
           await reset_all( true );
         }
+
+        init_running = true;
 
         enable_disable( true );
 
@@ -3954,7 +4007,15 @@
 
               m.vertexColors = child.geometry.hasAttribute( 'color' );
 
-              if (child.isPoints) m.size = isMobile === true ? 0.8 : 1.25;
+              if (child.isPoints) {
+                m.size = isMobile === true ? 0.8 : 1.25;
+              } else {
+                if (m.transparent) {
+                  m.polygonOffset = true;
+                  m.polygonOffsetFactor = 1;
+                  m.polygonOffsetUnits = 1;
+                }
+              }
 
               if (mats.length > 1) {
                 initial_opacity_array[ child.name ][ child_count_array ] = m.opacity;
@@ -4418,9 +4479,9 @@
       }
 
       async function finish_loading() {
-        enable_disable( false );
-
         frame_camera();
+
+        enable_disable( false );
 
         Obj.traverse( function( child ) {
           if (child.isMesh || child.isPoints || child.isLine) {
@@ -4472,7 +4533,13 @@
           postProcessing.render();
         }
 
+        init_running = false;
+
         console.timeEnd( 'Loading Time' );
+
+        document.getElementById('btn_load').disabled = false;
+        document.getElementById('file_input').disabled = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_message').style.display = 'none';
 
@@ -4483,7 +4550,7 @@
         count = 0;
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+        if (!isMobile) await new Promise( resolve => setTimeout( log_info, 1000 ) );
       }
 
       function log_info() {
@@ -4501,12 +4568,17 @@
 
         set_gui_position();
 
+        init_running = false;
+
         console.timeEnd( 'Loading Time' );
         console.log( 'Error loading model!' );
         console.log( error );
         mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
+
+        document.getElementById('btn_load').disabled = false;
+        document.getElementById('file_input').disabled = false;
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
@@ -4547,8 +4619,8 @@
 
       async function simplify( arrayBuffer ) {
         const { WebIO } = await import( '@gltf-transform/core' );
+        const { MeshoptSimplifier } = await import( 'meshoptimizer' );
         const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
-        const { MeshoptSimplifier } = await import( 'meshoptimizer_simplifier' );
         const { dedup, flatten, instance, join, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
@@ -4589,8 +4661,8 @@
 
       async function draco_compress( arrayBuffer ) {
         const { WebIO } = await import( '@gltf-transform/core' );
+        const { MeshoptSimplifier } = await import( 'meshoptimizer' );
         const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
-        const { MeshoptSimplifier } = await import( 'meshoptimizer_simplifier' );
         const { dedup, flatten, instance, join, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
@@ -4651,8 +4723,7 @@
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( '@gltf-transform/core' );
         const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
-        const { MeshoptEncoder } = await import( 'meshoptimizer_encoder' );
-        const { MeshoptSimplifier } = await import( 'meshoptimizer_simplifier' );
+        const { MeshoptEncoder, MeshoptSimplifier } = await import( 'meshoptimizer' );
         const { dedup, flatten, instance, join, meshopt, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         await MeshoptEncoder.ready;
@@ -4715,8 +4786,8 @@
 
       async function texture_compress( arrayBuffer ) {
         const { WebIO } = await import( '@gltf-transform/core' );
+        const { MeshoptSimplifier } = await import( 'meshoptimizer' );
         const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
-        const { MeshoptSimplifier } = await import( 'meshoptimizer_simplifier' );
         const { dedup, flatten, instance, join, meshopt, prune, simplify, sparse, weld } = await import( '@gltf-transform/functions' );
 
         const io = new WebIO().registerExtensions( ALL_EXTENSIONS );

@@ -4,18 +4,68 @@
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="description" content="SPLAT (3D Gaussian Splatting) Viewer">
+    <link rel="stylesheet" href="../static/css/desktop-viewers.css">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
-    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@1.10.0/dist/es-module-shims.min.js"></script>
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.178.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/",
-          "three/examples/jsm/postprocessing/Pass": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/postprocessing/Pass.min.js",
-          "three/examples/jsm/utils/BufferGeometryUtils": "https://cdn.jsdelivr.net/npm/three@0.178.0/examples/jsm/utils/BufferGeometryUtils.min.js",
-          "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.0.6/dist/decode.min.js",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.184.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/",
+          "three/examples/jsm/postprocessing/Pass": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/postprocessing/Pass.min.js",
+          "three/examples/jsm/utils/BufferGeometryUtils": "https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/utils/BufferGeometryUtils.min.js",
+          "@monogrid/gainmap-js/decode": "https://cdn.jsdelivr.net/npm/@monogrid/gainmap-js@3.4.0/dist/decode.min.js",
           "@lumaai/luma-web": "https://cdn.jsdelivr.net/npm/@lumaai/luma-web@0.2.2/dist/library/luma-web.module.min.js"
         }
       }
@@ -33,22 +83,22 @@
       var gui, gui_set = false, guiExposure, params, toneMappingOptions;
       var ww = window.innerWidth, wh = window.innerHeight, slider_height = 0;
       var bounding_box, filename = '', gif_export, bgnd_linear_gradient;
-      var selected_local_file, selected_url_file = '', reset_rotation;
-      var first_run = false, fr_count = 0, count = 0, equi_enabled;
+      var selected_local_file, selected_url_file = '', reset_rotation, equi_enabled;
+      var first_run = false, fr_count = 0, count = 0, init_running = false;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
     </script>
 
     <script type="module">
-      import * as three_js from "three";
-      import { GUI } from "three/addons/libs/lil-gui.module.min.js";
-      import { OrbitControls } from "three/addons/controls/OrbitControls.min.js";
-      import { VRButton } from "three/addons/webxr/VRButton.min.js";
+      import * as threejs from 'three';
+      import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
+      import { OrbitControls } from 'three/addons/controls/OrbitControls.min.js';
+      import { VRButton } from 'three/addons/webxr/VRButton.min.js';
       import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.min.js';
-      import { Splat, SplatLoader } from "https://cdn.jsdelivr.net/npm/@pmndrs/vanilla@1.25.0/core/Splat.min.js";
+      import { Splat, SplatLoader } from 'https://cdn.jsdelivr.net/npm/@pmndrs/vanilla@1.25.0/core/Splat.min.js';
 
-      THREE = three_js;
+      THREE = threejs;
       vr_button = VRButton;
       xr_controller = XRControllerModelFactory;
 
@@ -57,187 +107,13 @@
 
       texture_loader = new THREE.TextureLoader( manager );
 
-      gui = new GUI( { autoPlace: false, container: document.getElementById("gui_position") } );
+      gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
       set_gui_position();
 
       orb_controls = OrbitControls;
       splat_loader = SplatLoader;
       splat = Splat;
     </script>
-
-    <style>
-      body, html {
-        backdrop-filter: blur(10px);
-        position: relative;
-        display: block;
-        background-color: black;
-        background-image: url( '../../images/DragonFly.webp' ), url( '../../images/DragonFly.png' );
-        background-image: -webkit-image-set( url( '../../images/DragonFly.webp' ), url( '../../images/DragonFly.png' ) );
-        background-position: calc(50vw - 115px) calc(50vh - 115px);
-        background-repeat: no-repeat;
-        width: 100%;
-        min-height: 100vh;
-        border: 0;
-        padding: 0;
-        margin: 0;
-        overflow: hidden;
-      }
-
-      button {
-        background-color: transparent;
-        border: 1px solid blue;
-        -webkit-border-radius: 3px;
-        border-radius: 3px;
-        text-align: center;
-        vertical-align: middle;
-        margin: 2px 2px 2px 0;
-        min-width: 22px;
-        height: 22px;
-        padding: 1px;
-      }
-
-      label {
-        vertical-align: middle;
-        height: 22px;
-        margin: 2px 0 2px 0;
-      }
-
-      input[type=file] {
-        vertical-align: middle;
-        margin: 2px 0 2px 0;
-        max-width: 160px;
-      }
-
-      input[type=text] {
-        vertical-align: middle;
-        margin: 2px 2px 2px 0;
-      }
-
-      select {
-        vertical-align: middle;
-        border: 1px solid blue;
-        -webkit-border-radius: 3px;
-        border-radius: 3px;
-        background: none;
-        min-width: 72px;
-        height: 22px;
-        color: blue;
-      }
-
-      .gif_rectangle {
-        background-color: transparent;
-        border: 1px solid blue;
-        left: calc(50% - 252px);
-        top: calc(50% - 252px);
-        position: absolute;
-        display: none;
-        height: 500px;
-        width: 500px;
-        z-index: 1;
-      }
-
-      .spinner {
-        background-color: transparent;
-        position: absolute;
-        display: block;
-        width: 240px;
-        height: 240px;
-        padding: 4px;
-        top: calc(50% - 130px);
-        left: calc(50% - 130px);
-        border: 6px solid blue;
-        -webkit-border-radius: 50%;
-        border-radius: 50%;
-        border-top-color: lightblue;
-        border-bottom-color: lightblue;
-        -webkit-animation: spin 8s ease-in-out infinite;
-        animation: spin 8s ease-in-out infinite;
-      }
-
-      @-webkit-keyframes spin { to { -webkit-transform: rotate( 360deg ); } }
-      @keyframes spin { to { transform: rotate( 360deg ); } }
-
-      .error_msg {
-        background-color: transparent;
-        position: absolute;
-        text-align: center;
-        font-size: x-large;
-        display: none;
-        color: red;
-        width: 50vw;
-        height: 50vh;
-        top: 50vh;
-        left: 25vw;
-        padding: 10px;
-        border: none;
-      }
-
-      .loading_msg {
-        background-color: transparent;
-        color: greenyellow;
-        position: absolute;
-        text-align: center;
-        font-size: x-large;
-        display: none;
-        width: 50vw;
-        height: 50vh;
-        top: 50vh;
-        left: 25vw;
-        padding: 10px;
-        border: none;
-      }
-
-      p.full_screen {
-        text-align: center;
-        content: url(data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABgAAAAYCAYAAADgdz34AAAACXBIWXMAAA7DAAAOwwHHb6hkAAAAf0lEQVRIie1VQQ6AMAjb/x9M4IRePICoK7GLB5eQbElpCTAY7j6YRiUPAvvxbNMkN76XIDhSRKCdjhmB494hzzwngcoBIa/eASgisMgTBo4ODqCTAiSFrW6Biv8LfL/I1DbtfDRV9VLgjVFhZp59A4g+7JaM6yULh7IyWUYX2AAPDxz26GjX+gAAAABJRU5ErkJggg==);
-        margin: 1px 1px 1px 2px;
-        padding: 0;
-        width: 15px;
-        height: 15px;
-      }
-
-      #gui_position {
-        position: absolute;
-        display: none;
-        min-width: 200px;
-        border: 1px solid navy;
-        -webkit-border-radius: 2px;
-        border-radius: 2px;
-        min-height: 22px;
-        margin-left: 2px;
-      }
-
-      .fm {
-        color: navy;
-        width: calc(100% - 12px);
-        border: 1px solid navy;
-        -webkit-border-radius: 2px;
-        border-radius: 2px;
-        padding: 4px;
-        margin: 1px;
-      }
-
-      .fixed-menu {
-        background-color: whitesmoke;
-        display: inline-block;
-        position: fixed;
-        padding: 1px;
-        width: 100%;
-        z-index: 1;
-        margin: 0;
-      }
-
-      #progress {
-        width: 99.5%;
-        height: 2px;
-        margin-left: 3px;
-        margin-right: 3px;
-        text-align: center;
-        -webkit-appearance: none;
-        -moz-appearance: none;
-        appearance: none;
-      }
-    </style>
 
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
     <!-- Using @pmndrs/drei-vanilla Library from: https://github.com/pmndrs/drei-vanilla#splat -->
@@ -249,16 +125,16 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>SPLAT Viewer (r178)</title>
+    <title>SPLAT Viewer (r184)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
-        <button title="URL of the remote splat" id="btn_url" onclick="show_url();" style="min-width: 34px;">URL</button>
+        <button title="URL of the remote splat" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
         <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".splat" />
-        <button title="Reset" id="reset" onclick="reset_only();" style="color: maroon; min-width: 34px;" disabled>RST</button>
-        <button title="Toggle Full Screen" id="btn_full_screen" onclick="full_screen();" style="min-width: 24px;"><p class="full_screen"></p></button>
-        <button title="Switch Menu Location" id="btn_menu_location" onclick="change_menu_location();" style="min-width: 16px;">&#x2193</button>
+        <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; min-width: 34px;" disabled>RST</button>
+        <button title="Toggle Full Screen" id="btn_full_screen" onclick="full_screen();" style="background-color: transparent; min-width: 24px;"><p class="full_screen"></p></button>
+        <button title="Switch Menu Location" id="btn_menu_location" onclick="change_menu_location();" style="background-color: transparent; min-width: 16px;">&#x2193</button>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
@@ -267,7 +143,7 @@
         <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
       </div>
       <div class="fm">
-        <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="background-color: transparent; color: blue; min-width: 25px;" disabled>Eq</button>
+        <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="color: blue; min-width: 25px;" disabled>Eq</button>
         <button title="Toggle Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="color: blue;" disabled>G</button>
         <select title="Quick XYZ Rotation" id="quick_rotation" disabled>
           <option title="Quick XYZ Rotation" value="" selected disabled>Rotate</option>
@@ -305,14 +181,14 @@
 
     <div id="div_spinner" class="spinner"></div>
     <div id="div_error" class="error_msg">E R R O R !</div>
-    <div id="div_loading" class="loading_msg">Loading</div>
+    <div id="div_loading" class="loading_msg">SPLAT Viewer</div>
     <div id="div_gif_rectangle" class="gif_rectangle"></div>
 
     <script>
       function return_false() { return false; }
 
       function set_gui_position() {
-        if (menu_location_bottom === false) {
+        if (!menu_location_bottom) {
           let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
           document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
         } else {
@@ -323,7 +199,7 @@
       }
 
       function show_url() {
-        if (url_displayed === true) {
+        if (url_displayed) {
           document.getElementById('url').style.display = 'none';
           document.getElementById('btn_url').style.backgroundColor = 'transparent';
           url_displayed = false;
@@ -347,6 +223,7 @@
 
       function initialize_event_listeners() {
         const arrow_keys = [ 'ArrowUp', 'ArrowDown', 'ArrowRight', 'ArrowLeft' ];
+        const activeKeys = new Set();
 
         window.addEventListener( 'pointerdown', ( event ) => { if (progress.value === 0) mouse_down = true; }, false);
         window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; }, false);
@@ -355,13 +232,16 @@
           if (progress.value === 0) {
             if (arrow_keys.some( k => k === event.key ) || event.ctrlKey || event.metaKey || event.shiftKey) {
               controls.listenToKeyEvents( window );
+              activeKeys.add( event.key ); // Track this key
               mouse_wheel = true;
             }
           }
         }, false);
         window.addEventListener( 'keyup', ( event ) => {
           if (progress.value === 0) {
-            if (arrow_keys.some( k => k === event.key )) {
+            activeKeys.delete( event.key ); // Remove this key
+
+            if (controls && activeKeys.size === 0) {
               controls.stopListenToKeyEvents();
               mouse_wheel = false;
             }
@@ -370,7 +250,7 @@
       }
 
       function resize() {
-        if (window.fullScreen || document.fullscreenElement || document.mozFullScreenElement ||
+        if (document.fullscreenElement || document.mozFullScreenElement ||
           document.msFullscreenElement || document.webkitFullscreenElement) {
 
           document.getElementById('btn_full_screen').style.backgroundColor = '#FFFF00';
@@ -381,13 +261,13 @@
         if (scene !== undefined) {
           mouse_wheel = true;
 
-          renderer.setSize( window.innerWidth, window.innerHeight );
-
-          camera.aspect = window.innerWidth / window.innerHeight;
-          camera.updateProjectionMatrix();
-
           ww = window.innerWidth;
           wh = window.innerHeight;
+
+          renderer.setSize( ww, wh );
+
+          camera.aspect = ww / wh;
+          camera.updateProjectionMatrix();
 
           if (gui) set_gui_position();
 
@@ -404,13 +284,11 @@
           document.msFullscreenElement ? document.msExitFullscreen() : document.body.msRequestFullscreen();
         } else if (document.webkitFullscreenEnabled) {
           document.webkitFullscreenElement ? document.webkitExitFullscreen() : document.body.webkitRequestFullscreen();
-        } else if (window.fullScreen) {
-          // Do nothing. This fullscreen mode was triggered with F11 key press and requires the same again.
         }
       }
 
       function change_menu_location() {
-        if (menu_location_bottom === true) {
+        if (menu_location_bottom) {
           menu_location_bottom = false;
           document.getElementById('fixed_menu').style.top = 0;
           document.getElementById('fixed_menu').style.bottom = '';
@@ -512,7 +390,7 @@
               document.getElementById('animation_progress').style.display = 'block';
               document.getElementById('div_gif_rectangle').style.display = 'block';
 
-              if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'none';
+              if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'none';
 
               setTimeout( addFrame, 100 );
             }
@@ -538,9 +416,9 @@
             document.getElementById('animation_progress').style.display = 'none';
             document.getElementById('div_gif_rectangle').style.display = 'none';
 
-            if (gui_set === true && equi_enabled === true) document.getElementById('gui_position').style.display = 'block';
+            if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'block';
 
-            if (render_requested === true) render();
+            if (render_requested) render();
 
             return;
           }
@@ -563,7 +441,7 @@
             scene.background = null;
           }
 
-          if (bgnd_linear_gradient === true) {
+          if (bgnd_linear_gradient) {
             bgnd_linear_gradient = false;
             document.getElementById('btn_bgnd_linear_gradient').style.backgroundColor = 'transparent';
           }
@@ -577,7 +455,7 @@
 
         await reset_scene_params();
 
-        if (lg === false) {
+        if (!lg) {
           bgnd_linear_gradient = true;
 
           let canvas = document.createElement('canvas');
@@ -630,8 +508,8 @@
       async function set_equi() {
         await reset_scene_params();
 
-        if (equi_enabled === false) {
-          if (gui_set === false) {
+        if (!equi_enabled) {
+          if (!gui_set) {
             gui.add( params, 'toneMapping', Object.keys( toneMappingOptions ) )
             .onChange( function () {
               updateGUI();
@@ -736,8 +614,11 @@
       }
 
       async function init() {
-        if (url_loading === false && document.getElementById('file_input').files.length === 0) return;
+        if (!url_loading && document.getElementById('file_input').files.length === 0) return;
 
+        document.getElementById('btn_load').disabled = true;
+        document.getElementById('file_input').disabled = true;
+ 
         if (scene) {
           if (splats) {
             scene.remove( splats );
@@ -747,7 +628,7 @@
                 if (child.material) {
                   if (child.material.uniforms) {
                     Object.keys( child.material.uniforms ).forEach( ( key ) => {
-                      if (child.material.uniforms[ key ].value && child.material.uniforms[ key ].value.isTexture) {
+                      if (child.material.uniforms[ key ].value?.isTexture) {
                         child.material.uniforms[ key ].value.dispose();
                       }
                     });
@@ -761,13 +642,15 @@
             });
           }
 
-          if (isMobile === false) {
+          if (!isMobile) {
             renderer.info.reset();
             renderer.resetState();
           }
 
           reset_all( true );
         }
+
+        init_running = true;
 
         enable_disable( true );
 
@@ -804,13 +687,14 @@
         bounding_box = new THREE.Box3();
 
         console.time( 'Loading Time' );
+
         document.body.style.backgroundImage = 'none';
         document.getElementById('div_spinner').style.display = 'none';
         document.getElementById('div_error').style.display = 'none';
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
-        if (url_loading === false) {
+        if (!url_loading) {
           // Loaded splat file
           let fi = document.getElementById('file_input');
           let fn_uc = fi.files[ 0 ].name.toUpperCase();
@@ -844,10 +728,9 @@
         }
 
         if (hdrJPGLoader === undefined) {
-          const { HDRJPGLoader } = await import( "@monogrid/gainmap-js/decode" );
+          const { HDRJPGLoader } = await import( '@monogrid/gainmap-js/decode' );
           hdrJPGLoader = new HDRJPGLoader( renderer );
         }
-
 
         if (scene === undefined) {
           scene = new THREE.Scene();
@@ -879,25 +762,25 @@
 
         if (camera === undefined) {
           camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 5000 );
-          camera.position.set( 0, 0, 30 );
+          camera.position.set( 0, 0, 25 );
           scene.add( camera );
         }
 
         if (controls === undefined) {
           controls = new orb_controls( camera, renderer.domElement );
+          controls.enableZoom = true;
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.5;
           controls.rotateSpeed = 0.8;
           controls.keyPanSpeed = 0.5; 
           controls.panSpeed = 0.5;
+          controls.minDistance = 0;
+          controls.maxDistance = Infinity;
           //controls.enableDamping = true;
           //controls.dampingFactor = 0.3;
           //controls.enableKeys = false;
-          //controls.enableZoom = true;
           //controls.maxPolarAngle = 2.2;
           //controls.minPolarAngle = 1.1;
-          //controls.minDistance = 2;
-          //controls.maxDistance = 500;
         }
 
         (selected_local_file !== null) ? loadFile() : loadURLFile();
@@ -1000,7 +883,14 @@
 
       async function finish_loading() {
         console.timeEnd( 'Loading Time' );
+
+        init_running = false;
+
+        document.getElementById('btn_load').disabled = false;
+        document.getElementById('file_input').disabled = false;
+
         document.body.style.backgroundImage = 'none';
+
         enable_disable( false );
         render_requested = true;
         mouse_wheel = true;
@@ -1008,7 +898,7 @@
         fr_count = 0;
         render();
 
-        if (isMobile === false) await new Promise( resolve => setTimeout( log_info(), 250 ) );
+        if (!isMobile) await new Promise( resolve => setTimeout( log_info, 5000 ) );
       }
 
       function log_info() {
@@ -1024,27 +914,31 @@
         render_requested = false;
         enable_disable( true );
 
+        init_running = false;
+
+        document.getElementById('btn_load').disabled = false;
+        document.getElementById('file_input').disabled = false;
+
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
       }
 
       async function render() {
         if (document.getElementById('animation_progress').style.display === 'none') {
-          if (render_requested === true) requestAnimationFrame( render );
+          if (render_requested) requestAnimationFrame( render );
         }
 
         if (splats) {
-          if (first_run === true || mouse_down === true || mouse_wheel === true ||
-            reset_rotation === true || progress.value > 0) {
+          if (first_run || mouse_down || mouse_wheel || reset_rotation || progress.value > 0) {
 
             // Reset splats rotational values
-            if (reset_rotation === true) {
+            if (reset_rotation) {
               splats.rotation.set( 0, 0, 0 );
               reset_rotation = false;
             }
 
             // Rotate the splats
-            if (mouse_down === false) {
+            if (!mouse_down) {
               // Animated GIF / APNG generation
               if (progress.value > 0) {
                 splats.rotation.y += 0.05;
@@ -1052,9 +946,10 @@
             }
 
             // If it might be slow to render initially
-            if (first_run === true) {
+            if (first_run) {
               fr_count ++;
-              if (fr_count > 10) {
+
+              if (fr_count > 60) {
                 count = 0;
                 fr_count = 0;
                 first_run = false;
@@ -1062,8 +957,8 @@
                 document.getElementById('div_loading').style.display = 'none';
               }
             } else {
-              if (mouse_wheel === true) {
-                if (count > 5) {
+              if (mouse_wheel) {
+                if (count > 60) {
                   mouse_wheel = false;
                   count = 0;
                 } else {
@@ -1089,7 +984,7 @@
               if (child.material) {
                 if (child.material.uniforms) {
                   Object.keys( child.material.uniforms ).forEach( ( key ) => {
-                    if (child.material.uniforms[ key ].value && child.material.uniforms[ key ].value.isTexture) {
+                    if (child.material.uniforms[ key ].value?.isTexture) {
                       child.material.uniforms[ key ].value.dispose();
                     }
                   });
@@ -1105,7 +1000,7 @@
           splats = null;
         }
 
-        if (isMobile === false) {
+        if (!isMobile) {
           renderer.info.reset();
           renderer.resetState();
         }
@@ -1146,7 +1041,7 @@
           }
         }
 
-        if (gui_set === true) {
+        if (gui_set) {
           document.getElementById('gui_position').style.display = 'none';
         }
 
@@ -1154,7 +1049,7 @@
         reset_rotation = true;
 
         // Reset the view
-        if (reset === true) {
+        if (reset) {
           controls.reset();
           first_run = true;
           fr_count = 0;
@@ -1170,7 +1065,7 @@
                   if (child.material) {
                     if (child.material.uniforms) {
                       Object.keys( child.material.uniforms ).forEach( ( key ) => {
-                        if (child.material.uniforms[ key ].value && child.material.uniforms[ key ].value.isTexture) {
+                        if (child.material.uniforms[ key ].value?.isTexture) {
                           child.material.uniforms[ key ].value.dispose();
                         }
                       });
@@ -1223,7 +1118,7 @@
         isNewiPad = (/iPad/.test( navigator.platform ) && (/Mac OS X/i.test( navigator.userAgent ))) ||
           (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
 
-        isMobile = (isNewiPad === false) && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
+        isMobile = !isNewiPad && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
           (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
 
         $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
@@ -1231,7 +1126,7 @@
         $('#quick_rotation').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
 
-        if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile === true) {
+        if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile) {
           $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
           $('#quick_rotation').change( function() { $(this).children(':selected').click(); });
@@ -1244,7 +1139,7 @@
 
       function disabled_changed() {
         $('button').each( function() {
-          if (this.disabled === false ) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -1256,7 +1151,7 @@
         });
 
         $('select').each( function() {
-          if (this.disabled === false) {
+          if (!this.disabled) {
             $(this).hover(
             function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
             function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
@@ -1269,7 +1164,7 @@
       }
 
       function equi_changed() {
-        if (equi_enabled === true) {
+        if (equi_enabled) {
           $('#btn_bgnd_linear_gradient').unbind('mouseenter mouseleave');
         } else {
           $('#btn_bgnd_linear_gradient').hover(
