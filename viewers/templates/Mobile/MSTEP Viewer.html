@@ -7,6 +7,59 @@
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running || render_requested) {
+            handle_error( 'RESOURCE ERROR' );
+          } else {
+            document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
@@ -22,8 +75,8 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var THREE, manager, file_loader, wireframe_enabled, events_initialized;
-      var renderer, scene, camera, mesh, render_requested;
+      var THREE, manager, mesh, file_loader, wireframe_enabled, events_initialized;
+      var renderer, scene, camera, render_requested, init_running = false;
       var controls, mouse_down, mouse_wheel, bounding_box;
       var ambientLight, directionalLight, flat_shading_enabled;
       var ww = window.innerWidth, wh = window.innerHeight, isMobile;
@@ -79,7 +132,7 @@
         <label for="btn_flat" title="Flat Shading"></label>
         <button title="Wireframe" id="btn_wireframe" onclick="show_wireframe();" disabled >W</button>
         <label for="btn_wireframe" title="Wireframe"></label>
-        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation( '-0.5' );" style="min-width: 15px;" disabled>&#x2191</button>
+        <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
         <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
       </div>
       <div class="fm" id="url" style="display: none;">
@@ -93,7 +146,7 @@
     </div>
 
     <div id="div_error" class="error_msg">E R R O R !</div>
-    <div id="div_loading" class="loading_msg">STEP++ Viewer</div>
+    <div id="div_loading" class="loading_msg">STEP+ Viewer</div>
 
     <script>
       function hide_dropdown_dli() { $('#dc_dli').fadeOut(); mouse_wheel = true; }
@@ -232,6 +285,8 @@
           await reset_all( true );
         }
 
+        init_running = true;
+
         enable_disable( true );
 
         selected_model_file = null;
@@ -310,7 +365,7 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 45, ww / wh, 0.1, 10000 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 1e4 );
           camera.position.set( 0, 0, 250 );
           scene.add( camera );
         }
@@ -324,7 +379,7 @@
         }
 
         if (controls === undefined) {
-          const { OrbitControls } = await import( "three/addons/controls/OrbitControls.min.js" );
+          const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
 
           controls = new OrbitControls( camera, renderer.domElement );
           controls.enableZoom = true;
@@ -376,7 +431,7 @@
         }
 
         // Load the model
-        selected_model_file !== null ? ( bim === true ? loadBIM() : loadFile() ) : loadURLFile();
+        selected_model_file !== null ? ( bim ? loadBIM() : loadFile() ) : loadURLFile();
       }
 
       function process_mesh( resultMesh, mesh_count ) {
@@ -665,6 +720,8 @@
       }
 
       async function finish_loading() {
+        init_running = false;
+
         console.timeEnd( 'Loading Time' );
 
         document.getElementById('btn_load').disabled = false;
@@ -694,6 +751,8 @@
         render_requested = false;
         enable_disable( true );
 
+        init_running = false;
+
         document.getElementById('btn_load').disabled = false;
         document.getElementById('btn_desktop').disabled = false;
         document.getElementById('btn_file_input').disabled = false;
@@ -703,8 +762,8 @@
         document.getElementById('div_error').style.display = 'block';
       }
 
-      function quick_x_rotation( angle ) {
-        mesh.rotateX( Math.PI * parseFloat( angle ) );
+      function quick_x_rotation() {
+        mesh.rotateX( - Math.PI / 2.0 );
 
         bounding_box.setFromObject( mesh );
         let center = bounding_box.getCenter( new THREE.Vector3() );
@@ -726,15 +785,12 @@
 
           mesh.traverse( function( child ) {
       	    if (child.isMesh) {
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  mtl.flatShading = flat_shading_enabled;
-                  mtl.needsUpdate = true;
-                });
-              } else {
-                child.material.flatShading = flat_shading_enabled;
-                child.material.needsUpdate = true;
-              }
+              const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
+
+              mtls.forEach( m => {
+                m.flatShading = flat_shading_enabled;
+                m.needsUpdate = true;
+              });
             }
 
             mouse_wheel = true;
@@ -755,13 +811,8 @@
           mesh.traverse( function( child ) {
             if (child.isMesh) {
               if (child.material) {
-                if (Array.isArray( child.material )) {
-                  child.material.forEach( mtl => {
-                    mtl.wireframe = wireframe_enabled;
-                  });
-                } else {
-                  child.material.wireframe = wireframe_enabled;
-                }
+                const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
+                mtls.forEach( m => m.wireframe = wireframe_enabled );
               }
 
               mouse_wheel = true;
@@ -845,8 +896,8 @@
 
         renderer.clear();
 
-        if (wireframe_enabled === true) await show_wireframe();
-        if (flat_shading_enabled === true) await set_flat();
+        if (wireframe_enabled) await show_wireframe();
+        if (flat_shading_enabled) await set_flat();
 
         mesh.traverse( function( child ) {
           if (child.isMesh && child.material) {
