@@ -162,13 +162,15 @@ Number Type Converter
 
 # Notes about nunuStudio Games and Experiences Examples
 
-- This page is just showcasing the [nunuStudio](https://github.com/tentone/nunuStudio) games and experiences examples
+- This page is just an unofficial educational mirror, showcasing the [nunuStudio](https://github.com/tentone/nunuStudio) games and experiences examples
 - These examples are interesting and could keep you busy and entertained for a little while
 - Designed for a desktop, might not be as good on mobile devices but are available regardless:
-  - As for the AR / VR experience, `AR` and/or `VR` button should remain visible if your device supports it:
-    - got at least VR working on an Android phone with Chrome + Cardboard
+  - As for the AR / VR experiences, `AR` and/or `VR` button should become visible if both the selected example and your device support it:
+    - Managed to get at least VR working on an Android phone with Chrome + Cardboard
 - The code of my page shows how to import and use the latest available nunuStudio version from CDN
-- The nunuStudio repository has not been updated in a while and appears to have some unresolved issues
+- Special Notes for nunuStudio repository and examples showcased on my page:
+  - That repository has not been updated in a while and appears to have some unresolved issues
+  - See the `Contact` section on the bottom of this description for any licensing issues that might be pertaining to any of these examples
 
 # Notes about three.js based 3D Model Viewers
 
@@ -771,8 +773,12 @@ PLY+STL Viewer
 
 # License
 
-This is all MIT licensed but please observe any other licenses that might be applicable to some files or content.
+This is all MIT licensed but please observe any other licenses that might be governing some files or content.
 
 # Trademarks
 
-Any and all trademarks, either directly or indirectly mentioned in this project, belong to their respective owners.
+Any and all trademarks, service marks, logos and brand names - either directly or indirectly mentioned in this project, belong to their respective owners.
+
+# Contact
+
+If you are a rights holder wishing to request the removal of any specific bundled asset or example, please open an issue in my active [Contact_Me](https://github.com/GitHubDragonFly/Contact_Me) repository.
