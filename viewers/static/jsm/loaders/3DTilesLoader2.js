@@ -3,8 +3,8 @@ import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.min.js";
 import { KTX2Loader } from "three/addons/loaders/KTX2Loader.min.js";
 import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.min.js";
-import * as ThreeDTilesRenderer from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.24/build/index.three.min.js';
-import * as ThreeDTilesPlugins from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.24/build/index.plugins.min.js';
+import * as ThreeDTilesRenderer from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.27/build/index.three.min.js';
+import * as ThreeDTilesPlugins from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.27/build/index.plugins.min.js';
 
 // Inject "required" v1.1 Implicit Tiling one-line fixer-upper
 
@@ -105,12 +105,12 @@ class Three3DTilesLoader extends Loader {
 		this._renderer = null;
 
 		this._dracoLoader = new DRACOLoader( manager );
-		this._dracoLoader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/libs/draco/" );
+		this._dracoLoader.setDecoderPath( 'https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/libs/draco/' );
 		this._dracoLoader.setDecoderConfig( { type: 'js' } );
 		this._dracoLoader.preload();
 
 		this._ktx2Loader = new KTX2Loader( manager );
-		this._ktx2Loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/libs/basis/" );
+		this._ktx2Loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/libs/basis/' );
 
 		this._gltfLoader = new GLTFLoader( manager );
 		this._gltfLoader.setDRACOLoader( this._dracoLoader );

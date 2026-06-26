@@ -367,12 +367,11 @@ class Three3DTilesLoader extends Loader {
 		this._maxCacheSize = 100;
 
 		this._dracoLoader = new DRACOLoader( manager );
-		this._dracoLoader.setDecoderPath( "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/libs/draco/" );
-		this._dracoLoader.setDecoderConfig( { type: 'js' } );
+		this._dracoLoader.setDecoderPath( 'https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/libs/draco/' );
 		this._dracoLoader.preload();
 
 		this._ktx2Loader = new KTX2Loader( manager );
-		this._ktx2Loader.setTranscoderPath( "https://cdn.jsdelivr.net/npm/three@0.183.2/examples/jsm/libs/basis/" );
+		this._ktx2Loader.setTranscoderPath( 'https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/libs/basis/' );
 
 	}
 
