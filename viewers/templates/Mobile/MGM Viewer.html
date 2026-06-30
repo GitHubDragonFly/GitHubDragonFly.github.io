@@ -54,12 +54,12 @@
     <script type="importmap">
       {
         "imports": {
-          "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@3.10.1",
-          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@3.10.1",
-          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@3.10.1",
-          "meshoptimizer_encoder": "https://cdn.jsdelivr.net/npm/meshoptimizer@0.25.0/meshopt_encoder.module.min.js",
+          "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.4.0",
+          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.4.0",
+          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.4.0",
           "ktx2-encoder": "https://cdn.jsdelivr.net/npm/ktx2-encoder@0.5.1/dist/web/index.min.js",
           "ktx-parse": "https://cdn.jsdelivr.net/npm/ktx-parse@1.1.0/dist/ktx-parse.esm.min.js",
+          "meshoptimizer": "https://esm.sh/meshoptimizer@1.1.1",
           "@jsquash/avif": "https://esm.sh/@jsquash/avif@2.1.1",
           "fast-png": "https://esm.sh/fast-png@8.0.0"
         }
@@ -74,8 +74,8 @@
 
     <script>
       var mdl_viewer, filename, gltf_filenames, models, current_model = 0;
-      var tex_res, tex_fmt, tex_flip, neutral_lighting = false;
-      var url_displayed = false, url_loading = false, zip;
+      var tex_res, tex_fmt, tex_flip, neutral_lighting = false, zip;
+      var url_displayed = false, url_loading = false, meta_enabled;
       var ww = window.innerWidth, wh = window.innerHeight;
       var selected_file, other_files, selected_url_file = '';
       var variants, current_variant = 0, variants_available = false;
@@ -698,15 +698,17 @@
 
         const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
 
-        await doc.transform(
-          dedup(),
-          instance( { min: 5 } ),
-          flatten(),
-          join(),
-          resample(),
-          prune(),
-          sparse( { ratio: 0.2 } )
-        );
+        if (!meta_enabled) {
+          await doc.transform(
+            dedup(),
+            instance( { min: 5 } ),
+            flatten(),
+            join(),
+            resample(),
+            prune(),
+            sparse( { ratio: 0.2 } )
+          );
+        }
 
         const textures = doc.getRoot().listTextures();
 
@@ -719,8 +721,15 @@
         doc.createExtension( KHRDracoMeshCompression )
         .setRequired( true )
         .setEncoderOptions({
-          method: KHRDracoMeshCompression.EncoderMethod.EDGEBREAKER,
+          method: meta_enabled ? KHRDracoMeshCompression.EncoderMethod.SEQUENTIAL : KHRDracoMeshCompression.EncoderMethod.EDGEBREAKER,
           encodeSpeed: 5,
+          quantizationBits: {
+            'POSITION': 14,
+            'TEX_COORD': 12,
+            'NORMAL': 10,
+            'COLOR': 8,
+            'GENERIC': 0 // This tells Draco NOT to quantize custom/generic integer arrays!
+          }
         });
 
         const compressedArrayBuffer = io.writeBinary( doc );
@@ -737,7 +746,7 @@
       async function meshopt_compress( arrayBuffer ) {
         const { WebIO } = await import( '@gltf-transform/core' );
         const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
-        const { MeshoptEncoder } = await import( 'meshoptimizer_encoder' );
+        const { MeshoptEncoder } = await import( 'meshoptimizer' );
         const { dedup, flatten, instance, join, meshopt, prune, resample, sparse } = await import( '@gltf-transform/functions' );
 
         await MeshoptEncoder.ready;
@@ -1058,6 +1067,7 @@
         models = [];
         userData = {};
         hasMetadata = false;
+        meta_enabled = false;
 
         enable_disable( true );
 
@@ -1984,10 +1994,16 @@
           return;
         }
 
-        const data = object_userData.metadata;
+        const data = object_userData.metadata
+          ? object_userData.metadata
+          : object_userData.extras
+            ? object_userData.extras
+            : object_userData;
+
         const tilesetMetadataOnly = !data && !!pickedObject.parent;
 
         if (data || tilesetMetadataOnly) {
+          highlightFeatureUnique();
           showUiPanel( data, event, schema, pickedObject.name, tilesetMetadataOnly, pickedObject.type );
         }
       }
@@ -2551,8 +2567,57 @@
         }
       }
 
+      function highlightFeatureUnique() {
+        if (!pickedObject || pickedObject.material?.isShaderMaterial) return;
+
+        // 1. Borrow Three.js constructor via the object's prototype
+        const MeshConstructor = pickedObject.constructor;
+        const MaterialConstructor = pickedObject.material.constructor;
+
+        // 3. Cleanup: Remove any existing highlight to prevent "stacking"
+        const existing = pickedObject.children.find( c => c.isHighlight );
+
+        if (existing) {
+          pickedObject.remove( existing );
+          if (existing.geometry) existing.geometry.dispose();
+          if (existing.material) existing.material.dispose();
+
+          refreshScene();
+        }
+
+        // 4. Construct the overlay
+        const highlightMat = new MaterialConstructor();
+        highlightMat.color.setHex( 0x20ff20 ); // Light coral
+        highlightMat.transparent = true;
+        highlightMat.opacity = 0.5;
+        highlightMat.side = 2;               // DoubleSide
+        highlightMat.depthWrite = false;     // Don't obscure other objects
+        highlightMat.polygonOffset = true;   // Shift it slightly towards camera
+        highlightMat.polygonOffsetFactor = -1;
+        highlightMat.polygonOffsetUnits = -1;
+
+        // If the borrowed material is MeshStandardMaterial (default for model-viewer),
+        // we turn off metalness/roughness so it looks like a flat highlight
+        if (highlightMat.metalness !== undefined) highlightMat.metalness = 0.15;
+        if (highlightMat.roughness !== undefined) highlightMat.roughness = 0.85;
+
+        highlightMat.needsUpdate = true;
+
+        const highlightMesh = new MeshConstructor( pickedObject.geometry, highlightMat );
+        highlightMesh.isHighlight = true; // Tag for later cleanup
+        highlightMesh.receiveShadow = false;
+        highlightMesh.castShadow = false;
+        highlightMesh.renderOrder = 999;
+
+        // 5. Add to the local coordinate system of the picked object
+        pickedObject.add( highlightMesh );
+        pickedObject.updateWorldMatrix( true, true );
+
+        refreshScene();
+      }
+
       function highlightFeatureSimple( highlight_id, attrName ) {
-        if (!pickedObject || !attrName || pickedObject.material?.isShaderMaterial) return;
+        if (!pickedObject || pickedObject.material?.isShaderMaterial || !attrName) return;
 
         // 1. Borrow Three.js constructor via the object's prototype
         const MeshConstructor = pickedObject.constructor;
@@ -2588,6 +2653,7 @@
           pickedObject.remove( existing );
           if (existing.geometry) existing.geometry.dispose();
           if (existing.material) existing.material.dispose();
+
           refreshScene();
         }
 
@@ -2615,6 +2681,8 @@
 
         const highlightMesh = new MeshConstructor( highlightGeo, highlightMat );
         highlightMesh.isHighlight = true; // Tag for later cleanup
+        highlightMesh.receiveShadow = false;
+        highlightMesh.castShadow = false;
         highlightMesh.renderOrder = 999;
 
         // 5. Add to the local coordinate system of the picked object
@@ -2973,6 +3041,7 @@
           const hydratedStore = userData[ currentKey ];
 
           if (hasMetadata || hydratedStore?.textures?.length > 0 || hydratedStore?.structuralMetadata !== null || hydratedStore?.hasGLTFExtensions) {
+            meta_enabled = true;
             document.getElementById('metadata_message').style.visibility = 'visible';
             await new Promise( resolve => setTimeout( hide_metadata_message, 5000 ) );
           }
