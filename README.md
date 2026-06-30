@@ -404,6 +404,8 @@ Number Type Converter
 - Special notes about `3D Tiles Viewer`:
   - 2 versions of this viewer exist, `3D Tiles Viewer 1` using [threedtiles](https://github.com/ebeaufay/threedtiles) and `3D Tiles Viewer 2` using [3d-tiles-renderer](https://github.com/NASA-AMMOS/3DTilesRendererJS) library:
     - Neither is perfect so use both of them and compare
+    - Both currently include experimental support for exporting to GLTF/GLB format:
+      - 3D Tiles Viewer 1 seems to be slightly better at this experiment
   - These viewers are specifically designed to stream 3D Tiles:
     - Support for v1.1 ImplicitTiling, MultipleContents, Property Tables and all kinds of Metadata, by performing conversion to explicit:
       - Both viewers will indicate detection of metadata presence by displaying `Metadata Raycasting Enabled` message
