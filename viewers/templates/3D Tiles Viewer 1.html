@@ -67,13 +67,21 @@
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/",
-          "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/"
+          "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/",
+          "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.4.0",
+          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.4.0",
+          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.4.0",
+          "meshoptimizer": "https://esm.sh/meshoptimizer@1.1.1"
         }
       }
     </script>
 
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" defer></script>
     <script src="https://mrdoob.github.io/stats.js/build/stats.min.js" defer></script>
+
+    <!-- For encoding GLB exports with draco compression (draco_encoder was removed from v0.185.0) -->
+    <script src="https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
       var THREE, manager, texture_loader, tiles_loader, tileset_obj, init_running = false;
@@ -83,7 +91,7 @@
       var ww = window.innerWidth, wh = window.innerHeight, halt_on_error;
       var stats, stats_enabled, events_initialized, clock, params;
       var currCacheInfo, currDepthInfo, maxDepthInfo;
-      var currentCache = '100', currentDepth = '4';
+      var currentCache = '100', currentDepth = '4', link, zip;
       var selected_url_file = '', directionalLight, isMobile, safeJson, ghostMesh;
       var lod_displayed = false, warning_displayed = false, wireframe_enabled;
       var extended_render, extended_count = 0, count = 0, selectedObject, pickedObject;
@@ -91,6 +99,8 @@
       var bounding_box, bbox_enabled, box, boxHelper, box_helper_added, xAxis;
       var raycaster, mouse, mouseDownPos, raycastableObjects, featureHighlightMesh;
       var url_displayed = false, keyAPI_displayed = false, token_displayed = false;
+
+      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
       const TYPE_COUNT_MAP = {
         'SCALAR': 1,
@@ -206,10 +216,12 @@
     <!-- Original OBJ source code that inspired this: https://codepen.io/Mamboleoo/pen/PqjGdN -->
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
     <!-- Internally using OGC3DTile loader: https://github.com/ebeaufay/threedtiles -->
+    <!-- When applicable, using glTF Transform for DRACO / MESHOPT compression: https://gltf-transform.dev -->
+    <!--  - When applicable, using meshoptimizer: https://github.com/zeux/meshoptimizer -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>3D Tiles Viewer (r185)</title>
+    <title>3D Tiles Viewer 1 (r185)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -239,6 +251,13 @@
         <label for="btn_animate" title="Switch Animation"></label>
         <button title="Switch Variant" id="btn_variants" onclick="switch_variant();" style="display: none; min-width: 36px;">V</button>
         <label for="btn_variants" title="Switch Variant"></label>
+        <select title="Export" id="export_names" style="min-width: 90px;" disabled>
+          <option title="Export Formats" value="export" selected disabled>Export</option>
+          <option title="GLB - GL Transmission Format binary regular export with optional texture compression" value="glb" onclick="export_gltf( true );">GLB</option>
+          <option title="GLB - GL Transmission Format binary regular export with DRACO and optional texture compression" value="glbdraco" onclick="export_gltf( true, true, false );">GLB_d</option>
+          <option title="GLB - GL Transmission Format binary regular export with Meshopt and optional texture compression" value="glbmeshopt" onclick="export_gltf( true, false, true );">GLB_m</option>
+          <option title="GLTF - GL Transmission Format ascii regular export" value="gltf" onclick="export_gltf();">GLTF</option>
+        </select>
         <div id="status_indicator" class="indicator"></div>
       </div>
       <div class="fm" id="keyAPI" style="display: none;">
@@ -503,6 +522,268 @@
         }
       }
 
+      function start_export() {
+        if (!link) {
+          link = document.createElement( 'a' );
+          link.style.display = 'none';
+          document.body.appendChild( link );
+        }
+
+        hideUiPanel();
+
+        render_requested = false;
+        document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = pw;
+        document.getElementById('div_loading').style.display = 'block';
+
+        if (gui_set) document.getElementById('right_gui_position').style.display = 'none';
+
+        popup_card_cleanup();
+
+        return;
+      }
+
+      async function process_zip( ext = '' ) {
+        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 9 } } ).then( function( zipped_file ) {
+          link.href = URL.createObjectURL( zipped_file );
+          URL.revokeObjectURL( zipped_file );
+          link.download = 'Tileset' + ext + '.zip';
+          link.click();
+
+          finish_export();
+        });
+      }
+
+      function handle_export_error( error ) {
+        alert( 'Export error!' );
+        console.log( error );
+
+        finish_export();
+      }
+
+      function finish_export() {
+        document.getElementById('div_loading').innerHTML = '';
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('fixed_menu').style.display = 'block';
+
+        document.getElementById('export_names').selectedIndex = 0;
+
+        if (gui_set) document.getElementById('right_gui_position').style.display = 'block';
+
+        render_requested = true;
+        mouse_wheel = true;
+        render();
+
+        zip = new JSZip();
+
+        if (link) {
+          document.body.removeChild( link );
+          link = undefined;
+        }
+      }
+
+      async function export_gltf( binary = false, draco = false, meshopt = false ) {
+        if (tileset_obj) {
+          await start_export();
+
+          // Initialize structural configuration object
+          const structural = {
+            schema: null,
+            propertyTables: [],
+            propertyTextures: [],
+            textures: [],
+            uris: []
+          };
+
+          const structuralUris = [];
+          const structuralTextures = [];
+
+          if (click_listener_added) {
+            let tableOffset = 0;   // Track table index shifting globally
+            let textureOffset = 0; // Track texture index shifting globally
+
+            // Crawl all loaded meshes and pull metadata up to the root config
+            tileset_obj.traverse( ( node ) => {
+              const nodeMetadata = node.userData?.structuralMetadata;
+              const metadataTextures = nodeMetadata?.textures;
+              const metadataUris = nodeMetadata?.uris;
+              const otherMetadataTextures = node.userData?.textures;
+              const otherMetadataUris = node.userData?.uris;
+
+              if ( nodeMetadata ) {
+                if (!node._originalStructuralMetadata) {
+                  node._originalStructuralMetadata = node.userData.structuralMetadata;
+                }
+
+                // Take the schema from the first tile that has it
+                if ( !structural.schema && nodeMetadata.schema ) {
+                  structural.schema = nodeMetadata.schema;
+                }
+
+                // --- HANDLE PROPERTY TABLES & FEATURES ---
+                if (nodeMetadata.propertyTables && Array.isArray( nodeMetadata.propertyTables )) {
+                  const clonedTables = structuredClone( nodeMetadata.propertyTables );
+                  structural.propertyTables.push( ...clonedTables );
+
+                  const meshFeatures = node.userData?.meshFeatures || node.userData?.gltfExtensions?.EXT_mesh_features;
+
+                  if (meshFeatures && Array.isArray( meshFeatures.featureIds )) {
+                    const clonedFeatures = structuredClone( meshFeatures );
+
+                    clonedFeatures.featureIds.forEach( ( fid ) => {
+                      if (fid.propertyTable !== undefined) {
+                        fid.propertyTable += tableOffset;
+                      } else {
+                        fid.propertyTable = tableOffset;
+                      }
+                    });
+
+                    if (!node.userData._originalFeatures) {
+                      node.userData._originalFeatures = meshFeatures;
+                    }
+
+                    if (node.userData?.meshFeatures) node.userData.meshFeatures = clonedFeatures;
+                    if (node.userData?.gltfExtensions?.EXT_mesh_features) {
+                      node.userData.gltfExtensions.EXT_mesh_features = clonedFeatures;
+                    }
+                  }
+
+                  tableOffset += nodeMetadata.propertyTables.length;
+                }
+
+                // --- COLLECT TEXTURES AND URIS ---
+                let localTextureCount = 0;
+
+                if (metadataTextures && Array.isArray( metadataTextures )) {
+                  localTextureCount = metadataTextures.length;
+
+                  for ( let i = 0; i < metadataTextures.length; i++ ) {
+                    // If the slot is empty/undefined, push null, otherwise push the texture
+                    if (metadataTextures[ i ]) {
+                      structural.textures[ i + textureOffset ] = metadataTextures[ i ];
+                    }
+                  }
+
+                  for ( let i = 0; i < metadataUris.length; i++ ) {
+                    // If the slot is empty/undefined, push null, otherwise push the uri
+                    if (metadataUris[ i ]) {
+                      structural.uris[ i + textureOffset ] = metadataUris[ i ];
+                    }
+                  }
+                }
+
+                if (otherMetadataTextures && Array.isArray( otherMetadataTextures )) {
+                  localTextureCount = otherMetadataTextures.length;
+
+                  for ( let i = 0; i < otherMetadataTextures.length; i++ ) {
+                    // If the slot is empty/undefined, push null, otherwise push the texture
+                    if (otherMetadataTextures[ i ]) {
+                      structuralTextures[ i + textureOffset ] = otherMetadataTextures[ i ];
+                    }
+                  }
+
+                  for ( let i = 0; i < otherMetadataUris.length; i++ ) {
+                    // If the slot is empty/undefined, push null, otherwise push the uri
+                    if (otherMetadataUris[ i ]) {
+                      structuralUris[ i + textureOffset ] = otherMetadataUris[ i ];
+                    }
+                  }
+                }
+
+                // --- SHIFT PROPERTY TEXTURE POINTERS ---
+                if (nodeMetadata.propertyTextures && Array.isArray( nodeMetadata.propertyTextures )) {
+                  const clonedPropertyTextures = structuredClone( nodeMetadata.propertyTextures );
+
+                  // Dynamically step into the texture properties and offset the source target index
+                  clonedPropertyTextures.forEach( pTex => {
+                    if (pTex.properties) {
+                      Object.values( pTex.properties ).forEach( prop => {
+                        if (prop && prop.texture && prop.texture.index !== undefined) {
+                          prop.texture.index += textureOffset;
+                        }
+                      });
+                    }
+                  });
+
+                  structural.propertyTextures.push( ...clonedPropertyTextures );
+                }
+
+                // Increment global texture tracking offset
+                textureOffset += localTextureCount;
+              }
+
+              delete node.userData.structuralMetadata;
+            });
+          }
+
+          const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
+
+          let gltf_exporter = new GLTFExporter( manager );
+
+          const options = click_listener_added
+            ? { binary: binary, structuralMetadata: structural, includeCustomExtensions: true }
+            : { binary: binary, includeCustomExtensions: true }
+
+          if (structuralTextures.length > 0 || structuralUris.length > 0) {
+            options.metadataTextures = { textures: structuralTextures, uris: structural.uris };
+          }
+
+          gltf_exporter.parse( tileset_obj, async json => {
+            // --- CLEANUP STEP: Restore original live viewer references immediately ---
+            tileset_obj.traverse( ( node ) => {
+              if (node.userData?._originalFeatures) {
+                if (node.userData.meshFeatures) node.userData.meshFeatures = node.userData._originalFeatures;
+                if (node.userData.gltfExtensions?.EXT_mesh_features) {
+                  node.userData.gltfExtensions.EXT_mesh_features = node.userData._originalFeatures;
+                }
+
+                delete node.userData._originalFeatures;
+              }
+
+              if (node._originalStructuralMetadata) {
+                node.userData.structuralMetadata = node._originalStructuralMetadata;
+                delete node._originalStructuralMetadata;
+              }
+            });
+
+            let blob;
+
+            if (binary) {
+              try {
+                let type = 'application/octet-stream';
+
+                if (draco) {
+                  blob = new Blob( [ await draco_compress( new Uint8Array( json ) ) ], { type: type } );
+                } else if (meshopt) {
+                  blob = new Blob( [ await meshopt_compress( new Uint8Array( json ) ) ], { type: type } );
+                } else {
+                  blob = new Blob( [ new Uint8Array( json ) ], { type: type } );
+                }
+              } catch (error) {
+                handle_export_error( error );
+                return;
+              }
+
+              zip.file( 'tileset.glb', blob );
+
+              let str = '_GLB';
+              if (draco) str += '_DRACO';
+              else if (meshopt) str += '_MESHOPT';
+
+              await process_zip( str );
+            } else {
+              let string = JSON.stringify( json, null, 2 );
+              blob = new Blob( [ string ], { type: 'text/plain' } );
+
+              zip.file( 'tileset.gltf', blob );
+
+              await process_zip( '_GLTF' );
+            }
+          }, function( error ) { handle_export_error( error ); }, options);
+        }
+      }
+
       async function set_scene_image() {
         if (!scene) return;
 
@@ -673,6 +954,8 @@
           set_fps_stats();
         }
 
+        if (zip === undefined) zip = new JSZip();
+
         enable_disable( true );
 
         mouse_down = false;
@@ -765,10 +1048,10 @@
           controls = new OrbitControls( camera, renderer.domElement );
           controls.enableZoom = true;
           controls.zoomToCursor = true;
-          controls.zoomSpeed = 0.5;
-          controls.rotateSpeed = 0.5;
-          controls.keyPanSpeed = 0.5; 
-          controls.panSpeed = 0.5;
+          controls.zoomSpeed = 0.1;
+          controls.rotateSpeed = 0.2;
+          controls.keyPanSpeed = 0.2; 
+          controls.panSpeed = 0.2;
           controls.minDistance = 0;
           controls.maxDistance = Infinity;
           //controls.enableDamping = true;
@@ -1075,9 +1358,9 @@
         document.getElementById('btn_load').disabled = false;
 
         if (!isMobile) {
-          await new Promise( resolve => setTimeout( log_info, 5000 ) );
+          await new Promise( resolve => setTimeout( log_info, 3000 ) );
         } else {
-          await new Promise( resolve => setTimeout( hide_metadata_message, 5000 ) );
+          await new Promise( resolve => setTimeout( hide_metadata_message, 3000 ) );
         }
       }
 
@@ -1086,7 +1369,7 @@
         console.log( 'Render: ', renderer.info.render );
 
         if (document.getElementById('metadata_message').style.visibility === 'visible')
-          await new Promise( resolve => setTimeout( hide_metadata_message, 5000 ) );
+          await new Promise( resolve => setTimeout( hide_metadata_message, 3000 ) );
       }
 
       function hide_metadata_message() {
@@ -1268,7 +1551,7 @@
         const z = positionAttr.getZ( pointIndex );
 
         // 2. Create a small Cube (Box) to represent the highlight
-        // Adjust the size (0.05) based on your tileset scale
+        // Adjust the size (0.05) based on tileset scale
         const boxSize = 0.05; 
         const highlightGeo = new THREE.BoxGeometry( boxSize, boxSize, boxSize );
 
@@ -2467,6 +2750,79 @@
         popup_card_cleanup();
       }
 
+      /* Encode with draco compression - geometry */
+
+      async function draco_compress( arrayBuffer ) {
+        const { WebIO } = await import( '@gltf-transform/core' );
+        const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
+
+        const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
+
+        io.registerDependencies({
+          'draco3d.encoder': DracoEncoderModule(),
+        });
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        const KHRDracoMeshCompression = ALL_EXTENSIONS.find( ( Extension ) => Extension.EXTENSION_NAME === 'KHR_draco_mesh_compression' );
+
+        doc.createExtension( KHRDracoMeshCompression )
+        .setRequired( true )
+        .setEncoderOptions({
+          method: KHRDracoMeshCompression.EncoderMethod.SEQUENTIAL,
+          encodeSpeed: 5,
+          quantizationBits: {
+            'POSITION': 14,
+            'TEX_COORD': 12,
+            'NORMAL': 10,
+            'COLOR': 8,
+            'GENERIC': 0 // This tells Draco NOT to quantize custom/generic integer arrays!
+          }
+        });
+
+        const compressedArrayBuffer = io.writeBinary( doc );
+
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
+      }
+
+      /* Encode with meshopt compression - geometry, morphs, animations */
+
+      async function meshopt_compress( arrayBuffer ) {
+        const { WebIO } = await import( '@gltf-transform/core' );
+        const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
+        const { MeshoptEncoder } = await import( 'meshoptimizer' );
+
+        await MeshoptEncoder.ready;
+
+        const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
+
+        io.registerDependencies({
+          'meshopt.encoder': MeshoptEncoder,
+        });
+
+        const doc = await io.readBinary( arrayBuffer ); // read GLB from ArrayBuffer
+
+        const EXTMeshoptCompression = ALL_EXTENSIONS.find( ( Extension ) => Extension.EXTENSION_NAME === 'EXT_meshopt_compression' );
+
+        doc.createExtension( EXTMeshoptCompression )
+        .setRequired( true )
+        .setEncoderOptions({
+          method: EXTMeshoptCompression.EncoderMethod.QUANTIZE,  // or EncoderMethod.FILTER
+        });
+
+        const compressedArrayBuffer = await io.writeBinary( doc );
+
+        for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
+        for (const material of doc.getRoot().listMaterials()) { material.dispose(); }
+        for (const mesh of doc.getRoot().listMeshes()) { mesh.dispose(); }
+
+        return compressedArrayBuffer;
+      }
+
       function set_bounding_box() {
           if (!tileset_obj) return;
           bbox_enabled = !bbox_enabled;
@@ -2688,6 +3044,7 @@
         document.getElementById('btn_quick_x').disabled = disable;
         document.getElementById('btn_wireframe').disabled = disable;
         document.getElementById('btn_bounding_box').disabled = disable;
+        document.getElementById('export_names').disabled = disable;
         disabled_changed();
 
         mouse_wheel = true;
@@ -2702,6 +3059,7 @@
         isMobile = !isNewiPad && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
           (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
 
+        $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#cache_level').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#depth_level').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#keyAPI_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_set_keyAPI').click(); });
@@ -2709,10 +3067,12 @@
         $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
 
         if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile) {
+          $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#cache_level').change( function() { $(this).children(':selected').click(); });
           $('#depth_level').change( function() { $(this).children(':selected').click(); });
         }
 
+        document.getElementById('export_names').selectedIndex = 0;
         document.getElementById('cache_level').selectedIndex = 0;
         document.getElementById('depth_level').selectedIndex = 0;
 
