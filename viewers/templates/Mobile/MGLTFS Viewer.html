@@ -78,13 +78,15 @@
       var manager, gltfMaterialsVariantsExtension, gltfVideoTextureExtension;
       var renderer, scene, clock, render_requested, first_run = false, fr_count = 0;
       var default_camera, camera, cameras, cam_id, init_running = false;
-      var url_displayed = false, url_loading = false;
+      var url_displayed = false, url_loading = false, metadataExtensionsUsed;
       var directionalLight, ww = window.innerWidth, wh = window.innerHeight;
       var mouse_down, mouse_wheel, events_initialized, count = 0, userData;
       var selected_gltf_file, selected_draco_file, selected_url_file = '';
       var local_files, local_files_indexes, local_bin_files, filesMap, rootPath;
       var raycaster, mouse, mouseDownPos, raycastableObjects, featureHighlightMesh;
       var pickedObject, selectedObject, hasMetadata, click_listener_added = false;
+
+      const metadata_extensions = [ 'EXT_mesh_features', 'EXT_instance_features', 'EXT_structural_metadata' ];
 
       const TYPE_COUNT_MAP = {
         'SCALAR': 1,
@@ -385,7 +387,7 @@
         const center = bounding_box.getCenter( new THREE.Vector3() );
         const size = bounding_box.getSize( new THREE.Vector3() );
 
-        default_camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length())));
+        default_camera.position.copy( center.clone().add( new THREE.Vector3( 0, 0, size.length() ) ) );
         default_camera.lookAt( center );
 
         // Center root
@@ -523,6 +525,7 @@
         raycastableObjects = [];
         render_requested = false;
         featureHighlightMesh = null;
+        metadataExtensionsUsed = false;
         mouseDownPos = { x: 0, y: 0 };
         bounding_box = new THREE.Box3();
 
@@ -664,10 +667,10 @@
           controls = new orb_controls( default_camera, renderer.domElement );
           controls.enableZoom = true;
           controls.enableZoomToCursor = true;
-          controls.zoomSpeed = 0.8;
-          controls.rotateSpeed = 0.8;
-          controls.keyPanSpeed = 0.8; 
-          controls.panSpeed = 0.8;
+          controls.zoomSpeed = 0.5;
+          controls.rotateSpeed = 0.5;
+          controls.keyPanSpeed = 0.5; 
+          controls.panSpeed = 0.5;
           controls.minDistance = 0;
           controls.maxDistance = Infinity;
           //controls.enableDamping = true;
@@ -702,6 +705,12 @@
       function loadFile() {
         gltf_loader.load( URL.createObjectURL( local_files[ selected_gltf_file ] ), async function( gltf ) {
           URL.revokeObjectURL( local_files[ selected_gltf_file ] );
+
+          const eu = gltf.parser?.json?.extensionsUsed;
+
+          if (eu?.length > 0 && metadata_extensions.some( k => eu.includes( k ) )) {
+            metadataExtensionsUsed = true;
+          }
 
           cameras = gltf.cameras;
 
@@ -751,23 +760,16 @@
               child.geometry.computeBoundingBox();
               child.geometry.computeBoundingSphere();
 
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  if (child.isPoints) mtl.size = isMobile ? 0.8 : 1.25;
-                  mtl.receiveShadow = true;
-                  mtl.castShadow = true;
-                  mtl.flatShading = false;
+              const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                  mtl.needsUpdate = true;
-                });
-              } else {
-                if (child.isPoints) child.material.size = isMobile ? 0.8 : 1.25;
-                child.material.receiveShadow = true;
-                child.material.castShadow = true;
-                child.material.flatShading = false;
+              mtls.forEach( m => {
+                if (child.isPoints) m.size = isMobile ? 0.8 : 1.25;
+                m.receiveShadow = true;
+                m.castShadow = true;
+                m.flatShading = false;
 
-                child.material.needsUpdate = true;
-              }
+                m.needsUpdate = true;
+              });
 
               if (!gltf.parser.json.images) {
                 // Use as a texture the first loaded image if any
@@ -951,6 +953,12 @@
           console.log( 'Trying GLTF Loader...' );
 
           gltf_loader.load( selected_url_file, async gltf => {
+            const eu = gltf.parser?.json?.extensionsUsed;
+
+            if (eu?.length > 0 && metadata_extensions.some( k => eu.includes( k ) )) {
+              metadataExtensionsUsed = true;
+            }
+
             cameras = gltf.cameras;
 
             if (gltf.userData) userData = gltf.userData;
@@ -999,23 +1007,16 @@
                 child.geometry.computeBoundingBox();
                 child.geometry.computeBoundingSphere();
 
-                if (Array.isArray( child.material )) {
-                  child.material.forEach( m => {
-                    if (child.isPoints) m.size = isMobile ? 0.8 : 1.25;
-                    m.receiveShadow = true;
-                    m.castShadow = true;
-                    m.flatShading = false;
+                const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                    m.needsUpdate = true;
-                  });
-                } else {
-                  if (child.isPoints) child.material.size = isMobile ? 0.8 : 1.25;
-                  child.material.receiveShadow = true;
-                  child.material.castShadow = true;
-                  child.material.flatShading = false;
+                mtls.forEach( m => {
+                  if (child.isPoints) m.size = isMobile ? 0.8 : 1.25;
+                  m.receiveShadow = true;
+                  m.castShadow = true;
+                  m.flatShading = false;
 
-                  child.material.needsUpdate = true;
-                }
+                  m.needsUpdate = true;
+                });
               }
             });
 
@@ -1098,7 +1099,7 @@
           }
         });
 
-        if (userData.structuralMetadata !== undefined || hasGltfExtensions || hasHybrid || meshHasMetadata) {
+        if (userData.structuralMetadata !== undefined || hasGltfExtensions || hasHybrid || meshHasMetadata || metadataExtensionsUsed) {
           hasMetadata = true;
         }
 
@@ -2243,11 +2244,13 @@
           return;
         }
 
-        const data = obj_userData.metadata
-          ? obj_userData.metadata
-          : obj_userData.extras
-            ? obj_userData.extras
-            : obj_userData;
+        const data = pickedObject.parent?.userData?.tileset
+          ? pickedObject.parent.userData
+          : obj_userData.metadata
+            ? obj_userData.metadata
+            : obj_userData.extras
+              ? obj_userData.extras
+              : obj_userData;
 
         const tilesetMetadataOnly = !data && !!pickedObject.parent;
 

@@ -92,8 +92,10 @@
       var ww = window.innerWidth, wh = window.innerHeight, flat_shading_enabled, count = 0;
       var local_files, local_files_indexes, local_bin_files, assimp_files, file_model_urls;
       var selected_gltf_file, selected_draco_file, selected_url_file = '', selected_gltf_url_file;
-      var raycaster, mouse, mouseDownPos, raycastableObjects, featureHighlightMesh;
+      var raycaster, mouse, mouseDownPos, raycastableObjects, featureHighlightMesh, metadataExtensionsUsed;
       var pickedObject, selectedObject, hasMetadata, click_listener_added = false, userData;
+
+      const metadata_extensions = [ 'EXT_mesh_features', 'EXT_instance_features', 'EXT_structural_metadata' ];
 
       const TYPE_COUNT_MAP = {
         'SCALAR': 1,
@@ -179,7 +181,6 @@
 
       draco_loader = new DRACOLoader();
       draco_loader.setDecoderPath( 'https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/libs/draco/' );
-      draco_loader.setDecoderConfig( { type: 'js' } );
       draco_loader.preload();
 
       g_loader = GLTFLoader;
@@ -573,6 +574,7 @@
         flat_shading_enabled = false;
         raycastableObjects = [];
         featureHighlightMesh = null;
+        metadataExtensionsUsed = false;
         mouseDownPos = { x: 0, y: 0 };
         bounding_box = new THREE.Box3();
 
@@ -611,7 +613,7 @@
             if (fn_uc.endsWith('.GLB') || fn_uc.endsWith('.GLTF') || fn_uc.endsWith('.VRM')) {
               let resolution = await resolve_gltf_version( false, local_files[ i ] );
 
-              if (resolution === true) {
+              if (resolution) {
                 selected_gltf_file = i;
                 if (fn_uc.endsWith('.VRM')) vrm = true;
               }
@@ -677,7 +679,7 @@
         // Logic for checking GLTF version, slightly modified code from GLTF Loader
         let loader = new THREE.FileLoader( manager );
 
-        if (from_url === false && file !== null) {
+        if (!from_url && file !== null) {
           file_url = URL.createObjectURL( file ); // local
         } else {
           file_url = file; // remote
@@ -905,12 +907,12 @@
         // Start flashing indicator
         document.getElementById('status_indicator').style.display = 'inline-block';
 
-        if (from_url === false) {
+        if (!from_url) {
           // Load DRACO or gltf file
           if (selected_gltf_file !== null) loadFile();
           else if (selected_draco_file !== null) loadDRACO();
         } else {
-          if (assimp_load === true && selected_gltf_file !== null) loadFile();
+          if (assimp_load && selected_gltf_file !== null) loadFile();
         }
       }
 
@@ -925,9 +927,16 @@
         console.time( 'GLTF Loading Time' );
 
         gltf_loader.load( URL.createObjectURL( lfile ), async function( gltf ) {
-          URL.revokeObjectURL( assimp_load === true ? selected_gltf_file : local_files[ selected_gltf_file ] );
+          URL.revokeObjectURL( assimp_load ? selected_gltf_file : local_files[ selected_gltf_file ] );
 
           parser = gltf.parser;
+
+          const eu = parser?.json?.extensionsUsed;
+
+          if (eu?.length > 0 && metadata_extensions.some( k => eu.includes( k ) )) {
+            metadataExtensionsUsed = true;
+          }
+
           cameras = gltf.cameras;
           animations = gltf.animations;
 
@@ -947,7 +956,7 @@
             gltf_obj = gltf.scene;
           }
 
-          if (cameras && cameras.length > 0) {
+          if (cameras?.length > 0) {
             document.getElementById('btn_cameras').disabled = false;
             document.getElementById('btn_cameras').style.backgroundColor = 'lightgreen';
           } else {
@@ -960,7 +969,7 @@
             animations.forEach( clip => { animation_mixer.clipAction( clip ).loop = THREE.LoopRepeat; } );
           }
 
-          if (gltf.userData.gltfExtensions && gltf.userData.gltfExtensions[ 'KHR_materials_variants' ]) {
+          if (gltf.userData.gltfExtensions?.[ 'KHR_materials_variants' ]) {
             variants = gltf.userData.gltfExtensions[ 'KHR_materials_variants' ].variants.map( ( variant ) => variant.name );
           }
 
@@ -980,7 +989,7 @@
             }
 
             if (child.isMesh || child.isPoints) {
-              if (assimp_load === true) {
+              if (assimp_load) {
                 child.geometry.deleteAttribute('normal');
                 child.geometry = merge_vertices( child.geometry, 1e-6 );
                 child.geometry.computeVertexNormals();
@@ -1016,93 +1025,54 @@
                 child.sizeAttenuation = true;
               }
 
-              if (Array.isArray( child.material )) {
-                child.material.forEach( mtl => {
-                  if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
+              const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                  if ( mtl.transmission && mtl.transmission > 0 ) {
-                    if ( mtl.metalnessMap && ! mtl.metalness ) {
-                      mtl.metalness = 0.01;
-                    }
+              mtls.forEach( m => {
+                if (child.isPoints) m.size = isMobile ? 0.8 : 1.25;
 
-                    if ( mtl.roughnessMap && ! mtl.roughness ) {
-                      mtl.roughness = 0.01;
-                    }
-
-                    if ( mtl.roughnessMap && mtl.roughness === 1 ) {
-                      mtl.roughness = 0.95;
-                    }
-
-                    if ( ! mtl.metalnessMap && ! mtl.roughnessMap && ! mtl.metalness && mtl.roughness === 1 ) {
-                      mtl.roughness = 0.01;
-                    }
+                if (m.transmission && m.transmission > 0) {
+                  if (m.metalnessMap && ! m.metalness) {
+                    m.metalness = 0.01;
                   }
 
-                  if (assimp_load === true && child.isMesh) {
-                    if (mtl.map && mtl.color.r === 0 && mtl.color.g === 0 && mtl.color.b === 0) {
-                      mtl.color.setRGB( 1, 1, 1, THREE.SRGBColorSpace );
-                    }
-
-                    if (mtl.emissive.r !== 0 || mtl.emissive.g !== 0 || mtl.emissive.b !== 0) {
-                      mtl.emissive.convertSRGBToLinear();
-                    }
-
-                    // default to double side since some models might not be visible initially
-                    mtl.side = THREE.DoubleSide;
-                    mtl.flatShading = true;
-                    flat_shading_enabled = true;
-                    document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
-                  } else {
-                    mtl.flatShading = false;
+                  if (m.roughnessMap && ! m.roughness) {
+                    m.roughness = 0.01;
                   }
 
-                  mtl.castShadow = true;
-                  mtl.receiveShadow = true;
-                  mtl.needsUpdate = true;
-                });
-              } else {
-                if (child.isPoints === true) child.material.size = isMobile === true ? 0.8 : 1.25;
-
-                if ( child.material.transmission && child.material.transmission > 0 ) {
-                  if ( child.material.metalnessMap && ! child.material.metalness ) {
-                    child.material.metalness = 0.01;
+                  if (m.roughnessMap && m.roughness === 1) {
+                    m.roughness = 0.95;
                   }
 
-                  if ( child.material.roughnessMap && ! child.material.roughness ) {
-                    child.material.roughness = 0.01;
-                  }
-
-                  if ( child.material.roughnessMap && child.material.roughness === 1 ) {
-                    child.material.roughness = 0.95;
-                  }
-
-                  if ( ! child.material.metalnessMap && ! child.material.roughnessMap && ! child.material.metalness && child.material.roughness === 1 ) {
-                    child.material.roughness = 0.01;
+                  if (! m.metalnessMap && ! m.roughnessMap && ! m.metalness && m.roughness === 1) {
+                    m.roughness = 0.01;
                   }
                 }
 
-                if (assimp_load === true && child.isMesh) {
-                  if (child.material.map && child.material.color.r === 0 && child.material.color.g === 0 && child.material.color.b === 0) {
-                    child.material.color.setRGB( 1, 1, 1, THREE.SRGBColorSpace );
+                if (assimp_load && child.isMesh) {
+                  if (m.map && m.color.r === 0 && m.color.g === 0 && m.color.b === 0) {
+                    m.color.setRGB( 1, 1, 1, THREE.SRGBColorSpace );
                   }
 
-                  if (child.material.emissive.r !== 0 || child.material.emissive.g !== 0 || child.material.emissive.b !== 0) {
-                    child.material.emissive.convertSRGBToLinear();
+                  if (m.emissive.r !== 0 || m.emissive.g !== 0 || m.emissive.b !== 0) {
+                    m.emissive.convertSRGBToLinear();
                   }
 
                   // default to double side since some models might not be visible initially
-                  child.material.side = THREE.DoubleSide;
-                  child.material.flatShading = true;
+                  m.side = THREE.DoubleSide;
+                  m.flatShading = true;
                   flat_shading_enabled = true;
                   document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
                 } else {
-                  child.material.flatShading = false;
+                  m.flatShading = false;
                 }
 
-                child.material.castShadow = true;
-                child.material.receiveShadow = true;
-                child.material.needsUpdate = true;
-              }
+                if (!m.isMeshStandardMaterial) {
+                  m.castShadow = true;
+                  m.receiveShadow = true;
+                }
+
+                m.needsUpdate = true;
+              });
 
               if (!gltf.parser.json.images) {
                 // Use as a texture the first loaded image if any
@@ -1214,7 +1184,7 @@
                 map: texture,
                 opacity: 1,
                 transparent: true,
-                vertexColors: geometry.hasAttribute( 'color' ) === true
+                vertexColors: geometry.hasAttribute( 'color' )
               });
 
               gltf_obj = new THREE.Mesh( geometry, draco_material );
@@ -1244,7 +1214,7 @@
               receiveShadow: true,
               castShadow: true,
               transparent: true,
-              vertexColors: geometry.hasAttribute( 'color' ) === true
+              vertexColors: geometry.hasAttribute( 'color' )
             });
 
             gltf_obj = new THREE.Mesh( geometry, draco_material );
@@ -1297,7 +1267,7 @@
               if (url_uc.endsWith('.GLTF') || url_uc.endsWith('.GLB') || url_uc.endsWith('.VRM')) {
                 let resolution = await resolve_gltf_version( true, url );
 
-                if (resolution === true) {
+                if (resolution) {
                   selected_gltf_url_file = url;
                   if (url_uc.endsWith('.VRM')) vrm = true;
                 } else {
@@ -1330,7 +1300,7 @@
             if (url_uc.endsWith('.GLTF') || url_uc.endsWith('.GLB') || url_uc.endsWith('.VRM')) {
               let resolution = await resolve_gltf_version( true, selected_url_file );
 
-              if (resolution === true) {
+              if (resolution) {
                 selected_gltf_url_file = selected_url_file;
                 if (url_uc.endsWith('.VRM')) vrm = true;
               } else {
@@ -1375,7 +1345,7 @@
                 receiveShadow: true,
                 castShadow: true,
                 transparent: true,
-                vertexColors: geometry.hasAttribute( 'color' ) === true
+                vertexColors: geometry.hasAttribute( 'color' )
               });
 
               gltf_obj = new THREE.Mesh( geometry, draco_material );
@@ -1395,6 +1365,13 @@
           } else {
             gltf_loader.load( selected_gltf_url_file, async function( gltf ) {
               parser = gltf.parser;
+
+              const eu = parser?.json?.extensionsUsed;
+
+              if (eu?.length > 0 && metadata_extensions.some( k => eu.includes( k ) )) {
+                metadataExtensionsUsed = true;
+              }
+
               cameras = gltf.cameras;
               animations = gltf.animations;
 
@@ -1447,7 +1424,7 @@
                 }
 
                 if (child.isMesh || child.isPoints) {
-                  if (assimp_load === true) {
+                  if (assimp_load) {
                     child.geometry.deleteAttribute('normal');
                     child.geometry = merge_vertices( child.geometry, 1e-6 );
                     child.geometry.computeVertexNormals();
@@ -1463,7 +1440,7 @@
                   if (child.isMesh) {
                     if (child.isSkinnedMesh) child.frustumCulled = false;
 
-                    if (variants_available === true && child.material && child.userData.gltfExtensions) {
+                    if (variants_available && child.material && child.userData.gltfExtensions) {
                       variant_materials[ child.id ] = {};
                       const meshVariants = child.userData.gltfExtensions[ 'KHR_materials_variants' ];
 
@@ -1483,93 +1460,54 @@
                     child.sizeAttenuation = true;
                   }
 
-                  if (Array.isArray( child.material )) {
-                    child.material.forEach( mtl => {
-                      if (child.isPoints === true) mtl.size = isMobile === true ? 0.8 : 1.25;
+                  const mtls = Array.isArray( child.material ) ? child.material : [ child.material ];
 
-                      if ( mtl.transmission && mtl.transmission > 0 ) {
-                        if ( mtl.metalnessMap && ! mtl.metalness ) {
-                          mtl.metalness = 0.01;
-                        }
+                  mtls.forEach( m => {
+                    if (child.isPoints) m.size = isMobile ? 0.8 : 1.25;
 
-                        if ( mtl.roughnessMap && ! mtl.roughness ) {
-                          mtl.roughness = 0.01;
-                        }
-
-                        if ( mtl.roughnessMap && mtl.roughness === 1 ) {
-                          mtl.roughness = 0.95;
-                        }
-
-                        if ( ! mtl.metalnessMap && ! mtl.roughnessMap && ! mtl.metalness && mtl.roughness === 1 ) {
-                          mtl.roughness = 0.01;
-                        }
+                    if (m.transmission && m.transmission > 0) {
+                      if (m.metalnessMap && ! m.metalness) {
+                        m.metalness = 0.01;
                       }
 
-                      if (assimp_load === true && child.isMesh) {
-                        if (mtl.map && mtl.color.r === 0 && mtl.color.g === 0 && mtl.color.b === 0) {
-                          mtl.color.setRGB( 1, 1, 1, THREE.SRGBColorSpace );
-                        }
-
-                        if (mtl.emissive.r !== 0 || mtl.emissive.g !== 0 || mtl.emissive.b !== 0) {
-                          mtl.emissive.convertSRGBToLinear();
-                        }
-
-                        // default to double side since some models might not be visible initially
-                        mtl.side = THREE.DoubleSide;
-                        mtl.flatShading = true;
-                        flat_shading_enabled = true;
-                        document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
-                      } else {
-                        mtl.flatShading = false;
+                      if (m.roughnessMap && ! m.roughness) {
+                        m.roughness = 0.01;
                       }
 
-                      mtl.castShadow = true;
-                      mtl.receiveShadow = true;
-                      mtl.needsUpdate = true;
-                    });
-                  } else {
-                    if (child.isPoints === true) child.material.size = isMobile === true ? 0.8 : 1.25;
-
-                    if ( child.material.transmission && child.material.transmission > 0 ) {
-                      if ( child.material.metalnessMap && ! child.material.metalness ) {
-                        child.material.metalness = 0.01;
+                      if (m.roughnessMap && m.roughness === 1) {
+                        m.roughness = 0.95;
                       }
 
-                      if ( child.material.roughnessMap && ! child.material.roughness ) {
-                        child.material.roughness = 0.01;
-                      }
-
-                      if ( child.material.roughnessMap && child.material.roughness === 1 ) {
-                        child.material.roughness = 0.95;
-                      }
-
-                      if ( ! child.material.metalnessMap && ! child.material.roughnessMap && ! child.material.metalness && child.material.roughness === 1 ) {
-                        child.material.roughness = 0.01;
+                      if (! m.metalnessMap && ! m.roughnessMap && ! m.metalness && m.roughness === 1) {
+                        m.roughness = 0.01;
                       }
                     }
 
-                    if (assimp_load === true && child.isMesh) {
-                      if (child.material.map && child.material.color.r === 0 && child.material.color.g === 0 && child.material.color.b === 0) {
-                        child.material.color.setRGB( 1, 1, 1, THREE.SRGBColorSpace );
+                    if (assimp_load && child.isMesh) {
+                      if (m.map && m.color.r === 0 && m.color.g === 0 && m.color.b === 0) {
+                        m.color.setRGB( 1, 1, 1, THREE.SRGBColorSpace );
                       }
 
-                      if (child.material.emissive.r !== 0 || child.material.emissive.g !== 0 || child.material.emissive.b !== 0) {
-                        child.material.emissive.convertSRGBToLinear();
+                      if (m.emissive.r !== 0 || m.emissive.g !== 0 || m.emissive.b !== 0) {
+                        m.emissive.convertSRGBToLinear();
                       }
 
                       // default to double side since some models might not be visible initially
-                      child.material.side = THREE.DoubleSide;
-                      child.material.flatShading = true;
+                      m.side = THREE.DoubleSide;
+                      m.flatShading = true;
                       flat_shading_enabled = true;
                       document.getElementById('btn_flat').style.backgroundColor = 'lightgreen';
                     } else {
-                      child.material.flatShading = false;
+                      m.flatShading = false;
                     }
 
-                    child.material.castShadow = true;
-                    child.material.receiveShadow = true;
-                    child.material.needsUpdate = true;
-                  }
+                    if (!m.isMeshStandardMaterial) {
+                      m.castShadow = true;
+                      m.receiveShadow = true;
+                    }
+
+                    m.needsUpdate = true;
+                  });
                 }
               });
 
@@ -1617,11 +1555,11 @@
           }
         });
 
-        if (userData.structuralMetadata !== undefined || hasGltfExtensions || hasHybrid || meshHasMetadata) {
+        if (userData.structuralMetadata !== undefined || hasGltfExtensions || hasHybrid || meshHasMetadata || metadataExtensionsUsed) {
           hasMetadata = true;
         }
 
-        if (object_is_mesh === false) {
+        if (!object_is_mesh) {
           document.getElementById('btn_flat').disabled = true;
           document.getElementById('btn_wireframe').disabled = true;
           disabled_changed();
@@ -1639,7 +1577,7 @@
           document.getElementById('metadata_message').style.visibility = 'visible';
           console.log( 'Metadata Raycasting Enabled' );
 
-          if (click_listener_added === false) {
+          if (!click_listener_added) {
             window.addEventListener( 'click', handle_raycast_click );
             click_listener_added = true;
           }
@@ -1666,7 +1604,7 @@
 
         render_requested = true;
 
-        if (vrm === true) {
+        if (vrm) {
           mouse_wheel = false;
           first_run = true;
           fr_count = 0;
@@ -1678,10 +1616,10 @@
         render();
 
         if (!isMobile) {
-          await new Promise( resolve => setTimeout( log_info, 1000 ) );
+          await new Promise( resolve => setTimeout( log_info, 3000 ) );
         } else {
           if (document.getElementById('metadata_message').style.visibility === 'visible')
-            await new Promise( resolve => setTimeout( hide_metadata_message, 5000 ) );
+            await new Promise( resolve => setTimeout( hide_metadata_message, 3000 ) );
         }
       }
 
@@ -1690,7 +1628,7 @@
         console.log( 'Render: ', renderer.info.render );
 
         if (document.getElementById('metadata_message').style.visibility === 'visible')
-          await new Promise( resolve => setTimeout( hide_metadata_message, 5000 ) );
+          await new Promise( resolve => setTimeout( hide_metadata_message, 3000 ) );
       }
 
       function hide_metadata_message() {
@@ -2755,11 +2693,13 @@
           return;
         }
 
-        const data = obj_userData.metadata
-          ? obj_userData.metadata
-          : obj_userData.extras
-            ? obj_userData.extras
-            : obj_userData;
+        const data = pickedObject.parent?.userData?.tileset
+          ? pickedObject.parent.userData
+          : obj_userData.metadata
+            ? obj_userData.metadata
+            : obj_userData.extras
+              ? obj_userData.extras
+              : obj_userData;
 
         const tilesetMetadataOnly = !data && !!pickedObject.parent;
 
@@ -3263,7 +3203,7 @@
           controls.reset();
           set_back_color();
 
-          if (variants_available === true) {
+          if (variants_available) {
             if (variants && variants.length > 0) {
               current_variant = variants.length - 1;
               switch_variant();
@@ -3351,7 +3291,7 @@
           animation_mixer.uncacheRoot( animation_mixer.getRoot() );
         }
 
-        if (wireframe_enabled === true) show_wireframe();
+        if (wireframe_enabled) show_wireframe();
 
         if (gltf_obj.skeleton && gltf_obj.skeleton.boneTexture)
           gltf_obj.skeleton.boneTexture.dispose();
