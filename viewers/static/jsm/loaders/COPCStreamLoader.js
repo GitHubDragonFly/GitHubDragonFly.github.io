@@ -22,23 +22,32 @@ const LazPerf = await createLazPerf({
 
 });
 
-// Created with assistance from Microsoft Copilot and Google Gemini
-// Supporting loading of selective nodes streamed from COPC LAZ datasets
-
-// Nodes appear to follow the EPT format and are already sorted out:
-//
-// {
-// 	'0-0-0-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
-// 	'1-0-0-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
-// 	'1-0-1-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
-// 	'1-1-1-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
-// 	'2-0-0-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
-// 	'2-0-1-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
-// 	'2-0-2-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
-// 	'2-0-3-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
-// 	...
-// }
-
+/**
+ * Created with assistance from Microsoft Copilot and Google Gemini
+ * Supporting loading of selective nodes streamed from COPC LAZ datasets
+ *
+ * Nodes appear to follow the EPT format and are already sorted out:
+ *
+ * {
+ * 	'0-0-0-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
+ * 	'1-0-0-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
+ * 	'1-0-1-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
+ * 	'1-1-1-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
+ * 	'2-0-0-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
+ * 	'2-0-1-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
+ * 	'2-0-2-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
+ * 	'2-0-3-0': { pointCount: xxx, pointDataLength: xxx, pointDataOffset: xxx }
+ * 	...
+ * }
+ *
+ * Note: laz-perf and copc imports rely on the main application's importmap entries:
+ *   "laz-perf": "https://esm.sh/laz-perf@0.0.7"
+ *   "copc": "https://esm.sh/copc@0.0.8"
+ *
+ *
+ * @augments Loader
+ * @three_import import { COPCStreamLoader } from "path_to/COPCStreamLoader.js"
+ */
 class COPCStreamLoader extends Loader {
 
 	constructor( manager ) {

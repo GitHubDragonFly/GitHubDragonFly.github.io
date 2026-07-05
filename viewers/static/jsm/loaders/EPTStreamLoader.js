@@ -6,39 +6,40 @@ import * as fzstd from 'https://cdn.skypack.dev/fzstd?min';
 // Reuse existing LAS/LAZ decoder
 import { LASZLoader } from './LASZLoader.min.js';
 
-/**
-*	Created with assistance from Microsoft Copilot and Google Gemini
-*
-*	Supports loading of streamed:
-*	- EPT datasets with ept.json and BIN/LAS/LAZ/ZST tiles
-*	- POTREE datasets with cloud.js and BIN/LAS/LAZ tiles
-*
-*	Local loading is also supported (keep all files in the same folder)
-*
-*	EPT datasets should always contain:
-*
-*	ept.json
-*	ept-hierarchy/
-*		- ept-hierarchy/0-0-0-0.json
-*		- ept-hierarchy/1-0-0-0.json
-*		- ept-hierarchy/1-0-0-1.json
-*		...
-*		- ept-hierarchy/2-0-0-0.json
-*		...
-*	ept-data/
-*		ept-data/0-0-0-0.laz (or .bin or .zst)
-*		ept-data/1-0-0-0.laz (or .bin or .zst)
-*		...
-*
-*	POTREE could have the following:
-*	cloud.js
-*	data or data/r folder
-*	.hrc hierarchy files
-*
-*/
-
 const GIT_LFS_THRESHOLD_BYTES = 150;
 
+/**
+ *	Created with assistance from Microsoft Copilot and Google Gemini
+ *
+ *	Supports loading of streamed:
+ *	- EPT datasets with ept.json and BIN/LAS/LAZ/ZST tiles
+ *	- POTREE datasets with cloud.js and BIN/LAS/LAZ tiles
+ *
+ *	Local loading is also supported (keep all files in the same folder)
+ *
+ *	EPT datasets should always contain:
+ *
+ *	ept.json
+ *	ept-hierarchy/
+ *		- ept-hierarchy/0-0-0-0.json
+ *		- ept-hierarchy/1-0-0-0.json
+ *		- ept-hierarchy/1-0-0-1.json
+ *		...
+ *		- ept-hierarchy/2-0-0-0.json
+ *		...
+ *	ept-data/
+ *		ept-data/0-0-0-0.laz (or .bin or .zst)
+ *		ept-data/1-0-0-0.laz (or .bin or .zst)
+ *		...
+ *
+ *	POTREE could have the following:
+ *	cloud.js
+ *	data or data/r folder
+ *	.hrc hierarchy files
+ *
+ * @augments Loader
+ * @three_import import { EPTStreamLoader } from "path_to/EPTStreamLoader.js"
+ */
 class EPTStreamLoader extends Loader {
 
 	constructor( manager ) {

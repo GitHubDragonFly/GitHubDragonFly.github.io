@@ -1,34 +1,34 @@
-import {
-    BufferAttribute,
-    BufferGeometry,
-    Loader
-} from 'three';
+import { BufferAttribute, BufferGeometry, Loader } from 'three';
 
-// Default for this loader, direct JS import of fzstd
+// Default zdecompressor for this loader, direct JS import of fzstd
 import * as fzstd from 'https://cdn.skypack.dev/fzstd?min';
 
 // Reuse existing LAS/LAZ decoder
 import { LASZLoader } from './LASZLoader.min.js';
 
-// Created with assistance from Microsoft Copilot and Google Gemini
-// Supporting loading of EPT datasets with BIN/LAS/LAZ/ZST tiles
-
-// EPT datasets should always contain:
-// ept.json
-// ept-hierarchy/
-//	- ept-hierarchy/0-0-0-0.json
-//	- ept-hierarchy/1-0-0-0.json
-//	- ept-hierarchy/1-0-0-1.json
-//	...
-//	- ept-hierarchy/2-0-0-0.json
-//	...
-// ept-data/
-//	ept-data/0-0-0-0.laz (or .bin or .zst)
-//	ept-data/1-0-0-0.laz (or .bin or .zst)
-//	...
-
 const GIT_LFS_THRESHOLD_BYTES = 150;
 
+/**
+ * Created with assistance from Microsoft Copilot and Google Gemini
+ * Supporting loading of EPT datasets with BIN, LAS, LAZ, ZST tiles
+ *
+ * EPT datasets should always contain:
+ * ept.json
+ * ept-hierarchy
+ *	- 0-0-0-0.json
+ *	- 1-0-0-0.json
+ *	- 1-0-0-1.json
+ *	...
+ *	- 2-0-0-0.json
+ *	...
+ * ept-data
+ *	0-0-0-0.laz (or .bin or .zst)
+ *	1-0-0-0.laz (or .bin or .zst)
+ *	...
+ *
+ * @augments Loader
+ * @three_import import { EPTLoader } from "path_to/EPTLoader.js"
+ */
 class EPTLoader extends Loader {
 
 	constructor( manager ) {
