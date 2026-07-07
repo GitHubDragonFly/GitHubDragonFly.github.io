@@ -33,9 +33,7 @@ async function import_decompress() {
 	try {
 
 		const { WebGLRenderer } = await import( 'three' );
-		const { decompress } = await import(
-			'https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/utils/TextureUtils.min.js'
-		);
+		const { decompress } = await import( 'https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/utils/WebGLTextureUtils.min.js' );
 
 		const renderer = new WebGLRenderer( { antialias: true } );
 
@@ -3511,7 +3509,8 @@ class GLTFInstanceFeaturesExtension {
 /**
  * Custom created Mesh Features Extension
  * Created with assistance from AI: Google Gemini
- * Official specs: https://github.com/CesiumGS/glTF/tree/3d-tiles-next/extensions/2.0/Vendor/EXT_mesh_features
+ * Official specs:
+ * - https://github.com/CesiumGS/glTF/tree/3d-tiles-next/extensions/2.0/Vendor/EXT_mesh_features
  */
 class GLTFMeshFeaturesExtension {
 
@@ -3614,8 +3613,9 @@ class GLTFMeshFeaturesExtension {
 /**
  * Custom created Structural Metadata Extension
  * Created with assistance from AI: Google Gemini and Microsoft Copilot
- * Handles the Global Schema and Property Tables
- * Official specs: https://github.com/CesiumGS/glTF/tree/3d-tiles-next/extensions/2.0/Vendor/EXT_structural_metadata
+ * Handles the Global Schema, Property Tables and Property Textures
+ * Official specs: 
+ * - https://github.com/CesiumGS/glTF/tree/3d-tiles-next/extensions/2.0/Vendor/EXT_structural_metadata
  */
 class GLTFStructuralMetadataExtension {
 
@@ -3982,7 +3982,6 @@ class GLTFStructuralMetadataExtension {
 		if ( !classDef || !classDef.properties ) return false;
 
 		// Find the schema definition for this property by matching type/componentType
-		// (You can refine this if you want to match by name instead.)
 
 		const propDef = Object.values( classDef.properties ).find( p => {
 
