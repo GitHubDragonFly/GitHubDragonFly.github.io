@@ -4,27 +4,28 @@ If you wish to have some example 3D model files on your device then just downloa
 
 Else, most of the passive links below are of the actual models so copy any of them and then paste it within the `URL` option of the corresponding viewer:
 
-- Access to [three.js](https://github.com/mrdoob/three.js/tree/master/examples) examples can be achieved with the following URL format, mind the correct path after `models`:
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gltf/RobotExpressive/RobotExpressive.glb`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/collada/abb_irb52_7_120.dae`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/usdz/saeukkang.usdz`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vrml/house.wrl`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/gcode/benchy.gcode`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/fbx/Samba Dancing.fbx`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pdb/aspirin.pdb`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/svg/tiger.svg`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ply/binary/Lucy100k.ply`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/stl/binary/colored.stl`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3dm/Rhino_Logo.3dm`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/3mf/truck.3mf`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/amf/rook.amf`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/vtk/liver.vtk`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/json/lightmap/lightmap.json`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ldraw/officialLibrary/models/car.ldr_Packed.mpd`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/pcd/binary_compressed/pcl_logo.pcd`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/ifc/rac_advanced_sample_project.ifc`
-  - `https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.mtl, https://raw.githubusercontent.com/mrdoob/three.js/master/examples/models/obj/male02/male02.obj`
-- Some of the links above might become invalid as three.js revisions progress so try using still available older version:
+- Access to older [three.js](https://github.com/GitHubDragonFly/three.js/tree/dev/examples) examples can be achieved with the following URL format, mind the correct path after `models`:
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/gltf/RobotExpressive/RobotExpressive.glb`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/collada/abb_irb52_7_120.dae`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/usdz/saeukkang.usdz`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/vrml/house.wrl`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/gcode/benchy.gcode`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/fbx/Samba Dancing.fbx`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/pdb/aspirin.pdb`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/svg/tiger.svg`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/ply/binary/Lucy100k.ply`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/stl/binary/colored.stl`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/3dm/Rhino_Logo.3dm`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/3mf/truck.3mf`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/amf/rook.amf`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/vtk/liver.vtk`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/json/lightmap/lightmap.json`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/ldraw/officialLibrary/models/car.ldr_Packed.mpd`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/pcd/binary_compressed/pcl_logo.pcd`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/ifc/rac_advanced_sample_project.ifc`
+  - `https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/obj/male02/male02.mtl, https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/models/obj/male02/male02.obj`
+
+- Some models from even older version:
   - `https://raw.githubusercontent.com/KodyJKing/three.js/master/examples/models/prwm/smooth-suzanne.le.prwm`
 
 - Access to some LDRAW example files:
