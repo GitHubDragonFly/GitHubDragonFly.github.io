@@ -289,7 +289,7 @@ Number Type Converter
     - Supports both local (blob) and remote URL loading
     - Local loading supports self-contained models (embedded GLTF or binary GLB) as well as GLTF + BIN + Textures
     - The viewer supports loading of multiple models at once, which will be switchable with the viewer's `M` button
-  - `GLTF Viewer` is for v2.0 glTF files and is currently using r184 of three.js:
+  - `GLTF Viewer` is for v2.0 glTF files and is currently using r185 of three.js:
     - Does not support obsolete `pbrSpecularGlossiness`
     - Supports currently arbitrary `KHR_animation_pointer`
     - Supports converting and exporting meshed model to points:
@@ -630,6 +630,7 @@ Number Type Converter
     - will reset the background color
     - will clear the `Eq` input if present
     - also sets environment in some viewers
+  - `g` - glass globe (currently available in desktop USD Viewer only)
   - `I` - raycasting intersects (available in VTK Viewer only)
   - `K` - kinematics (available in DAE viewers only)
   - `L` - lines (LDRAW and its exports in ASSIMP, GLTF, OBJ, JSON viewers)
@@ -684,7 +685,7 @@ Number Type Converter
     - scene background `backBlurriness` and `backIntensity`
     - this will also disable/enable the gradient background `G` button and background color control 
 - JSON viewers support three.js and assimp JS and/or JSON formats with some limitations:
-  - JSON Viewer is currently using r178 of three.js and cannot open legacy formats
+  - JSON Viewer is currently using r185 of three.js and cannot open legacy formats
   - JSON Legacy viewer is using r111 of three.js to support legacy THREE.Geometry:
     - It is using 4 loaders: ObjectLoader, BufferGeometryLoader, LegacyJSONLoader and AssimpJSONLoader
     - It could possibly open and export current three.js JSON format, with limitations of r111
