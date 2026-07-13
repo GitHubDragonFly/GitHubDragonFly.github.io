@@ -99,7 +99,7 @@
       var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized;
       var ambientLight, hemisphereLight, directionalLight;
-      var glassMaterial, glassGlobe, globeEnabled;
+      var glassMaterial, glassGlobe, globeEnabled, snowParticles;
       var ww = window.innerWidth, wh = window.innerHeight;
       var rot_x = 0, rot_y = 0, rot_z = 0, filename = '';
       var bounding_box, zip, flat_shading_enabled, link, xAxis;
@@ -2460,6 +2460,16 @@
 
           glassGlobe.scale.multiplyScalar( scalar_scale );
           glassGlobe.position.copy( center.clone() );
+
+          snowParticles.position.copy( center.clone() );
+          snowParticles.scale.multiplyScalar( scalar_scale );
+
+          // ADJUST PARTICLE SIZE TO MATCH NEW SCALE
+          if (snowParticles.material) {
+            // Multiply the current size by the scale factor to keep visual proportions identical
+            snowParticles.material.size *= scalar_scale;
+            snowParticles.material.needsUpdate = true;
+          }
         }
 
         set_polar_grid_y();
@@ -2877,7 +2887,7 @@
         camera.lookAt( mesh.position );
   
         finish_loading();
-    }
+      }
 
       async function loadURLFile() {
         if (selected_url_file !== '') {
@@ -2960,7 +2970,7 @@
           // 3. Create the Physical Glass Material
           glassMaterial = new THREE.MeshPhysicalMaterial({
             color: 0xe0f7fa,
-            transparent: true,
+            transparent: false,
             opacity: 1.0,
             roughness: 0.05,
             metalness: 0.05,
@@ -2981,6 +2991,48 @@
           document.getElementById('btn_glass_globe').disabled = false;
 
           scene.add( glassGlobe );
+
+          // ==========================================
+          // CREATE SNOW PARTICLES INSIDE GLOBE
+          // ==========================================
+          const particleCount = 300; // Adjust for density
+          const positions = new Float32Array( particleCount * 3 );
+          
+          // We want the snow to stay strictly inside the inner boundary of the glass
+          const snowMaxRadius = sphere.radius * 1.05; 
+          const center = sphere.center;
+
+          for ( let i = 0; i < particleCount; i++ ) {
+            const u = Math.random();
+            const th = Math.random() * Math.PI * 2;
+
+            // Restrict the initial angle much closer to 0 (the absolute top pole)
+            const ph = Math.acos( 0.5 + Math.random() * 0.5 ); 
+            const r = snowMaxRadius * Math.cbrt( u );
+
+            const x = r * Math.sin( ph ) * Math.cos( th );
+            const y = r * Math.sin( ph ) * Math.sin( th );
+            const z = r * Math.cos( ph );
+          }
+
+          const snowGeo = new THREE.BufferGeometry();
+          snowGeo.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
+
+          // Soft, glowing, anti-aliased circles for snow
+          const snowMat = new THREE.PointsMaterial({
+            color: 0xffffff,
+            size: globeRadius * 0.02, // Dynamically size snow relative to globe size
+            transparent: false,
+            opacity: 0.8,
+            blending: THREE.NormalBlending,
+            depthWrite: false, // Prevents particles from clipping each other awkwardly
+            sizeAttenuation: true
+          });
+
+          // Create the particle system and link visibility to the globe
+          snowParticles = new THREE.Points( snowGeo, snowMat );
+          snowParticles.visible = globeEnabled;
+          scene.add( snowParticles );
         }
 
         enable_disable( false );
@@ -3057,6 +3109,7 @@
         if (glassGlobe) {
           globeEnabled = !globeEnabled;
           glassGlobe.visible = globeEnabled;
+          if (snowParticles) snowParticles.visible = globeEnabled;
 
           const btn = document.getElementById('btn_glass_globe');
           btn.style.backgroundColor = globeEnabled ? 'lightgreen' : '#d1cefc';
@@ -3988,7 +4041,7 @@
 
         if (mesh) {
           if (first_run || animation_running || mouse_down || mouse_wheel || reset_rotation ||
-            progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
+            globeEnabled || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
 
             // Reset mesh rotational values
             if (reset_rotation) {
@@ -4034,6 +4087,41 @@
                   count ++;
                 }
               }
+            }
+
+            // Update Snow Animation
+            if (glassGlobe && globeEnabled && snowParticles) {
+              const positions = snowParticles.geometry.attributes.position.array;
+
+              // Calculate the dynamic inner radius boundary
+              const maxRadius = ( glassGlobe.geometry.parameters.radius ) * 0.95; 
+              const fallSpeed = maxRadius * 0.005; 
+
+              for ( let i = 0; i < positions.length; i += 3 ) {
+                positions[ i + 1 ] -= fallSpeed;
+                positions[ i ] += ( Math.random() - 0.5 ) * ( fallSpeed * 0.3 );
+                positions[ i + 2 ] += ( Math.random() - 0.5 ) * ( fallSpeed * 0.3 );
+
+                // Distance check from LOCAL center (0,0,0)
+                const dx = positions[ i ];
+                const dy = positions[ i + 1 ];
+                const dz = positions[ i + 2 ];
+                const dist = Math.sqrt( dx * dx + dy * dy + dz * dz );
+
+                // If it hits the bottom glass hemisphere or leaves the radius, reset
+                if (dist >= maxRadius || positions[ i + 1 ] < ( -maxRadius )) {
+                  const th = Math.random() * Math.PI * 2;
+                  const ph = Math.acos( Math.random() * 0.5 ); 
+                  const r = maxRadius * Math.random();
+
+                  // Keep positions local to 0,0,0
+                  positions[ i ] = r * Math.sin( ph ) * Math.cos( th );
+                  positions[ i + 1 ] = Math.abs( r * Math.cos( ph ) ); 
+                  positions[ i + 2 ] = r * Math.sin( ph ) * Math.sin( th );
+                }
+              }
+
+              snowParticles.geometry.attributes.position.needsUpdate = true;
             }
 
             controls.update();
@@ -4222,6 +4310,15 @@
             edges[ key ].geometry.dispose();
             delete edges[ key ];
           });
+        }
+
+        if (snowParticles) {
+          scene.remove( snowParticles );
+          snowParticles.geometry.dispose();
+          snowParticles.geometry = null;
+          snowParticles.material.dispose();
+          snowParticles.material = null;
+          snowParticles = null;
         }
 
         if (glassGlobe) {
