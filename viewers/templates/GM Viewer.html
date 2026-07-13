@@ -55,12 +55,13 @@
       {
         "imports": {
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.4.0",
-          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.4.0",
-          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.4.0",
+          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.4.0?external=@gltf-transform/core",
+          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.4.0?external=@gltf-transform/core",
           "ktx2-encoder": "https://cdn.jsdelivr.net/npm/ktx2-encoder@0.5.1/dist/web/index.min.js",
           "ktx-parse": "https://cdn.jsdelivr.net/npm/ktx-parse@1.1.0/dist/ktx-parse.esm.min.js",
           "meshoptimizer": "https://esm.sh/meshoptimizer@1.1.1",
           "@jsquash/avif": "https://esm.sh/@jsquash/avif@2.1.1",
+          "@jsquash/webp": "https://esm.sh/@jsquash/webp@1.5.0",
           "fast-png": "https://esm.sh/fast-png@8.0.0"
         }
       }
@@ -304,10 +305,12 @@
     <!--  - Licensed under the MIT License -->
     <!--  - When applicable, using meshoptimizer: https://github.com/zeux/meshoptimizer -->
     <!--    - Licensed under the MIT License -->
-    <!-- When applicable, using @jsquash/avif encoder for AVIF compression: https://github.com/jamsinclair/jSquash -->
+    <!-- When applicable, using @jsquash/avif and @jsquash/webp encoders for AVIF/WEBP compression: https://github.com/jamsinclair/jSquash -->
     <!--  - Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0 -->
     <!-- When applicable, using experimental ktx2-encoder for KTX2 compression: https://github.com/gz65555/ktx2-encoder -->
     <!--  - Licensed under the MIT License -->
+    <!--  - When applicable, using ktx-parse: https://github.com/donmccurdy/KTX-Parse -->
+    <!--    - Licensed under the MIT License -->
     <!-- When applicable, using JSZip to export maps: https://github.com/Stuk/jszip -->
     <!--  - Licensed under the MIT License -->
     <!-- When applicable, using fast-png decode function: https://github.com/image-js/fast-png -->
@@ -570,8 +573,8 @@
 
         let image, blob, data;
 
-        if (type === 'avif') {
-          // Use PNG format and then encode it to AVIF
+        if (type === 'avif' || type === 'webp') {
+          // Use PNG format and then encode it to AVIF/WEBP
           image = await mdl_viewer.toDataURL( 'image/png', encoderOptions = 1.0 );
         } else {
           image = await mdl_viewer.toDataURL( 'image/' + type, encoderOptions = 1.0 );
@@ -594,8 +597,14 @@
           const { encode } = await import( '@jsquash/avif' );
 
           data = await transform_texture( blob, 'image/png', type );
-          let avif = await encode( data[ 1 ] );
+          let avif = await encode( data[ 1 ], { quality: 65, subsample: 3, chromaDeltaQ: true, enableSharpYUV: true } );
           blob = new Blob( [ avif ], { type: 'image/avif' } );
+        } else if (type === 'webp') {
+          const { encode } = await import( '@jsquash/webp' );
+
+          data = await transform_texture( blob, 'image/png', type );
+          let webp = await encode( data[ 1 ], { quality: 85, use_sharp_yuv: 1, filter_strength: 15, filter_sharpness: 7, sns_strength: 35, method: 6 } );
+          blob = new Blob( [ webp ], { type: 'image/webp' } );
         }
 
         let file = new File( [ blob ], filename + '.' + type );
@@ -835,7 +844,7 @@
 
         const textures = doc.getRoot().listTextures();
 
-        if (textures.length > 0 && (tex_fmt !== '' || tex_res !== Infinity || tex_flip)) {
+        if (textures.length > 0) {
           await process_textures( textures, doc, ALL_EXTENSIONS );
         }
 
@@ -887,6 +896,7 @@
           let blob = new Blob( [ texture.getImage() ], { type: mime_type } );
 
           data = await transform_texture( blob, mime_type, tex_fmt );
+
           texture.setImage( data[ 0 ] );
           texture.setMimeType( mime_type );
 
@@ -901,8 +911,8 @@
             const slots = await listTextureSlots( texture );
             const size = data[ 2 ];
 
-            let fmt_e = tex_fmt.endsWith( 'e' ) === true;
-            let fmt_u = tex_fmt.endsWith( 'u' ) === true;
+            let fmt_e = (tex_fmt === 'ktx2e');
+            let fmt_u = (tex_fmt === 'ktx2u');
 
             const uastc = !fmt_e && (uastc_textures.some( k => k === slots[ 0 ] ) || fmt_u);
 
@@ -974,7 +984,7 @@
             if (tex_fmt === 'avif') {
               const { encode } = await import( '@jsquash/avif' );
 
-              let avif = await encode( data[ 1 ] );
+              let avif = await encode( data[ 1 ], { quality: 65, subsample: 3, chromaDeltaQ: true, enableSharpYUV: true } );
 
               if (!export_textures) {
                 texture.setImage( new Uint8Array( avif ) );
@@ -987,17 +997,26 @@
                 zip.file( 'image' + i + '.avif', blob );
               }
             } else {
-              const { compressTexture } = await import( '@gltf-transform/functions' );
+              let webp_array;
 
-              await compressTexture( texture, { targetFormat: (tex_fmt === '') ? 'png' : tex_fmt } );
+              if (tex_fmt === 'webp') {
+                const { encode } = await import( '@jsquash/webp' );
+                webp_array = await encode( data[ 1 ], { quality: 85, use_sharp_yuv: 1, filter_strength: 15, filter_sharpness: 7, sns_strength: 35, method: 6 } );
 
-              if (!export_textures) {
-                if (tex_fmt === 'webp') {
+                if (!export_textures) {
+                  texture.setImage( new Uint8Array( webp_array ) );
+                  texture.setMimeType( 'image/webp' );
+
                   const EXTTextureWebP = ALL_EXTENSIONS.find( ( Extension ) => Extension.EXTENSION_NAME === 'EXT_texture_webp' );
                   doc.createExtension( EXTTextureWebP ).setRequired( true );
                 }
-              } else {
-                let blob = new Blob( [ texture.getImage() ], { type: 'image/' + (tex_fmt === '' ? 'png' : tex_fmt) } );
+              }
+
+              const { compressTexture } = await import( '@gltf-transform/functions' );
+              await compressTexture( texture, { targetFormat: (tex_fmt === '') ? 'png' : tex_fmt } );
+
+              if (export_textures) {
+                let blob = new Blob( [ webp_array ? webp_array : texture.getImage() ], { type: 'image/' + (tex_fmt === '' ? 'png' : tex_fmt) } );
                 zip.file( 'image' + i + (tex_fmt === '' ? '.png' : '.' + tex_fmt), blob );
               }
             }

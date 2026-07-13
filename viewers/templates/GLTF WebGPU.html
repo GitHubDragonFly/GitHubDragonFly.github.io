@@ -23,7 +23,8 @@
             alert('jQuery failed to load. Limited functionality. Check your internet connection!');
           }
 
-          if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
+          if (export_running) handle_export_error( 'RESOURCE ERROR' );
+          else if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
         }
       }, true); // The 'true' here is vital; it enables the "capturing" phase
 
@@ -39,7 +40,8 @@
           errorObj: error   // The actual Error object (includes stack trace)
         });
 
-        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+        if (export_running) handle_export_error( 'RUNTIME ERROR' );
+        else if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
 
         // Returning 'true' prevents the error from showing up in the browser console
         return false; 
@@ -52,7 +54,8 @@
         // event.promise is the promise that failed
         // event.reason is usually the error object or message
 
-        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
+        if (export_running) handle_export_error( 'UNHANDLED PROMISE' );
+        else if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
       });
     </script>
 
@@ -67,12 +70,13 @@
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/",
           "three/examples/jsm/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/",
           "@gltf-transform/core": "https://esm.sh/@gltf-transform/core@4.4.0",
-          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.4.0",
-          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.4.0",
+          "@gltf-transform/extensions": "https://esm.sh/@gltf-transform/extensions@4.4.0?external=@gltf-transform/core",
+          "@gltf-transform/functions": "https://esm.sh/@gltf-transform/functions@4.4.0?external=@gltf-transform/core",
           "ktx2-encoder": "https://cdn.jsdelivr.net/npm/ktx2-encoder@0.5.1/dist/web/index.min.js",
           "ktx-parse": "https://cdn.jsdelivr.net/npm/ktx-parse@1.1.0/dist/ktx-parse.esm.min.js",
           "meshoptimizer": "https://esm.sh/meshoptimizer@1.1.1",
           "@jsquash/avif": "https://esm.sh/@jsquash/avif@2.1.1",
+          "@jsquash/webp": "https://esm.sh/@jsquash/webp@1.5.0",
           "xatlas-web": "https://esm.sh/xatlas-web@0.1.0"
         }
       }
@@ -92,7 +96,8 @@
       var postProcessing, outputPass, scenePass, emissivePass, bloomPass, bloom_enabled, emissive_present;
       var grid, polar_grid, grid_visible, polar_grid_visible, uvUnwrapper;
       var animations, animation_mixer, current_animation, extras, current_extra;
-      var gltf_obj, parser, current_side, edges, edges_visible, init_running = false;
+      var gltf_obj, parser, current_side, edges, edges_visible;
+      var init_running = false, export_running = false;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, wireframe_enabled;
       var gui, gui_set = false, guiExposure, params, toneMappingOptions, draco_material;
       var variants, variant_materials, current_variant, variants_available, link;
@@ -361,9 +366,10 @@
     <!-- Using jQuery: https://github.com/jquery/jquery -->
     <!-- When applicable, using glTF Transform for DRACO / MESHOPT / PNG / JPEG / WEBP compression: https://gltf-transform.dev -->
     <!--  - When applicable, using meshoptimizer: https://github.com/zeux/meshoptimizer -->
-    <!-- When applicable, using @jsquash/avif encoder for AVIF compression: https://github.com/jamsinclair/jSquash -->
+    <!-- When applicable, using @jsquash/avif and @jsquash/webp encoders for AVIF/WEBP compression: https://github.com/jamsinclair/jSquash -->
     <!--  - Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0 -->
     <!-- When applicable, using experimental ktx2-encoder for KTX2 compression: https://github.com/gz65555/ktx2-encoder -->
+    <!--  - When applicable, using ktx-parse: https://github.com/donmccurdy/KTX-Parse -->
     <!-- When applicable, using JSZip for exports: https://github.com/Stuk/jszip -->
     <!-- When applicable, using Animated GIF export based on the following example and library: -->
     <!--   https://github.com/mrdoob/omggif-example  -->
@@ -904,6 +910,8 @@
 
         if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'none';
 
+        export_running = true;
+
         set_filename();
       }
 
@@ -950,6 +958,8 @@
         tex_fmt = '';
 
         if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'block';
+
+        export_running = false;
 
         render_requested = true;
         mouse_wheel = true;
@@ -3060,7 +3070,11 @@
           clock.connect( document );
         }
 
-        if (scene === undefined) scene = new THREE.Scene();
+        if (scene === undefined) {
+          scene = new THREE.Scene();
+          scene.backgroundRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
+          scene.environmentRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
+        }
 
         scene.backgroundIntensity = 1.0;
         scene.backgroundBlurriness = 0.00001;
@@ -3078,7 +3092,7 @@
         //scene.add( new THREE.AxesHelper( 50 ) );
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 1e8 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.05, 1e8 );
           camera.position.set( 0, 0, 250 );
 
           default_camera = camera;
@@ -5434,7 +5448,7 @@
 
           const textures = doc.getRoot().listTextures();
 
-          if (textures.length > 0 && (tex_fmt !== '' || tex_res !== I8K || tex_flip)) {
+          if (textures.length > 0) {
             await process_textures( textures, doc, ALL_EXTENSIONS );
           }
         }
@@ -5480,13 +5494,12 @@
         let file_reader, i = 1;
 
         for (const texture of textures) {
-          let data;
-
           // Flip and scale the texture
           let mime_type = await texture.getMimeType();
           let blob = new Blob( [ texture.getImage() ], { type: mime_type } );
 
-          data = await transform_texture( blob, mime_type, tex_fmt );
+          const data = await transform_texture( blob, mime_type, tex_fmt );
+
           texture.setImage( data[ 0 ] );
           texture.setMimeType( mime_type );
 
@@ -5501,8 +5514,8 @@
             const slots = await listTextureSlots( texture );
             const size = data[ 2 ];
 
-            let fmt_e = tex_fmt.endsWith( 'e' ) === true;
-            let fmt_u = tex_fmt.endsWith( 'u' ) === true;
+            let fmt_e = (tex_fmt === 'ktx2e');
+            let fmt_u = (tex_fmt === 'ktx2u');
 
             const uastc = !fmt_e && (uastc_textures.some( k => k === slots[ 0 ] ) || fmt_u);
 
@@ -5571,39 +5584,43 @@
 
             i ++;
           } else {
+            const { compressTexture } = await import( '@gltf-transform/functions' );
+
+            let imgData;
+
             if (tex_fmt === 'avif') {
               const { encode } = await import( '@jsquash/avif' );
-
-              let avif = await encode( data[ 1 ] );
+              imgData = await encode( data[ 1 ], { quality: 65, subsample: 3, chromaDeltaQ: true, enableSharpYUV: true } );
 
               if (!export_textures) {
-                texture.setImage( new Uint8Array( avif ) );
+                texture.setImage( new Uint8Array( imgData ) );
                 texture.setMimeType( 'image/avif' );
 
                 const EXTTextureAVIF = ALL_EXTENSIONS.find( ( Extension ) => Extension.EXTENSION_NAME === 'EXT_texture_avif' );
                 doc.createExtension( EXTTextureAVIF ).setRequired( true );
-              } else {
-                let blob = new Blob( [ avif ], { type: 'image/avif' } );
-                zip.file( 'image' + i + '.avif', blob );
               }
-            } else {
-              const { compressTexture } = await import( '@gltf-transform/functions' );
-
-              await compressTexture( texture, { targetFormat: (tex_fmt === '') ? 'png' : tex_fmt } );
+            } else if (tex_fmt === 'webp') {
+              const { encode } = await import( '@jsquash/webp' );
+              imgData = await encode( data[ 1 ], { quality: 85, use_sharp_yuv: 1, filter_strength: 15, filter_sharpness: 7, sns_strength: 35, method: 6 } );
 
               if (!export_textures) {
-                if (tex_fmt === 'webp') {
-                  const EXTTextureWebP = ALL_EXTENSIONS.find( ( Extension ) => Extension.EXTENSION_NAME === 'EXT_texture_webp' );
-                  doc.createExtension( EXTTextureWebP ).setRequired( true );
-                }
-              } else {
-                let blob = new Blob( [ texture.getImage() ], { type: 'image/' + (tex_fmt === '' ? 'png' : tex_fmt) } );
-                zip.file( 'image' + i + (tex_fmt === '' ? '.png' : '.' + tex_fmt), blob );
+                texture.setImage( new Uint8Array( imgData ) );
+                texture.setMimeType( 'image/webp' );
+
+                const EXTTextureWebP = ALL_EXTENSIONS.find( ( Extension ) => Extension.EXTENSION_NAME === 'EXT_texture_webp' );
+                doc.createExtension( EXTTextureWebP ).setRequired( true );
               }
             }
 
-            i ++;
+            await compressTexture( texture, { targetFormat: (tex_fmt === '') ? 'png' : tex_fmt } );
+
+            if (export_textures) {
+              let blob = new Blob( [ imgData ? imgData : texture.getImage() ], { type: 'image/' + (tex_fmt === '' ? 'png' : tex_fmt) } );
+              zip.file( 'image' + i + (tex_fmt === '' ? '.png' : '.' + tex_fmt), blob );
+            }
           }
+
+          i ++;
         }
       }
 
