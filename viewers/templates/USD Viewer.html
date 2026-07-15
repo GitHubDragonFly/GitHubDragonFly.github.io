@@ -89,7 +89,7 @@
     <script src="https://cdn.jsdelivr.net/npm/three@0.184.0/examples/jsm/libs/draco/draco_encoder.min.js" defer></script>
 
     <script>
-      var THREE, manager, texture_loader, usd_loader, ktx2_loader, tiff_loader;
+      var THREE, textureUtils, manager, texture_loader, usd_loader, ktx2_loader, tiff_loader;
       var fflate, exr_loader, hdr_loader, hdrJPGLoader, slider_height = 0, clock;
       var controls, gizmo, equi_enabled, wireframe_enabled, count = 0, bg_flip;
       var grid, polar_grid, grid_visible, polar_grid_visible, hdrjpg_texture;
@@ -103,7 +103,8 @@
       var ww = window.innerWidth, wh = window.innerHeight;
       var rot_x = 0, rot_y = 0, rot_z = 0, filename = '';
       var bounding_box, zip, flat_shading_enabled, link, xAxis;
-      var gif_export, bgnd_linear_gradient, init_running = false;
+      var gif_export, bgnd_linear_gradient;
+      var init_running = false, export_running = false;
       var original_side, original_side_array, outline_material;
       var initial_transparency, initial_transparency_array;
       var vertex_colors_enabled, vertex_colors_present, original_vertex_color;
@@ -126,9 +127,11 @@
       import * as fflatejs from 'three/addons/libs/fflate.module.min.js';
       import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
       import { USDLoader } from 'three/addons/loaders/USDLoader.min.js';
+      import * as WebGLTextureUtils from 'three/addons/utils/WebGLTextureUtils.js';
 
       THREE = threejs;
       fflate = fflatejs;
+      textureUtils = WebGLTextureUtils;
 
       manager = new THREE.LoadingManager();
 
@@ -766,6 +769,8 @@
 
         if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'none';
 
+        export_running = true;
+
         set_filename();
       }
 
@@ -784,7 +789,8 @@
       }
 
       async function process_zip( ext = '' ) {
-        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 9 } } ).then( function( zipped_file ) {
+        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 9 } } )
+        .then( function( zipped_file ) {
           link.href = URL.createObjectURL( zipped_file );
           URL.revokeObjectURL( zipped_file );
           link.download = filename + ext + '.zip';
@@ -821,6 +827,8 @@
         if (gizmo) gizmo.enabled = true;
 
         if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'block';
+
+        export_running = false;
 
         render_requested = true;
         mouse_wheel = true;
@@ -1042,13 +1050,11 @@
           const { clone } = await import( 'three/addons/utils/SkeletonUtils.min.js' );
           const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
-          let gltf_exporter = new GLTFExporter( manager );
+          const gltf_exporter = new GLTFExporter( manager );
+          gltf_exporter.setTextureUtils( textureUtils );
 
-          let options = {
-            binary: binary,
-            animations: animations,
-            maxTextureSize: (binary ? D16K : tex_res)
-          };
+          const options = { binary: binary, maxTextureSize: (binary ? D16K : tex_res) };
+          if (animations?.length > 0) options.animations = animations;
 
           const mesh_clone = await clone( mesh );
 
@@ -1103,9 +1109,10 @@
           const { clone } = await import( 'three/addons/utils/SkeletonUtils.min.js' );
           const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
-          let gltf_exporter = new GLTFExporter( manager );
+          const gltf_exporter = new GLTFExporter( manager );
+          gltf_exporter.setTextureUtils( textureUtils );
 
-          let options = { binary: true };
+          const options = { binary: true };
 
           const mesh_clone = await clone( mesh );
 
@@ -1167,22 +1174,20 @@
         if (mesh) {
           await start_export();
 
-          const { clone } = await import( 'three/addons/utils/SkeletonUtils.min.js' );
           const { USDZExporter } = await import( 'three/addons/exporters/USDZExporter.min.js' );
 
-          let usdz_exporter = new USDZExporter( manager );
+          const usdz_exporter = new USDZExporter( manager );
+          usdz_exporter.setTextureUtils( textureUtils );
 
-          let options = { maxTextureSize: tex_res, map_flip_required: tex_flip };
+          const options = { maxTextureSize: tex_res };
+          if (animations.length > 0) options.animations = animations;
 
-          const mesh_clone = await clone( mesh );
-
-          await usdz_exporter.parse( mesh_clone, async function( arraybuffer ) {
+          await usdz_exporter.parse( mesh, async function( arraybuffer ) {
             let blob = new Blob( [ arraybuffer ], { type: 'application/octet-stream' } );
 
             zip.file( filename + '.usdz', blob );
 
             let str = '_USDZ';
-            if (tex_flip) str += '_Y';
             if (tex_res !== D16K) str += ' (' + tex_res + ')';
 
             await process_zip( str );

@@ -23,7 +23,8 @@
             alert('jQuery failed to load. Limited functionality. Check your internet connection!');
           }
 
-          if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
+          if (export_running) handle_export_error( 'RESOURCE ERROR' );
+          else if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
         }
       }, true); // The 'true' here is vital; it enables the "capturing" phase
 
@@ -39,7 +40,8 @@
           errorObj: error   // The actual Error object (includes stack trace)
         });
 
-        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+        if (export_running) handle_export_error( 'RUNTIME ERROR' );
+        else if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
 
         // Returning 'true' prevents the error from showing up in the browser console
         return false; 
@@ -52,7 +54,8 @@
         // event.promise is the promise that failed
         // event.reason is usually the error object or message
 
-        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
+        if (export_running) handle_export_error( 'UNHANDLED PROMISE' );
+        else if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
       });
     </script>
 
@@ -74,7 +77,8 @@
           "ktx2-encoder": "https://cdn.jsdelivr.net/npm/ktx2-encoder@0.5.1/dist/web/index.min.js",
           "ktx-parse": "https://cdn.jsdelivr.net/npm/ktx-parse@1.1.0/dist/ktx-parse.esm.min.js",
           "meshoptimizer": "https://esm.sh/meshoptimizer@1.1.1",
-          "@jsquash/avif": "https://esm.sh/@jsquash/avif@2.1.1"
+          "@jsquash/avif": "https://esm.sh/@jsquash/avif@2.1.1",
+          "@jsquash/webp": "https://esm.sh/@jsquash/webp@1.5.0"
         }
       }
     </script>
@@ -93,7 +97,8 @@
       var lil_gui, gui, gui_set = false, gui_multi_layers, params, toneMappingOptions;
       var guiExposure, guiToneMapping, guiBlurriness, guiEnvIntensity, guiIntensity;
       var grid, polar_grid, grid_visible, polar_grid_visible, scene_bgnd, hdrjpg_texture;
-      var ambientLight, hemisphereLight, directionalLight, init_running = false;
+      var ambientLight, hemisphereLight, directionalLight;
+      var init_running = false, export_running = false;
       var ww = window.innerWidth, wh = window.innerHeight;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
       var bounding_box, outline_material, gif_export, zip;
@@ -152,7 +157,7 @@
     <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/three-viewport-gizmo -->
     <!-- When applicable, using glTF Transform for DRACO / MESHOPT / PNG / JPEG / WEBP compression: https://gltf-transform.dev -->
     <!--  - When applicable, using meshoptimizer: https://github.com/zeux/meshoptimizer -->
-    <!-- When applicable, using @jsquash/avif encoder for AVIF compression: https://github.com/jamsinclair/jSquash -->
+    <!-- When applicable, using @jsquash/avif and @jsquash/webp encoders for AVIF/WEBP compression: https://github.com/jamsinclair/jSquash -->
     <!--  - Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0 -->
     <!-- When applicable, using experimental ktx2-encoder for KTX2 compression: https://github.com/gz65555/ktx2-encoder -->
     <!-- When applicable, using JSZip for exports: https://github.com/Stuk/jszip -->
@@ -670,6 +675,8 @@
           document.getElementById('gui_position').style.display = 'none';
         }
 
+        export_running = true;
+
         set_filename();
       }
 
@@ -682,7 +689,8 @@
       }
 
       async function process_zip( ext = '' ) {
-        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 9 } } ).then( function( zipped_file ) {
+        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 9 } } )
+        .then( function( zipped_file ) {
           link.href = URL.createObjectURL( zipped_file );
           URL.revokeObjectURL( zipped_file );
           link.download = filename + ext + '.zip';
@@ -720,6 +728,8 @@
         if (gui_multi_layers || (gui_set && document.getElementById('equi').checked)) {
           document.getElementById('gui_position').style.display = 'block';
         }
+
+        export_running = false;
 
         render_requested = true;
         mouse_wheel = true;
@@ -1122,7 +1132,7 @@
           const usdz_exporter = new USDZExporter( manager );
           usdz_exporter.setTextureUtils( textureUtils );
 
-          let options = { maxTextureSize: tex_res, quickLookCompatible: true };
+          let options = { maxTextureSize: tex_res };
 
           await usdz_exporter.parse( rhino_obj.clone(), async function( arraybuffer ) {
             let blob = new Blob( [ arraybuffer ], { type: 'model/vnd.usdz+zip' } );
@@ -2335,14 +2345,6 @@
         const dist = (maxDim < 0.05 ? 0.05 : maxDim) + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
         camera.position.set( 0, 0, dist );
         camera.lookAt( 0, 0, 0 );
-
-        // ========================================================
-        // POST-CENTERING ADJUSTMENT
-        // ========================================================
-        // Now that the model is sitting safely at (0,0,0), we no longer 
-        // need a 100-million unit far plane. We tighten it dynamically!
-        camera.near = maxDim < 0.05 ? maxDim :0.05;
-        camera.far = dist * 5;
         camera.updateProjectionMatrix();
 
         resize();
@@ -3466,42 +3468,44 @@
                 }
               });
             }
-
-            i ++;
           } else {
+            const { compressTexture } = await import( '@gltf-transform/functions' );
+
+            let imgData;
+
             if (tex_fmt === 'avif') {
               const { encode } = await import( '@jsquash/avif' );
-
-              let avif = await encode( data[ 1 ] );
+              imgData = await encode( data[ 1 ], { quality: 65, subsample: 3, chromaDeltaQ: true, enableSharpYUV: true } );
 
               if (!export_textures) {
-                texture.setImage( new Uint8Array( avif ) );
+                texture.setImage( new Uint8Array( imgData ) );
                 texture.setMimeType( 'image/avif' );
 
                 const EXTTextureAVIF = ALL_EXTENSIONS.find( ( Extension ) => Extension.EXTENSION_NAME === 'EXT_texture_avif' );
                 doc.createExtension( EXTTextureAVIF ).setRequired( true );
-              } else {
-                let blob = new Blob( [ avif ], { type: 'image/avif' } );
-                zip.file( 'image' + i + '.avif', blob );
               }
-            } else {
-              const { compressTexture } = await import( '@gltf-transform/functions' );
-
-              await compressTexture( texture, { targetFormat: (tex_fmt === '') ? 'png' : tex_fmt } );
+            } else if (tex_fmt === 'webp') {
+              const { encode } = await import( '@jsquash/webp' );
+              imgData = await encode( data[ 1 ], { quality: 85, use_sharp_yuv: 1, filter_strength: 15, filter_sharpness: 7, sns_strength: 35, method: 6 } );
 
               if (!export_textures) {
-                if (tex_fmt === 'webp') {
-                  const EXTTextureWebP = ALL_EXTENSIONS.find( ( Extension ) => Extension.EXTENSION_NAME === 'EXT_texture_webp' );
-                  doc.createExtension( EXTTextureWebP ).setRequired( true );
-                }
-              } else {
-                let blob = new Blob( [ texture.getImage() ], { type: 'image/' + (tex_fmt === '' ? 'png' : tex_fmt) } );
-                zip.file( 'image' + i + (tex_fmt === '' ? '.png' : '.' + tex_fmt), blob );
+                texture.setImage( new Uint8Array( imgData ) );
+                texture.setMimeType( 'image/webp' );
+
+                const EXTTextureWebP = ALL_EXTENSIONS.find( ( Extension ) => Extension.EXTENSION_NAME === 'EXT_texture_webp' );
+                doc.createExtension( EXTTextureWebP ).setRequired( true );
               }
             }
 
-            i ++;
+            await compressTexture( texture, { targetFormat: (tex_fmt === '') ? 'png' : tex_fmt } );
+
+            if (export_textures) {
+              let blob = new Blob( [ imgData ? imgData : texture.getImage() ], { type: 'image/' + (tex_fmt === '' ? 'png' : tex_fmt) } );
+              zip.file( 'image' + i + (tex_fmt === '' ? '.png' : '.' + tex_fmt), blob );
+            }
           }
+
+          i ++;
         }
       }
 
