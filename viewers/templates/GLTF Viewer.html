@@ -105,7 +105,7 @@
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, bg_flip;
       var ambientLight, directionalLight, isMobile, isNewiPad, wireframe_enabled;
       var ww = window.innerWidth, wh = window.innerHeight, equi_enabled;
-      var animation_running, extra_running, gif_export;
+      var animation_running, extra_running, gif_export, textureUtils;
       var init_running = false, export_running = false;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
       var render_requested, flat_shading_enabled, filename;
@@ -202,10 +202,12 @@
       import { GLTFLoader } from '../static/jsm/loaders/GLTFLoader.min.js';
       import { GifWriter } from '../static/jsm/libs/omggif/omggif.min.js';
       import { GifLoader } from '../static/jsm/loaders/three-gif-loader/gif-loader.js';
+      import * as WebGLTextureUtils from 'three/addons/utils/WebGLTextureUtils.js';
       import GLTFVideoTextureExtension from '../static/jsm/extensions/loaders/EXT_texture_video/EXT_texture_video.min.js';
 
       THREE = threejs;
       fflate = fflatejs;
+      textureUtils = WebGLTextureUtils;
 
       default_camera = new THREE.Object3D();
 
@@ -1596,6 +1598,7 @@
           const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
           const gltf_exporter = new GLTFExporter( manager );
+          gltf_exporter.setTextureUtils( textureUtils );
 
           const options = { binary: binary, maxTextureSize: (binary ? D16K : tex_res), includeCustomExtensions: true };
           if (animations.length > 0) options.animations = animations;
@@ -1704,13 +1707,74 @@
 
           await start_export();
 
-          const { USDZExporter } = await import( '../static/jsm/exporters/USDZExporter.min.js' );
+          const { USDZExporter } = await import( 'three/addons/exporters/USDZExporter.min.js' );
 
-          let usdz_exporter = new USDZExporter( manager );
+          const usdz_exporter = new USDZExporter( manager );
+          usdz_exporter.setTextureUtils( textureUtils );
 
-          let mesh_clone = alternative ? await create_meshes() : gltf_obj.clone();
+          const options = { maxTextureSize: tex_res, quickLookCompatible: true };
 
-          let options = { maxTextureSize: tex_res, map_flip_required: tex_flip };
+          if (animations.length > 0) {
+            // Function to merge clips end-to-end
+            function combineClips( clips ) {
+              let totalDuration = 0;
+
+              // TrackMap will store: trackName -> { times: [], values: [], ValueBufferType }
+              const trackMap = new Map();
+
+              clips.forEach( ( clip ) => {
+                clip.tracks.forEach( ( track ) => {
+                  if (!trackMap.has( track.name )) {
+                    trackMap.set(track.name, {
+                      type: track.constructor, // e.g. VectorKeyframeTrack or QuaternionKeyframeTrack
+                      times: [],
+                      values: []
+                    });
+                  }
+
+                  const trackData = trackMap.get( track.name );
+                  const stride = track.getValueSize();
+
+                  // 1. Shift track keyframe timestamps by current accumulated duration
+                  for ( let i = 0; i < track.times.length; i++ ) {
+                    trackData.times.push( track.times[ i ] + totalDuration );
+                  }
+
+                  // 2. Append values directly
+                  for ( let i = 0; i < track.values.length; i++ ) {
+                    trackData.values.push( track.values[ i ] );
+                  }
+                });
+
+                totalDuration += clip.duration;
+              });
+
+              // Reconstruct KeyframeTrack instances
+              const combinedTracks = [];
+
+              trackMap.forEach( ( data, trackName ) => {
+                // Instantiate track dynamically based on its original class type
+                const TrackType = data.type;
+
+                const mergedTrack = new TrackType(
+                  trackName,
+                  data.times,
+                  data.values
+                );
+
+                combinedTracks.push( mergedTrack );
+              });
+
+              return new THREE.AnimationClip( 'SequentialAnimation', totalDuration, combinedTracks );
+            }
+
+            // Pass the single merged clip to the exporter
+            const combinedClip = combineClips( animations );
+
+            options.animations = [ combinedClip ];
+          }
+
+          const mesh_clone = alternative ? await create_meshes() : gltf_obj.clone();
 
           await usdz_exporter.parse( mesh_clone, async function( arraybuffer ) {
             let blob = new Blob( [ arraybuffer ], { type: 'model/vnd.usdz+zip' } );
@@ -1719,7 +1783,6 @@
 
             let str = '_USDZ';
             if (alternative) str += 'x';
-            if (tex_flip) str += '_Y';
             if (tex_res !== D16K) str += ' (' + tex_res + ')';
 
             await process_zip( str );
@@ -1856,6 +1919,7 @@
           const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
           const gltf_exporter = new GLTFExporter( manager );
+          gltf_exporter.setTextureUtils( textureUtils );
 
           const options = { binary: true, maxTextureSize: D16K };
 
@@ -2988,14 +3052,6 @@
         const dist = (maxDim < 0.05 ? 0.05 : maxDim) + maxDim / ( 2 * Math.tan( fov / 2.0 ) );
         default_camera.position.set( 0, 0, dist );
         default_camera.lookAt( 0, 0, 0 );
-
-        // ========================================================
-        // POST-CENTERING ADJUSTMENT
-        // ========================================================
-        // Now that the model is sitting safely at (0,0,0), we no longer 
-        // need a 100-million unit far plane. We tighten it dynamically!
-        default_camera.near = maxDim < 0.05 ? maxDim : 0.05;
-        default_camera.far = dist * 5;
         default_camera.updateProjectionMatrix();
 
         resize();
