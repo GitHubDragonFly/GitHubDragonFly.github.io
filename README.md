@@ -630,7 +630,7 @@ Number Type Converter
     - will reset the background color
     - will clear the `Eq` input if present
     - also sets environment in some viewers
-  - `g` - glass globe (currently available in desktop USD Viewer only)
+  - `g` - glass globe with snow flakes (currently available in desktop USD and PLY+STL viewers only)
   - `I` - raycasting intersects (available in VTK Viewer only)
   - `K` - kinematics (available in DAE viewers only)
   - `L` - lines (LDRAW and its exports in ASSIMP, GLTF, OBJ, JSON viewers)
