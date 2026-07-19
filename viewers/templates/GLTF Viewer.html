@@ -104,6 +104,7 @@
       var variants, variant_materials, current_variant, variants_available, link;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, bg_flip;
       var ambientLight, directionalLight, isMobile, isNewiPad, wireframe_enabled;
+      var glassMaterial, glassGlobe, globeEnabled, snowParticles, renderTarget;
       var ww = window.innerWidth, wh = window.innerHeight, equi_enabled;
       var animation_running, extra_running, gif_export, textureUtils;
       var init_running = false, export_running = false;
@@ -409,6 +410,7 @@
         <button title="Y-Flip Background Image" id="btn_bg_flip" onclick="set_bg_flip();" style="background-color: transparent; color: blue;" disabled>Y</button>
         <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="background-color: transparent; color: blue; min-width: 25px;" disabled>Eq</button>
         <button title="Toggle Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
+        <button title="Toggle Glass Globe" id="btn_glass_globe" onclick="set_globe();" style="display: none; color: blue; min-width: 15px;" disabled>g</button>
         <button title="Model Opacity - double click to enable/disable" id="btn_dc_opacity" class="dropdown" style="text-align: center; border: 1px solid blue; -webkit-border-radius: 3px; border-radius: 3px;" ondblclick="set_opacity();" onclick="show_hide_dropdown_opacity();">O
           <div id="dc_opacity" class="dropdown-content" style="display: none;" onfocusout="if (enable_opacity) hide_dropdown_opacity();">
             <input type="range" orient="vertical" id="model_opacity" min="0" max="1" step="0.01" value="1" onkeydown="return_false();" oninput="set_model_opacity();" disabled />
@@ -1158,7 +1160,8 @@
       }
 
       async function process_zip( ext = '' ) {
-        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 9 } } ).then( function( zipped_file ) {
+        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 9 } } )
+        .then( function( zipped_file ) {
           link.href = URL.createObjectURL( zipped_file );
           URL.revokeObjectURL( zipped_file );
           link.download = filename + ext + '.zip';
@@ -2197,6 +2200,7 @@
           if (scene.background) {
             scene.background.dispose();
             scene.background = null;
+            if (glassMaterial) glassMaterial.uniforms.envMap.value = null;
           }
 
           if (bgnd_linear_gradient) {
@@ -2364,6 +2368,9 @@
           scene.background = clone.clone();
         }
 
+        glassMaterial.uniforms.envMap.value = scene.background;
+        glassMaterial.uniforms.envMapIntensity.value = params.envMapIntensity;
+
         clone.dispose();
 
         mouse_wheel = true;
@@ -2398,8 +2405,9 @@
               mouse_wheel = true;
             });
 
-            gui.add( params, 'envMapIntensity', 0, 5 )
+            gui.add( params, 'envMapIntensity', 0, 10 )
             .onChange( function ( value ) {
+              glassMaterial.uniforms.envMapIntensity.value = value;
               scene.environmentIntensity = value;
               mouse_wheel = true;
             });
@@ -2503,7 +2511,7 @@
         params.toneMapping = 'Neutral';
         renderer.toneMapping = THREE.NeutralToneMapping;
         renderer.toneMappingExposure = 1.0;
-        params.envMapIntensity = 1.0;
+        params.envMapIntensity = 5.0;
         params.backBlurriness = 0.0;
         params.backIntensity = 1.0;
         params.exposure = 1.0;
@@ -2968,8 +2976,9 @@
               tex.needsUpdate = true;
 
               scene.background = tex.clone();
-              scene.environment = tex.clone();
-              scene.environmentIntensity = 0.1;
+
+              glassMaterial.uniforms.envMap.value = scene.background;
+              glassMaterial.uniforms.envMapIntensity.value = params.envMapIntensity;
 
               tex.dispose();
 
@@ -3060,7 +3069,9 @@
       function set_model_scale( scale ) {
         document.getElementById('model_scale').selectedIndex = 0;
 
-        gltf_obj.scale.multiplyScalar( parseFloat( scale.slice( 0, -1 ) ) );
+        const scalar_scale = parseFloat( scale.slice( 0, -1 ) );
+
+        gltf_obj.scale.multiplyScalar( scalar_scale );
 
         gltf_obj.updateMatrix();
         gltf_obj.updateMatrixWorld( true );
@@ -3076,6 +3087,24 @@
         });
 
         center_object();
+
+        if (!isMobile) {
+          bounding_box.setFromObject( mesh );
+          const center = bounding_box.getCenter( new THREE.Vector3() );
+
+          glassGlobe.scale.multiplyScalar( scalar_scale );
+          glassGlobe.position.copy( center.clone() );
+
+          snowParticles.position.copy( center.clone() );
+          snowParticles.scale.multiplyScalar( scalar_scale );
+
+          // ADJUST PARTICLE SIZE TO MATCH NEW SCALE
+          if (snowParticles.material) {
+            // Multiply the current size by the scale factor to keep visual proportions identical
+            snowParticles.material.size *= scalar_scale;
+            snowParticles.material.needsUpdate = true;
+          }
+        }
 
         set_polar_grid_y();
         set_grid_y();
@@ -3403,7 +3432,7 @@
         if (params === undefined) {
           params = {
             toneMapping: 'Neutral',
-            envMapIntensity: 1.0,
+            envMapIntensity: 5.0,
             backBlurriness: 0.0,
             backIntensity: 1.0,
             exposure: 1.0
@@ -3427,6 +3456,8 @@
         selected_gltf_file = null;
         selected_draco_file = null;
         object_is_points = false;
+        glassGlobe = null;
+        globeEnabled = false;
         pcdExportOptions = {};
         totalPoints = 100000;
         unzipped_files = {};
@@ -3576,7 +3607,7 @@
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFSoftShadowMap;
           renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
-          renderer.autoClear = false;
+          renderer.autoClear = true;
 
           document.body.appendChild( renderer.domElement );
 
@@ -4314,6 +4345,186 @@
           document.getElementById('btn_mtl_side').disabled = true;
           document.getElementById('btn_wireframe').disabled = true;
           disabled_changed();
+        }
+
+        if (!isMobile && !glassGlobe) {
+          // CREATE GLASS GLOBE BASED ON MODEL SIZE
+          // 1. Calculate the bounding box of the loaded model
+          const box = new THREE.Box3().setFromObject( gltf_obj );
+          const sphere = new THREE.Sphere();
+          box.getBoundingSphere( sphere );
+
+          // 2. Create the glass globe geometry (padded by 10% so it doesn't clip the model)
+          const globeRadius = sphere.radius * 1.1;
+          const globeGeo = new THREE.SphereGeometry( globeRadius, 64, 64 );
+
+          // 3. Create the off-screen buffer (Render Target)
+          renderTarget = new THREE.WebGLRenderTarget( window.innerWidth, window.innerHeight, {
+            minFilter: THREE.LinearFilter,
+            magFilter: THREE.LinearFilter,
+            format: THREE.RGBAFormat
+          });
+
+          // 4. Glass Globe Shader Material
+
+          glassMaterial = new THREE.ShaderMaterial({
+            uniforms: {
+              // This is where we feed the splat background texture!
+              tDiffuse: { value: null }, 
+              ior: { value: 1.15 }, // Index of refraction
+              thickness: { value: 15.0 },
+              refractionRatio: { value: 0.9 },
+              envMapIntensity: { value: 5.0 },
+              envMap: { value: scene.background }
+            },
+            vertexShader: `
+              varying vec3 vNormal;
+              varying vec3 vViewPosition;
+              varying vec3 vWorldNormal;   // Added for environment reflection
+              varying vec3 vWorldPosition; // Added for environment reflection
+              varying vec4 vUv;
+
+              void main() {
+                vNormal = normalize( normalMatrix * normal );
+                vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+                vViewPosition = -mvPosition.xyz;
+                gl_Position = projectionMatrix * mvPosition;
+
+                // Calculate world-space vectors for reflections
+                vWorldNormal = normalize( mat3( modelMatrix ) * normal );
+                vWorldPosition = ( modelMatrix * vec4( position, 1.0 ) ).xyz;
+
+                // Calculate screen-space coordinates for texture sampling
+                vUv = gl_Position;
+              }
+            `,
+            fragmentShader: `
+              uniform sampler2D tDiffuse;
+              uniform sampler2D envMap;  // Declare the environment texture
+              uniform float envMapIntensity;
+              uniform float thickness;
+              uniform float ior;
+              varying vec3 vNormal;
+              varying vec3 vViewPosition;
+              varying vec3 vWorldNormal;
+              varying vec3 vWorldPosition;
+              varying vec4 vUv;
+
+              // Constants for mapping 3D direction to 2D equirectangular UVs
+              #define RECIPROCAL_PI 0.3183098861837907
+              #define RECIPROCAL_PI2 0.15915494309189535
+
+              // Helper function to map a 3D direction vector to 2D Equirectangular UV coordinates
+              vec2 equirectangularMapping( vec3 dir ) {
+                float u = atan( dir.z, dir.x ) * RECIPROCAL_PI2 + 0.5;
+                float v = asin( clamp( dir.y, -1.0, 1.0 ) ) * RECIPROCAL_PI + 0.5;
+                return vec2( u, v );
+              }
+
+              void main() {
+                // Project texture coordinates to screen space [0, 1]
+                vec2 uv = ( vUv.xy / vUv.w ) * 0.5 + 0.5;
+
+                // Simple refraction vector based on normal and view directions
+                vec3 normal = normalize( vNormal );
+
+                if ( !gl_FrontFacing ) {
+                  normal = -normal;
+                }
+
+                vec3 viewDir = normalize( vViewPosition );
+
+                // Adjust refraction math for inner surface
+                // (Going from glass-to-air vs air-to-glass)
+                float eta = gl_FrontFacing ? ( 1.0 / ior ) : ior;
+                vec3 refracted = refract( -viewDir, normal, eta );
+
+                // Fix the distance scaling (divide by camera distance)
+                float depth = vUv.w;
+                vec2 distortedUv = uv + ( refracted.xy * thickness * 0.01 );
+
+                // Sample the off-screen splat texture!
+                vec4 refractedColor = texture2D( tDiffuse, distortedUv );
+
+                // --- CALCULATE REFLECTION ---
+                vec3 worldNormal = normalize( vWorldNormal );
+                vec3 worldViewDir = normalize( vWorldPosition - cameraPosition );
+                vec3 reflectDir = reflect( worldViewDir, worldNormal );
+
+                // Convert 3D reflection direction to 2D UV coordinates
+                vec2 envUv = equirectangularMapping( normalize( reflectDir ) );
+
+                // Sample the 2D equirectangular environment map
+                vec4 envColor = texture2D( envMap, envUv );
+
+                // Fresnel determines reflection vs refraction intensity (glass edges are reflective)
+                float fresnel = pow( 1.0 - max( dot( normal, viewDir ), 0.0 ), 3.0 );
+
+                // Multiply the environment map color by intensity uniform
+                vec3 finalEnvColor = envColor.rgb * envMapIntensity;
+
+                // Blend the refracted splat and the environment reflection
+                vec3 finalColor = mix( refractedColor.rgb, finalEnvColor, fresnel * 0.5 );
+
+                // Add a clean white specular highlight
+                finalColor += vec3( fresnel * 0.3 );
+
+                gl_FragColor = vec4( finalColor, 1.0 );
+              }
+            `,
+            transparent: true,
+            side: THREE.DoubleSide
+          });
+
+          gltf_obj.renderOrder = 1;
+
+          glassGlobe = new THREE.Mesh( globeGeo, glassMaterial );
+          glassGlobe.renderOrder = 3;
+
+          // Center the globe around the model's computed center point
+          glassGlobe.position.copy( sphere.center ); 
+
+          // Default to hidden
+          glassGlobe.visible = globeEnabled; 
+
+          document.getElementById('btn_glass_globe').disabled = false;
+
+          scene.add( glassGlobe );
+
+          // ==========================================
+          // CREATE SNOW PARTICLES INSIDE GLOBE
+          // ==========================================
+          const particleCount = 300; // Adjust for density
+          const positions = new Float32Array( particleCount * 3 );
+          
+          // We want the snow to stay strictly inside the inner boundary of the glass
+          const snowMaxRadius = sphere.radius * 1.05; 
+          const center = sphere.center;
+
+          for ( let i = 0; i < positions.length; i += 3 ) {
+            randomizeSnowflake( positions, i, snowMaxRadius );
+          }
+
+          const snowGeo = new THREE.BufferGeometry();
+          snowGeo.setAttribute( 'position', new THREE.BufferAttribute( positions, 3 ) );
+
+          // Soft, glowing, anti-aliased snow 🌨️🔮✨
+          const snowMat = new THREE.PointsMaterial({
+            color: 0xffffff,
+            size: globeRadius * 0.006,      // Size snow relative to globe size
+            transparent: true,
+            opacity: 0.6,
+            blending: THREE.NormalBlending,
+            depthWrite: false,              // Prevents particles from clipping each other awkwardly
+            sizeAttenuation: true
+          });
+
+          // Create the particle system and link visibility to the globe
+          snowParticles = new THREE.Points( snowGeo, snowMat );
+          snowParticles.visible = globeEnabled;
+          snowParticles.renderOrder = 2;
+
+          scene.add( snowParticles );
         }
 
         // Skip gizmo creation on mobile devices
@@ -6654,6 +6865,19 @@
         });
       }
 
+      function set_globe() {
+        if (glassGlobe) {
+          globeEnabled = !globeEnabled;
+          glassGlobe.visible = globeEnabled;
+          if (snowParticles) snowParticles.visible = globeEnabled;
+
+          const btn = document.getElementById('btn_glass_globe');
+          btn.style.backgroundColor = globeEnabled ? 'lightgreen' : 'transparent';
+
+          mouse_wheel = true;
+        }
+      }
+
       function show_polar_grid() {
         if (polar_grid_visible) {
           scene.remove( polar_grid );
@@ -6982,15 +7206,29 @@
     	  });
       }
 
+      // Helper to position a snowflake correctly inside the top hemisphere
+      function randomizeSnowflake( positions, index, maxRadius ) {
+        const th = THREE.MathUtils.randFloat( 0, Math.PI * 2 );
+        const ph = Math.acos( THREE.MathUtils.randFloat( 0, 0.5 ) );
+        const r = THREE.MathUtils.randFloat( 0, maxRadius );
+
+        positions[ index ]     = r * Math.sin( ph ) * Math.cos( th );
+        positions[ index + 1 ] = Math.abs( r * Math.cos( ph ) ); // Keep in top hemisphere
+        positions[ index + 2 ] = r * Math.sin( ph ) * Math.sin( th );
+      }
+
       async function render( timestamp ) {
         if (document.getElementById('animation_progress').style.display === 'none') {
           if (render_requested) requestAnimationFrame( render );
         }
 
-        if (first_run || mouse_down || mouse_wheel || animated_gif_texture || animation_running ||
+        if (first_run || globeEnabled || mouse_down || mouse_wheel || animated_gif_texture || animation_running ||
           reset_rotation || progress.value > 0 || rot_x !== 0 || rot_y !== 0 || rot_z !== 0) {
 
           if (gltf_obj) {
+            clock.update( timestamp );
+            const delta = clock.getDelta();
+
             // Reset object rotational values
             if (reset_rotation) {
               gltf_obj.rotation.set( initial_rotation.x, initial_rotation.y, initial_rotation.z );
@@ -7017,10 +7255,7 @@
               }
             }
 
-            if (animation_running) {
-              clock.update( timestamp );
-              animation_mixer.update( clock.getDelta() );
-            }
+            if (animation_running) animation_mixer.update( delta );
 
             if (first_run) {
               fr_count ++;
@@ -7028,7 +7263,6 @@
               // Quick demo VRM humanoid by tweaking its bones
 
               if (vrm && current_vrm?.humanoid?._normalizedHumanBones) {
-                clock.update( timestamp );
                 const s = 0.01 * Math.PI * Math.sin( Math.PI * clock.elapsedTime );
 
                 if (fr_count > 30) {
@@ -7040,7 +7274,7 @@
                 }
 
                 // update vrm
-                current_vrm.update( clock.getDelta() );
+                current_vrm.update( delta );
               }
 
               if (fr_count > 30) {
@@ -7058,9 +7292,48 @@
               }
             }
 
+            // Update Snow Animation
+            if (glassGlobe && globeEnabled && snowParticles) {
+              // --- PASS 1: Render the background mesh ---
+              glassGlobe.visible = false; 
+
+              renderer.setRenderTarget( renderTarget );
+              renderer.clear();
+              renderer.render( scene, camera );
+
+              // --- PASS 2: Render the glass globe with refraction ---
+              glassGlobe.visible = true; 
+              glassMaterial.uniforms.tDiffuse.value = renderTarget.texture;
+              renderer.setRenderTarget( null );
+
+              const positions = snowParticles.geometry.attributes.position.array;
+              const maxRadius = glassGlobe.geometry.parameters.radius * 0.95; 
+              const fallSpeed = maxRadius * 0.005 * ( delta * 20 );
+              const drift = fallSpeed * 0.3;
+
+              for ( let i = 0; i < positions.length; i += 3 ) {
+                // Apply falling speed and use randFloatSpread for a clean -drift to +drift range
+                positions[ i + 1 ] -= fallSpeed;
+                positions[ i ]     += THREE.MathUtils.randFloatSpread( drift );
+                positions[ i + 2 ] += THREE.MathUtils.randFloatSpread( drift );
+
+                // Distance check from LOCAL center (0,0,0)
+                const dx = positions[ i ];
+                const dy = positions[ i + 1 ];
+                const dz = positions[ i + 2 ];
+                const dist = Math.sqrt( dx * dx + dy * dy + dz * dz );
+
+                // If it hits the bottom glass hemisphere or leaves the radius, reset
+                if (dist >= maxRadius || positions[ i + 1 ] < -maxRadius) {
+                  randomizeSnowflake( positions, i, maxRadius );
+                }
+              }
+
+              snowParticles.geometry.attributes.position.needsUpdate = true;
+            }
+
             controls.update();
 
-            renderer.clear();
             renderer.render( scene, default_camera );
 
             if (gizmo && gizmo.enabled) gizmo.render();
@@ -7154,6 +7427,9 @@
         document.getElementById('btn_random_vertex_colors').style.backgroundColor = '#d1cefc';
         document.getElementById('btn_random_vertex_colors').disabled = true;
         random_vertex_changed();
+
+        document.getElementById('btn_glass_globe').style.backgroundColor = 'transparent';
+        document.getElementById('btn_glass_globe').disabled = true;
 
         document.getElementById('model_scale').selectedIndex = 0;
         document.getElementById('export_names').selectedIndex = 0;
@@ -7274,6 +7550,24 @@
 
         if (polar_grid_visible) show_polar_grid();
         if (grid_visible) show_grid();
+
+        if (snowParticles) {
+          scene.remove( snowParticles );
+          snowParticles.geometry.dispose();
+          snowParticles.geometry = null;
+          snowParticles.material.dispose();
+          snowParticles.material = null;
+          snowParticles = null;
+        }
+
+        if (glassGlobe) {
+          scene.remove( glassGlobe );
+          glassGlobe.geometry.dispose();
+          glassGlobe.geometry = null;
+          glassGlobe.material.dispose();
+          glassGlobe.material = null;
+          glassGlobe = null;
+        }
 
         scene.remove( gltf_obj );
 
@@ -7449,6 +7743,7 @@
           $('#file_image_input')[ 0 ].style.display = '';
           $('#lbl_file_image_input')[ 0 ].style.display = '';
           $('#btn_file_image_input')[ 0 ].style.display = 'none';
+          $('#btn_glass_globe')[ 0 ].style.display = 'inline-block';
 
           $('#lbl_radio_dlight')[ 0 ].style.display = '';
           $('#lbl_radio_rotate')[ 0 ].style.display = '';
