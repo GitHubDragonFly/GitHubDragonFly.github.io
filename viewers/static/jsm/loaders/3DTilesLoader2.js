@@ -1,10 +1,10 @@
 import { Box3, Loader, PerspectiveCamera, Quaternion, Sphere, Vector3, WebGLRenderer } from 'three';
-import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
-import { DRACOLoader } from "three/addons/loaders/DRACOLoader.min.js";
-import { KTX2Loader } from "three/addons/loaders/KTX2Loader.min.js";
-import { MeshoptDecoder } from "three/addons/libs/meshopt_decoder.module.min.js";
-import * as ThreeDTilesRenderer from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.27/build/index.three.min.js';
-import * as ThreeDTilesPlugins from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.4.27/build/index.plugins.min.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.min.js';
+import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.min.js';
+import { KTX2Loader } from 'three/addons/loaders/KTX2Loader.min.js';
+import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.min.js';
+import * as ThreeDTilesRenderer from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.5.0/build/index.three.min.js';
+import * as ThreeDTilesPlugins from 'https://cdn.jsdelivr.net/npm/3d-tiles-renderer@0.5.0/build/index.plugins.min.js';
 
 // Inject "required" v1.1 Implicit Tiling one-line fixer-upper
 
