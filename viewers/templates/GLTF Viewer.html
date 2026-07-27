@@ -99,14 +99,17 @@
       var animations, animation_mixer, current_animation, extras, current_extra;
       var gif_loader, gif_writer, object_is_points, clock, scene_bgnd, hdrjpg_texture;
       var parser, gltf_VideoTextureExtension, current_side, edges, edges_visible;
-      var gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
+      var gui, gui_set = false, right_gui, right_gui_set = false;
+      var guiExposure = null, right_gui_flakes = null;
       var tex_res, tex_flip, tex_fmt, draco_material, uvUnwrapper, count = 0;
       var variants, variant_materials, current_variant, variants_available, link;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, bg_flip;
       var ambientLight, directionalLight, isMobile, isNewiPad, wireframe_enabled;
-      var glassMaterial, glassGlobe, globeEnabled, snowParticles, renderTarget;
+      var glassMaterial, glassGlobe, globeEnabled;
+      var snowParticles, fSize_min, fSize_max, renderTarget;
       var ww = window.innerWidth, wh = window.innerHeight, equi_enabled;
-      var animation_running, extra_running, gif_export, textureUtils;
+      var animation_running, extra_running, gif_export;
+      var textureUtils, params, toneMappingOptions;
       var init_running = false, export_running = false;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
       var render_requested, flat_shading_enabled, filename;
@@ -234,6 +237,7 @@
       gif_loader = new GifLoader( manager );
 
       gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
+      right_gui = new GUI( { autoPlace: false, container: document.getElementById('right_gui_position') } );
       set_gui_position();
 
       // Modified version of UVUnwrapper: https://github.com/gkjohnson/three-gpu-pathtracer/blob/main/src/utils/UVUnwrapper.js
@@ -774,6 +778,7 @@
       </div>
     </div>
     <div id="gui_position"></div>
+    <div id="right_gui_position"></div>
     <div id="animation_progress" style="display: none; background-color: whitesmoke; border: none;">
       <progress id="progress" value="0" max="1"></progress>
     </div>
@@ -998,8 +1003,10 @@
         if (!menu_location_bottom) {
           let fixed_menu_bottom = ( parseInt( $('#fixed_menu').outerHeight( true ) ) + 2 ).toString() + 'px';
           document.getElementById('gui_position').style.marginTop = fixed_menu_bottom;
+          document.getElementById('right_gui_position').style.marginTop = fixed_menu_bottom;
         } else {
           document.getElementById('gui_position').style.marginTop = '2px';
+          document.getElementById('right_gui_position').style.marginTop = '2px';
         }
 
         mouse_wheel = true;
@@ -1142,6 +1149,7 @@
         if (gizmo) gizmo.enabled = false;
 
         if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'none';
+        if (right_gui_set && globeEnabled) document.getElementById('right_gui_position').style.display = 'none';
 
         export_running = true;
 
@@ -1199,6 +1207,7 @@
         if (gizmo) gizmo.enabled = true;
 
         if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'block';
+        if (right_gui_set && globeEnabled) document.getElementById('right_gui_position').style.display = 'block';
 
         export_running = false;
 
@@ -2012,6 +2021,7 @@
               document.getElementById('div_gif_rectangle').style.display = 'block';
 
               if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'none';
+              if (right_gui_set && globeEnabled) document.getElementById('right_gui_position').style.display = 'none';
 
               setTimeout( addFrame, 100 );
             }
@@ -2158,6 +2168,7 @@
               document.getElementById('div_gif_rectangle').style.display = 'block';
 
               if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'none';
+              if (right_gui_set && globeEnabled) document.getElementById('right_gui_position').style.display = 'none';
 
               setTimeout( addFrame, 100 );
             }
@@ -2499,6 +2510,29 @@
         }
 
         equi_changed();
+
+        mouse_wheel = true;
+      }
+
+      function updateRightGUI() {
+        right_gui_flakes = right_gui.add( params, 'flakeSize', fSize_min, fSize_max, (fSize_max - fSize_min) / 100.0 )
+        .name( 'Snow Flake Size' )
+        .onChange( function ( value ) {
+          if (snowParticles) snowParticles.material.size = value;
+          mouse_wheel = true;
+        });
+
+        mouse_wheel = true;
+      }
+
+      function right_gui_reset() {
+        params.flakeSize = fSize_min || 1.0;
+        params.globeThickness = 1.0;
+        params.indexOfRefraction = 1.15;
+
+        right_gui.reset();
+
+        document.getElementById('right_gui_position').style.display = 'none';
 
         mouse_wheel = true;
       }
@@ -3435,7 +3469,10 @@
             envMapIntensity: 5.0,
             backBlurriness: 0.0,
             backIntensity: 1.0,
-            exposure: 1.0
+            exposure: 1.0,
+            flakeSize: 1.0,
+            globeThickness: 1.0,
+            indexOfRefraction: 1.15
           };
         }
 
@@ -4372,7 +4409,7 @@
               // This is where we feed the splat background texture!
               tDiffuse: { value: null }, 
               ior: { value: 1.15 }, // Index of refraction
-              thickness: { value: 15.0 },
+              thickness: { value: 1.0 },
               refractionRatio: { value: 0.9 },
               envMapIntensity: { value: 5.0 },
               envMap: { value: scene.background }
@@ -4512,13 +4549,28 @@
           // Soft, glowing, anti-aliased snow 🌨️🔮✨
           const snowMat = new THREE.PointsMaterial({
             color: 0xffffff,
-            size: globeRadius * 0.006,      // Size snow relative to globe size
-            transparent: true,
-            opacity: 0.6,
+            size: globeRadius * 0.006,
+            transparent: false,
+            opacity: 0.9,
             blending: THREE.NormalBlending,
             depthWrite: false,              // Prevents particles from clipping each other awkwardly
             sizeAttenuation: true
           });
+
+          function roundToFirstSignificant( num, hi = false ) {
+            if (num >= 1) return hi ? Math.ceil( num ) : Math.floor( num );
+
+            // Find the position of the first non-zero digit
+            let decimalPlaces = Math.ceil( - Math.log10( num ) );
+
+            // Round to that specific number of decimal places
+            return Number( num.toFixed( decimalPlaces ) );
+          }
+
+          params.flakeSize = snowMat.size;
+          fSize_min = roundToFirstSignificant( snowMat.size );
+          fSize_max = roundToFirstSignificant( snowMat.size * 10, true );
+          if (right_gui_set) await updateRightGUI();
 
           // Create the particle system and link visibility to the globe
           snowParticles = new THREE.Points( snowGeo, snowMat );
@@ -4648,6 +4700,49 @@
         document.getElementById('metadata_message').style.visibility = 'hidden';
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
+      }
+
+      function set_globe() {
+        if (glassGlobe) {
+          globeEnabled = !globeEnabled;
+          glassGlobe.visible = globeEnabled;
+          if (snowParticles) snowParticles.visible = globeEnabled;
+
+          const btn = document.getElementById('btn_glass_globe');
+          btn.style.backgroundColor = globeEnabled ? 'lightgreen' : 'transparent';
+
+          if (!right_gui_set) {
+            right_gui.add( params, 'globeThickness', 1, 40, 0.5  )
+            .name( 'Glass Thickness' )
+            .onChange( function ( value ) {
+              if (glassMaterial) glassMaterial.uniforms.thickness.value = value;
+              mouse_wheel = true;
+            });
+
+            right_gui.add( params, 'indexOfRefraction', 1.0, 2.0, 0.05  )
+            .name( 'IOR' )
+            .onChange( function ( value ) {
+              if (glassMaterial) glassMaterial.uniforms.ior.value = value;
+              mouse_wheel = true;
+            });
+
+            right_gui_flakes = right_gui.add( params, 'flakeSize', fSize_min, fSize_max, (fSize_max - fSize_min) / 100.0 )
+            .name( 'Snow Flake Size' )
+            .onChange( function ( value ) {
+              if (snowParticles) snowParticles.material.size = value;
+              mouse_wheel = true;
+            });
+
+            right_gui.open();
+            right_gui_set = true;
+          }
+
+          document.getElementById('right_gui_position').style.display = globeEnabled ? 'block' : 'none';
+
+          set_gui_position();
+
+          mouse_wheel = true;
+        }
       }
 
       function highlightFeatureInstanced( instanceId ) {
@@ -6867,19 +6962,6 @@
         });
       }
 
-      function set_globe() {
-        if (glassGlobe) {
-          globeEnabled = !globeEnabled;
-          glassGlobe.visible = globeEnabled;
-          if (snowParticles) snowParticles.visible = globeEnabled;
-
-          const btn = document.getElementById('btn_glass_globe');
-          btn.style.backgroundColor = globeEnabled ? 'lightgreen' : 'transparent';
-
-          mouse_wheel = true;
-        }
-      }
-
       function show_polar_grid() {
         if (polar_grid_visible) {
           scene.remove( polar_grid );
@@ -7446,7 +7528,15 @@
         if (gui_set) {
           gui_reset();
           updateGUI();
-          document.getElementById('gui_position').style.display = 'none';
+        }
+
+        if (right_gui_set) {
+          if (right_gui_flakes !== null) {
+            right_gui_flakes.destroy();
+            right_gui_flakes = null;
+          }
+
+          right_gui_reset();
         }
 
         parser = null;
@@ -7493,6 +7583,7 @@
             }
 
             if (gui) gui.dispose();
+            if (right_gui) right_gui.dispose();
 
             if (gizmo) {
               gizmo.dispose();

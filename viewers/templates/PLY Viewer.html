@@ -90,13 +90,15 @@
       var gif_loader, gif_writer, ktx2_loader, tiff_loader, exr_loader, hdr_loader, hdrJPGLoader;
       var fflate, renderer, scene, camera, mesh, edges, edges_visible, render_requested;
       var merge_vertices, controls, gizmo, grid, polar_grid, grid_visible, polar_grid_visible;
-      var gui, gui_set = false, guiExposure = null, right_gui, right_gui_set = false;
+      var gui, gui_set = false, guiExposure = null;
+      var right_gui, right_gui_set = false, right_gui_flakes = null;
       var params, toneMappingOptions, outline_material, scene_bgnd, hdrjpg_texture;
       var mouse_down, mouse_wheel, reset_rotation, events_initialized, link, isMobile, isNewiPad;
       var original_model, points_model, sampled_points, object_is_points;
       var ambientLight, directionalLight, triangles_count, count = 0, equi_enabled;
       var ww = window.innerWidth, wh = window.innerHeight, uvUnwrapper, sampler;
-      var glassMaterial, glassGlobe, globeEnabled, snowParticles, renderTarget;
+      var glassMaterial, glassGlobe, globeEnabled;
+      var snowParticles, fSize_min, fSize_max, renderTarget;
       var rot_x = 0, rot_y = 0, rot_z = 0, initial_rotation;
       var init_running = false, export_running = false, clock;
       var mesh_present, bounding_box, filename, gif_export, wireframe_enabled;
@@ -920,6 +922,7 @@
         if (gizmo) gizmo.enabled = false;
 
         if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'none';
+        if (right_gui_set && globeEnabled) document.getElementById('right_gui_position').style.display = 'none';
 
         export_running = true;
 
@@ -971,6 +974,7 @@
         if (gizmo) gizmo.enabled = true;
 
         if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'block';
+        if (right_gui_set && globeEnabled) document.getElementById('right_gui_position').style.display = 'block';
 
         export_running = false;
 
@@ -1659,6 +1663,7 @@
               document.getElementById('div_gif_rectangle').style.display = 'block';
 
               if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'none';
+              if (right_gui_set && globeEnabled) document.getElementById('right_gui_position').style.display = 'none';
 
               setTimeout( addFrame, 100 );
             }
@@ -1807,6 +1812,7 @@
               document.getElementById('div_gif_rectangle').style.display = 'block';
 
               if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'none';
+              if (right_gui_set && globeEnabled) document.getElementById('right_gui_position').style.display = 'none';
 
               setTimeout( addFrame, 100 );
             }
@@ -2101,6 +2107,17 @@
         }
 
         equi_changed();
+
+        mouse_wheel = true;
+      }
+
+      function updateRightGUI() {
+        right_gui_flakes = right_gui.add( params, 'flakeSize', fSize_min, fSize_max, (fSize_max - fSize_min) / 100.0 )
+        .name( 'Snow Flake Size' )
+        .onChange( function ( value ) {
+          if (snowParticles) snowParticles.material.size = value;
+          mouse_wheel = true;
+        });
 
         mouse_wheel = true;
       }
@@ -3600,13 +3617,28 @@
           // Soft, glowing, anti-aliased snow 🌨️🔮✨
           const snowMat = new THREE.PointsMaterial({
             color: 0xffffff,
-            size: params.flakeSize,
-            transparent: true,
-            opacity: 0.8,
+            size: globeRadius * 0.006,
+            transparent: false,
+            opacity: 0.9,
             blending: THREE.NormalBlending,
             depthWrite: false,              // Prevents particles from clipping each other awkwardly
             sizeAttenuation: true
           });
+
+          function roundToFirstSignificant( num, hi = false ) {
+            if (num >= 1) return hi ? Math.ceil( num ) : Math.floor( num );
+
+            // Find the position of the first non-zero digit
+            let decimalPlaces = Math.ceil( - Math.log10( num ) );
+
+            // Round to that specific number of decimal places
+            return Number( num.toFixed( decimalPlaces ) );
+          }
+
+          params.flakeSize = snowMat.size;
+          fSize_min = roundToFirstSignificant( snowMat.size );
+          fSize_max = roundToFirstSignificant( snowMat.size * 10, true );
+          if (right_gui_set) await updateRightGUI();
 
           // Create the particle system and link visibility to the globe
           snowParticles = new THREE.Points( snowGeo, snowMat );
@@ -3716,6 +3748,49 @@
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
+      }
+
+      function set_globe() {
+        if (glassGlobe) {
+          globeEnabled = !globeEnabled;
+          glassGlobe.visible = globeEnabled;
+          if (snowParticles) snowParticles.visible = globeEnabled;
+
+          const btn = document.getElementById('btn_glass_globe');
+          btn.style.backgroundColor = globeEnabled ? 'lightgreen' : 'transparent';
+
+          if (!right_gui_set) {
+            right_gui.add( params, 'globeThickness', 1, 40, 0.5  )
+            .name( 'Glass Thickness' )
+            .onChange( function ( value ) {
+              if (glassMaterial) glassMaterial.uniforms.thickness.value = value;
+              mouse_wheel = true;
+            });
+
+            right_gui.add( params, 'indexOfRefraction', 1.0, 2.0, 0.05  )
+            .name( 'IOR' )
+            .onChange( function ( value ) {
+              if (glassMaterial) glassMaterial.uniforms.ior.value = value;
+              mouse_wheel = true;
+            });
+
+            right_gui_flakes = right_gui.add( params, 'flakeSize', fSize_min, fSize_max, (fSize_max - fSize_min) / 100.0 )
+            .name( 'Snow Flake Size' )
+            .onChange( function ( value ) {
+              if (snowParticles) snowParticles.material.size = value;
+              mouse_wheel = true;
+            });
+
+            right_gui.open();
+            right_gui_set = true;
+          }
+
+          document.getElementById('right_gui_position').style.display = globeEnabled ? 'block' : 'none';
+
+          set_gui_position();
+
+          mouse_wheel = true;
+        }
       }
 
       function show_points_model() {
@@ -4137,46 +4212,6 @@
         if (texture.isTexture) texture.dispose();
 
         return tex;
-      }
-
-      function set_globe() {
-        if (glassGlobe) {
-          globeEnabled = !globeEnabled;
-          glassGlobe.visible = globeEnabled;
-          if (snowParticles) snowParticles.visible = globeEnabled;
-
-          const btn = document.getElementById('btn_glass_globe');
-          btn.style.backgroundColor = globeEnabled ? 'lightgreen' : 'transparent';
-
-          if (!right_gui_set) {
-            right_gui.add( params, 'flakeSize', 1, 40, 0.5 )
-            .onChange( function ( value ) {
-              if (snowParticles) snowParticles.material.size = value;
-              mouse_wheel = true;
-            });
-
-            right_gui.add( params, 'globeThickness', 1, 40, 0.5  )
-            .onChange( function ( value ) {
-              if (glassMaterial) glassMaterial.uniforms.thickness.value = value;
-              mouse_wheel = true;
-            });
-
-            right_gui.add( params, 'indexOfRefraction', 1.0, 2.0, 0.05  )
-            .onChange( function ( value ) {
-              if (glassMaterial) glassMaterial.uniforms.ior.value = value;
-              mouse_wheel = true;
-            });
-
-            right_gui.open();
-            right_gui_set = true;
-          }
-
-          document.getElementById('right_gui_position').style.display = globeEnabled ? 'block' : 'none';
-
-          set_gui_position();
-
-          mouse_wheel = true;
-        }
       }
 
       function show_polar_grid() {
@@ -4796,7 +4831,14 @@
           updateGUI();
         }
 
-        if (right_gui_set) right_gui_reset();
+        if (right_gui_set) {
+          if (right_gui_flakes !== null) {
+            right_gui_flakes.destroy();
+            right_gui_flakes = null;
+          }
+
+          right_gui_reset();
+        }
 
         gif_export = false;
         reset_rotation = true;
@@ -4816,6 +4858,9 @@
           // Page (re)loading
           if (scene !== undefined) {
             if (mesh) await scene_cleanup();
+
+            if (gui) gui.dispose();
+            if (right_gui) right_gui.dispose();
 
             if (gizmo) {
               gizmo.dispose();
