@@ -23,7 +23,8 @@
             alert('jQuery failed to load. Limited functionality. Check your internet connection!');
           }
 
-          if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
+          if (export_running) handle_export_error( 'RESOURCE ERROR' );
+          else if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
         }
       }, true); // The 'true' here is vital; it enables the "capturing" phase
 
@@ -39,7 +40,8 @@
           errorObj: error   // The actual Error object (includes stack trace)
         });
 
-        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+        if (export_running) handle_export_error( 'RUNTIME ERROR' );
+        else if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
 
         // Returning 'true' prevents the error from showing up in the browser console
         return false; 
@@ -52,7 +54,8 @@
         // event.promise is the promise that failed
         // event.reason is usually the error object or message
 
-        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
+        if (export_running) handle_export_error( 'UNHANDLED PROMISE' );
+        else if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
       });
     </script>
 
@@ -74,6 +77,7 @@
           "ktx-parse": "https://cdn.jsdelivr.net/npm/ktx-parse@1.1.0/dist/ktx-parse.esm.min.js",
           "meshoptimizer": "https://esm.sh/meshoptimizer@1.1.1",
           "@jsquash/avif": "https://esm.sh/@jsquash/avif@2.1.1",
+          "@jsquash/webp": "https://esm.sh/@jsquash/webp@1.5.0",
           "bitmap2vector": "https://esm.sh/bitmap2vector@0.0.4",
           "svgo": "https://esm.sh/svgo@3.3.2"
         }
@@ -90,8 +94,8 @@
     <script src="../static/js/hdrpng/hdrpng.min.js" defer></script>
 
     <script>
-      var THREE, renderer, render_requested, scene, loader, texture_loader, dds_loader;
-      var ktx2_loader, tiff_loader, tga_loader, exr_loader, hdr_loader, hdrJPGLoader;
+      var THREE, textureUtils, renderer, render_requested, scene, loader, texture_loader;
+      var dds_loader, ktx2_loader, tiff_loader, tga_loader, exr_loader, hdr_loader, hdrJPGLoader;
       var manager, camera, controls, gizmo, mouse_down, mouse_wheel, events_initialized;
       var img_obj, gui, gui_set = false, guiExposure = null, params, toneMappingOptions;
       var grid, polar_grid, grid_visible, polar_grid_visible, slider_height = 0;
@@ -100,13 +104,14 @@
       var uSync, strU8, local_files, zip_file, unzipped_files, bgnd_linear_gradient;
       var rot_x = 0, rot_y = 0, rot_z = 0, gif_export, bg_flip, scene_bgnd, hdrjpg_texture;
       var url_displayed = false, url_loading = false, menu_location_bottom = false, filesMap;
-      var selected_img_file, selected_url_file = '', equi_enabled, wireframe_enabled, init_running = false;
+      var selected_img_file, selected_url_file = '', equi_enabled, wireframe_enabled;
+      var init_running = false, export_running = false, isHD = false;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
-      const M2K = 2048; // Mobile 2k limit
-      const A4K = 4096; // AVIF 4k limit
-      const I8K = 8192; // iPad 8k limit
+      const M2K = 2048;   // Mobile 2k limit
+      const A4K = 4096;   // AVIF 4k limit
+      const I8K = 8192;   // iPad 8k limit
       const D16K = 16384; // Desktop 16k limit
     </script>
 
@@ -114,10 +119,12 @@
       import * as threejs from 'three';
       import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
       import { unzipSync, strToU8 } from 'three/addons/libs/fflate.module.min.js';
+      import * as WebGLTextureUtils from 'three/addons/utils/WebGLTextureUtils.min.js';
 
       THREE = threejs;
       uSync = unzipSync;
       strU8 = strToU8;
+      textureUtils = WebGLTextureUtils;
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
@@ -141,7 +148,7 @@
     <!-- OrbitControlsGizmo from: https://github.com/Fennec-hub/three-viewport-gizmo -->
     <!-- When applicable, using glTF Transform for DRACO / MESHOPT / PNG / JPEG / WEBP compression: https://gltf-transform.dev -->
     <!--  - When applicable, using meshoptimizer: https://github.com/zeux/meshoptimizer -->
-    <!-- When applicable, using @jsquash/avif encoder for AVIF compression: https://github.com/jamsinclair/jSquash -->
+    <!-- When applicable, using @jsquash/avif and @jsquash/webp encoders for AVIF/WEBP compression: https://github.com/jamsinclair/jSquash -->
     <!--  - Licensed under the Apache License, Version 2.0: https://www.apache.org/licenses/LICENSE-2.0 -->
     <!-- When applicable, using bitmap2vector for conversion to SVG format: https://github.com/cancerberoSgx/univac -->
     <!--  - When applicable, using SVG Optimizer: https://github.com/svg/svgo -->
@@ -605,6 +612,8 @@
 
         if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'none';
 
+        export_running = true;
+
         set_filename();
       }
 
@@ -617,7 +626,8 @@
       }
 
       async function process_zip( ext = '' ) {
-        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 9 } } ).then( function( zipped_file ) {
+        await zip.generateAsync( { type: 'blob', compression: "DEFLATE", compressionOptions: { level: 9 } } )
+        .then( function( zipped_file ) {
           let link = document.getElementById('link');
           link.href = URL.createObjectURL( zipped_file );
           URL.revokeObjectURL( zipped_file );
@@ -646,6 +656,8 @@
         if (gizmo) gizmo.enabled = true;
 
         if (gui_set && equi_enabled) document.getElementById('gui_position').style.display = 'block';
+
+        export_running = false;
 
         render_requested = true;
         mouse_wheel = true;
@@ -705,6 +717,8 @@
           const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
           const gltf_exporter = new GLTFExporter( manager );
+          gltf_exporter.setTextureUtils( textureUtils );
+
           const options = { binary: binary, maxTextureSize: D16K };
 
           gltf_exporter.parse( img_obj.clone(), async json => {
@@ -734,7 +748,9 @@
 
               await process_zip( str );
             } else {
-              let string = JSON.stringify( json, null, 2 );
+              let finalJson = await process_gltf_json_textures( json );
+
+              let string = JSON.stringify( finalJson, null, 2 );
               blob = new Blob( [ string ], { type: 'text/plain' } );
 
               zip.file( filename + '.gltf', blob );
@@ -762,9 +778,11 @@
         if (img_obj) {
           await start_export();
 
-          const { USDZExporter } = await import( '../static/jsm/exporters/USDZExporter.min.js' );
+          const { USDZExporter } = await import( 'three/addons/exporters/USDZExporter.min.js' );
 
           const usdz_exporter = new USDZExporter( manager );
+          usdz_exporter.setTextureUtils( textureUtils );
+
           const options = { maxTextureSize: D16K };
 
           await usdz_exporter.parse( img_obj.clone(), async function( arraybuffer ) {
@@ -805,6 +823,8 @@
         const { GLTFExporter } = await import( '../static/jsm/exporters/GLTFExporter.min.js' );
 
         const gltf_exporter = new GLTFExporter( manager );
+        gltf_exporter.setTextureUtils( textureUtils );
+
         const options = { binary: true, maxTextureSize: D16K };
 
         gltf_exporter.parse( img_obj.clone(), async json => {
@@ -1831,15 +1851,6 @@
         camera.position.set( 0, 0, dist );
         camera.lookAt( 0, 0, 0 );
 
-        // ========================================================
-        // POST-CENTERING ADJUSTMENT
-        // ========================================================
-        // Now that the model is sitting safely at (0,0,0), we no longer 
-        // need a 100-million unit far plane. We tighten it dynamically!
-        camera.near = 0.1;
-        camera.far = dist * 10;
-        camera.updateProjectionMatrix();
-
         resize();
       }
 
@@ -2047,7 +2058,7 @@
       };
 
       const createExtrudedImageMesh = async ( { url } ) => {
-        let tex, hd = false;
+        let tex;
 
         if (loader === dds_loader || loader === ktx2_loader) {
           tex = await convert( url );
@@ -2058,7 +2069,7 @@
           tex.magFilter = THREE.LinearFilter;
           tex.minFilter = THREE.NearestMipmapLinearFilter;
           tex.flipY = false;
-          hd = true;
+          isHD = true;
         } else {
           tex = await loader.loadAsync( url );
           tex.minFilter = tex.magFilter = THREE.LinearFilter;
@@ -2074,7 +2085,7 @@
           tex = await resize_texture( tex, D16K, !tex.flipY, mime_type, true );
         }
 
-        tex.colorSpace = hd ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
+        tex.colorSpace = isHD ? THREE.LinearSRGBColorSpace : THREE.SRGBColorSpace;
 
         let g = extrudedImageGeometry( { image: tex.source.data } );
 
@@ -2296,6 +2307,7 @@
         local_files = null;
         mime_type = 'image/';
         isKTX2 = false;
+        isHD = false;
         filesMap = {};
         zip_file = null;
         unzipped_files = null;
@@ -2644,6 +2656,12 @@
           sparse( { ratio: 0.2 } )
         );
 
+        const textures = doc.getRoot().listTextures();
+
+        if (textures.length > 0) {
+          await process_textures( textures, doc, ALL_EXTENSIONS );
+        }
+
         const compressedArrayBuffer = await io.writeBinary( doc );
 
         for (const texture of doc.getRoot().listTextures()) { texture.dispose(); }
@@ -2678,6 +2696,12 @@
           prune(),
           sparse( { ratio: 0.2 } )
         );
+
+        const textures = doc.getRoot().listTextures();
+
+        if (textures.length > 0) {
+          await process_textures( textures, doc, ALL_EXTENSIONS );
+        }
 
         const KHRDracoMeshCompression = ALL_EXTENSIONS.find( ( Extension ) => Extension.EXTENSION_NAME === 'KHR_draco_mesh_compression' );
 
@@ -2728,6 +2752,12 @@
           meshopt( { encoder: MeshoptEncoder, level: 'high' } )
         );
 
+        const textures = doc.getRoot().listTextures();
+
+        if (textures.length > 0) {
+          await process_textures( textures, doc, ALL_EXTENSIONS );
+        }
+
         const EXTMeshoptCompression = ALL_EXTENSIONS.find( ( Extension ) => Extension.EXTENSION_NAME === 'EXT_meshopt_compression' );
 
         doc.createExtension( EXTMeshoptCompression )
@@ -2745,7 +2775,82 @@
         return compressedArrayBuffer;
       }
 
-      /* Export texture only as either of AVIF, EXR, PNG, SVG, WEBP or KTX2 */
+      async function process_gltf_json_textures( originalJson ) {
+        const { WebIO } = await import( '@gltf-transform/core' );
+        const { dedup } = await import( '@gltf-transform/functions' );
+        const { ALL_EXTENSIONS } = await import( '@gltf-transform/extensions' );
+
+        const io = new WebIO().registerExtensions( ALL_EXTENSIONS );
+
+        const doc = await io.readJSON({
+          json: originalJson,
+          resources: {} 
+        });
+
+        await doc.transform(
+          dedup( { textures: true } )
+        );
+
+        const textures = doc.getRoot().listTextures();
+
+        if (textures.length > 0) {
+          await process_textures( textures, doc, ALL_EXTENSIONS );
+        }
+
+        // 1. Write the document. This splits out the updated buffers into 'resources'
+        const { json, resources } = await io.writeJSON( doc );
+
+        // Helper function to turn a Uint8Array into a Base64 string in the browser
+        const arrayBufferToBase64 = ( uint8Array ) => {
+          let binary = '';
+          const len = uint8Array.byteLength;
+
+          for ( let i = 0; i < len; i++ ) {
+            binary += String.fromCharCode( uint8Array[ i ] );
+          }
+
+          return btoa( binary );
+        };
+
+        // 2. Inline the texture data URIs directly back into the images array
+        if (json.images?.length > 0) {
+          json.images.forEach( ( img ) => {
+            if (img.uri && resources[ img.uri ]) {
+              const base64Str = arrayBufferToBase64( resources[ img.uri ] );
+              img.uri = `data:${img.mimeType};base64,${base64Str}`;
+            }
+          });
+        }
+
+        // 3. Inline the geometry buffer data URI directly back into the buffers array
+        if (json.buffers?.length > 0) {
+          json.buffers.forEach( ( buf ) => {
+            if (buf.uri && resources[ buf.uri ]) {
+              const base64Str = arrayBufferToBase64( resources[ buf.uri ] );
+              buf.uri = `data:application/octet-stream;base64,${base64Str}`;
+            }
+          });
+        }
+
+        return json;
+      }
+
+      async function process_textures( textures, doc, ALL_EXTENSIONS ) {
+        const { compressTexture } = await import( '@gltf-transform/functions' );
+
+        for (const texture of textures) {
+          // Flip and scale the texture
+          let blob = new Blob( [ texture.getImage() ], { type: 'image/png' } );
+
+          const data = await transform_texture( blob );
+          texture.setImage( data[ 0 ] );
+          texture.setMimeType( 'image/png' );
+
+          await compressTexture( texture, { targetFormat: 'png' } );
+        }
+      }
+
+      /* Export texture only as either of AVIF, EXR, HDR, PNG, SVG, WEBP or KTX2 */
 
       async function texture_only_export( arrayBuffer, tex_fmt, tex_flip ) {
         const { WebIO } = await import( '@gltf-transform/core' );
@@ -2767,14 +2872,12 @@
         }
 
         for (const texture of textures) {
-          let data;
-
           const compress_supported = [ 'avif', 'jpeg', 'png', 'webp' ];
 
           // Flip and scale the texture
           let blob = new Blob( [ texture.getImage() ], { type: mime_type } );
 
-          data = await transform_texture( blob, mime_type, tex_fmt, tex_flip );
+          const data = await transform_texture( blob, mime_type, tex_fmt, tex_flip );
           texture.setImage( data[ 0 ] );
           texture.setMimeType( mime_type );
 
@@ -2783,10 +2886,7 @@
 
             const size = data[ 2 ];
 
-            let fmt_e = tex_fmt.endsWith( 'e' ) === true;
-            let fmt_u = tex_fmt.endsWith( 'u' ) === true;
-
-            const uastc = (fmt_u === true);
+            let uastc = (tex_fmt === 'ktx2u');
 
             // check if texture dimensions are multiples of 4
             const width_is_m4 = size[ 0 ] % 4 === 0;
@@ -2845,8 +2945,12 @@
 
             if (fmt === 'avif') {
               const { encode } = await import( '@jsquash/avif' );
-              const avif = await encode( data[ 1 ] );
+              const avif = await encode( data[ 1 ], { quality: 65, subsample: 3, chromaDeltaQ: true, enableSharpYUV: true } );
               blob = new Blob( [ avif ], { type: 'image/avif' } );
+            } else if (fmt === 'webp') {
+              const { encode } = await import( '@jsquash/webp' );
+              const webp = await encode( data[ 1 ], { quality: 85, use_sharp_yuv: 1, filter_strength: 15, filter_sharpness: 7, sns_strength: 35, method: 6 } );
+              blob = new Blob( [ webp ], { type: 'image/webp' } );
             } else if (fmt === 'svg') {
               const { bitmap2vector } = await import( 'bitmap2vector' );
               const { optimize } = await import( 'svgo' );
@@ -3042,6 +3146,27 @@
             ctx.drawImage( img, 0, 0, canvas.width, canvas.height );
 
             image_data = ctx.getImageData( 0, 0, canvas.width, canvas.height );
+
+            if(isHD && export_fmt !== 'exr' && export_fmt !== 'hdr') {
+              // --- MANUALLY CONVERT LINEAR TO sRGB ---
+              const data = image_data.data;
+
+              const transformChannel = ( c ) => {
+                const v = c / 255.0;
+                return ( v <= 0.0031308 ? v * 12.92 : 1.055 * Math.pow( v, 1 / 2.4 ) - 0.055 ) * 255;
+              };
+
+              for ( let i = 0; i < data.length; i += 4 ) {
+                // This lifts the dark midtones and matches standard PNG expectations
+                data[ i ]     = transformChannel( data[ i ] ); // Red
+                data[ i + 1 ] = transformChannel( data[ i + 1 ] ); // Green
+                data[ i + 2 ] = transformChannel( data[ i + 2 ] ); // Blue
+                // data[ i + 3 ] is Alpha, leave it alone
+              }
+
+              // Write the color-corrected pixels back to the canvas before exporting to Blob
+              ctx.putImageData( image_data, 0, 0 );
+            }
 
             canvas.toBlob( blob => {
               let reader = new FileReader();
