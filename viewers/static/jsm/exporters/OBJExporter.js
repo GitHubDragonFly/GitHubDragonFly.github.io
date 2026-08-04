@@ -4,16 +4,14 @@ import {
 	Matrix3,
 	Vector2,
 	Vector3
-} from "three";
+} from 'three';
 
 async function import_decompress() {
 
 	try {
 
 		const { WebGLRenderer } = await import( 'three' );
-		const { decompress } = await import(
-			'https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/utils/TextureUtils.min.js'
-		);
+		const { decompress } = await import( 'three/addons/utils/WebGLTextureUtils.min.js' );
 
 		const renderer = new WebGLRenderer( { antialias: true } );
 
@@ -215,7 +213,7 @@ class OBJExporter {
 
 				let temp_name = mesh.material.name;
 
-				if ( material_names.includes( temp_name ) === false ) {
+				if ( ! material_names.includes( temp_name ) ) {
 
 					material_names.push( temp_name );
 					materials[ temp_name ] = mesh.material;
@@ -667,19 +665,19 @@ class OBJExporter {
 
 		object.traverse( function ( child ) {
 
-			if ( child.isMesh === true ) {
+			if ( child.isMesh ) {
 
 				parseMesh( child.clone() );
 
 			}
 
-			if ( ( child.isLine === true || child.isLineSegments === true ) && ! child.isConditionalLine ) {
+			if ( ( child.isLine || child.isLineSegments ) && ! child.isConditionalLine ) {
 
 				parseLine( child.clone() );
 
 			}
 
-			if ( child.isPoints === true ) {
+			if ( child.isPoints ) {
 
 				parsePoints( child.clone() );
 
@@ -734,12 +732,12 @@ class OBJExporter {
 				name = name.replaceAll( '#', '' );
 				name = name.replaceAll( ' ', '_' );
 
-				if ( names.includes( name ) === false ) {
+				if ( ! names.includes( name ) ) {
 
 					names.push( name );
 
 					let transparency = ( mat.opacity < 1 ) ? ( 1 - mat.opacity ) : '0.0000';
-					if ( mat.transparent === true && parseFloat( transparency ) === 0 ) transparency = '0.0001';
+					if ( mat.transparent && parseFloat( transparency ) === 0 ) transparency = '0.0001';
 
 					mtlOutput += '\n' + 'newmtl ' + name + '\n';
 
@@ -761,14 +759,14 @@ class OBJExporter {
 					} else if ( mat.refractionRatio !== undefined && mat.refractionRatio <= 1 && mat.refractionRatio !== 0.98) {
 						mtlOutput += 'Ni ' + mat.refractionRatio + '\n';
 					}
-					if ( ( mat.normalScale && ! ( mat.normalScale.x === 1 && mat.normalScale.y === 1 ) && ! mat.sheen ) || vertexTangents === true ) {
-						mtlOutput += 'Pns ' + mat.normalScale.x + ' ' + ( vertexTangents === true ? mat.normalScale.y *= -1 : mat.normalScale.y ) + '\n';
+					if ( ( mat.normalScale && ! ( mat.normalScale.x === 1 && mat.normalScale.y === 1 ) && ! mat.sheen ) || vertexTangents ) {
+						mtlOutput += 'Pns ' + mat.normalScale.x + ' ' + ( vertexTangents ? mat.normalScale.y *= -1 : mat.normalScale.y ) + '\n';
 					}
 					if ( mat.clearcoat && mat.clearcoat > 0 ) {
 						mtlOutput += 'Pcc ' + mat.clearcoat + '\n';
 						if ( mat.clearcoatRoughness ) mtlOutput += 'Pcr ' + mat.clearcoatRoughness + '\n';
-						if ( ( mat.clearcoatNormalScale && ! ( mat.clearcoatNormalScale.x === 1 && mat.clearcoatNormalScale.y === 1 ) ) || vertexTangents === true ) {
-							mtlOutput += 'Pcn ' + mat.clearcoatNormalScale.x + ' ' + ( vertexTangents === true ? mat.clearcoatNormalScale.y *= -1 : mat.clearcoatNormalScale.y ) + '\n';
+						if ( ( mat.clearcoatNormalScale && ! ( mat.clearcoatNormalScale.x === 1 && mat.clearcoatNormalScale.y === 1 ) ) || vertexTangents ) {
+							mtlOutput += 'Pcn ' + mat.clearcoatNormalScale.x + ' ' + ( vertexTangents ? mat.clearcoatNormalScale.y *= -1 : mat.clearcoatNormalScale.y ) + '\n';
 						}
 					}
 					if ( mat.lightMapIntensity !== undefined && mat.lightMapIntensity !== 1 ) mtlOutput += 'Pli ' + mat.lightMapIntensity + '\n';
@@ -794,48 +792,31 @@ class OBJExporter {
 						if ( mat.specularColor ) mtlOutput += 'Psp ' + mat.specularColor.r + ' ' + mat.specularColor.g + ' ' + mat.specularColor.b + '\n';
 						if ( mat.specularIntensity !== undefined ) mtlOutput += 'Psi ' + mat.specularIntensity + '\n';
 					}
-					// thickness value currently appears to need a certain correction depending on the transmission and its own value
-					// this workaround just brings the look of all Khronos examples with thickness rather close to GLTF Viewer's
-					// not sure why this would be required in the first place
-					if ( mat.thickness && mat.thickness > 0 ) {
-						if ( mat.transmission && mat.transmission > 0 ) {
-							if ( mat.thickness < 1 ) {
-								mtlOutput += 'Pth ' + ( mat.thickness * 140 ) + '\n';
-							} else {
-								mtlOutput += 'Pth ' + ( mat.thickness * 11 ) + '\n';
-							}
-						} else {
-							if ( mat.thickness < 1 ) {
-								mtlOutput += 'Pth ' + ( mat.thickness * 210 ) + '\n';
-							} else {
-								mtlOutput += 'Pth ' + ( mat.thickness * 17 ) + '\n';
-							}
-						}
-					}
 					if ( mat.attenuationDistance && mat.attenuationDistance !== Infinity ) {
 						mtlOutput += 'Pac ' + mat.attenuationColor.r + ' ' + mat.attenuationColor.g + ' ' + mat.attenuationColor.b + '\n';
 						mtlOutput += 'Pad ' + ( mat.attenuationDistance + ( mat.thickness || 0 ) ) + '\n';
 					}
 					if ( mat.transmission && mat.transmission > 0 ) mtlOutput += 'Ptr ' + mat.transmission + '\n';
+					if ( mat.thickness && mat.thickness > 0 ) mtlOutput += 'Pth ' + mat.thickness + '\n';
 
 					if ( mat.reflectivity !== undefined && mat.reflectivity > 0 ) mtlOutput += 'Prf ' + mat.reflectivity + '\n';
 					if ( mat.alphaTest > 0 ) mtlOutput += 'a ' + mat.alphaTest + '\n';
-					if ( mat.depthTest !== undefined ) mtlOutput += 'Pdt ' + ( mat.depthTest === true ? 1 : 0 ) + '\n';
+					if ( mat.depthTest !== undefined ) mtlOutput += 'Pdt ' + ( mat.depthTest ? 1 : 0 ) + '\n';
 					mtlOutput += 's ' + mat.side + '\n';
 
 					if ( mat.map && mat.map.image ) {
 
 						let map_to_process = mat.map;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.map.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.map.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.map.isCompressedTexture || mat.map.source?.data || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
-							const hd = mat.map.type === 1016;
+							const hd = mat.map.type === 1016 || mat.map.colorSpace === 'srgb-linear';
 
 							const xs = mat.map.repeat.x;
 							const ys = mat.map.repeat.y;
@@ -847,12 +828,12 @@ class OBJExporter {
 							const yc = mat.map.center ? mat.map.center.y : 0;
 							const rot = mat.map.rotation ? mat.map.rotation : 0;
 
-							if ( map_uuids.includes( mat.map.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.map.uuid ) ) {
 
 								map_uuids.push( mat.map.uuid );
 								map_names[ mat.map.uuid ] = name;
 
-								if ( hd === true ) {
+								if ( hd ) {
 
 									mtlOutput += 'map_Kd -r ' + rot + ' -hd 1 -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + name + '.png' + '\n';
 
@@ -870,7 +851,7 @@ class OBJExporter {
 
 							} else {
 
-								if ( hd === true ) {
+								if ( hd ) {
 
 									mtlOutput += 'map_Kd -r ' + rot + ' -hd 1 -c ' + xc + ' ' + yc + ' -s ' + xs + ' ' + ys + ' 1' + ' -o ' + xo + ' ' + yo + ' 0 ' + '-w ' + ws + ' ' + wt + ' ' + map_names[ mat.map.uuid ] + '.png' + '\n';
 
@@ -890,13 +871,13 @@ class OBJExporter {
 
 						let map_to_process = mat.specularMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.specularMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.specularMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.specularMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.specularMap.repeat.x;
 							const ys = mat.specularMap.repeat.y;
@@ -908,7 +889,7 @@ class OBJExporter {
 							const yc = mat.specularMap.center ? mat.specularMap.center.y : 0;
 							const rot = mat.specularMap.rotation ? mat.specularMap.rotation : 0;
 
-							if ( map_uuids.includes( mat.specularMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.specularMap.uuid ) ) {
 
 								name = 'specMap' + count;
 
@@ -937,13 +918,13 @@ class OBJExporter {
 
 						let map_to_process = mat.emissiveMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.emissiveMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.emissiveMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.emissiveMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.emissiveMap.repeat.x;
 							const ys = mat.emissiveMap.repeat.y;
@@ -955,7 +936,7 @@ class OBJExporter {
 							const yc = mat.emissiveMap.center ? mat.emissiveMap.center.y : 0;
 							const rot = mat.emissiveMap.rotation ? mat.emissiveMap.rotation : 0;
 
-							if ( map_uuids.includes( mat.emissiveMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.emissiveMap.uuid ) ) {
 
 								name = 'emMap' + count;
 
@@ -984,13 +965,13 @@ class OBJExporter {
 
 						let map_to_process = mat.bumpMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.bumpMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.bumpMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.bumpMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.bumpMap.repeat.x;
 							const ys = mat.bumpMap.repeat.y;
@@ -1002,7 +983,7 @@ class OBJExporter {
 							const yc = mat.bumpMap.center ? mat.bumpMap.center.y : 0;
 							const rot = mat.bumpMap.rotation ? mat.bumpMap.rotation : 0;
 
-							if ( map_uuids.includes( mat.bumpMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.bumpMap.uuid ) ) {
 
 								name = 'bmMap' + count;
 
@@ -1047,13 +1028,13 @@ class OBJExporter {
 
 						let map_to_process = mat.lightMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.lightMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.lightMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.lightMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.lightMap.repeat.x;
 							const ys = mat.lightMap.repeat.y;
@@ -1065,7 +1046,7 @@ class OBJExporter {
 							const yc = mat.lightMap.center ? mat.lightMap.center.y : 0;
 							const rot = mat.lightMap.rotation ? mat.lightMap.rotation : 0;
 
-							if ( map_uuids.includes( mat.lightMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.lightMap.uuid ) ) {
 
 								name = 'ltMap' + count;
 
@@ -1092,17 +1073,17 @@ class OBJExporter {
 
 					if ( mat.metalnessMap && mat.metalnessMap.image ) {
 
-						if ( map_Px_set === false ) {
+						if ( ! map_Px_set ) {
 
 							let map_to_process = mat.metalnessMap;
 
-							if ( map_to_process.isCompressedTexture === true ) {
+							if ( map_to_process.isCompressedTexture ) {
 
 								map_to_process = scope.decompress( mat.metalnessMap.clone(), maxTextureSize, scope.renderer );
 
 							}
 
-							if ( mat.metalnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+							if ( mat.metalnessMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 								const xs = mat.metalnessMap.repeat.x;
 								const ys = mat.metalnessMap.repeat.y;
@@ -1114,7 +1095,7 @@ class OBJExporter {
 								const yc = mat.metalnessMap.center ? mat.metalnessMap.center.y : 0;
 								const rot = mat.metalnessMap.rotation ? mat.metalnessMap.rotation : 0;
 
-								if ( map_uuids.includes( mat.metalnessMap.uuid ) === false ) {
+								if ( ! map_uuids.includes( mat.metalnessMap.uuid ) ) {
 
 									name = 'metalMap' + count;
 
@@ -1161,17 +1142,17 @@ class OBJExporter {
 
 					if ( mat.roughnessMap && mat.roughnessMap.image ) {
 
-						if ( map_Px_set === false ) {
+						if ( ! map_Px_set ) {
 
 							let map_to_process = mat.roughnessMap;
 
-							if ( map_to_process.isCompressedTexture === true ) {
+							if ( map_to_process.isCompressedTexture ) {
 
 								map_to_process = scope.decompress( mat.roughnessMap.clone(), maxTextureSize, scope.renderer );
 
 							}
 
-							if ( mat.roughnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+							if ( mat.roughnessMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 								const xs = mat.roughnessMap.repeat.x;
 								const ys = mat.roughnessMap.repeat.y;
@@ -1183,7 +1164,7 @@ class OBJExporter {
 								const yc = mat.roughnessMap.center ? mat.roughnessMap.center.y : 0;
 								const rot = mat.roughnessMap.rotation ? mat.roughnessMap.rotation : 0;
 
-								if ( map_uuids.includes( mat.roughnessMap.uuid ) === false ) {
+								if ( ! map_uuids.includes( mat.roughnessMap.uuid ) ) {
 
 									name = 'roughMap' + count;
 
@@ -1232,13 +1213,13 @@ class OBJExporter {
 
 						let map_to_process = mat.displacementMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.displacementMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.displacementMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.displacementMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.displacementMap.repeat.x;
 							const ys = mat.displacementMap.repeat.y;
@@ -1250,7 +1231,7 @@ class OBJExporter {
 							const yc = mat.displacementMap.center ? mat.displacementMap.center.y : 0;
 							const rot = mat.displacementMap.rotation ? mat.displacementMap.rotation : 0;
 
-							if ( map_uuids.includes( mat.displacementMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.displacementMap.uuid ) ) {
 
 								name = 'displaceMap' + count;
 
@@ -1279,13 +1260,13 @@ class OBJExporter {
 
 						let map_to_process = mat.normalMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.normalMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.normalMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.normalMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.normalMap.repeat.x;
 							const ys = mat.normalMap.repeat.y;
@@ -1297,7 +1278,7 @@ class OBJExporter {
 							const yc = mat.normalMap.center ? mat.normalMap.center.y : 0;
 							const rot = mat.normalMap.rotation ? mat.normalMap.rotation : 0;
 
-							if ( map_uuids.includes( mat.normalMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.normalMap.uuid ) ) {
 
 								name = 'norMap' + count;
 
@@ -1326,13 +1307,13 @@ class OBJExporter {
 
 						let map_to_process = mat.alphaMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.alphaMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.alphaMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.alphaMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.alphaMap.repeat.x;
 							const ys = mat.alphaMap.repeat.y;
@@ -1344,7 +1325,7 @@ class OBJExporter {
 							const yc = mat.alphaMap.center ? mat.alphaMap.center.y : 0;
 							const rot = mat.alphaMap.rotation ? mat.alphaMap.rotation : 0;
 
-							if ( map_uuids.includes( mat.alphaMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.alphaMap.uuid ) ) {
 
 								name = 'alpMap' + count;
 
@@ -1373,13 +1354,13 @@ class OBJExporter {
 
 						let map_to_process = mat.aoMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.aoMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.aoMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.aoMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.aoMap.repeat.x;
 							const ys = mat.aoMap.repeat.y;
@@ -1391,7 +1372,7 @@ class OBJExporter {
 							const yc = mat.aoMap.center ? mat.aoMap.center.y : 0;
 							const rot = mat.aoMap.rotation ? mat.aoMap.rotation : 0;
 
-							if ( map_uuids.includes( mat.aoMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.aoMap.uuid ) ) {
 
 								name = 'ambMap' + count;
 
@@ -1420,13 +1401,13 @@ class OBJExporter {
 
 						let map_to_process = mat.anisotropyMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.anisotropyMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.anisotropyMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.anisotropyMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.anisotropyMap.repeat.x;
 							const ys = mat.anisotropyMap.repeat.y;
@@ -1438,7 +1419,7 @@ class OBJExporter {
 							const yc = mat.anisotropyMap.center.y;
 							const rot = mat.anisotropyMap.rotation;
 
-							if ( map_uuids.includes( mat.anisotropyMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.anisotropyMap.uuid ) ) {
 
 								name = 'anisMap' + count;
 
@@ -1467,13 +1448,13 @@ class OBJExporter {
 
 						let map_to_process = mat.clearcoatMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.clearcoatMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.clearcoatMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.clearcoatMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.clearcoatMap.repeat.x;
 							const ys = mat.clearcoatMap.repeat.y;
@@ -1485,7 +1466,7 @@ class OBJExporter {
 							const yc = mat.clearcoatMap.center.y;
 							const rot = mat.clearcoatMap.rotation;
 
-							if ( map_uuids.includes( mat.clearcoatMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.clearcoatMap.uuid ) ) {
 
 								name = 'ccMap' + count;
 
@@ -1514,13 +1495,13 @@ class OBJExporter {
 
 						let map_to_process = mat.clearcoatNormalMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.clearcoatNormalMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.clearcoatNormalMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.clearcoatNormalMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.clearcoatNormalMap.repeat.x;
 							const ys = mat.clearcoatNormalMap.repeat.y;
@@ -1532,7 +1513,7 @@ class OBJExporter {
 							const yc = mat.clearcoatNormalMap.center.y;
 							const rot = mat.clearcoatNormalMap.rotation;
 
-							if ( map_uuids.includes( mat.clearcoatNormalMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.clearcoatNormalMap.uuid ) ) {
 
 								name = 'ccnMap' + count;
 
@@ -1561,13 +1542,13 @@ class OBJExporter {
 
 						let map_to_process = mat.clearcoatRoughnessMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.clearcoatRoughnessMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.clearcoatRoughnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.clearcoatRoughnessMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.clearcoatRoughnessMap.repeat.x;
 							const ys = mat.clearcoatRoughnessMap.repeat.y;
@@ -1579,7 +1560,7 @@ class OBJExporter {
 							const yc = mat.clearcoatRoughnessMap.center.y;
 							const rot = mat.clearcoatRoughnessMap.rotation;
 
-							if ( map_uuids.includes( mat.clearcoatRoughnessMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.clearcoatRoughnessMap.uuid ) ) {
 
 								name = 'ccrMap' + count;
 
@@ -1608,13 +1589,13 @@ class OBJExporter {
 
 						let map_to_process = mat.iridescenceMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.iridescenceMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.iridescenceMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.iridescenceMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.iridescenceMap.repeat.x;
 							const ys = mat.iridescenceMap.repeat.y;
@@ -1626,7 +1607,7 @@ class OBJExporter {
 							const yc = mat.iridescenceMap.center.y;
 							const rot = mat.iridescenceMap.rotation;
 
-							if ( map_uuids.includes( mat.iridescenceMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.iridescenceMap.uuid ) ) {
 
 								name = 'irMap' + count;
 
@@ -1655,13 +1636,13 @@ class OBJExporter {
 
 						let map_to_process = mat.iridescenceThicknessMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.iridescenceThicknessMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.iridescenceThicknessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.iridescenceThicknessMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.iridescenceThicknessMap.repeat.x;
 							const ys = mat.iridescenceThicknessMap.repeat.y;
@@ -1673,7 +1654,7 @@ class OBJExporter {
 							const yc = mat.iridescenceThicknessMap.center.y;
 							const rot = mat.iridescenceThicknessMap.rotation;
 
-							if ( map_uuids.includes( mat.iridescenceThicknessMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.iridescenceThicknessMap.uuid ) ) {
 
 								name = 'irthMap' + count;
 
@@ -1702,13 +1683,13 @@ class OBJExporter {
 
 						let map_to_process = mat.sheenColorMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.sheenColorMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.sheenColorMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.sheenColorMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.sheenColorMap.repeat.x;
 							const ys = mat.sheenColorMap.repeat.y;
@@ -1720,7 +1701,7 @@ class OBJExporter {
 							const yc = mat.sheenColorMap.center.y;
 							const rot = mat.sheenColorMap.rotation;
 
-							if ( map_uuids.includes( mat.sheenColorMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.sheenColorMap.uuid ) ) {
 
 								name = 'shcMap' + count;
 
@@ -1749,13 +1730,13 @@ class OBJExporter {
 
 						let map_to_process = mat.sheenRoughnessMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.sheenRoughnessMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.sheenRoughnessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.sheenRoughnessMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.sheenRoughnessMap.repeat.x;
 							const ys = mat.sheenRoughnessMap.repeat.y;
@@ -1767,7 +1748,7 @@ class OBJExporter {
 							const yc = mat.sheenRoughnessMap.center.y;
 							const rot = mat.sheenRoughnessMap.rotation;
 
-							if ( map_uuids.includes( mat.sheenRoughnessMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.sheenRoughnessMap.uuid ) ) {
 
 								name = 'shrMap' + count;
 
@@ -1796,13 +1777,13 @@ class OBJExporter {
 
 						let map_to_process = mat.specularIntensityMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.specularIntensityMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.specularIntensityMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.specularIntensityMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.specularIntensityMap.repeat.x;
 							const ys = mat.specularIntensityMap.repeat.y;
@@ -1814,7 +1795,7 @@ class OBJExporter {
 							const yc = mat.specularIntensityMap.center.y;
 							const rot = mat.specularIntensityMap.rotation;
 
-							if ( map_uuids.includes( mat.specularIntensityMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.specularIntensityMap.uuid ) ) {
 
 								name = 'spiMap' + count;
 
@@ -1843,13 +1824,13 @@ class OBJExporter {
 
 						let map_to_process = mat.specularColorMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.specularColorMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.specularColorMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.specularColorMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.specularColorMap.repeat.x;
 							const ys = mat.specularColorMap.repeat.y;
@@ -1861,7 +1842,7 @@ class OBJExporter {
 							const yc = mat.specularColorMap.center.y;
 							const rot = mat.specularColorMap.rotation;
 
-							if ( map_uuids.includes( mat.specularColorMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.specularColorMap.uuid ) ) {
 
 								name = 'spcMap' + count;
 
@@ -1890,13 +1871,13 @@ class OBJExporter {
 
 						let map_to_process = mat.thicknessMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.thicknessMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.thicknessMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.thicknessMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.thicknessMap.repeat.x;
 							const ys = mat.thicknessMap.repeat.y;
@@ -1908,7 +1889,7 @@ class OBJExporter {
 							const yc = mat.thicknessMap.center.y;
 							const rot = mat.thicknessMap.rotation;
 
-							if ( map_uuids.includes( mat.thicknessMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.thicknessMap.uuid ) ) {
 
 								name = 'thMap' + count;
 
@@ -1937,13 +1918,13 @@ class OBJExporter {
 
 						let map_to_process = mat.transmissionMap;
 
-						if ( map_to_process.isCompressedTexture === true ) {
+						if ( map_to_process.isCompressedTexture ) {
 
 							map_to_process = scope.decompress( mat.transmissionMap.clone(), maxTextureSize, scope.renderer );
 
 						}
 
-						if ( mat.transmissionMap.isCompressedTexture === true || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
+						if ( mat.transmissionMap.isCompressedTexture || map_to_process.image.src || map_to_process.image.data || map_to_process.image instanceof ImageBitmap ) {
 
 							const xs = mat.transmissionMap.repeat.x;
 							const ys = mat.transmissionMap.repeat.y;
@@ -1955,7 +1936,7 @@ class OBJExporter {
 							const yc = mat.transmissionMap.center.y;
 							const rot = mat.transmissionMap.rotation;
 
-							if ( map_uuids.includes( mat.transmissionMap.uuid ) === false ) {
+							if ( ! map_uuids.includes( mat.transmissionMap.uuid ) ) {
 
 								name = 'trMap' + count;
 
@@ -2049,7 +2030,7 @@ class OBJExporter {
 
 				ctx = ctx || canvas.getContext( '2d' );
 
-				if ( map_flip_required === true ) {
+				if ( map_flip_required ) {
 
 					// Flip image vertically
 
@@ -2071,7 +2052,7 @@ class OBJExporter {
 					let fromHF = DataUtils.fromHalfFloat;
 
 					for ( let i = 0; i < image.data.length; i ++ ) {
-					  let tmp = Math.max( -1, Math.min( 1, f32 === true ? image.data[ i ] : fromHF( image.data[ i ] ) ) );
+					  let tmp = Math.max( -1, Math.min( 1, f32 ? image.data[ i ] : fromHF( image.data[ i ] ) ) );
 					  tmp = tmp < 0 ? ( tmp * 0x8000 ) : ( tmp * 0x7FFF );
 					  u8[ i ] = tmp / 128.0;
 					}
