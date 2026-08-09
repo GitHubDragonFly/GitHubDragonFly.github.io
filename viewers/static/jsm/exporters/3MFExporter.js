@@ -9,24 +9,19 @@ import {
 	MirroredRepeatWrapping,
 	NearestFilter,
 	Quaternion,
+	SRGBColorSpace,
 	Vector3
-} from "three";
+} from 'three';
 
-import {
-	strToU8,
-	zipSync,
-} from "three/addons/libs/fflate.module.min.js";
-
-import { deinterleaveAttribute, mergeVertices } from "three/addons/utils/BufferGeometryUtils.min.js";
+import { strToU8, zipSync } from 'three/addons/libs/fflate.module.min.js';
+import { deinterleaveAttribute, mergeVertices } from 'three/addons/utils/BufferGeometryUtils.min.js';
 
 async function import_decompress() {
 
 	try {
 
-		const { WebGLRenderer } = await import( "three" );
-		const { decompress } = await import(
-			"https://cdn.jsdelivr.net/npm/three@0.169.0/examples/jsm/utils/TextureUtils.min.js"
-		);
+		const { WebGLRenderer } = await import( 'three' );
+		const { decompress } = await import( 'three/addons/utils/WebGLTextureUtils.min.js' );
 
 		const renderer = new WebGLRenderer( { antialias: true } );
 
@@ -36,8 +31,8 @@ async function import_decompress() {
 
 	try {
 
-		const { CanvasTexture, NodeMaterial, QuadMesh, WebGPURenderer } = await import( "three" );
-		const { texture, uv } = await import( "three/tsl" );
+		const { CanvasTexture, NodeMaterial, QuadMesh, WebGPURenderer } = await import( 'three' );
+		const { texture, uv } = await import( 'three/tsl' );
 
 		const renderer = new WebGPURenderer( { antialias: true } );
 		await renderer.init();
@@ -60,7 +55,7 @@ async function import_decompress() {
 			const height = Math.min( blitTexture_clone.image.height, maxTextureSize );
 
 			renderer.setSize( width, height );
-			renderer.outputColorSpace = blitTexture_clone.colorSpace;
+			renderer.outputColorSpace = SRGBColorSpace;
 
 			_quadMesh.material = material;
 			_quadMesh.render( renderer );
@@ -79,7 +74,7 @@ async function import_decompress() {
 
 			readableTexture.offset.set( blitTexture.offset.x, blitTexture.offset.y );
 			readableTexture.repeat.set( blitTexture.repeat.x, blitTexture.repeat.y );
-			readableTexture.colorSpace = blitTexture.colorSpace;
+			readableTexture.colorSpace = SRGBColorSpace;
 			readableTexture.minFilter = blitTexture.minFilter;
 			readableTexture.magFilter = blitTexture.magFilter;
 			readableTexture.wrapS = blitTexture.wrapS;
@@ -223,65 +218,47 @@ class ThreeMFExporter {
 		let relsStringTextures = '<?xml version="1.0" encoding="UTF-8"?>\n';
 		relsStringTextures += '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">\n';
 
-		const image_names = {};
+		const texture_url = 'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture';
+
+		const tex_uuids = {};
 
 		scene.traverse( ( object ) => {
 
-			if ( object.isMesh === true ) {
+			if ( object.isMesh ) {
 
-				if ( Array.isArray( object.material ) ) {
+				const mtls = Array.isArray( object.material ) ? object.material : [ object.material ];
 
-					object.material.forEach( mtl => {
+				mtls.forEach( m => {
 
-						if ( mtl.map !== null || mtl.emissiveMap !== null ) {
+					if ( m.map !== null || m.emissiveMap !== null ) {
 
-							const map = mtl.map !== null ? mtl.map : mtl.emissiveMap;
+						const map = m.map !== null ? m.map : m.emissiveMap;
 
-							// If there is no name then use texture uuid as a part of new name
+						map_found = true;
 
-							map_found = true;
-							let name = map.name ? map.name : 'texture_' + map.uuid;
-							if ( name.indexOf( '.' ) === -1 ) name += '.png';
+						let name = tex_uuids[ map.uuid ]
+							? tex_uuids[ map.uuid ]
+							: map.name
+								? map.name
+								: 'texture_' + map.id;
 
-							if ( ! image_names[ name ] ) {
+						if ( ! tex_uuids[ map.uuid ] ) {
 
-								image_names[ name ] = name;
+							if ( name.indexOf( '.' ) < 0 ) {
 
-								let texture_url = 'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture';
-
-								relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + map.id + '" Type="' + texture_url + '" />\n';
+								name += '_' + map.id + '.png';
 
 							}
 
-						}
-
-					});
-
-				} else {
-
-					if ( object.material.map !== null || object.material.emissiveMap !== null ) {
-
-						const map = object.material.map !== null ? object.material.map : object.material.emissiveMap;
-
-						// If there is no name then use texture uuid as a part of new name
-
-						map_found = true;
-						let name = map.name ? map.name : 'texture_' + map.uuid;
-						if ( name.indexOf( '.' ) === -1 ) name += '.png';
-
-						if ( ! image_names[ name ] ) {
-
-							image_names[ name ] = name;
-
-							let texture_url = 'http://schemas.microsoft.com/3dmanufacturing/2013/01/3dtexture';
-
-							relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + map.id + '" Type="' + texture_url + '" />\n';
+							tex_uuids[ map.uuid ] = name;
 
 						}
+
+						relsStringTextures += ' <Relationship Target="/3D/Textures/' + name + '" Id="rel' + map.id + '" Type="' + texture_url + '" />\n';
 
 					}
 
-				}
+				});
 
 			}
 
@@ -289,7 +266,7 @@ class ThreeMFExporter {
 
 		relsStringTextures += '</Relationships>\n';
 
-		return map_found === true ? relsStringTextures : null;
+		return map_found ? relsStringTextures : null;
 
 	}
 
@@ -313,7 +290,7 @@ class ThreeMFExporter {
 
 		scene.traverse( ( object ) => {
 
-			if ( object.isMesh === true ) {
+			if ( object.isMesh ) {
 
 				let geometry = this.interleaved_buffer_attribute_check( object.geometry.clone() );
 				let material = object.material;
@@ -371,7 +348,7 @@ class ThreeMFExporter {
 
 						let hex_uc = '#' + color_hex;
 
-						if ( mtl.opacity < 1 || mtl.transparent === true ) {
+						if ( mtl.opacity < 1 || mtl.transparent ) {
 
 							let hex_opacity = mtl.opacity === 1 ? 'FD' : ( parseInt( mtl.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
 							hex_uc += hex_opacity;
@@ -485,7 +462,7 @@ class ThreeMFExporter {
 
 						let hex_uc = '#' + color_hex;
 
-						if ( material.opacity < 1 || material.transparent === true ) {
+						if ( material.opacity < 1 || material.transparent ) {
 
 							let hex_opacity = material.opacity === 1 ? 'FD' : ( parseInt( material.opacity * 255 ) ).toString( 16 ).toUpperCase().padStart( 2, '0' );
 							hex_uc += hex_opacity;
@@ -543,7 +520,7 @@ class ThreeMFExporter {
 
 		scene.traverse( ( object ) => {
 
-			if ( object.isMesh === true ) {
+			if ( object.isMesh ) {
 
 				const matrix = new Matrix4();
 				matrix.copy( object.matrixWorld );
@@ -581,7 +558,7 @@ class ThreeMFExporter {
 
 		let resString = '';
 
-		if ( add_basematerial === true ) {
+		if ( add_basematerial ) {
 
 			resString += '  <basematerials id="' + id + '">\n';
 			resString += '   <base name="' + ( material.name || material.type ) + '" displaycolor="FFFFFF" />\n';
@@ -589,10 +566,13 @@ class ThreeMFExporter {
 
 		}
 
-		// If there is no name then use texture uuid as a part of new name
+		let name = map.name ? map.name : 'texture_' + map.id;
 
-		let name = map.name ? map.name : 'texture_' + map.uuid;
-		if ( name.indexOf( '.' ) === -1 ) name += '.png';
+		if ( name.indexOf( '.' ) < 0 ) {
+
+			name += '_' + map.id + '.png';
+
+		}
 
 		let styleu = map.wrapS === MirroredRepeatWrapping ? 'mirror' :
 			( map.wrapS === ClampToEdgeWrapping ? 'clamp' :'wrap' );
@@ -636,11 +616,11 @@ class ThreeMFExporter {
 
 		const groups = index !== null && geometry.groups[ index ] !== undefined;
 
-		let start = groups === true ? geometry.groups[ index ].start : 0;
-		let end = groups === true ? geometry.groups[ index ].start + geometry.groups[ index ].count : vertices.length;
+		let start = groups ? geometry.groups[ index ].start : 0;
+		let end = groups ? geometry.groups[ index ].start + geometry.groups[ index ].count : vertices.length;
 		if ( end === Infinity ) end = indices.length;
 
-		if ( groups === true ) {
+		if ( groups ) {
 
 			for ( let i = start; i < end; i ++ ) {
 
@@ -681,14 +661,14 @@ class ThreeMFExporter {
 		const groups = index !== null && geometry.groups[ index ] !== undefined;
 
 		let start = 0;
-		let end = groups === true ? geometry.groups[ index ].count : indices.length;
-		if ( end === Infinity ) end = groups === true ? indices.length - geometry.groups[ index ].start : indices.length;
+		let end = groups ? geometry.groups[ index ].count : indices.length;
+		if ( end === Infinity ) end = groups ? indices.length - geometry.groups[ index ].start : indices.length;
 
 		for ( let i = start; i < end; i += 3 ) {
 
-			let v1 = groups === true ? i : indices[ i ];
-			let v2 = groups === true ? i + 1 : indices[ i + 1 ];
-			let v3 = groups === true ? i + 2 : indices[ i + 2 ];
+			let v1 = groups ? i : indices[ i ];
+			let v2 = groups ? i + 1 : indices[ i + 1 ];
+			let v3 = groups ? i + 2 : indices[ i + 2 ];
 
 			if ( map_pid !== null ) {
 
@@ -721,15 +701,15 @@ class ThreeMFExporter {
 
 		const groups = index !== null && geometry.groups[ index ] !== undefined;
 
-		let start = groups === true ? geometry.groups[ index ].start : 0;
-		let end = groups === true ? ( geometry.groups[ index ].start + geometry.groups[ index ].count ) : uvs.length;
+		let start = groups ? geometry.groups[ index ].start : 0;
+		let end = groups ? ( geometry.groups[ index ].start + geometry.groups[ index ].count ) : uvs.length;
 
-		if ( groups === true ) {
+		if ( groups ) {
 
 			for ( let i = start; i < end; i ++ ) {
 
 				const uvu = uvs[ indices[ i ] * 2 ];
-				const uvv = uvs[ indices[ i ] * 2 + 1 ];
+				let uvv = uvs[ indices[ i ] * 2 + 1 ];
 
 				uvsString += '   <m:tex2coord u="' + uvu + '" v="' + uvv + '" />\n';
 
@@ -740,7 +720,7 @@ class ThreeMFExporter {
 			for ( let i = start; i < end; i += 2 ) {
 
 				const uvu = uvs[ i ];
-				const uvv = uvs[ i + 1 ];
+				let uvv = uvs[ i + 1 ];
 
 				uvsString += '   <m:tex2coord u="' + uvu + '" v="' + uvv + '" />\n';
 
@@ -756,84 +736,24 @@ class ThreeMFExporter {
 
 	async addTexturesToZip( scene, files, options ) {
 
-		const image_names = {};
+		const tex_uuids = {};
 		const textures = [];
 
 		scene.traverse( ( object ) => {
 
-			if ( object.isMesh === true ) {
+			if ( object.isMesh ) {
 
 				let texture;
 
-				if ( Array.isArray( object.material ) ) {
+				const mtls = Array.isArray( object.material ) ? object.material : [ object.material ];
 
-					for ( const mtl of object.material ) {
+				for ( const m of mtls ) {
 
-						if ( mtl.map !== null || mtl.emissiveMap !== null ) {
+					if ( m.map !== null || m.emissiveMap !== null ) {
 
-							const map = mtl.map !== null ? mtl.map : mtl.emissiveMap;
+						const map = m.map !== null ? m.map : m.emissiveMap;
 
-							// Preserve original texture uuid in case if
-							// it was used as a part of the texture name
-
-							const uuid = map.uuid;
-
-							if ( map.isCompressedTexture === true ) {
-
-								texture = this.decompress( map.clone(), Infinity, this.renderer );
-
-							} else {
-
-								texture = map.clone();
-
-							}
-
-							let name = texture.name ? texture.name : 'texture_' + uuid;
-							if ( name.indexOf( '.' ) === -1 ) name += '.png';
-
-							if ( ! image_names[ name ] ) {
-
-								image_names[ name ] = name;
-
-								const canvas = this.imageToCanvas( texture.image, options.map_flip_required, options.maxTextureSize );
-
-								const base64 = canvas.toDataURL( 'image/png', 1 ).split( ',' )[ 1 ];
-
-								const binaryString = atob( base64 );
-								const len = binaryString.length;
-								const bytes = new Uint8Array( len );
-
-								for ( let i = 0; i < len; i++ ) { bytes[ i ] = binaryString.charCodeAt( i ); }
-
-								const blob = new Blob( [ bytes ], { type: 'image/png' } );
-
-								textures.push( new Promise( async resolve => {
-
-									const buff = await blob.arrayBuffer();
-									const u8 = new Uint8Array( buff );
-
-									resolve( files[ '3D/Textures/' + name ] = u8 );
-
-								}));
-
-							}
-
-						}
-
-					}
-
-				} else {
-
-					if ( object.material.map !== null || object.material.emissiveMap !== null ) {
-
-						const map = object.material.map !== null ? object.material.map : object.material.emissiveMap;
-
-						// Preserve original texture uuid in case if
-						// it was used as a part of the texture name
-
-						const uuid = map.uuid;
-
-						if ( map.isCompressedTexture === true ) {
+						if ( map.isCompressedTexture ) {
 
 							texture = this.decompress( map.clone(), Infinity, this.renderer );
 
@@ -843,12 +763,21 @@ class ThreeMFExporter {
 
 						}
 
-						let name = texture.name ? texture.name : 'texture_' + uuid;
-						if ( name.indexOf( '.' ) === -1 ) name += '.png';
+						let name = tex_uuids[ map.uuid ]
+							? tex_uuids[ map.uuid ]
+							: map.name
+								? map.name
+								: 'texture_' + map.id;
 
-						if ( ! image_names[ name ] ) {
+						if ( ! tex_uuids[ map.uuid ] ) {
 
-							image_names[ name ] = name;
+							if ( name.indexOf( '.' ) < 0 ) {
+
+								name += '_' + map.id + '.png';
+
+							}
+
+							tex_uuids[ map.uuid ] = name;
 
 							const canvas = this.imageToCanvas( texture.image, options.map_flip_required, options.maxTextureSize );
 
@@ -911,7 +840,7 @@ class ThreeMFExporter {
 
 				ctx = canvas.getContext( '2d', { willReadFrequently: true } );
 
-				if ( flipY === true ) {
+				if ( flipY ) {
 
 					// Flip image vertically
 
