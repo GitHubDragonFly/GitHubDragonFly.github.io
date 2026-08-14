@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="encoding" content="utf-8" charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="GSPLAT (3D Gaussian Splatting) Viewer">
+    <link rel="stylesheet" href="../static/css/desktop-viewers.css">
+    <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
+
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
+    <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/",
+          "gsplat": "https://esm.sh/gsplat@1.2.9"
+        }
+      }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
+
+    <script>
+      var loader, ksplat_loader, splat_loader, spz_loader, ply_loader, isNotSplat;
+      var THREE, SPLAT, manager, controls, renderer, scene, camera, render_requested;
+      var mouse_down, mouse_wheel, events_initialized, isMobile, isNewiPad;
+      var ww = window.innerWidth, wh = window.innerHeight, slider_height = 0;
+      var selected_local_file, selected_url_file = '';
+      var first_run = false, fr_count = 0, count = 0, init_running = false;
+      var url_displayed = false, url_loading = false, menu_location_bottom = false;
+
+      const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
+    </script>
+
+    <script type="module">
+      import * as threejs from 'three';
+      import * as gsplatjs from 'gsplat';
+      import { SPZLoader } from 'three/addons/loaders/SPZLoader.min.js';
+      import { KSPLATLoader } from 'three/addons/loaders/KSPLATLoader.min.js';
+
+      THREE = threejs;
+      SPLAT = gsplatjs;
+
+      manager = new THREE.LoadingManager();
+
+      ply_loader = SPLAT.PLYLoader;
+      splat_loader = SPLAT.Loader;
+
+      spz_loader = new SPZLoader( manager );
+      ksplat_loader = new KSPLATLoader( manager );
+    </script>
+
+    <!-- Using gsplat library: https://github.com/huggingface/gsplat.js -->
+    <!-- Using three.js library: https://github.com/mrdoob/three.js -->
+    <!-- Using jQuery: https://github.com/jquery/jquery -->
+
+    <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
+
+    <title>GSPLAT Viewer (r186)</title>
+  </head>
+  <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
+    <div id="fixed_menu" class="fixed-menu">
+      <div class="fm">
+        <button title="URL of the remote splat" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
+        <button title="Browse Local Files" id="btn_file_input" style="background-color: transparent; min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
+        <label for="btn_file_input" title="Browse Local Files"></label>
+        <input type="file" title="Browse Local Files" id="file_input" style="display: none;" onchange="init();" accept=".ply, .ksplat, .splat, .spz" />
+        <select title="Quick XYZ Rotation" id="quick_rotation" disabled>
+          <option title="Quick XYZ Rotation" value="" selected disabled>Rotate</option>
+          <option title="Rotate 180x" value="180x" onclick="quick_x_rotation( '1' );">180x</option>
+          <option title="Rotate 90x" value="90x" onclick="quick_x_rotation( '0.5' );">90x</option>
+          <option title="Rotate -90x" value="-90x" onclick="quick_x_rotation( '-0.5' );">-90x</option>
+          <option title="Rotate 180y" value="180y" onclick="quick_y_rotation( '1' );">180y</option>
+          <option title="Rotate 90y" value="90y" onclick="quick_y_rotation( '0.5' );">90y</option>
+          <option title="Rotate -90y" value="-90y" onclick="quick_y_rotation( '-0.5' );">-90y</option>
+          <option title="Rotate 180z" value="180z" onclick="quick_z_rotation( '1' );">180z</option>
+          <option title="Rotate 90z" value="90z" onclick="quick_z_rotation( '0.5' );">90z</option>
+          <option title="Rotate -90z" value="-90z" onclick="quick_z_rotation( '-0.5' );">-90z</option>
+        </select>
+        <select title="Scale" id="model_scale" disabled>
+          <option title="Model Scale" value="model_scale" selected disabled>Scale</option>
+          <option title="Scale 0.05x" value="0.05x" onclick="set_model_scale( '0.05x' );">0.05x</option>
+          <option title="Scale 0.1x" value="0.1x" onclick="set_model_scale( '0.1x' );">0.1x</option>
+          <option title="Scale 0.2x" value="0.2x" onclick="set_model_scale( '0.2x' );">0.2x</option>
+          <option title="Scale 0.5x" value="0.5x" onclick="set_model_scale( '0.5x' );">0.5x</option>
+          <option title="Scale 2x" value="2x" onclick="set_model_scale( '2x' );">2x</option>
+          <option title="Scale 5x" value="5x" onclick="set_model_scale( '5x' );">5x</option>
+          <option title="Scale 10x" value="10x" onclick="set_model_scale( '10x' );">10x</option>
+          <option title="Scale 20x" value="20x" onclick="set_model_scale( '20x' );">20x</option>
+        </select>
+        <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; min-width: 34px;" disabled>RST</button>
+        <button title="Toggle Full Screen" id="btn_full_screen" onclick="full_screen();" style="display: none; background-color: transparent; min-width: 24px;"><p class="full_screen"></p></button>
+        <button title="Switch Menu Location" id="btn_menu_location" onclick="change_menu_location();" style="background-color: transparent; min-width: 16px;">&#x2193</button>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" placeholder="Type or paste URL here..." style="width: calc(75% - 12px);" />
+        <button title="Load" id="btn_load" onclick="load_url_file();" style="min-width: 8.5%;">Load</button>
+        <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
+      </div>
+    </div>
+
+    <div id="div_spinner" class="spinner"></div>
+    <div id="div_error" class="error_msg">E R R O R !</div>
+    <div id="div_loading" class="loading_msg">SPLAT Viewer</div>
+
+    <script>
+      function return_false() { return false; }
+
+      function show_url() {
+        if (url_displayed) {
+          document.getElementById('url').style.display = 'none';
+          document.getElementById('btn_url').style.backgroundColor = 'transparent';
+          url_displayed = false;
+        } else {
+          document.getElementById('url').style.display = 'block';
+          document.getElementById('btn_url').style.backgroundColor = 'lightgreen';
+          url_displayed = true;
+        }
+
+        mouse_wheel = true;
+      }
+
+      function load_url_file() {
+        let url = document.getElementById('url_entry').value.trim();
+        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+      }
+
+      function clear_url() { document.getElementById('url_entry').value = ''; }
+
+      function initialize_event_listeners() {
+        window.addEventListener( 'pointerdown', ( event ) => { mouse_down = true; count = 0 }, false);
+        window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; }, false);
+        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; count = 0 }, false);
+      }
+
+      function resize() {
+        if (document.fullscreenElement || document.mozFullScreenElement ||
+          document.msFullscreenElement || document.webkitFullscreenElement) {
+
+          document.getElementById('btn_full_screen').style.backgroundColor = '#FFFF00';
+        } else {
+          document.getElementById('btn_full_screen').style.backgroundColor = 'transparent';
+        }
+
+        if (scene !== undefined) {
+          mouse_wheel = true;
+
+          ww = window.innerWidth;
+          wh = window.innerHeight;
+
+          renderer.setSize( ww, wh );
+
+          camera.update();
+
+          mouse_wheel = true;
+        }
+      }
+
+      function full_screen() {
+        if (document.fullscreenEnabled) {
+          document.fullscreenElement ? document.exitFullscreen() : document.body.requestFullscreen();
+        } else if (document.mozFullScreenEnabled) {
+          document.mozFullScreenElement ? document.mozCancelFullScreen() : document.body.mozRequestFullScreen();
+        } else if (document.msFullscreenEnabled) {
+          document.msFullscreenElement ? document.msExitFullscreen() : document.body.msRequestFullscreen();
+        } else if (document.webkitFullscreenEnabled) {
+          document.webkitFullscreenElement ? document.webkitExitFullscreen() : document.body.webkitRequestFullscreen();
+        }
+      }
+
+      function change_menu_location() {
+        if (menu_location_bottom) {
+          menu_location_bottom = false;
+          document.getElementById('fixed_menu').style.top = 0;
+          document.getElementById('fixed_menu').style.bottom = '';
+          document.getElementById('btn_menu_location').innerHTML = '&#x2193';
+          document.getElementById('btn_menu_location').style.backgroundColor = 'transparent';
+        } else {
+          menu_location_bottom = true;
+          document.getElementById('fixed_menu').style.top = '';
+          document.getElementById('fixed_menu').style.bottom = 0;
+          document.getElementById('btn_menu_location').innerHTML = '&#x2191';
+          document.getElementById('btn_menu_location').style.backgroundColor = '#FFFF00';
+        }
+
+        mouse_wheel = true;
+      }
+    </script>
+
+    <script>
+      function set_model_scale( scale ) {
+        document.getElementById('model_scale').selectedIndex = 0;
+
+        const scalar_scale = parseFloat( scale.slice( 0, -1 ) );
+
+        const s = scene._objects[ 0 ]._scale;
+
+        const x = s.x * scalar_scale;
+        const y = s.y * scalar_scale;
+        const z = s.z * scalar_scale;
+
+        scene._objects[ 0 ]._scale = new SPLAT.Vector3( x, y, z );
+
+        scene._objects[ 0 ].applyScale();
+        scene._objects[ 0 ].update();
+
+        mouse_wheel = true;
+      }
+
+      // Helper to create a quaternion from an axis and an angle (in radians)
+      function createQuaternionFromAxisAngle( axisX, axisY, axisZ, angleInRadians ) {
+        const halfAngle = angleInRadians / 2.0;
+        const sin = Math.sin( halfAngle );
+
+        return new SPLAT.Quaternion(
+          axisX * sin,
+          axisY * sin,
+          axisZ * sin,
+          Math.cos( halfAngle )
+        );
+      }
+
+      function quick_x_rotation( angleMultiplier ) {
+        document.getElementById('quick_rotation').selectedIndex = 0;
+
+        const obj = scene._objects[ 0 ];
+        const currentRotation = obj._rotation;
+
+        // 1. Calculate the rotation angle in radians (e.g., 1 * Math.PI = 180 degrees)
+        const angle = Math.PI * parseFloat( angleMultiplier );
+
+        // 2. Create the delta quaternion for X-axis: ( 1, 0, 0 )
+        const deltaRotation = createQuaternionFromAxisAngle( 1, 0, 0, angle );
+
+        // 3. Combine them using quaternion multiplication
+        // Note: order matters! (delta * current) for global rotation, (current * delta) for local rotation.
+        obj._rotation = deltaRotation.multiply( currentRotation );
+
+        // 4. Update the scene
+        obj.applyRotation();
+        obj.update();
+
+        mouse_wheel = true;
+      }
+
+      function quick_y_rotation( angleMultiplier ) {
+        document.getElementById('quick_rotation').selectedIndex = 0;
+
+        const obj = scene._objects[ 0 ];
+        const angle = Math.PI * parseFloat( angleMultiplier );
+
+        // Y-axis: ( 0, 1, 0 )
+        const deltaRotation = createQuaternionFromAxisAngle( 0, 1, 0, angle );
+
+        obj._rotation = deltaRotation.multiply( obj._rotation );
+
+        obj.applyRotation();
+        obj.update();
+
+        mouse_wheel = true;
+      }
+
+      function quick_z_rotation(angleMultiplier) {
+        document.getElementById('quick_rotation').selectedIndex = 0;
+
+        const obj = scene._objects[ 0 ];
+        const angle = Math.PI * parseFloat( angleMultiplier );
+
+        // Z-axis: ( 0, 0, 1 )
+        const deltaRotation = createQuaternionFromAxisAngle( 0, 0, 1, angle );
+
+        obj._rotation = deltaRotation.multiply(obj._rotation);
+
+        obj.applyRotation();
+        obj.update();
+
+        mouse_wheel = true;
+      }
+
+      async function init() {
+        if (!url_loading && document.getElementById('file_input').files.length === 0) return;
+
+        document.getElementById('btn_load').disabled = true;
+        document.getElementById('btn_file_input').disabled = true;
+ 
+        if (scene) {
+          scene.removeObject( scene._objects[ 0 ] );
+          scene.reset();
+
+          reset_all( true );
+        }
+
+        init_running = true;
+
+        enable_disable( true );
+
+        isNotSplat = false;
+        selected_local_file = null;
+        mouse_down = false;
+        mouse_wheel = true;
+        render_requested = false;
+
+        console.time( 'Loading Time' );
+
+        document.body.style.backgroundImage = 'none';
+        document.getElementById('div_spinner').style.display = 'none';
+        document.getElementById('div_error').style.display = 'none';
+        document.getElementById('div_loading').style.display = 'block';
+        document.getElementById('div_loading').innerHTML = 'Load & Visualize';
+
+        if (!url_loading) {
+          // Loaded splat file
+          let fi = document.getElementById('file_input');
+          let fn_uc = fi.files[ 0 ].name.toUpperCase();
+
+          if (fn_uc.endsWith('.KSPLAT')) {
+            selected_local_file = fi.files[ 0 ];
+            loader = ksplat_loader;
+            isNotSplat = true;
+          } else if (fn_uc.endsWith('.SPLAT')) {
+            selected_local_file = fi.files[ 0 ];
+            loader = splat_loader;
+          } else if (fn_uc.endsWith('.SPZ')) {
+            selected_local_file = fi.files[ 0 ];
+            loader = spz_loader;
+            isNotSplat = true;
+          } else if (fn_uc.endsWith('.PLY')) {
+            selected_local_file = fi.files[ 0 ];
+            loader = ply_loader;
+          }
+
+          if (selected_local_file === null) {
+            handle_error( 'No valid SPLAT file selected!' );
+            return;
+          }
+
+          selected_url_file = '';
+        } else {
+          // Reset the file input
+          document.getElementById('file_input').value = '';
+          url_loading = false;
+        }
+
+        if (renderer === undefined) {
+          renderer = new SPLAT.WebGLRenderer();
+          renderer.backgroundColor = new SPLAT.Color32( 0, 0, 64, 255 );
+
+          document.body.appendChild( renderer.canvas );
+        }
+
+        if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
+
+        if (scene === undefined) scene = new SPLAT.Scene();
+        if (camera === undefined) camera = new SPLAT.Camera();
+        if (controls === undefined) controls = new SPLAT.OrbitControls( camera, renderer.canvas );
+
+        resize();
+
+        (selected_local_file !== null) ? loadFile() : loadURLFile();
+      }
+
+      /**
+       * Transcodes r186 geometry to a .splat buffer and filters out distant background noise.
+       * 
+       * @param {THREE.BufferGeometry} splatGeometry 
+       * @param {number} [maxRadius=15] - Maximum distance from center ( 0, 0, 0 ) to keep splats.
+       * @returns {ArrayBuffer} Cleaned sequential .splat buffer
+       */
+      function transcodeGeometryToSplatBuffer( splatGeometry, maxRadius = 15 ) {
+        const positionAttr = splatGeometry.getAttribute( 'position' );
+        const colorAttr = splatGeometry.getAttribute( 'color' );
+        const covAttr = splatGeometry.getAttribute( 'covariance' ); 
+
+        const count = positionAttr.count;
+
+        // We create a temporary array to store only the valid (passed) splat data blocks
+        // Each valid splat needs 32 bytes of space
+        const validSplats = [];
+
+        const posArray = positionAttr.array;
+        const colorArray = colorAttr.array;
+        const covArray = covAttr.array;
+
+        for ( let i = 0; i < count; i++ ) {
+          const i3 = i * 3;
+
+          // 1. Get positions to calculate distance from center
+          const x = posArray[ i3 + 0 ];
+          const y = posArray[ i3 + 1 ];
+          const z = posArray[ i3 + 2 ];
+
+          // Calculate Euclidean distance from ( 0, 0, 0 )
+          const distance = Math.sqrt( x * x + y * y + z * z );
+
+          // OPTIONAL: Skip this splat entirely if it belongs to the distant background
+          //if (distance > maxRadius) continue; 
+
+          const i4 = i * 4;
+          const i6 = i * 6;
+
+          // 2. Extract Covariance Matrix
+          const c0 = covArray[ i6 + 0 ];
+          const c1 = covArray[ i6 + 1 ];
+          const c2 = covArray[ i6 + 2 ];
+          const c3 = covArray[ i6 + 3 ];
+          const c4 = covArray[ i6 + 4 ];
+          const c5 = covArray[ i6 + 5 ];
+
+          // Decompose upper triangle elements into scale vectors
+          const scaleX = Math.sqrt( Math.max( 0.000001, c0 ) );
+          const scaleY = Math.sqrt( Math.max( 0.000001, c3 ) );
+          const scaleZ = Math.sqrt( Math.max( 0.000001, c5 ) );
+
+          // 3. Compute Rotation Quaternion
+          const tr = c0 + c3 + c5;
+          let qx = 0, qy = 0, qz = 0, qw = 1;
+
+          if (tr > 0) {
+            const S = Math.sqrt( tr + 1.0 ) * 2;
+            qw = 0.1 * S;
+            qx = c4 / S;
+            qy = c2 / S;
+            qz = c1 / S;
+          } else if ((c0 > c3) && (c0 > c5)) {
+            const S = Math.sqrt( 1.0 + c0 - c3 - c5 ) * 2;
+            qw = c4 / S;
+            qx = 0.1 * S;
+            qy = (c1 + c2) / S;
+            qz = (c2 + c1) / S;
+          } else if (c3 > c5) {
+            const S = Math.sqrt( 1.0 + c3 - c0 - c5 ) * 2;
+            qw = c2 / S;
+            qx = (c1 + c2) / S;
+            qy = 0.1 * S;
+            qz = (c4 + c1) / S;
+          } else {
+            const S = Math.sqrt( 1.0 + c5 - c0 - c3 ) * 2;
+            qw = c1 / S;
+            qx = (c2 + c1) / S;
+            qy = (c4 + c1) / S;
+            qz = 0.1 * S;
+          }
+
+          // Store intermediate data block in an object
+          validSplats.push({
+            pos:   [ x, y, z ],
+            scale: [ scaleX, scaleY, scaleZ ],
+            color: [
+                     colorArray[ i4 + 0 ],
+                     colorArray[ i4 + 1 ],
+                     colorArray[ i4 + 2 ],
+                     colorArray[ i4 + 3 ]
+                   ],
+            rot:   [
+                     Math.floor( ( qx + 1 ) * 127.5 ),
+                     Math.floor( ( qy + 1 ) * 127.5 ),
+                     Math.floor( ( qz + 1 ) * 127.5 ),
+                     Math.floor( ( qw + 1 ) * 127.5 )
+                   ]
+          });
+        }
+
+        // Allocate an exact buffer sizing payload based only on the clean kept count
+        const outBuffer = new ArrayBuffer( validSplats.length * 32 );
+        const outFloat = new Float32Array( outBuffer );
+        const outUint8 = new Uint8Array( outBuffer );
+
+        // Pack the clean data sequentially
+        for ( let i = 0; i < validSplats.length; i++ ) {
+          const floatOffset = i * 8; 
+          const byteOffset = i * 32;
+          const s = validSplats[ i ];
+
+          outFloat[ floatOffset + 0 ] = s.pos[ 0 ];
+          outFloat[ floatOffset + 1 ] = s.pos[ 1 ];
+          outFloat[ floatOffset + 2 ] = s.pos[ 2 ];
+
+          outFloat[ floatOffset + 3 ] = s.scale[ 0 ];
+          outFloat[ floatOffset + 4 ] = s.scale[ 1 ];
+          outFloat[ floatOffset + 5 ] = s.scale[ 2 ];
+
+          let r = Math.min( 255, s.color[ 0 ] * 1.15 ); // Brighten by 15%
+          let g = Math.min( 255, s.color[ 1 ] * 1.15 );
+          let b = Math.min( 255, s.color[ 2 ] * 1.15 );
+
+          outUint8[ byteOffset + 24 ] = r; 
+          outUint8[ byteOffset + 25 ] = g; 
+          outUint8[ byteOffset + 26 ] = b; 
+          outUint8[ byteOffset + 27 ] = s.color[ 3 ]; 
+
+          outUint8[ byteOffset + 28 ] = s.rot[ 0 ];
+          outUint8[ byteOffset + 29 ] = s.rot[ 1 ];
+          outUint8[ byteOffset + 30 ] = s.rot[ 2 ];
+          outUint8[ byteOffset + 31 ] = s.rot[ 3 ];
+        }
+
+        //console.log( `Filtered out ${count - validSplats.length} background splats.` );
+
+        return outBuffer;
+      }
+
+      async function loadFile() {
+        if (isNotSplat) {
+          await loader.loadAsync( URL.createObjectURL( selected_local_file ),
+          function( xhr ) { },
+          function( error ) {
+            URL.revokeObjectURL( selected_local_file );
+            handle_error( error );
+          }).then( async loaded_splat => {
+            URL.revokeObjectURL( selected_local_file );
+
+            // Convert Three.js geometry structure into a binary format, trimming background could be enabled
+            const maxRadiusDistance = 10; // Lower this number to trim more background away
+            const rawSplatArrayBuffer = await transcodeGeometryToSplatBuffer( loaded_splat, maxRadiusDistance );
+
+            try {
+              await splat_loader.LoadFromArrayBuffer( rawSplatArrayBuffer, scene ); 
+            } catch( err ) {
+              console.error( 'Error setting up gsplat splat: ', err );
+            }
+          });
+        } else {
+          await loader.LoadAsync( URL.createObjectURL( selected_local_file ), scene, () => {} );
+        }
+
+        finish_loading();
+      }
+
+      async function loadURLFile() {
+        if (selected_url_file !== '') {
+          if (selected_url_file.startsWith('https://www.dropbox.com') === true) {
+            selected_url_file = selected_url_file.replace('www.dropbox.com', 'dl.dropbox.com');
+          } else if (selected_url_file.startsWith('https://github.com') === true) {
+            selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
+          }
+
+          const ext = [ '.KSPLAT', '.SPLAT', '.SPZ', '.PLY' ];
+
+          let fn_uc = selected_url_file.toUpperCase();
+
+          if (!ext.some( e => fn_uc.endsWith( e ) === true )) {
+            handle_error( 'Invalid URL!' );
+            return;
+          }
+
+          if (fn_uc.endsWith('.KSPLAT')) {
+            loader = ksplat_loader;
+            isNotSplat = true;
+          } else if (fn_uc.endsWith('.SPLAT')) {
+            loader = splat_loader;
+          } else if (fn_uc.endsWith('.SPZ')) {
+            loader = spz_loader;
+            isNotSplat = true;
+          } else if (fn_uc.endsWith('.PLY')) {
+            loader = ply_loader;
+          }
+
+          if (isNotSplat) {
+            await loader.loadAsync( selected_url_file,
+            function( xhr ) { },
+            function( error ) {
+              handle_error( error );
+            }).then( async loaded_splat => {
+              // Convert Three.js geometry structure into a binary format, trimming background could be enabled
+              const maxRadiusDistance = 10; // Lower this number to trim more background away
+              const rawSplatArrayBuffer = await transcodeGeometryToSplatBuffer( loaded_splat, maxRadiusDistance );
+
+              try {
+                await splat_loader.LoadFromArrayBuffer( rawSplatArrayBuffer, scene ); 
+              } catch( err ) {
+                console.error( 'Error setting up gsplat splat: ', err );
+              }
+            });
+          } else {
+            await loader.LoadAsync( URL.createObjectURL( selected_local_file ), scene, () => {} );
+          }
+
+          finish_loading();
+        }
+      }
+
+      async function finish_loading() {
+        console.timeEnd( 'Loading Time' );
+
+        init_running = false;
+
+        document.getElementById('btn_load').disabled = false;
+        document.getElementById('btn_file_input').disabled = false;
+
+        document.body.style.backgroundImage = 'none';
+
+        enable_disable( false );
+
+        render_requested = true;
+        mouse_wheel = true;
+        first_run = true;
+        fr_count = 0;
+        render();
+      }
+
+      function handle_error( error ) {
+        console.timeEnd( 'Loading Time' );
+        console.log( 'Error loading model!' );
+        console.log( error );
+        mouse_wheel = true;
+        render_requested = false;
+        enable_disable( true );
+
+        init_running = false;
+
+        document.getElementById('btn_load').disabled = false;
+        document.getElementById('btn_file_input').disabled = false;
+        disabled_changed();
+
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('div_error').style.display = 'block';
+      }
+
+      async function render() {
+        if (scene) {
+          if (first_run || mouse_down || mouse_wheel) {
+            // If it might be slow to render initially
+            if (first_run) {
+              fr_count ++;
+
+              if (fr_count > 60) {
+                count = 0;
+                fr_count = 0;
+                first_run = false;
+                mouse_wheel = true;
+                document.getElementById('div_loading').style.display = 'none';
+              }
+            } else {
+              if (mouse_wheel) {
+                if (count > 300) {
+                  mouse_wheel = false;
+                  count = 0;
+                } else {
+                  count ++;
+                }
+              }
+            }
+
+            controls.update();
+
+            renderer.render( scene, camera );
+          }
+        }
+
+        if (render_requested) requestAnimationFrame( render );
+      }
+
+      function reset_only() {
+        scene.removeObject( scene._objects[ 0 ] );
+        scene.reset();
+
+        reset_all( true );
+
+        console.time( 'Loading Time' );
+
+        document.getElementById('div_loading').innerText = 'Reload';
+        document.getElementById('div_loading').style.display = 'block';
+
+        mouse_wheel = true;
+
+        (selected_local_file !== null) ? loadFile() : loadURLFile();
+      }
+
+      async function reset_all( reset = false ) {
+        // Reset the view
+        if (reset) {
+          first_run = true;
+          fr_count = 0;
+          await render();
+        } else {
+          // Page (re)loading
+          if (scene) {
+            scene.removeObject( scene._objects[ 0 ] );
+            scene.reset();
+
+            renderer.dispose();
+          }
+
+          document.getElementById('file_input').value = '';
+          document.getElementById('div_error').style.display = 'none';
+          document.getElementById('div_spinner').style.display = 'block';
+          document.getElementById('url_entry').value = '';
+          selected_url_file = '';
+          enable_disable( true );
+        }
+
+        disabled_changed();
+
+        mouse_wheel = true;
+      }
+
+      function enable_disable( disable = false ) {
+        document.getElementById('quick_rotation').disabled = disable;
+        document.getElementById('model_scale').disabled = disable;
+        document.getElementById('reset').disabled = disable;
+        disabled_changed();
+
+        mouse_wheel = true;
+      }
+    </script>
+
+    <script>
+      function document_ready() {
+        isNewiPad = (/iPad/.test( navigator.platform ) && (/Mac OS X/i.test( navigator.userAgent ))) ||
+          (navigator.maxTouchPoints !== undefined && navigator.maxTouchPoints > 2 && /MacIntel/.test( navigator.platform ));
+
+        isMobile = !isNewiPad && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
+          (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
+
+        $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
+        $('#model_scale').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#quick_rotation').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+
+        if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile) {
+          $('#model_scale').change( function() { $(this).children(':selected').click(); });
+          $('#quick_rotation').change( function() { $(this).children(':selected').click(); });
+        }
+
+        document.getElementById('model_scale').selectedIndex = 0;
+        document.getElementById('quick_rotation').selectedIndex = 0;
+
+        if (!isMobile) $('#btn_full_screen')[ 0 ].style.display = '';
+      }
+
+      function disabled_changed() {
+        $('button').each( function() {
+          if (!this.disabled) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+
+        $('select').each( function() {
+          if (!this.disabled) {
+            $(this).hover(
+            function() { $(this)[ 0 ].style.border = 'solid 2px red'; },
+            function() { $(this)[ 0 ].style.border = 'solid 1px blue'; });
+          } else {
+            $(this).unbind('mouseenter mouseleave');
+          }
+
+          mouse_wheel = true;
+        });
+      }
+    </script>
+  </body>
+</html>
