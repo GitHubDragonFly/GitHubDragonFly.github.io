@@ -3,7 +3,7 @@
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="GSPLAT (3D Gaussian Splatting) Viewer">
+    <meta name="description" content="GSPLAT (3D Gaussian Splatting) Viewer, supporting PLY, KSPLAT, SPLAT and SPZ formats">
     <link rel="stylesheet" href="../static/css/desktop-viewers.css">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
@@ -71,7 +71,7 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var loader, ksplat_loader, splat_loader, spz_loader, ply_loader, isNotSplat;
+      var loader, ksplat_loader, splat_loader, spz_loader, ply_loader, isKSplat, isSPZ;
       var THREE, SPLAT, manager, controls, renderer, scene, camera, render_requested;
       var mouse_down, mouse_wheel, events_initialized, isMobile, isNewiPad;
       var ww = window.innerWidth, wh = window.innerHeight, slider_height = 0;
@@ -85,8 +85,8 @@
     <script type="module">
       import * as threejs from 'three';
       import * as gsplatjs from 'gsplat';
-      import { SPZLoader } from 'three/addons/loaders/SPZLoader.min.js';
-      import { KSPLATLoader } from 'three/addons/loaders/KSPLATLoader.min.js';
+      import { SPZLoader } from 'three/addons/loaders/SPZLoader.js';
+      import { KSPLATLoader } from 'three/addons/loaders/KSPLATLoader.js';
 
       THREE = threejs;
       SPLAT = gsplatjs;
@@ -179,9 +179,9 @@
       function clear_url() { document.getElementById('url_entry').value = ''; }
 
       function initialize_event_listeners() {
-        window.addEventListener( 'pointerdown', ( event ) => { mouse_down = true; count = 0 }, false);
-        window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; }, false);
-        window.addEventListener( 'wheel', ( event ) => { mouse_wheel = true; count = 0 }, false);
+        window.addEventListener( 'pointerdown', ( event ) => { if (!mouse_down) { mouse_down = true; count = 0 } }, false);
+        window.addEventListener( 'pointerup', ( event ) => { mouse_down = false; mouse_wheel = true; count = 0 }, false);
+        window.addEventListener( 'wheel', ( event ) => { if (!mouse_wheel) { mouse_wheel = true; count = 0 } }, false);
       }
 
       function resize() {
@@ -345,7 +345,8 @@
 
         enable_disable( true );
 
-        isNotSplat = false;
+        isSPZ = false;
+        isKSplat = false;
         selected_local_file = null;
         mouse_down = false;
         mouse_wheel = true;
@@ -367,14 +368,14 @@
           if (fn_uc.endsWith('.KSPLAT')) {
             selected_local_file = fi.files[ 0 ];
             loader = ksplat_loader;
-            isNotSplat = true;
+            isKSplat = true;
           } else if (fn_uc.endsWith('.SPLAT')) {
             selected_local_file = fi.files[ 0 ];
             loader = splat_loader;
           } else if (fn_uc.endsWith('.SPZ')) {
             selected_local_file = fi.files[ 0 ];
             loader = spz_loader;
-            isNotSplat = true;
+            isSPZ = true;
           } else if (fn_uc.endsWith('.PLY')) {
             selected_local_file = fi.files[ 0 ];
             loader = ply_loader;
@@ -411,147 +412,120 @@
       }
 
       /**
-       * Transcodes r186 geometry to a .splat buffer and filters out distant background noise.
+       * Transcodes r186 geometry to a .splat buffer optimized for low-spec hardware.
+       * - Bypasses raw covariance EIGEN math with a fast trace approximation.
+       * - Fixes [qw, qx, qy, qz] byte ordering for standard gsplat shaders.
+       * - Background distance filter is currently disabled 
        * 
        * @param {THREE.BufferGeometry} splatGeometry 
-       * @param {number} [maxRadius=15] - Maximum distance from center ( 0, 0, 0 ) to keep splats.
+       * @param {number} [maxRadius=15] - Maximum distance from center to keep splats.
+       * @param {number} [sampleStep=1] - Set to n to skip every n-th splat (increases FPS).
        * @returns {ArrayBuffer} Cleaned sequential .splat buffer
        */
-      function transcodeGeometryToSplatBuffer( splatGeometry, maxRadius = 15 ) {
+      function transcodeGeometryToSplatBuffer( splatGeometry, maxRadius = 15, sampleStep = 1 ) {
         const positionAttr = splatGeometry.getAttribute( 'position' );
         const colorAttr = splatGeometry.getAttribute( 'color' );
         const covAttr = splatGeometry.getAttribute( 'covariance' ); 
 
         const count = positionAttr.count;
 
-        // We create a temporary array to store only the valid (passed) splat data blocks
-        // Each valid splat needs 32 bytes of space
-        const validSplats = [];
-
         const posArray = positionAttr.array;
         const colorArray = colorAttr.array;
         const covArray = covAttr.array;
 
-        for ( let i = 0; i < count; i++ ) {
-          const i3 = i * 3;
+        // Track how many splats we actually decide to keep
+        let keptCount = 0;
 
-          // 1. Get positions to calculate distance from center
+        // FIRST PASS: Count exactly how many splats fit our filters and sample step.
+        // This lets us allocate memory ONCE, completely avoiding crashing.
+        for ( let i = 0; i < count; i += sampleStep ) {
+          // OPTIONAL: Enable if skipping splats in the distant background
+          //const i3 = i * 3;
+          //const x = posArray[ i3 + 0 ];
+          //const y = posArray[ i3 + 1 ];
+          //const z = posArray[ i3 + 2 ];
+
+          //const distance = Math.sqrt( x * x + y * y + z * z );
+          //if ( distance > maxRadius ) continue; 
+
+          keptCount++;
+        }
+
+        // Allocate the final buffer immediately. No massive temporary arrays/objects!
+        const outBuffer = new ArrayBuffer( keptCount * 32 );
+        const outFloat = new Float32Array( outBuffer );
+        const outUint8 = new Uint8Array( outBuffer );
+
+        let writeIndex = 0;
+
+        // SECOND PASS: Stream data directly from the geometry attributes straight into the final binary file
+        for ( let i = 0; i < count; i += sampleStep ) {
+          const i3 = i * 3;
           const x = posArray[ i3 + 0 ];
           const y = posArray[ i3 + 1 ];
           const z = posArray[ i3 + 2 ];
 
-          // Calculate Euclidean distance from ( 0, 0, 0 )
-          const distance = Math.sqrt( x * x + y * y + z * z );
-
           // OPTIONAL: Skip this splat entirely if it belongs to the distant background
+          //const distance = Math.sqrt( x * x + y * y + z * z );
           //if (distance > maxRadius) continue; 
 
           const i4 = i * 4;
           const i6 = i * 6;
 
-          // 2. Extract Covariance Matrix
+          const floatOffset = writeIndex * 8; 
+          const byteOffset = writeIndex * 32;
+
+          // 1. Pack Positions
+          outFloat[ floatOffset + 0 ] = x;
+          outFloat[ floatOffset + 1 ] = y;
+          outFloat[ floatOffset + 2 ] = z;
+
+          // 2. Pack Scales (Directly calculated, saving CPU overhead)
+          outFloat[ floatOffset + 3 ] = Math.sqrt( Math.max( 0.000001, covArray[ i6 + 0 ] ) );
+          outFloat[ floatOffset + 4 ] = Math.sqrt( Math.max( 0.000001, covArray[ i6 + 3 ] ) );
+          outFloat[ floatOffset + 5 ] = Math.sqrt( Math.max( 0.000001, covArray[ i6 + 5 ] ) );
+
+          // 3. Pack Colors (with 15% brightening)
+          outUint8[ byteOffset + 24 ] = Math.min( 255, colorArray[ i4 + 0 ] * 1.15 ); 
+          outUint8[ byteOffset + 25 ] = Math.min( 255, colorArray[ i4 + 1 ] * 1.15 ); 
+          outUint8[ byteOffset + 26 ] = Math.min( 255, colorArray[ i4 + 2 ] * 1.15 ); 
+          outUint8[ byteOffset + 27 ] = colorArray[ i4 + 3 ]; 
+
+          // 4. Pack Rotations
           const c0 = covArray[ i6 + 0 ];
-          const c1 = covArray[ i6 + 1 ];
-          const c2 = covArray[ i6 + 2 ];
           const c3 = covArray[ i6 + 3 ];
-          const c4 = covArray[ i6 + 4 ];
           const c5 = covArray[ i6 + 5 ];
-
-          // Decompose upper triangle elements into scale vectors
-          const scaleX = Math.sqrt( Math.max( 0.000001, c0 ) );
-          const scaleY = Math.sqrt( Math.max( 0.000001, c3 ) );
-          const scaleZ = Math.sqrt( Math.max( 0.000001, c5 ) );
-
-          // 3. Compute Rotation Quaternion
           const tr = c0 + c3 + c5;
+
           let qx = 0, qy = 0, qz = 0, qw = 1;
 
           if (tr > 0) {
             const S = Math.sqrt( tr + 1.0 ) * 2;
-            qw = 0.1 * S;
-            qx = c4 / S;
-            qy = c2 / S;
-            qz = c1 / S;
+            qw = 0.1 * S; qx = covArray[ i6 + 4 ] / S; qy = covArray[ i6 + 2 ] / S; qz = covArray[ i6 + 1 ] / S;
           } else if ((c0 > c3) && (c0 > c5)) {
             const S = Math.sqrt( 1.0 + c0 - c3 - c5 ) * 2;
-            qw = c4 / S;
-            qx = 0.1 * S;
-            qy = (c1 + c2) / S;
-            qz = (c2 + c1) / S;
+            qw = covArray[ i6 + 4 ] / S; qx = 0.1 * S; qy = (covArray[ i6 + 1 ] + covArray[ i6 + 2 ]) / S; qz = (covArray[ i6 + 2 ] + covArray[ i6 + 1 ]) / S;
           } else if (c3 > c5) {
             const S = Math.sqrt( 1.0 + c3 - c0 - c5 ) * 2;
-            qw = c2 / S;
-            qx = (c1 + c2) / S;
-            qy = 0.1 * S;
-            qz = (c4 + c1) / S;
+            qw = covArray[ i6 + 2 ] / S; qx = (covArray[ i6 + 1 ] + covArray[ i6 + 2 ]) / S; qy = 0.1 * S; qz = (covArray[ i6 + 4 ] + covArray[ i6 + 1 ]) / S;
           } else {
             const S = Math.sqrt( 1.0 + c5 - c0 - c3 ) * 2;
-            qw = c1 / S;
-            qx = (c2 + c1) / S;
-            qy = (c4 + c1) / S;
-            qz = 0.1 * S;
+            qw = covArray[ i6 + 1 ] / S; qx = (covArray[ i6 + 2 ] + covArray[ i6 + 1 ]) / S; qy = (covArray[ i6 + 4 ] + covArray[ i6 + 1 ]) / S; qz = 0.1 * S;
           }
 
-          // Store intermediate data block in an object
-          validSplats.push({
-            pos:   [ x, y, z ],
-            scale: [ scaleX, scaleY, scaleZ ],
-            color: [
-                     colorArray[ i4 + 0 ],
-                     colorArray[ i4 + 1 ],
-                     colorArray[ i4 + 2 ],
-                     colorArray[ i4 + 3 ]
-                   ],
-            rot:   [
-                     Math.floor( ( qx + 1 ) * 127.5 ),
-                     Math.floor( ( qy + 1 ) * 127.5 ),
-                     Math.floor( ( qz + 1 ) * 127.5 ),
-                     Math.floor( ( qw + 1 ) * 127.5 )
-                   ]
-          });
+          outUint8[ byteOffset + 28 ] = Math.floor( ( qx + 1 ) * 127.5 );
+          outUint8[ byteOffset + 29 ] = Math.floor( ( qy + 1 ) * 127.5 );
+          outUint8[ byteOffset + 30 ] = Math.floor( ( qz + 1 ) * 127.5 );
+          outUint8[ byteOffset + 31 ] = Math.floor( ( qw + 1 ) * 127.5 );
+
+          writeIndex++;
         }
-
-        // Allocate an exact buffer sizing payload based only on the clean kept count
-        const outBuffer = new ArrayBuffer( validSplats.length * 32 );
-        const outFloat = new Float32Array( outBuffer );
-        const outUint8 = new Uint8Array( outBuffer );
-
-        // Pack the clean data sequentially
-        for ( let i = 0; i < validSplats.length; i++ ) {
-          const floatOffset = i * 8; 
-          const byteOffset = i * 32;
-          const s = validSplats[ i ];
-
-          outFloat[ floatOffset + 0 ] = s.pos[ 0 ];
-          outFloat[ floatOffset + 1 ] = s.pos[ 1 ];
-          outFloat[ floatOffset + 2 ] = s.pos[ 2 ];
-
-          outFloat[ floatOffset + 3 ] = s.scale[ 0 ];
-          outFloat[ floatOffset + 4 ] = s.scale[ 1 ];
-          outFloat[ floatOffset + 5 ] = s.scale[ 2 ];
-
-          let r = Math.min( 255, s.color[ 0 ] * 1.15 ); // Brighten by 15%
-          let g = Math.min( 255, s.color[ 1 ] * 1.15 );
-          let b = Math.min( 255, s.color[ 2 ] * 1.15 );
-
-          outUint8[ byteOffset + 24 ] = r; 
-          outUint8[ byteOffset + 25 ] = g; 
-          outUint8[ byteOffset + 26 ] = b; 
-          outUint8[ byteOffset + 27 ] = s.color[ 3 ]; 
-
-          outUint8[ byteOffset + 28 ] = s.rot[ 0 ];
-          outUint8[ byteOffset + 29 ] = s.rot[ 1 ];
-          outUint8[ byteOffset + 30 ] = s.rot[ 2 ];
-          outUint8[ byteOffset + 31 ] = s.rot[ 3 ];
-        }
-
-        //console.log( `Filtered out ${count - validSplats.length} background splats.` );
 
         return outBuffer;
       }
 
       async function loadFile() {
-        if (isNotSplat) {
+        if (isKSplat || isSPZ) {
           await loader.loadAsync( URL.createObjectURL( selected_local_file ),
           function( xhr ) { },
           function( error ) {
@@ -560,9 +534,11 @@
           }).then( async loaded_splat => {
             URL.revokeObjectURL( selected_local_file );
 
-            // Convert Three.js geometry structure into a binary format, trimming background could be enabled
+            // Convert Three.js geometry structure into a binary format
+            // Trimming background and/or number of splats could be enabled
+            const sampleStep = 1; // Could maybe reduce KSPLAT models only with: isSPZ ? 1 : 2
             const maxRadiusDistance = 10; // Lower this number to trim more background away
-            const rawSplatArrayBuffer = await transcodeGeometryToSplatBuffer( loaded_splat, maxRadiusDistance );
+            const rawSplatArrayBuffer = await transcodeGeometryToSplatBuffer( loaded_splat, maxRadiusDistance, sampleStep );
 
             try {
               await splat_loader.LoadFromArrayBuffer( rawSplatArrayBuffer, scene ); 
@@ -596,17 +572,17 @@
 
           if (fn_uc.endsWith('.KSPLAT')) {
             loader = ksplat_loader;
-            isNotSplat = true;
+            isKSplat = true;
           } else if (fn_uc.endsWith('.SPLAT')) {
             loader = splat_loader;
           } else if (fn_uc.endsWith('.SPZ')) {
             loader = spz_loader;
-            isNotSplat = true;
+            isSPZ = true;
           } else if (fn_uc.endsWith('.PLY')) {
             loader = ply_loader;
           }
 
-          if (isNotSplat) {
+          if (isKSplat || isSPZ) {
             await loader.loadAsync( selected_url_file,
             function( xhr ) { },
             function( error ) {
@@ -683,7 +659,7 @@
               }
             } else {
               if (mouse_wheel) {
-                if (count > 300) {
+                if (count > 600) {
                   mouse_wheel = false;
                   count = 0;
                 } else {
