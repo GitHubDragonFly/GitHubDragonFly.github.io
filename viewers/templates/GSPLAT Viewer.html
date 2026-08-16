@@ -75,7 +75,7 @@
       var THREE, SPLAT, manager, controls, renderer, scene, camera, render_requested;
       var mouse_down, mouse_wheel, events_initialized, isMobile, isNewiPad;
       var ww = window.innerWidth, wh = window.innerHeight, slider_height = 0;
-      var selected_local_file, selected_url_file = '';
+      var selected_local_file, selected_url_file = '', transcode;
       var first_run = false, fr_count = 0, count = 0, init_running = false;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
 
@@ -411,121 +411,13 @@
         (selected_local_file !== null) ? loadFile() : loadURLFile();
       }
 
-      /**
-       * Transcodes r186 geometry to a .splat buffer optimized for low-spec hardware.
-       * - Bypasses raw covariance EIGEN math with a fast trace approximation.
-       * - Fixes [qw, qx, qy, qz] byte ordering for standard gsplat shaders.
-       * - Background distance filter is currently disabled 
-       * 
-       * @param {THREE.BufferGeometry} splatGeometry 
-       * @param {number} [maxRadius=15] - Maximum distance from center to keep splats.
-       * @param {number} [sampleStep=1] - Set to n to skip every n-th splat (increases FPS).
-       * @returns {ArrayBuffer} Cleaned sequential .splat buffer
-       */
-      function transcodeGeometryToSplatBuffer( splatGeometry, maxRadius = 15, sampleStep = 1 ) {
-        const positionAttr = splatGeometry.getAttribute( 'position' );
-        const colorAttr = splatGeometry.getAttribute( 'color' );
-        const covAttr = splatGeometry.getAttribute( 'covariance' ); 
-
-        const count = positionAttr.count;
-
-        const posArray = positionAttr.array;
-        const colorArray = colorAttr.array;
-        const covArray = covAttr.array;
-
-        // Track how many splats we actually decide to keep
-        let keptCount = 0;
-
-        // FIRST PASS: Count exactly how many splats fit our filters and sample step.
-        // This lets us allocate memory ONCE, completely avoiding crashing.
-        for ( let i = 0; i < count; i += sampleStep ) {
-          // OPTIONAL: Enable if skipping splats in the distant background
-          //const i3 = i * 3;
-          //const x = posArray[ i3 + 0 ];
-          //const y = posArray[ i3 + 1 ];
-          //const z = posArray[ i3 + 2 ];
-
-          //const distance = Math.sqrt( x * x + y * y + z * z );
-          //if ( distance > maxRadius ) continue; 
-
-          keptCount++;
-        }
-
-        // Allocate the final buffer immediately. No massive temporary arrays/objects!
-        const outBuffer = new ArrayBuffer( keptCount * 32 );
-        const outFloat = new Float32Array( outBuffer );
-        const outUint8 = new Uint8Array( outBuffer );
-
-        let writeIndex = 0;
-
-        // SECOND PASS: Stream data directly from the geometry attributes straight into the final binary file
-        for ( let i = 0; i < count; i += sampleStep ) {
-          const i3 = i * 3;
-          const x = posArray[ i3 + 0 ];
-          const y = posArray[ i3 + 1 ];
-          const z = posArray[ i3 + 2 ];
-
-          // OPTIONAL: Skip this splat entirely if it belongs to the distant background
-          //const distance = Math.sqrt( x * x + y * y + z * z );
-          //if (distance > maxRadius) continue; 
-
-          const i4 = i * 4;
-          const i6 = i * 6;
-
-          const floatOffset = writeIndex * 8; 
-          const byteOffset = writeIndex * 32;
-
-          // 1. Pack Positions
-          outFloat[ floatOffset + 0 ] = x;
-          outFloat[ floatOffset + 1 ] = y;
-          outFloat[ floatOffset + 2 ] = z;
-
-          // 2. Pack Scales (Directly calculated, saving CPU overhead)
-          outFloat[ floatOffset + 3 ] = Math.sqrt( Math.max( 0.000001, covArray[ i6 + 0 ] ) );
-          outFloat[ floatOffset + 4 ] = Math.sqrt( Math.max( 0.000001, covArray[ i6 + 3 ] ) );
-          outFloat[ floatOffset + 5 ] = Math.sqrt( Math.max( 0.000001, covArray[ i6 + 5 ] ) );
-
-          // 3. Pack Colors (with 15% brightening)
-          outUint8[ byteOffset + 24 ] = Math.min( 255, colorArray[ i4 + 0 ] * 1.15 ); 
-          outUint8[ byteOffset + 25 ] = Math.min( 255, colorArray[ i4 + 1 ] * 1.15 ); 
-          outUint8[ byteOffset + 26 ] = Math.min( 255, colorArray[ i4 + 2 ] * 1.15 ); 
-          outUint8[ byteOffset + 27 ] = colorArray[ i4 + 3 ]; 
-
-          // 4. Pack Rotations
-          const c0 = covArray[ i6 + 0 ];
-          const c3 = covArray[ i6 + 3 ];
-          const c5 = covArray[ i6 + 5 ];
-          const tr = c0 + c3 + c5;
-
-          let qx = 0, qy = 0, qz = 0, qw = 1;
-
-          if (tr > 0) {
-            const S = Math.sqrt( tr + 1.0 ) * 2;
-            qw = 0.1 * S; qx = covArray[ i6 + 4 ] / S; qy = covArray[ i6 + 2 ] / S; qz = covArray[ i6 + 1 ] / S;
-          } else if ((c0 > c3) && (c0 > c5)) {
-            const S = Math.sqrt( 1.0 + c0 - c3 - c5 ) * 2;
-            qw = covArray[ i6 + 4 ] / S; qx = 0.1 * S; qy = (covArray[ i6 + 1 ] + covArray[ i6 + 2 ]) / S; qz = (covArray[ i6 + 2 ] + covArray[ i6 + 1 ]) / S;
-          } else if (c3 > c5) {
-            const S = Math.sqrt( 1.0 + c3 - c0 - c5 ) * 2;
-            qw = covArray[ i6 + 2 ] / S; qx = (covArray[ i6 + 1 ] + covArray[ i6 + 2 ]) / S; qy = 0.1 * S; qz = (covArray[ i6 + 4 ] + covArray[ i6 + 1 ]) / S;
-          } else {
-            const S = Math.sqrt( 1.0 + c5 - c0 - c3 ) * 2;
-            qw = covArray[ i6 + 1 ] / S; qx = (covArray[ i6 + 2 ] + covArray[ i6 + 1 ]) / S; qy = (covArray[ i6 + 4 ] + covArray[ i6 + 1 ]) / S; qz = 0.1 * S;
-          }
-
-          outUint8[ byteOffset + 28 ] = Math.floor( ( qx + 1 ) * 127.5 );
-          outUint8[ byteOffset + 29 ] = Math.floor( ( qy + 1 ) * 127.5 );
-          outUint8[ byteOffset + 30 ] = Math.floor( ( qz + 1 ) * 127.5 );
-          outUint8[ byteOffset + 31 ] = Math.floor( ( qw + 1 ) * 127.5 );
-
-          writeIndex++;
-        }
-
-        return outBuffer;
-      }
-
       async function loadFile() {
         if (isKSplat || isSPZ) {
+          if (transcode === undefined) {
+            const { transcodeGeometryToSplatBuffer } = await import( '../static/jsm/utils/splatTranscoder.min.js' );
+            transcode = transcodeGeometryToSplatBuffer;
+          }
+
           await loader.loadAsync( URL.createObjectURL( selected_local_file ),
           function( xhr ) { },
           function( error ) {
@@ -536,9 +428,18 @@
 
             // Convert Three.js geometry structure into a binary format
             // Trimming background and/or number of splats could be enabled
-            const sampleStep = 1; // Could maybe reduce KSPLAT models only with: isSPZ ? 1 : 2
-            const maxRadiusDistance = 10; // Lower this number to trim more background away
-            const rawSplatArrayBuffer = await transcodeGeometryToSplatBuffer( loaded_splat, maxRadiusDistance, sampleStep );
+
+            const options = {
+              backgroundFilterEnabled: true,
+              brightness: 1.15,
+              maxRadius: 10,
+              sampleStep: 1,
+              sh1Scale: 2.0,
+              sh2Scale: 1.5,
+              sh3Scale: 1.0
+            };
+
+            const rawSplatArrayBuffer = await transcode( loaded_splat, options );
 
             try {
               await splat_loader.LoadFromArrayBuffer( rawSplatArrayBuffer, scene ); 
@@ -583,14 +484,30 @@
           }
 
           if (isKSplat || isSPZ) {
+            if (transcode === undefined) {
+              const { transcodeGeometryToSplatBuffer } = await import( '../static/jsm/utils/splatTranscoder.min.js' );
+              transcode = transcodeGeometryToSplatBuffer;
+            }
+
             await loader.loadAsync( selected_url_file,
             function( xhr ) { },
             function( error ) {
               handle_error( error );
             }).then( async loaded_splat => {
-              // Convert Three.js geometry structure into a binary format, trimming background could be enabled
-              const maxRadiusDistance = 10; // Lower this number to trim more background away
-              const rawSplatArrayBuffer = await transcodeGeometryToSplatBuffer( loaded_splat, maxRadiusDistance );
+              // Convert Three.js geometry structure into a binary format
+              // Trimming background and/or number of splats could be enabled
+
+              const options = {
+                backgroundFilterEnabled: true,
+                brightness: 1.15,
+                maxRadius: 10,
+                sampleStep: 1,
+                sh1Scale: 2.0,
+                sh2Scale: 1.5,
+                sh3Scale: 1.0
+              };
+
+              const rawSplatArrayBuffer = await transcode( loaded_splat, options );
 
               try {
                 await splat_loader.LoadFromArrayBuffer( rawSplatArrayBuffer, scene ); 
