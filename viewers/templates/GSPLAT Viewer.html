@@ -23,7 +23,8 @@
             alert('jQuery failed to load. Limited functionality. Check your internet connection!');
           }
 
-          if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
+          if (export_running) handle_export_error( 'RESOURCE ERROR' );
+          else if (init_running || render_requested) handle_error( 'RESOURCE ERROR' );
         }
       }, true); // The 'true' here is vital; it enables the "capturing" phase
 
@@ -39,7 +40,8 @@
           errorObj: error   // The actual Error object (includes stack trace)
         });
 
-        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+        if (export_running) handle_export_error( 'RUNTIME ERROR' );
+        else if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
 
         // Returning 'true' prevents the error from showing up in the browser console
         return false; 
@@ -52,7 +54,8 @@
         // event.promise is the promise that failed
         // event.reason is usually the error object or message
 
-        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
+        if (export_running) handle_export_error( 'UNHANDLED PROMISE' );
+        else if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
       });
     </script>
 
@@ -61,8 +64,8 @@
     <script type="importmap">
       {
         "imports": {
-          "three": "https://cdn.jsdelivr.net/npm/three@0.186.0/build/three.module.min.js",
-          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.186.0/examples/jsm/",
+          "three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.min.js",
+          "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/",
           "gsplat": "https://esm.sh/gsplat@1.2.9"
         }
       }
@@ -76,17 +79,21 @@
       var mouse_down, mouse_wheel, events_initialized, isMobile, isNewiPad;
       var ww = window.innerWidth, wh = window.innerHeight, slider_height = 0;
       var selected_local_file, selected_url_file = '', transcode;
-      var first_run = false, fr_count = 0, count = 0, init_running = false;
+      var first_run = false, fr_count = 0, count = 0, filename;
+      var init_running = false, export_running = false;
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
+
+      // A simple utility to let the browser catch its breath
+      const yieldToMainThread = () => new Promise( resolve => setTimeout( resolve, 0 ) );
     </script>
 
     <script type="module">
       import * as threejs from 'three';
       import * as gsplatjs from 'gsplat';
-      import { SPZLoader } from 'three/addons/loaders/SPZLoader.min.js';
-      import { KSPLATLoader } from 'three/addons/loaders/KSPLATLoader.min.js';
+      import { SPZLoader } from '../static/jsm/loaders/SPZWebGL2Loader.min.js';
+      import { KSPLATLoader } from '../static/jsm/loaders/KSPLATWebGL2Loader.min.js';
 
       THREE = threejs;
       SPLAT = gsplatjs;
@@ -106,7 +113,7 @@
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>GSPLAT Viewer (r186)</title>
+    <title>GSPLAT Viewer (r185)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -138,9 +145,15 @@
           <option title="Scale 10x" value="10x" onclick="set_model_scale( '10x' );">10x</option>
           <option title="Scale 20x" value="20x" onclick="set_model_scale( '20x' );">20x</option>
         </select>
-        <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; min-width: 34px;" disabled>RST</button>
+        <select id="export_names" title="Export" style="display: none; min-width: 80px;" disabled>
+          <option title="Export Formats" value="export" selected disabled>Export</option>
+          <option title="Export as PLY" value="ply" onclick="export_model( 'ply' )">PLY</option>
+          <option title="Export as SPLAT" value="splat" onclick="export_model( 'splat' )">SPLAT</option>
+        </select>
+        <button title="Reset" id="reset" onclick="reset_only();" style="display: none; background-color: transparent; color: maroon; min-width: 34px;" disabled>RST</button>
         <button title="Toggle Full Screen" id="btn_full_screen" onclick="full_screen();" style="display: none; background-color: transparent; min-width: 24px;"><p class="full_screen"></p></button>
-        <button title="Switch Menu Location" id="btn_menu_location" onclick="change_menu_location();" style="background-color: transparent; min-width: 16px;">&#x2193</button>
+        <button title="Switch Menu Location" id="btn_menu_location" onclick="change_menu_location();" style="display: none; background-color: transparent; min-width: 16px;">&#x2193</button>
+        <div id="status_indicator" class="indicator"></div>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
@@ -235,6 +248,49 @@
         }
 
         mouse_wheel = true;
+      }
+
+      function start_export() {
+        document.getElementById('export_names').selectedIndex = 0;
+        document.getElementById('fixed_menu').style.display = 'none';
+        document.getElementById('div_loading').innerHTML = pw;
+        document.getElementById('div_loading').style.display = 'block';
+
+        export_running = true;
+
+        render_requested = false;
+
+        if (!filename || filename === '') {
+          filename = 'Model';
+        } else {
+          filename = filename.replaceAll( '%20', ' ' );
+        }
+      }
+
+      function handle_export_error( error ) {
+        alert( 'Export error!' );
+        console.log( error );
+        finish_export();
+      }
+
+      function finish_export() {
+        document.getElementById('div_loading').innerHTML = '';
+        document.getElementById('div_loading').style.display = 'none';
+        document.getElementById('fixed_menu').style.display = 'block';
+
+        export_running = false;
+
+        render_requested = true;
+        render();
+      }
+
+      async function export_model( ext = 'ply' ) {
+        if (scene) {
+          await start_export();
+          await yieldToMainThread();
+          await scene.saveToFile( filename + '.' + ext, ext );
+          finish_export();
+        }
       }
     </script>
 
@@ -335,10 +391,13 @@
         document.getElementById('btn_file_input').disabled = true;
  
         if (scene) {
+          render_requested = false;
+
           scene.removeObject( scene._objects[ 0 ] );
           scene.reset();
+          scene = undefined;
 
-          reset_all( true );
+          renderer.dispose();
         }
 
         init_running = true;
@@ -350,7 +409,6 @@
         selected_local_file = null;
         mouse_down = false;
         mouse_wheel = true;
-        render_requested = false;
 
         console.time( 'Loading Time' );
 
@@ -386,6 +444,7 @@
             return;
           }
 
+          filename = fi.files[ 0 ].name.substring( 0, fi.files[ 0 ].name.lastIndexOf('.') );
           selected_url_file = '';
         } else {
           // Reset the file input
@@ -395,7 +454,15 @@
 
         if (renderer === undefined) {
           renderer = new SPLAT.WebGLRenderer();
-          renderer.backgroundColor = new SPLAT.Color32( 0, 0, 64, 255 );
+          renderer.setSize( ww, wh );
+
+          renderer.canvas.style.backgroundImage = 'url( "../../../images/dark_blue.png" )';
+          renderer.canvas.style.backgroundSize = '100% 100%';
+          renderer.canvas.style.backgroundRepeat = 'no-repeat';
+          renderer.canvas.style.backgroundPosition = 'center';
+
+          // Background color could be set instead of image
+          //renderer.backgroundColor = new SPLAT.Color32( 0, 0, 64, 255 );
 
           document.body.appendChild( renderer.canvas );
         }
@@ -406,7 +473,8 @@
         if (camera === undefined) camera = new SPLAT.Camera();
         if (controls === undefined) controls = new SPLAT.OrbitControls( camera, renderer.canvas );
 
-        resize();
+        // Start flashing indicator
+        document.getElementById('status_indicator').style.display = 'inline-block';
 
         (selected_local_file !== null) ? loadFile() : loadURLFile();
       }
@@ -414,8 +482,8 @@
       async function loadFile() {
         if (isKSplat || isSPZ) {
           if (transcode === undefined) {
-            const { transcodeGeometryToSplatBuffer } = await import( '../static/jsm/utils/splatTranscoder.min.js' );
-            transcode = transcodeGeometryToSplatBuffer;
+            const { transcodeToSplatBuffer } = await import( '../static/jsm/utils/splatTranscoder.min.js' );
+            transcode = transcodeToSplatBuffer;
           }
 
           await loader.loadAsync( URL.createObjectURL( selected_local_file ),
@@ -426,20 +494,36 @@
           }).then( async loaded_splat => {
             URL.revokeObjectURL( selected_local_file );
 
+            await yieldToMainThread();
+
             // Convert Three.js geometry structure into a binary format
             // Trimming background and/or number of splats could be enabled
 
+            const highSPZCount = isSPZ && loaded_splat.count > 1000000;
+            const highKSPLATCount = isKSplat && loaded_splat.count > 2000000;
+
             const options = {
-              backgroundFilterEnabled: true,
-              brightness: 1.15,
-              maxRadius: 10,
-              sampleStep: 1,
+              backgroundFilterEnabled: highKSPLATCount,
+              brightness: highSPZCount ? 1.25 : 1.15,
+              maxRadius: isMobile ? 8 : 14,
+              sampleStep: highSPZCount ? 2 : 1,
               sh1Scale: 2.0,
               sh2Scale: 1.5,
-              sh3Scale: 1.0
+              sh3Scale: 1.0,
+              focusFactor: isKSplat ? 0.9 : 1.0
             };
 
             const rawSplatArrayBuffer = await transcode( loaded_splat, options );
+
+            await yieldToMainThread();
+
+            // Break references to large inner typed arrays immediately
+            loaded_splat.positions = null;
+            loaded_splat.scales = null;
+            loaded_splat.rotations = null;
+            loaded_splat.colors = null;
+            loaded_splat.sphericalHarmonics = null;
+            loaded_splat = null; 
 
             try {
               await splat_loader.LoadFromArrayBuffer( rawSplatArrayBuffer, scene ); 
@@ -471,6 +555,8 @@
             return;
           }
 
+          filename = selected_url_file.substring( selected_url_file.lastIndexOf('/') + 1, selected_url_file.lastIndexOf('.') );
+
           if (fn_uc.endsWith('.KSPLAT')) {
             loader = ksplat_loader;
             isKSplat = true;
@@ -485,8 +571,8 @@
 
           if (isKSplat || isSPZ) {
             if (transcode === undefined) {
-              const { transcodeGeometryToSplatBuffer } = await import( '../static/jsm/utils/splatTranscoder.min.js' );
-              transcode = transcodeGeometryToSplatBuffer;
+              const { transcodeToSplatBuffer } = await import( '../static/jsm/utils/splatTranscoder.min.js' );
+              transcode = transcodeToSplatBuffer;
             }
 
             await loader.loadAsync( selected_url_file,
@@ -494,36 +580,54 @@
             function( error ) {
               handle_error( error );
             }).then( async loaded_splat => {
+              await yieldToMainThread();
+
               // Convert Three.js geometry structure into a binary format
               // Trimming background and/or number of splats could be enabled
 
+              const highSPZCount = isSPZ && loaded_splat.count > 1000000;
+              const highKSPLATCount = isKSplat && loaded_splat.count > 2000000;
+
               const options = {
-                backgroundFilterEnabled: true,
-                brightness: 1.15,
-                maxRadius: 10,
-                sampleStep: 1,
+                backgroundFilterEnabled: highKSPLATCount,
+                brightness: highSPZCount ? 1.25 : 1.15,
+                maxRadius: isMobile ? 8 : 14,
+                sampleStep: highSPZCount ? 2 : 1,
                 sh1Scale: 2.0,
                 sh2Scale: 1.5,
-                sh3Scale: 1.0
+                sh3Scale: 1.0,
+                focusFactor: isKSplat ? 0.9 : 1.0
               };
 
               const rawSplatArrayBuffer = await transcode( loaded_splat, options );
 
+              await yieldToMainThread();
+
+              // Break references to large inner typed arrays immediately
+              loaded_splat.positions = null;
+              loaded_splat.scales = null;
+              loaded_splat.rotations = null;
+              loaded_splat.colors = null;
+              loaded_splat.sphericalHarmonics = null;
+              loaded_splat = null; 
+
               try {
                 await splat_loader.LoadFromArrayBuffer( rawSplatArrayBuffer, scene ); 
+                finish_loading();
               } catch( err ) {
                 console.error( 'Error setting up gsplat splat: ', err );
               }
             });
           } else {
-            await loader.LoadAsync( URL.createObjectURL( selected_local_file ), scene, () => {} );
+            await loader.LoadAsync( selected_url_file, scene, () => {} );
+            finish_loading();
           }
-
-          finish_loading();
         }
       }
 
       async function finish_loading() {
+        await yieldToMainThread();
+
         console.timeEnd( 'Loading Time' );
 
         init_running = false;
@@ -531,9 +635,9 @@
         document.getElementById('btn_load').disabled = false;
         document.getElementById('btn_file_input').disabled = false;
 
-        document.body.style.backgroundImage = 'none';
-
         enable_disable( false );
+
+        resize();
 
         render_requested = true;
         mouse_wheel = true;
@@ -552,6 +656,9 @@
 
         init_running = false;
 
+        // Stop flashing indicator
+        document.getElementById('status_indicator').style.display = 'none';
+
         document.getElementById('btn_load').disabled = false;
         document.getElementById('btn_file_input').disabled = false;
         disabled_changed();
@@ -560,7 +667,7 @@
         document.getElementById('div_error').style.display = 'block';
       }
 
-      async function render() {
+      function render() {
         if (scene) {
           if (first_run || mouse_down || mouse_wheel) {
             // If it might be slow to render initially
@@ -572,7 +679,11 @@
                 fr_count = 0;
                 first_run = false;
                 mouse_wheel = true;
+
                 document.getElementById('div_loading').style.display = 'none';
+
+                // Stop flashing indicator
+                document.getElementById('status_indicator').style.display = 'none';
               }
             } else {
               if (mouse_wheel) {
@@ -595,11 +706,6 @@
       }
 
       function reset_only() {
-        scene.removeObject( scene._objects[ 0 ] );
-        scene.reset();
-
-        reset_all( true );
-
         console.time( 'Loading Time' );
 
         document.getElementById('div_loading').innerText = 'Reload';
@@ -607,22 +713,20 @@
 
         mouse_wheel = true;
 
-        (selected_local_file !== null) ? loadFile() : loadURLFile();
+        init();
       }
 
       async function reset_all( reset = false ) {
         // Reset the view
-        if (reset) {
-          first_run = true;
-          fr_count = 0;
-          await render();
-        } else {
+        if (!reset) {
           // Page (re)loading
           if (scene) {
             scene.removeObject( scene._objects[ 0 ] );
             scene.reset();
+            scene = undefined;
 
             renderer.dispose();
+            renderer = undefined;
           }
 
           document.getElementById('file_input').value = '';
@@ -640,6 +744,7 @@
 
       function enable_disable( disable = false ) {
         document.getElementById('quick_rotation').disabled = disable;
+        document.getElementById('export_names').disabled = disable;
         document.getElementById('model_scale').disabled = disable;
         document.getElementById('reset').disabled = disable;
         disabled_changed();
@@ -658,17 +763,25 @@
 
         $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
         $('#model_scale').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#quick_rotation').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
 
         if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile) {
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
+          $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#quick_rotation').change( function() { $(this).children(':selected').click(); });
         }
 
         document.getElementById('model_scale').selectedIndex = 0;
+        document.getElementById('export_names').selectedIndex = 0;
         document.getElementById('quick_rotation').selectedIndex = 0;
 
-        if (!isMobile) $('#btn_full_screen')[ 0 ].style.display = '';
+        if (!isMobile) {
+          $('#reset')[ 0 ].style.display = '';
+          $('#export_names')[ 0 ].style.display = '';
+          $('#btn_full_screen')[ 0 ].style.display = '';
+          $('#btn_menu_location')[ 0 ].style.display = '';
+        }
       }
 
       function disabled_changed() {

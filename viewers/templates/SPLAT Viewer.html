@@ -76,9 +76,9 @@
     <script src="../static/js/upng/UPNG.min.js" defer></script>
 
     <script>
-      var splat_loader, splat, splats, manager, texture_loader, hdrJPGLoader, tex;
-      var THREE, controls, orb_controls, renderer, scene, camera, render_requested;
-      var xr_controller, controller, controllerGrip1, controllerGrip2, vr_button;
+      var loader, ksplat_loader, three_splat_loader, splat_loader, spz_loader, splat, splats, transcode;
+      var manager, texture_loader, hdrJPGLoader, tex, isKSplat, isSPZ;
+      var THREE, controls, renderer, scene, camera, render_requested;
       var mouse_down, mouse_wheel, events_initialized, isMobile, isNewiPad;
       var gui, gui_set = false, guiExposure, params, toneMappingOptions;
       var ww = window.innerWidth, wh = window.innerHeight, slider_height = 0;
@@ -88,19 +88,19 @@
       var url_displayed = false, url_loading = false, menu_location_bottom = false;
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
+
+      // A simple utility to let the browser catch its breath
+      const yieldToMainThread = () => new Promise( resolve => setTimeout( resolve, 0 ) );
     </script>
 
     <script type="module">
       import * as threejs from 'three';
       import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
-      import { OrbitControls } from 'three/addons/controls/OrbitControls.min.js';
-      import { VRButton } from 'three/addons/webxr/VRButton.min.js';
-      import { XRControllerModelFactory } from 'three/addons/webxr/XRControllerModelFactory.min.js';
-      import { Splat, SplatLoader } from 'https://cdn.jsdelivr.net/npm/@pmndrs/vanilla@1.25.0/core/Splat.min.js';
+      import { SPZLoader } from '../static/jsm/loaders/SPZWebGL2Loader.min.js';
+      import { SPLATLoader } from '../static/jsm/loaders/SPLATWebGL2Loader.min.js';
+      import { KSPLATLoader } from '../static/jsm/loaders/KSPLATWebGL2Loader.min.js';
 
       THREE = threejs;
-      vr_button = VRButton;
-      xr_controller = XRControllerModelFactory;
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
@@ -110,9 +110,9 @@
       gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
       set_gui_position();
 
-      orb_controls = OrbitControls;
-      splat_loader = SplatLoader;
-      splat = Splat;
+      spz_loader = new SPZLoader( manager );
+      ksplat_loader = new KSPLATLoader( manager );
+      three_splat_loader = new SPLATLoader( manager );
     </script>
 
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
@@ -131,20 +131,11 @@
     <div id="fixed_menu" class="fixed-menu">
       <div class="fm">
         <button title="URL of the remote splat" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
-        <input type="file" title="Browse Local Files" id="file_input" onchange="init();" accept=".splat" />
-        <button title="Reset" id="reset" onclick="reset_only();" style="background-color: transparent; color: maroon; min-width: 34px;" disabled>RST</button>
-        <button title="Toggle Full Screen" id="btn_full_screen" onclick="full_screen();" style="background-color: transparent; min-width: 24px;"><p class="full_screen"></p></button>
-        <button title="Switch Menu Location" id="btn_menu_location" onclick="change_menu_location();" style="background-color: transparent; min-width: 16px;">&#x2193</button>
-      </div>
-      <div class="fm" id="url" style="display: none;">
-        <label for="url_entry" title="Remote URL"></label>
-        <input type="text" id="url_entry" placeholder="Type or paste URL here..." style="width: calc(75% - 12px);" />
-        <button title="Load" id="btn_load" onclick="load_url_file();" style="min-width: 8.5%;">Load</button>
-        <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
-      </div>
-      <div class="fm">
-        <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="color: blue; min-width: 25px;" disabled>Eq</button>
-        <button title="Toggle Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="color: blue;" disabled>G</button>
+        <button title="Browse Local Files" id="btn_file_input" style="background-color: transparent; min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
+        <label for="btn_file_input" title="Browse Local Files"></label>
+        <input type="file" title="Browse Local Files" id="file_input" style="display: none;" onchange="init();" accept=".ksplat, .splat, .spz" />
+        <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="background-color: transparent; color: blue; min-width: 25px;" disabled>Eq</button>
+        <button title="Toggle Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
         <select title="Quick XYZ Rotation" id="quick_rotation" disabled>
           <option title="Quick XYZ Rotation" value="" selected disabled>Rotate</option>
           <option title="Rotate 180x" value="180x" onclick="quick_x_rotation( '1' );">180x</option>
@@ -172,6 +163,16 @@
           <option value="" selected disabled>Export</option>
           <option title="APNG - Animated PNG" value="apng" onclick="export_animated_png();">APNG</option>
         </select>
+        <button title="Reset" id="reset" onclick="reset_only();" style="display: none; background-color: transparent; color: maroon; min-width: 34px;" disabled>RST</button>
+        <button title="Toggle Full Screen" id="btn_full_screen" onclick="full_screen();" style="display: none; background-color: transparent; min-width: 24px;"><p class="full_screen"></p></button>
+        <button title="Switch Menu Location" id="btn_menu_location" onclick="change_menu_location();" style="display: none; background-color: transparent; min-width: 16px;">&#x2193</button>
+        <div id="status_indicator" class="indicator"></div>
+      </div>
+      <div class="fm" id="url" style="display: none;">
+        <label for="url_entry" title="Remote URL"></label>
+        <input type="text" id="url_entry" placeholder="Type or paste URL here..." style="width: calc(75% - 12px);" />
+        <button title="Load" id="btn_load" onclick="load_url_file();" style="min-width: 8.5%;">Load</button>
+        <button title="Clear" id="btn_clear" onclick="clear_url();" style="min-width: 8.5%;">Clear</button>
       </div>
     </div>
     <div id="gui_position"></div>
@@ -540,7 +541,6 @@
           document.getElementById('btn_bgnd_linear_gradient').disabled = true;
 
           scene.background = tex;
-          scene.environment = tex;
 
           scene.backgroundBlurriness = params.backBlurriness;
           scene.backgroundIntensity = params.backIntensity;
@@ -584,7 +584,9 @@
       function set_model_scale( scale ) {
         document.getElementById('model_scale').selectedIndex = 0;
 
-        splats.scale.multiplyScalar( parseFloat( scale.slice( 0, -1 ) ) );
+        const scalar_scale = parseFloat( scale.slice( 0, -1 ) );
+
+        splats.scale.multiplyScalar( scalar_scale );
 
         mouse_wheel = true;
       }
@@ -617,35 +619,10 @@
         if (!url_loading && document.getElementById('file_input').files.length === 0) return;
 
         document.getElementById('btn_load').disabled = true;
-        document.getElementById('file_input').disabled = true;
+        document.getElementById('btn_file_input').disabled = true;
  
         if (scene) {
-          if (splats) {
-            scene.remove( splats );
-
-            splats.traverse( ( child ) => {
-              if (child.isMesh || child.isPoints) {
-                if (child.material) {
-                  if (child.material.uniforms) {
-                    Object.keys( child.material.uniforms ).forEach( ( key ) => {
-                      if (child.material.uniforms[ key ].value?.isTexture) {
-                        child.material.uniforms[ key ].value.dispose();
-                      }
-                    });
-                  }
-
-                  child.material.dispose();
-                }
-
-                if (child.geometry) child.geometry.dispose();
-              }
-            });
-          }
-
-          if (!isMobile) {
-            renderer.info.reset();
-            renderer.resetState();
-          }
+          if (splats) await scene_cleanup();
 
           reset_all( true );
         }
@@ -676,6 +653,9 @@
         }
 
         splats = null;
+        loader = null;
+        isSPZ = false;
+        isKSplat = false;
         selected_local_file = null;
         mouse_down = false;
         mouse_wheel = true;
@@ -694,12 +674,47 @@
         document.getElementById('div_loading').style.display = 'block';
         document.getElementById('div_loading').innerHTML = 'Load & Visualize';
 
+        if (renderer === undefined) {
+          renderer = new THREE.WebGLRenderer( { antialias: false, alpha: true } );
+          renderer.setPixelRatio( window.devicePixelRatio );
+          renderer.toneMapping = THREE.NeutralToneMapping;
+          renderer.toneMappingExposure = 1.0;
+          renderer.info.autoReset = false;
+          renderer.setSize( ww, wh );
+          renderer.autoClear = true;
+
+          document.body.appendChild( renderer.domElement );
+        }
+
+        if (hdrJPGLoader === undefined) {
+          const { HDRJPGLoader } = await import( '@monogrid/gainmap-js/decode' );
+          hdrJPGLoader = new HDRJPGLoader( renderer );
+        }
+
+        if (splat_loader === undefined) {
+          const { Splat, SplatLoader } = await import( 'https://cdn.jsdelivr.net/npm/@pmndrs/vanilla@1.25.0/core/Splat.min.js' );
+
+          splat_loader = new SplatLoader( renderer );
+          splat = Splat;
+        }
+
         if (!url_loading) {
           // Loaded splat file
           let fi = document.getElementById('file_input');
           let fn_uc = fi.files[ 0 ].name.toUpperCase();
 
-          if (fn_uc.endsWith('.SPLAT')) selected_local_file = fi.files[ 0 ];
+          if (fn_uc.endsWith('.KSPLAT')) {
+            selected_local_file = fi.files[ 0 ];
+            loader = ksplat_loader;
+            isKSplat = true;
+          } else if (fn_uc.endsWith('.SPLAT')) {
+            selected_local_file = fi.files[ 0 ];
+            loader = three_splat_loader;
+          } else if (fn_uc.endsWith('.SPZ')) {
+            selected_local_file = fi.files[ 0 ];
+            loader = spz_loader;
+            isSPZ = true;
+          }
 
           if (selected_local_file === null) {
             handle_error( 'No valid SPLAT file selected!' );
@@ -713,25 +728,6 @@
           url_loading = false;
         }
 
-        if (renderer === undefined) {
-          renderer = new THREE.WebGLRenderer( { antialias: false, alpha: true } );
-          renderer.setPixelRatio( window.devicePixelRatio );
-          renderer.toneMapping = THREE.NeutralToneMapping;
-          renderer.toneMappingExposure = 1.0;
-          renderer.info.autoReset = false;
-          renderer.setSize( ww, wh );
-          renderer.autoClear = false;
-          renderer.xr.enabled = true;
-
-          document.body.appendChild( renderer.domElement );
-          document.body.appendChild( vr_button.createButton( renderer ) );
-        }
-
-        if (hdrJPGLoader === undefined) {
-          const { HDRJPGLoader } = await import( '@monogrid/gainmap-js/decode' );
-          hdrJPGLoader = new HDRJPGLoader( renderer );
-        }
-
         if (scene === undefined) {
           scene = new THREE.Scene();
           scene.backgroundRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
@@ -743,35 +739,20 @@
 
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
-        // The XRControllerModelFactory will automatically fetch controller models
-        // that match what the user is holding as closely as possible. The models
-        // should be attached to the object returned from getControllerGrip in
-        // order to match the orientation of the held device.
-
-        if (controller === undefined) {
-          controller = new xr_controller();
-
-          controllerGrip1 = renderer.xr.getControllerGrip( 0 );
-          controllerGrip1.add( controller.createControllerModel( controllerGrip1 ) );
-          scene.add( controllerGrip1 );
-
-          controllerGrip2 = renderer.xr.getControllerGrip( 1 );
-          controllerGrip2.add( controller.createControllerModel( controllerGrip2 ) );
-          scene.add( controllerGrip2 );
-        }
-
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.1, 5000 );
-          camera.position.set( 0, 0, 25 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.25, 1e4 );
+          camera.position.set( 0, 0, 10 );
           scene.add( camera );
         }
 
         if (controls === undefined) {
-          controls = new orb_controls( camera, renderer.domElement );
+          const { OrbitControls } = await import( 'three/addons/controls/OrbitControls.min.js' );
+
+          controls = new OrbitControls( camera, renderer.domElement );
           controls.enableZoom = true;
           controls.zoomToCursor = true;
           controls.zoomSpeed = 0.5;
-          controls.rotateSpeed = 0.8;
+          controls.rotateSpeed = 0.5;
           controls.keyPanSpeed = 0.5; 
           controls.panSpeed = 0.5;
           controls.minDistance = 0;
@@ -783,12 +764,15 @@
           //controls.minPolarAngle = 1.1;
         }
 
+        // Start flashing indicator
+        document.getElementById('status_indicator').style.display = 'inline-block';
+
         (selected_local_file !== null) ? loadFile() : loadURLFile();
 
         // Load equirectangular texture
         if (tex === undefined) {
-            // Regardless of its name, this is actually 2048 x 1024 image
-            let url = 'https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/textures/planets/earth_atmos_4096.avif';
+          // Regardless of its name, this is actually 2048 x 1024 image
+          let url = 'https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/textures/planets/earth_atmos_4096.avif';
 
           hdrJPGLoader.load( url, async function( texture ) {
             tex = await texture.toDataTexture();
@@ -804,19 +788,61 @@
       }
 
       async function loadFile() {
-        await new splat_loader( renderer ).loadAsync( URL.createObjectURL( selected_local_file ),
+        await loader.loadAsync( URL.createObjectURL( selected_local_file ),
         function( xhr ) { },
         function( error ) {
           URL.revokeObjectURL( selected_local_file );
           handle_error( error );
-        }).then( loaded_splat => {
+        }).then( async loaded_splat => {
           URL.revokeObjectURL( selected_local_file );
 
-          loaded_splat.toneMapped = true;
+          if (transcode === undefined) {
+            const { transcodeToSplatBuffer } = await import( '../static/jsm/utils/splatTranscoder.min.js' );
+            transcode = transcodeToSplatBuffer;
+          }
 
-          splats = new splat( loaded_splat, camera );
+          await yieldToMainThread();
 
-          scene.add( splats );
+          const isMassive = loaded_splat.count > 1000000;
+
+          // Unified option mapping for ALL types (SPLAT, KSPLAT, SPZ)
+          const options = {
+            backgroundFilterEnabled: isMassive || isKSplat, // Active filtering (trimming)
+            brightness: isSPZ && isMassive ? 1.25 : 1.15,
+            maxRadius: 5,                                   // Trim outer boundaries
+            sampleStep: isSPZ && isMassive ? 2 : 1,
+            sh1Scale: 2.0,
+            sh2Scale: 1.5,
+            sh3Scale: 1.0,
+            focusFactor: isKSplat ? 0.9 : 1.0
+          };
+
+          const rawSplatArrayBuffer = await transcode( loaded_splat, options );
+
+          await yieldToMainThread();
+
+          // Break references to large inner typed arrays immediately
+          loaded_splat.positions = null;
+          loaded_splat.scales = null;
+          loaded_splat.rotations = null;
+          loaded_splat.colors = null;
+          loaded_splat.sphericalHarmonics = null;
+          loaded_splat = null; 
+
+          // Convert raw ArrayBuffer into an absolute Blob URL object
+          const blob = new Blob( [ rawSplatArrayBuffer ], { type: 'application/octet-stream' } );
+          const blobURL = URL.createObjectURL( blob );
+
+          try {
+            const splatData = await splat_loader.loadAsync( blobURL ); 
+            splats = new splat( splatData, camera );
+            splats.toneMapped = true;
+            scene.add( splats );
+          } catch( err ) {
+            console.error( 'Error setting up pmndrs splat: ', err );
+          } finally {
+            URL.revokeObjectURL( blobURL );
+          }
 
           finish_loading();
         });
@@ -830,17 +856,76 @@
             selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          // No extension checking for URL so it has to point to either a Splat or Luma Splat model
+          let fn_uc = selected_url_file.toUpperCase();
 
-          console.log( 'Trying drei-vanilla splat loader...' );
+          if (fn_uc.endsWith('.KSPLAT')) {
+            loader = ksplat_loader;
+            isKSplat = true;
+          } else if (fn_uc.endsWith('.SPLAT')) {
+            loader = three_splat_loader;
+          } else if (fn_uc.endsWith('.SPZ')) {
+            loader = spz_loader;
+            isSPZ = true;
+          }
 
-          await new splat_loader( renderer ).loadAsync( selected_url_file,
-          function( xhr ) { },
-          async function( error ) {
-            console.log( 'Not a regular splat!' );
-            console.log( 'Trying luma splat loader...' );
+          if (loader) {
+            await loader.loadAsync( selected_url_file,
+            function( xhr ) { },
+            function( error ) {
+              handle_error( error );
+            }).then( async loaded_splat => {
+              if (transcode === undefined) {
+                const { transcodeToSplatBuffer } = await import( '../static/jsm/utils/splatTranscoder.min.js' );
+                transcode = transcodeToSplatBuffer;
+              }
 
-            const { LumaSplatsThree, LumaSplatsSemantics } = await import( "@lumaai/luma-web" );
+              await yieldToMainThread();
+
+              const isMassive = loaded_splat.count > 1000000;
+
+              // Unified option mapping for ALL types (SPLAT, KSPLAT, SPZ)
+              const options = {
+                backgroundFilterEnabled: isMassive || isKSplat, // Active filtering (trimming)
+                brightness: isSPZ && isMassive ? 1.25 : 1.15,
+                maxRadius: 5,                                   // Trim outer boundaries
+                sampleStep: isSPZ && isMassive ? 2 : 1,
+                sh1Scale: 2.0,
+                sh2Scale: 1.5,
+                sh3Scale: 1.0,
+                focusFactor: isKSplat ? 0.9 : 1.0
+              };
+
+              const rawSplatArrayBuffer = await transcode( loaded_splat, options );
+
+              await yieldToMainThread();
+
+              // Break references to large inner typed arrays immediately
+              loaded_splat.positions = null;
+              loaded_splat.scales = null;
+              loaded_splat.rotations = null;
+              loaded_splat.colors = null;
+              loaded_splat.sphericalHarmonics = null;
+              loaded_splat = null; 
+
+              // Convert raw ArrayBuffer into an absolute Blob URL object
+              const blob = new Blob( [ rawSplatArrayBuffer ], { type: 'application/octet-stream' } );
+              const blobURL = URL.createObjectURL( blob );
+
+              try {
+                const splatData = await splat_loader.loadAsync( blobURL ); 
+                splats = new splat( splatData, camera );
+                splats.toneMapped = true;
+                scene.add( splats );
+              } catch( err ) {
+                console.error( 'Error setting up pmndrs splat: ', err );
+              } finally {
+                URL.revokeObjectURL( blobURL );
+              }
+
+              finish_loading();
+            });
+          } else {
+            const { LumaSplatsThree, LumaSplatsSemantics } = await import( '@lumaai/luma-web' );
 
             splats = new LumaSplatsThree({
               needsSort: true,
@@ -869,25 +954,22 @@
             splats.onError = () => {
               handle_error( 'Check URL!' );
             }
-          }).then( loaded_splat => {
-            loaded_splat.toneMapped = true;
-
-            splats = new splat( loaded_splat, camera );
-
-            scene.add( splats );
-
-            finish_loading();
-          });
+          }
         }
       }
 
       async function finish_loading() {
+        await yieldToMainThread();
+
         console.timeEnd( 'Loading Time' );
 
         init_running = false;
 
+        // Stop flashing indicator
+        document.getElementById('status_indicator').style.display = 'none';
+
         document.getElementById('btn_load').disabled = false;
-        document.getElementById('file_input').disabled = false;
+        document.getElementById('btn_file_input').disabled = false;
 
         document.body.style.backgroundImage = 'none';
 
@@ -899,7 +981,7 @@
         fr_count = 0;
         render();
 
-        if (!isMobile) await new Promise( resolve => setTimeout( log_info, 5000 ) );
+        if (!isMobile) await new Promise( resolve => setTimeout( log_info, 3000 ) );
       }
 
       function log_info() {
@@ -917,22 +999,24 @@
 
         init_running = false;
 
+        // Stop flashing indicator
+        document.getElementById('status_indicator').style.display = 'none';
+
         document.getElementById('btn_load').disabled = false;
-        document.getElementById('file_input').disabled = false;
+        document.getElementById('btn_file_input').disabled = false;
         disabled_changed();
 
         document.getElementById('div_loading').style.display = 'none';
         document.getElementById('div_error').style.display = 'block';
       }
 
-      async function render() {
+      function render() {
         if (document.getElementById('animation_progress').style.display === 'none') {
           if (render_requested) requestAnimationFrame( render );
         }
 
         if (splats) {
           if (first_run || mouse_down || mouse_wheel || reset_rotation || progress.value > 0) {
-
             // Reset splats rotational values
             if (reset_rotation) {
               splats.rotation.set( 0, 0, 0 );
@@ -960,7 +1044,7 @@
               }
             } else {
               if (mouse_wheel) {
-                if (count > 60) {
+                if (count > 600) {
                   mouse_wheel = false;
                   count = 0;
                 } else {
@@ -971,44 +1055,12 @@
 
             controls.update();
 
-            renderer.clear();
             renderer.render( scene, camera );
           }
         }
       }
 
       function reset_only() {
-        if (scene) {
-          scene.remove( splats );
-
-          splats.traverse( ( child ) => {
-            if (child.isMesh || child.isPoints) {
-              if (child.material) {
-                if (child.material.uniforms) {
-                  Object.keys( child.material.uniforms ).forEach( ( key ) => {
-                    if (child.material.uniforms[ key ].value?.isTexture) {
-                      child.material.uniforms[ key ].value.dispose();
-                    }
-                  });
-                }
-
-                child.material.dispose();
-              }
-
-              if (child.geometry) child.geometry.dispose();
-            }
-          });
-
-          splats = null;
-        }
-
-        if (!isMobile) {
-          renderer.info.reset();
-          renderer.resetState();
-        }
-
-        if (gui) gui_reset();
-
         reset_all( true );
 
         console.time( 'Loading Time' );
@@ -1018,7 +1070,7 @@
 
         mouse_wheel = true;
 
-        (selected_local_file !== null) ? loadFile() : loadURLFile();
+        init();
       }
 
       async function reset_all( reset = false ) {
@@ -1059,27 +1111,7 @@
         } else {
           // Page (re)loading
           if (scene) {
-            if (splats) {
-              scene.remove( splats );
-
-              splats.traverse( ( child ) => {
-                if (child.isMesh || child.isPoints) {
-                  if (child.material) {
-                    if (child.material.uniforms) {
-                      Object.keys( child.material.uniforms ).forEach( ( key ) => {
-                        if (child.material.uniforms[ key ].value?.isTexture) {
-                          child.material.uniforms[ key ].value.dispose();
-                        }
-                      });
-                    }
-
-                    child.material.dispose();
-                  }
-
-                  if (child.geometry) child.geometry.dispose();
-                }
-              });
-            }
+            if (splats) await scene_cleanup();
 
             while (scene.children.length > 0) {
               scene.remove( scene.children[ 0 ] );
@@ -1100,6 +1132,44 @@
         disabled_changed();
 
         mouse_wheel = true;
+      }
+
+      async function scene_cleanup() {
+        scene.remove( splats );
+
+        renderer.clear();
+
+        splats.traverse( ( child ) => {
+          if (child.isMesh || child.isPoints) {
+            if (child.material) {
+              if (child.material.uniforms) {
+                Object.keys( child.material.uniforms ).forEach( ( key ) => {
+                  if (child.material.uniforms[ key ]?.value?.isTexture) {
+                    child.material.uniforms[ key ].value.dispose();
+                  }
+                });
+              }
+
+              child.material.dispose();
+              child.material = null;
+            }
+
+            if (child.geometry) {
+              child.geometry.dispose();
+              child.geometry = null;
+            }
+          }
+        });
+
+        if (splats.geometry) {
+          splats.geometry.dispose();
+          splats.geometry = null;
+        }
+
+        if (!isMobile) {
+          renderer.info.reset();
+          renderer.resetState();
+        }
       }
 
       function enable_disable( disable = false ) {
@@ -1123,20 +1193,26 @@
         isMobile = !isNewiPad && ((/iPhone|iPad|iPod/.test( navigator.platform )) ||
           (/Android|webOS|iPhone|iPad|iPod|BlackBerry|CriOS|IEMobile|Opera Mini/i.test( navigator.userAgent )));
 
-        $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
-        $('#model_scale').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
-        $('#quick_rotation').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
         $('#url_entry').keypress( function( event ) { if (event.key === 'Enter') $('#btn_load').click(); });
+        $('#model_scale').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#export_names').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
+        $('#quick_rotation').keypress( function( event ) { if (event.key === 'Enter') $(this).children(':selected').click(); });
 
         if (navigator.userAgent.indexOf('Chrome') > -1 || navigator.userAgent.indexOf('Safari') > -1 || isMobile) {
-          $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#model_scale').change( function() { $(this).children(':selected').click(); });
+          $('#export_names').change( function() { $(this).children(':selected').click(); });
           $('#quick_rotation').change( function() { $(this).children(':selected').click(); });
         }
 
         document.getElementById('model_scale').selectedIndex = 0;
         document.getElementById('export_names').selectedIndex = 0;
         document.getElementById('quick_rotation').selectedIndex = 0;
+
+        if (!isMobile) {
+          $('#reset')[ 0 ].style.display = '';
+          $('#btn_full_screen')[ 0 ].style.display = '';
+          $('#btn_menu_location')[ 0 ].style.display = '';
+        }
       }
 
       function disabled_changed() {
