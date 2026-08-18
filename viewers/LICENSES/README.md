@@ -18,7 +18,7 @@ Google's [Model Viewer](https://github.com/google/model-viewer) element Apache 2
 
 [web-ifc-three](https://github.com/ThatOpen/web-ifc-three) IFC Loader MIT license can be seen [here](https://github.com/ThatOpen/web-ifc-three?tab=MIT-1-ov-file#readme)
 
-[@jsquash/avif](https://github.com/jamsinclair/jSquash) Apache 2 license can be seen [here](https://www.apache.org/licenses/LICENSE-2.0)
+[@jsquash](https://github.com/jamsinclair/jSquash) AVIF and WEBP Apache 2 license can be seen [here](https://www.apache.org/licenses/LICENSE-2.0)
 
 [Polyslice](https://github.com/jgphilpott/polyslice) MIT license can be seen [here](https://github.com/jgphilpott/polyslice?tab=MIT-1-ov-file#readme)
 
