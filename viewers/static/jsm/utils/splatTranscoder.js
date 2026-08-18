@@ -1,10 +1,8 @@
 /**
- * Transcodes r186+ geometry to a .splat buffer optimized for low-spec hardware:
- * - 32-byte per splat layout as original version (positions, scales, RGBA, quat).
- * - Adds configurable background filtering, SH weights, and brightness.
- * - Fast trace-based covariance → quaternion approximation.
+ * Transcodes structured data object to a .splat buffer.
+ * Adds configurable background filtering, SH weights, focus and brightness.
  *
- * @param {THREE.BufferGeometry} splatGeometry
+ * @param {Object} [data] Structured data object returned by customized three.js KSPLAT / SPLAT / SPZ loaders
  * @param {Object} [options]
  * @param {boolean} [options.backgroundFilterEnabled=false] - Enable distance-based culling.
  * @param {number} [options.brightness=1.15]                - Global RGB multiplier before clamping.
@@ -35,8 +33,8 @@ export function transcodeToSplatBuffer( data, options = {} ) {
 		count,
 		positions,          // centers (Float32Array)
 		scales,             // raw integer scale bytes (Uint8Array)
-		rotations,          // quaternionXYZW (Float32Array from your parse loop)
-		colors,             // colorBytes from COLOR_LUT (Uint8ClampedArray)
+		rotations,          // quaternionXYZW (Float32Array)
+		colors,             // colorBytes (Uint8ClampedArray)
 		sphericalHarmonics  // sphericalHarmonicsBands object
 	} = data;
 
