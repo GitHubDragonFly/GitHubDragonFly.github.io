@@ -61,6 +61,8 @@ PRWM exports are powered by the [PRWM](https://github.com/kchapelier/PRWM) whose
 
 [@pmndrs/drei-vanilla](https://github.com/pmndrs/drei-vanilla#splat) MIT license can be seen [here](https://github.com/pmndrs/drei-vanilla?tab=MIT-1-ov-file#readme)
 
+[gsplat](https://github.com/huggingface/gsplat.js) MIT license can be seen [here](https://github.com/huggingface/gsplat.js?tab=MIT-1-ov-file)
+
 [Luma WebGL](https://github.com/lumalabs/luma-web-examples) MIT license can be seen [here](https://github.com/lumalabs/luma-web-examples?tab=MIT-1-ov-file#readme)
 
 [OCCT](https://github.com/kovacsv/occt-import-js) licenses are in the `viewers/static/occt-import-js/dist` folder
