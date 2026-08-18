@@ -49,7 +49,7 @@ const _quaternion = [ 0, 0, 0, 0 ];
 /**
  * A loader for compressed Gaussian splat `.spz` files.
  *
- * Custom WebGL2 version for use with gsplat/pmnrds splat loaders via custom splatTranscoder.
+ * Custom WebGL2 version for use with gsplat/pmndrs splat loaders via custom splatTranscoder.
  *
  * ```js
  * const loader = new SPZLoader();
@@ -77,7 +77,7 @@ class SPZLoader extends Loader {
 	 * the `onLoad()` callback.
 	 *
 	 * @param {string} url - The path/URL of the file to be loaded. This can also be a data URI.
-	 * @param {function(BufferGeometry)} onLoad - Executed when the loading process has been finished.
+	 * @param {function(Object)} onLoad - Executed when the loading process has been finished.
 	 * @param {onProgressCallback} onProgress - Executed while the loading is in progress.
 	 * @param {onErrorCallback} onError - Executed when errors occur.
 	 */
@@ -118,7 +118,7 @@ class SPZLoader extends Loader {
 	 * @param {ArrayBuffer} buffer - The raw SPZ file as an array buffer.
 	 * @param {function(BufferGeometry)} [onLoad] - Executed when the parsing process has been finished.
 	 * @param {onErrorCallback} [onError] - Executed when errors occur.
-	 * @return {BufferGeometry|Promise<BufferGeometry>|undefined} The parsed splat geometry, or a promise for SPZ v4 data.
+	 * @return {Object} Structured data object for use with custom splatTranscoder.
 	 */
 	parse( buffer, onLoad, onError ) {
 
@@ -179,7 +179,7 @@ class SPZLoader extends Loader {
 	 * Parses raw SPZ data after gzip decompression.
 	 *
 	 * @param {Uint8Array} bytes - The decompressed SPZ data.
-	 * @return {BufferGeometry} The parsed splat geometry.
+	 * @return {Object} Structured data object for use with custom splatTranscoder.
 	 */
 	parseRawSPZ( bytes ) {
 
@@ -265,7 +265,7 @@ class SPZLoader extends Loader {
 	 *
 	 * @param {Uint8Array} bytes - The raw SPZ v4 data.
 	 * @param {ZSTDDecoder} zstd - The initialized ZSTD decoder.
-	 * @return {BufferGeometry} The parsed splat geometry.
+	 * @return {Object} Structured data object for use with custom splatTranscoder.
 	 */
 	parseRawSPZV4( bytes, zstd ) {
 
@@ -432,14 +432,14 @@ function parseSPZAttributes( {
 
 	readSphericalHarmonics( sphericalHarmonics, 0, count, shDegree, sphericalHarmonicsBands, storedShDegree );
 
-	// WebGL2 Redirect: Return a pure data payload directly for gsplat loader use
+	// WebGL2 Redirect: Return a pure data payload directly to splatTranscoder for gsplat/pmndrs loader use
 
 	return {
 		count: count,
-		positions: centers,         // Float32Array [x, y, z, x, y, z...]
-		scales: scaleXYZ,           // Float32Array [sx, sy, sz...] (Corrected from LUT)
-		rotations: quaternionXYZW,  // Float32Array [qx, qy, qz, qw...]
-		colors: colorBytes,         // Uint8ClampedArray [r, g, b, a...]
+		positions: centers,                         // Float32Array [x, y, z, x, y, z...]
+		scales: scaleXYZ,                           // Float32Array [sx, sy, sz...]
+		rotations: quaternionXYZW,                  // Float32Array [qx, qy, qz, qw...]
+		colors: colorBytes,                         // Uint8ClampedArray [r, g, b, a...]
 		sphericalHarmonics: sphericalHarmonicsBands // Object containing SH arrays
 	};
 

@@ -57,7 +57,7 @@ const COMPRESSION_LEVELS = {
 /**
  * A loader for GaussianSplats3D `.ksplat` files.
  *
- * Custom WebGL2 version for use with gsplat/pmnrds splat loaders via custom splatTranscoder.
+ * Custom WebGL2 version for use with gsplat/pmndrs splat loaders via custom splatTranscoder.
  *
  * ```js
  * const loader = new KSPLATLoader();
@@ -85,7 +85,7 @@ class KSPLATLoader extends Loader {
 	 * the `onLoad()` callback.
 	 *
 	 * @param {string} url - The path/URL of the file to be loaded. This can also be a data URI.
-	 * @param {function(BufferGeometry)} onLoad - Executed when the loading process has been finished.
+	 * @param {function(Object)} onLoad - Executed when the loading process has been finished.
 	 * @param {onProgressCallback} onProgress - Executed while the loading is in progress.
 	 * @param {onErrorCallback} onError - Executed when errors occur.
 	 */
@@ -128,7 +128,7 @@ class KSPLATLoader extends Loader {
 	 * Parses the given `.ksplat` data.
 	 *
 	 * @param {ArrayBuffer} buffer - The raw KSPLAT file as an array buffer.
-	 * @return {BufferGeometry} The parsed splat geometry.
+	 * @return {Object} Structured data object for use with custom splatTranscoder.
 	 */
 	parse( buffer ) {
 
@@ -252,7 +252,7 @@ class KSPLATLoader extends Loader {
 
 		}
 
-		// Build Spherical Harmonics structures matching your unified signature
+		// Build Spherical Harmonics structures
 
 		const shPayload = {
 
@@ -262,12 +262,12 @@ class KSPLATLoader extends Loader {
 
 		};
 
-		// Return a pure data payload directly for gsplat/pmndrs loader use
+		// WebGL2 Redirect: Return a pure data payload directly to splatTranscoder for gsplat/pmndrs loader use
 
 		return {
 			count: header.splatCount,
 			positions: centers,           // Float32Array [x, y, z...]
-			scales: computedScales,       // Float32Array [sx, sy, sz...] (Linearized)
+			scales: computedScales,       // Float32Array [sx, sy, sz...]
 			rotations: computedRotations, // Float32Array [qx, qy, qz, qw...]
 			colors: colors,               // Uint8ClampedArray [r, g, b, a...]
 			sphericalHarmonics: shPayload

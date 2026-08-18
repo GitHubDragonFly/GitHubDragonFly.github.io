@@ -10,7 +10,7 @@ const ROW_SIZE_BYTES = 32;
 /**
  * A loader for standard fixed-width Gaussian splat `.splat` files.
  *
- * Custom WebGL2 version for use with gsplat/pmnrds splat loaders via custom splatTranscoder.
+ * Custom WebGL2 version for use with gsplat/pmndrs splat loaders via custom splatTranscoder.
  *
  * ```js
  * const loader = new SPLATLoader();
@@ -38,7 +38,7 @@ class SPLATLoader extends Loader {
 	 * the `onLoad()` callback.
 	 *
 	 * @param {string} url - The path/URL of the file to be loaded. This can also be a data URI.
-	 * @param {function(BufferGeometry)} onLoad - Executed when the loading process has been finished.
+	 * @param {function(Object)} onLoad - Executed when the loading process has been finished.
 	 * @param {onProgressCallback} onProgress - Executed while the loading is in progress.
 	 * @param {onErrorCallback} onError - Executed when errors occur.
 	 */
@@ -144,7 +144,7 @@ class SPLATLoader extends Loader {
 
 		}
 
-		// WebGL2 Redirect: Return the clean data signature directly for splatTranscoder consumption
+		// WebGL2 Redirect: Return a pure data payload directly to splatTranscoder for gsplat/pmndrs loader use
 
 		return {
 			count: count,
