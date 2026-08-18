@@ -271,8 +271,13 @@ Number Type Converter
   - It is using [@pmndrs/drei-vanilla](https://github.com/pmndrs/drei-vanilla#splat) splat loader built around [antimatter15/splat](https://github.com/antimatter15/splat)
   - Supports both local blob and remote URL loading
   - It requires a good and fast graphics hardware
+  - Might show `pins & needles` when camera is close to the model
+    - Only some background is currently visible due to this side effect
   - There is an untested VR button available
-  - Only APNG exporter is available
+  - Supported import formats: KSPLAT, SPLAT and SPZ
+  - Supported export formats: APNG
+  - Customized three.js KSPLAT and SPZ loaders are used:
+    - Transcoding is done via custom splatTranscoder
   - For converting your PLY files to splat you could use:
     - the original [WebGL Gaussian Splat Viewer](https://antimatter15.com/splat/)
     - [Super Splat](https://playcanvas.com/super-splat) editor
@@ -283,6 +288,16 @@ Number Type Converter
     - An example URL to use for testing `https://lumalabs.ai/capture/ca9ea966-ca24-4ec1-ab0f-af665cb546ff`
     - More info on [Luma WebGL Library](https://github.com/lumalabs/luma-web-examples)
     - [Luma AI](https://lumalabs.ai/) website appears to have an iOS App available for capturing luma splats
+
+- Special notes about `GSPLAT Viewer`:
+  - It is using [gsplat](https://github.com/huggingface/gsplat.js) library
+  - Supports both local blob and remote URL loading
+  - It requires a good and fast graphics hardware
+  - Supported import formats: PLY, KSPLAT, SPLAT and SPZ
+  - Supported export formats: PLY and SPLAT
+  - Customized three.js KSPLAT and SPZ loaders are used:
+    - Transcoding is done via custom splatTranscoder
+  - No `pins & needles` side effect
 
 - Special notes about GLTF viewers:
   - `GM Viewer` is for v2.0 glTF files and is currently using Google's [model-viewer](https://github.com/google/model-viewer) web component:
