@@ -1,231 +1,167 @@
 /**
- * Transcodes r186+ geometry to a .splat buffer optimized for low-spec hardware.
- * - Same 32-byte per splat layout as original version (positions, scales, RGBA, quat).
+ * Transcodes r186+ geometry to a .splat buffer optimized for low-spec hardware:
+ * - 32-byte per splat layout as original version (positions, scales, RGBA, quat).
  * - Adds configurable background filtering, SH weights, and brightness.
- * - Keeps fast trace-based covariance → quaternion approximation.
+ * - Fast trace-based covariance → quaternion approximation.
  *
  * @param {THREE.BufferGeometry} splatGeometry
  * @param {Object} [options]
- * @param {number} [options.maxRadius=15]                   - Max distance from origin to keep splats (if backgroundFilterEnabled).
- * @param {number} [options.sampleStep=1]                   - Skip every n-th splat to increase FPS.
  * @param {boolean} [options.backgroundFilterEnabled=false] - Enable distance-based culling.
  * @param {number} [options.brightness=1.15]                - Global RGB multiplier before clamping.
+ * @param {number} [options.maxRadius=15]                   - Max distance from origin to keep splats (if backgroundFilterEnabled).
+ * @param {number} [options.sampleStep=1]                   - Skip every n-th splat to increase FPS.
  * @param {number} [options.sh1Scale=2.0]                   - Scale for degree-1 SH contribution.
  * @param {number} [options.sh2Scale=1.5]                   - Scale for degree-2 SH contribution.
  * @param {number} [options.sh3Scale=1.0]                   - Scale for degree-3 SH contribution.
+ * @param {number} [options.focusFactor=1.0]                - Focus factor to control blur.
  * @returns {ArrayBuffer} Cleaned sequential .splat buffer
  */
-export function transcodeGeometryToSplatBuffer( splatGeometry, options = {} ) {
+export function transcodeToSplatBuffer( data, options = {} ) {
 
-    const {
-        maxRadius = 15,
-        sampleStep = 1,
-        backgroundFilterEnabled = false,
-        brightness = 1.15,
-        sh1Scale = 2.0,
-        sh2Scale = 1.5,
-        sh3Scale = 1.0
-    } = options;
+	const {
+		backgroundFilterEnabled = false,
+		brightness = 1.15,
+		maxRadius = 15,
+		sampleStep = 1,
+		sh1Scale = 2.0,
+		sh2Scale = 1.5,
+		sh3Scale = 1.0,
+		focusFactor = 1.0
+	} = options;
 
-    const positionAttr = splatGeometry.getAttribute( 'position' );
-    const colorAttr    = splatGeometry.getAttribute( 'color' );
-    const covAttr      = splatGeometry.getAttribute( 'covariance' );
+	// These are the raw, un-instanced flat typed arrays directly from the stream parser
 
-    const sh1Attr = splatGeometry.getAttribute( 'sphericalHarmonics1' );
-    const sh2Attr = splatGeometry.getAttribute( 'sphericalHarmonics2' );
-    const sh3Attr = splatGeometry.getAttribute( 'sphericalHarmonics3' );
+	const {
+		count,
+		positions,          // centers (Float32Array)
+		scales,             // raw integer scale bytes (Uint8Array)
+		rotations,          // quaternionXYZW (Float32Array from your parse loop)
+		colors,             // colorBytes from COLOR_LUT (Uint8ClampedArray)
+		sphericalHarmonics  // sphericalHarmonicsBands object
+	} = data;
 
-    const count     = positionAttr.count;
-    const posArray  = positionAttr.array;
-    const colorArray = colorAttr.array;
-    const covArray  = covAttr.array;
+	// Pull out SH band arrays if they exist
 
-    const sh1Array = sh1Attr ? sh1Attr.array : null;
-    const sh2Array = sh2Attr ? sh2Attr.array : null;
-    const sh3Array = sh3Attr ? sh3Attr.array : null;
+	const sh1Array = sphericalHarmonics?.sh1 || null;
+	const sh2Array = sphericalHarmonics?.sh2 || null;
+	const sh3Array = sphericalHarmonics?.sh3 || null;
 
-    let keptCount = 0;
+	let keptCount = 0;
 
-    // FIRST PASS: count splats that survive filters + sampling
-    for ( let i = 0; i < count; i += sampleStep ) {
+	for ( let i = 0; i < count; i += sampleStep ) {
 
-        const i3 = i * 3;
+		if ( backgroundFilterEnabled ) {
 
-        if ( backgroundFilterEnabled ) {
+			const i3 = i * 3;
+			const distanceSq = positions[ i3 ] * positions[ i3 ] + positions[ i3 + 1 ] * positions[ i3 + 1 ] + positions[ i3 + 2 ] * positions[ i3 + 2 ];
+			if ( distanceSq > maxRadius * maxRadius ) continue;
 
-            const x = posArray[ i3 + 0 ];
-            const y = posArray[ i3 + 1 ];
-            const z = posArray[ i3 + 2 ];
+		}
 
-            const distance = Math.sqrt( x * x + y * y + z * z );
-            if ( distance > maxRadius ) continue;
+		keptCount++;
 
-        }
+	}
 
-        keptCount++;
+	const outBuffer = new ArrayBuffer( keptCount * 32 );
+	const outFloat  = new Float32Array( outBuffer );
+	const outUint8  = new Uint8Array( outBuffer );
 
-    }
+	let writeIndex = 0;
 
-    // Allocate final buffer once
-    const outBuffer = new ArrayBuffer( keptCount * 32 );
-    const outFloat  = new Float32Array( outBuffer );
-    const outUint8  = new Uint8Array( outBuffer );
+	for ( let i = 0; i < count; i += sampleStep ) {
 
-    let writeIndex = 0;
+		const i3 = i * 3;
+		const x = positions[ i3 + 0 ];
+		const y = positions[ i3 + 1 ];
+		const z = positions[ i3 + 2 ];
 
-    // SECOND PASS: stream directly into final buffer
-    for ( let i = 0; i < count; i += sampleStep ) {
+		if ( backgroundFilterEnabled ) {
 
-        const i3 = i * 3;
+			const distanceSq = x * x + y * y + z * z;
+			if ( distanceSq > maxRadius * maxRadius ) continue;
 
-        const x = posArray[ i3 + 0 ];
-        const y = posArray[ i3 + 1 ];
-        const z = posArray[ i3 + 2 ];
+		}
 
-        if ( backgroundFilterEnabled ) {
+		const i4 = i * 4;
+		const floatOffset = writeIndex * 8;
+		const byteOffset  = writeIndex * 32;
 
-            const distance = Math.sqrt( x * x + y * y + z * z );
-            if ( distance > maxRadius ) continue;
+		// 1. Position Translation
 
-        }
+		outFloat[ floatOffset + 0 ] = x;
+		outFloat[ floatOffset + 1 ] = y;
+		outFloat[ floatOffset + 2 ] = z;
 
-        const i4 = i * 4;
-        const i5 = i * 5;
-        const i6 = i * 6;
+		// 2. Scale Translation
 
-        const floatOffset = writeIndex * 8;
-        const byteOffset  = writeIndex * 32;
+		outFloat[ floatOffset + 3 ] = scales[ i3 + 0 ] * focusFactor;
+		outFloat[ floatOffset + 4 ] = scales[ i3 + 1 ] * focusFactor;
+		outFloat[ floatOffset + 5 ] = scales[ i3 + 2 ] * focusFactor;
 
-        // 1. Positions
-        outFloat[ floatOffset + 0 ] = x;
-        outFloat[ floatOffset + 1 ] = y;
-        outFloat[ floatOffset + 2 ] = z;
+		// 3. Color Processing
 
-        // 2. Scales from covariance diagonal
-        outFloat[ floatOffset + 3 ] = Math.sqrt( Math.max( 0.000001, covArray[ i6 + 0 ] ) );
-        outFloat[ floatOffset + 4 ] = Math.sqrt( Math.max( 0.000001, covArray[ i6 + 3 ] ) );
-        outFloat[ floatOffset + 5 ] = Math.sqrt( Math.max( 0.000001, covArray[ i6 + 5 ] ) );
+		let r = colors[ i4 + 0 ];
+		let g = colors[ i4 + 1 ];
+		let b = colors[ i4 + 2 ];
+		let a = colors[ i4 + 3 ];
 
-        // 3. Colors + SH contributions
-        let r = colorArray[ i4 + 0 ];
-        let g = colorArray[ i4 + 1 ];
-        let b = colorArray[ i4 + 2 ];
-        let a = colorArray[ i4 + 3 ];
+		if ( sh1Array ) {
 
-        if ( sh1Array ) {
+			const packedVal = sh1Array[ i3 + 0 ];
 
-            const packedVal = sh1Array[ i3 + 0 ];
+			r += ( ( packedVal        & 0xFF ) / 255.0 - 0.5 ) * sh1Scale;
+			g += ( ( (packedVal >> 8) & 0xFF ) / 255.0 - 0.5 ) * sh1Scale;
+			b += ( ( (packedVal >>16) & 0xFF ) / 255.0 - 0.5 ) * sh1Scale;
 
-            const shX = ( ( packedVal        & 0xFF ) / 255.0 - 0.5 ) * sh1Scale;
-            const shY = ( ( (packedVal >> 8) & 0xFF ) / 255.0 - 0.5 ) * sh1Scale;
-            const shZ = ( ( (packedVal >>16) & 0xFF ) / 255.0 - 0.5 ) * sh1Scale;
+		}
 
-            r += shX;
-            g += shY;
-            b += shZ;
+		if ( sh2Array ) {
 
-        }
+			const packedVal2 = sh2Array[ i4 + 0 ];
 
-        if ( sh2Array ) {
+			r += ( ( packedVal2        & 0xFF ) / 255.0 - 0.5 ) * sh2Scale;
+			g += ( ( (packedVal2 >> 8) & 0xFF ) / 255.0 - 0.5 ) * sh2Scale;
+			b += ( ( (packedVal2 >>16) & 0xFF ) / 255.0 - 0.5 ) * sh2Scale;
 
-            const packedVal2 = sh2Array[ i4 + 0 ];
+		}
 
-            const sh2X = ( ( packedVal2        & 0xFF ) / 255.0 - 0.5 ) * sh2Scale;
-            const sh2Y = ( ( (packedVal2 >> 8) & 0xFF ) / 255.0 - 0.5 ) * sh2Scale;
-            const sh2Z = ( ( (packedVal2 >>16) & 0xFF ) / 255.0 - 0.5 ) * sh2Scale;
+		if ( sh3Array ) {
 
-            r += sh2X;
-            g += sh2Y;
-            b += sh2Z;
+			const packedVal3 = sh3Array[ i * 6 ]; 
 
-        }
+			r += ( ( packedVal3        & 0xFF ) / 255.0 - 0.5 ) * sh3Scale;
+			g += ( ( (packedVal3 >> 8) & 0xFF ) / 255.0 - 0.5 ) * sh3Scale;
+			b += ( ( (packedVal3 >>16) & 0xFF ) / 255.0 - 0.5 ) * sh3Scale;
 
-        if ( sh3Array ) {
+		}
 
-            const packedVal3 = sh3Array[ i5 + 0 ];
+		outUint8[ byteOffset + 24 ] = Math.max( 0, Math.min( 255, Math.floor( r * brightness ) ) );
+		outUint8[ byteOffset + 25 ] = Math.max( 0, Math.min( 255, Math.floor( g * brightness ) ) );
+		outUint8[ byteOffset + 26 ] = Math.max( 0, Math.min( 255, Math.floor( b * brightness ) ) );
+		outUint8[ byteOffset + 27 ] = a;
 
-            const sh3X = ( ( packedVal3        & 0xFF ) / 255.0 - 0.5 ) * sh3Scale;
-            const sh3Y = ( ( (packedVal3 >> 8) & 0xFF ) / 255.0 - 0.5 ) * sh3Scale;
-            const sh3Z = ( ( (packedVal3 >>16) & 0xFF ) / 255.0 - 0.5 ) * sh3Scale;
+		// 4. Quaternion Alignment
 
-            r += sh3X;
-            g += sh3Y;
-            b += sh3Z;
+		let qx = rotations[ i4 + 0 ];
+		let qy = rotations[ i4 + 1 ];
+		let qz = rotations[ i4 + 2 ];
+		let qw = rotations[ i4 + 3 ];
 
-        }
+		const len = Math.sqrt( qx * qx + qy * qy + qz * qz + qw * qw );
 
-        // Brightening + clamp
-        outUint8[ byteOffset + 24 ] = Math.max( 0, Math.min( 255, Math.floor( r * brightness ) ) );
-        outUint8[ byteOffset + 25 ] = Math.max( 0, Math.min( 255, Math.floor( g * brightness ) ) );
-        outUint8[ byteOffset + 26 ] = Math.max( 0, Math.min( 255, Math.floor( b * brightness ) ) );
-        outUint8[ byteOffset + 27 ] = a;
+		if ( len > 1e-5 ) {
 
-        // 4. Quaternion from covariance (trace-based approximation)
-        const c0 = covArray[ i6 + 0 ];
-        const c3 = covArray[ i6 + 3 ];
-        const c5 = covArray[ i6 + 5 ];
-        const tr = c0 + c3 + c5;
+			qx /= len; qy /= len; qz /= len; qw /= len;
 
-        let qx = 0, qy = 0, qz = 0, qw = 1;
+		}
 
-        if ( tr > 0 ) {
+		outUint8[ byteOffset + 28 ] = Math.floor( ( qw + 1 ) * 127.5 );
+		outUint8[ byteOffset + 29 ] = Math.floor( ( qx + 1 ) * 127.5 );
+		outUint8[ byteOffset + 30 ] = Math.floor( ( qy + 1 ) * 127.5 );
+		outUint8[ byteOffset + 31 ] = Math.floor( ( qz + 1 ) * 127.5 );
 
-            const S = Math.sqrt( tr + 1.0 ) * 2;
+		writeIndex++;
+	}
 
-            qw = 0.1 * S;
-            qx = covArray[ i6 + 4 ] / S;
-            qy = covArray[ i6 + 2 ] / S;
-            qz = covArray[ i6 + 1 ] / S;
-
-        } else if ( ( c0 > c3 ) && ( c0 > c5 ) ) {
-
-            const S = Math.sqrt( 1.0 + c0 - c3 - c5 ) * 2;
-
-            qw = covArray[ i6 + 4 ] / S;
-            qx = 0.1 * S;
-            qy = ( covArray[ i6 + 1 ] + covArray[ i6 + 2 ] ) / S;
-            qz = ( covArray[ i6 + 2 ] + covArray[ i6 + 1 ] ) / S;
-
-        } else if ( c3 > c5 ) {
-
-            const S = Math.sqrt( 1.0 + c3 - c0 - c5 ) * 2;
-
-            qw = covArray[ i6 + 2 ] / S;
-            qx = ( covArray[ i6 + 1 ] + covArray[ i6 + 2 ] ) / S;
-            qy = 0.1 * S;
-            qz = ( covArray[ i6 + 4 ] + covArray[ i6 + 1 ] ) / S;
-
-        } else {
-
-            const S = Math.sqrt( 1.0 + c5 - c0 - c3 ) * 2;
-
-            qw = covArray[ i6 + 1 ] / S;
-            qx = ( covArray[ i6 + 2 ] + covArray[ i6 + 1 ] ) / S;
-            qy = ( covArray[ i6 + 4 ] + covArray[ i6 + 1 ] ) / S;
-            qz = 0.1 * S;
-
-        }
-
-        const len = Math.sqrt( qx * qx + qy * qy + qz * qz + qw * qw );
-
-        if ( len > 0.00001 ) {
-
-            qx /= len;
-            qy /= len;
-            qz /= len;
-            qw /= len;
-
-        }
-
-        outUint8[ byteOffset + 28 ] = Math.floor( ( qx + 1 ) * 127.5 );
-        outUint8[ byteOffset + 29 ] = Math.floor( ( qy + 1 ) * 127.5 );
-        outUint8[ byteOffset + 30 ] = Math.floor( ( qz + 1 ) * 127.5 );
-        outUint8[ byteOffset + 31 ] = Math.floor( ( qw + 1 ) * 127.5 );
-
-        writeIndex++;
-
-    }
-
-    return outBuffer;
-
+	return outBuffer;
 }
