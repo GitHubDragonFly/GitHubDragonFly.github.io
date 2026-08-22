@@ -3,7 +3,7 @@
   <head>
     <meta http-equiv="encoding" content="utf-8" charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="description" content="SPLAT (3D Gaussian Splatting) Viewer, supporting KSPLAT, SPLAT and SPZ formats">
+    <meta name="description" content="Spark SPLAT (3D Gaussian Splatting) Viewer, supporting PLY, RAD, KSPLAT, SPLAT, SPZ and SOG formats">
     <link rel="stylesheet" href="../static/css/desktop-viewers.css">
     <link rel="shortcut icon" href="../../images/favicon.ico" type="image/x-icon"/>
 
@@ -63,9 +63,7 @@
         "imports": {
           "three": "https://cdn.jsdelivr.net/npm/three@0.185.0/build/three.module.min.js",
           "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/",
-          "three/examples/jsm/postprocessing/Pass": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/postprocessing/Pass.min.js",
-          "three/examples/jsm/utils/BufferGeometryUtils": "https://cdn.jsdelivr.net/npm/three@0.185.0/examples/jsm/utils/BufferGeometryUtils.min.js",
-          "@lumaai/luma-web": "https://cdn.jsdelivr.net/npm/@lumaai/luma-web@0.2.2/dist/library/luma-web.module.min.js"
+          "@sparkjsdev/spark": "https://cdn.jsdelivr.net/npm/@sparkjsdev/spark@2.1.0/dist/spark.module.js"
         }
       }
     </script>
@@ -73,11 +71,10 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var loader, splat_loader, three_ksplat_loader, three_splat_loader, three_spz_loader;
-      var splat, splats, isKSplat, isSPZ, transcode, manager, texture_loader, tex;
-      var THREE, controls, renderer, scene, camera, render_requested;
+      var SPARK, spark_renderer, splats, spz_loader, isRAD, isSPZ, isSplat, ftype, transcode;
+      var THREE, manager, controls, renderer, scene, camera, render_requested, texture_loader;
       var mouse_down, mouse_wheel, events_initialized, isMobile, isNewiPad;
-      var gui, gui_set = false, guiExposure, params, toneMappingOptions;
+      var gui, gui_set = false, guiExposure, params, toneMappingOptions, tex;
       var ww = window.innerWidth, wh = window.innerHeight, slider_height = 0;
       var bounding_box, filename = '', bgnd_linear_gradient;
       var selected_local_file, selected_url_file = '', reset_rotation, equi_enabled;
@@ -86,41 +83,38 @@
 
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
 
+      const fmts = [ '.ply', '.rad', '.ksplat', '.splat', '.spz', '.sog', '.zip' ];
+
       // A simple utility to let the browser catch its breath
       const yieldToMainThread = () => new Promise( resolve => setTimeout( resolve, 0 ) );
     </script>
 
     <script type="module">
       import * as threejs from 'three';
+      import * as sparkjs from '@sparkjsdev/spark';
       import { GUI } from 'three/addons/libs/lil-gui.module.min.js';
       import { SPZLoader } from '../static/jsm/loaders/SPZWebGL2Loader.min.js';
-      import { SPLATLoader } from '../static/jsm/loaders/SPLATWebGL2Loader.min.js';
-      import { KSPLATLoader } from '../static/jsm/loaders/KSPLATWebGL2Loader.min.js';
 
       THREE = threejs;
+      SPARK = sparkjs;
 
       manager = new THREE.LoadingManager();
       manager.onLoad = function() { mouse_wheel = true; }
 
       texture_loader = new THREE.TextureLoader( manager );
+      spz_loader = new SPZLoader( manager );
 
       gui = new GUI( { autoPlace: false, container: document.getElementById('gui_position') } );
       set_gui_position();
-
-      three_spz_loader = new SPZLoader( manager );
-      three_ksplat_loader = new KSPLATLoader( manager );
-      three_splat_loader = new SPLATLoader( manager );
     </script>
 
     <!-- Using three.js library: https://github.com/mrdoob/three.js -->
-    <!-- Using @pmndrs/drei-vanilla Library from: https://github.com/pmndrs/drei-vanilla#splat -->
-    <!-- A declarative abstraction around antimatter15/splat from: https://github.com/antimatter15/splat -->
-    <!-- Using Luma WebGL Library from: https://lumalabs.ai/luma-web-library -->
+    <!-- Using spark Library from: https://github.com/sparkjsdev/spark -->
     <!-- Using jQuery: https://github.com/jquery/jquery -->
 
     <!-- mouse_wheel variable is used throughout as a trigger for rendering -->
 
-    <title>SPLAT Viewer (r185)</title>
+    <title>Spark SPLAT Viewer (r185)</title>
   </head>
   <body onload="reset_all(); document_ready(); disabled_changed();" onresize="resize();">
     <div id="fixed_menu" class="fixed-menu">
@@ -128,8 +122,8 @@
         <button title="URL of the remote splat" id="btn_url" onclick="show_url();" style="background-color: transparent; min-width: 34px;">URL</button>
         <button title="Browse Local Files" id="btn_file_input" style="background-color: transparent; min-width: 54px;" onclick="document.getElementById('file_input').click();">Browse</button>
         <label for="btn_file_input" title="Browse Local Files"></label>
-        <input type="file" title="Browse Local Files" id="file_input" style="display: none;" onchange="init();" accept=".ksplat, .splat, .spz" />
-        <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="background-color: transparent; color: blue; min-width: 25px;" disabled>Eq</button>
+        <input type="file" title="Browse Local Files" id="file_input" style="display: none;" onchange="init();" accept=".ply, .rad, .ksplat, .splat, .spz, .sog, .zip" />
+        <button title="Toggle Equirectangular Background" id="btn_equi" onclick="set_equi();" style="display: none; background-color: transparent; color: blue; min-width: 25px;" disabled>Eq</button>
         <button title="Toggle Gradient Color Background" id="btn_bgnd_linear_gradient" onclick="set_bgnd_linear_gradient();" style="background-color: transparent; color: blue;" disabled>G</button>
         <select title="Quick XYZ Rotation" id="quick_rotation" disabled>
           <option title="Quick XYZ Rotation" value="" selected disabled>Rotate</option>
@@ -431,7 +425,7 @@
 
         params.toneMapping = 'Neutral';
         renderer.toneMapping = THREE.NeutralToneMapping;
-        renderer.toneMappingExposure = 1.0;
+        renderer.toneMappingExposure = 1.5;
         params.backBlurriness = 0.0;
         params.backIntensity = 1.0;
         params.exposure = 1.0;
@@ -487,7 +481,6 @@
  
         if (scene) {
           if (splats) await scene_cleanup();
-
           reset_all( true );
         }
 
@@ -516,10 +509,11 @@
           };
         }
 
-        loader = null;
         splats = null;
+        ftype = 'rad';
+        isRAD = false;
         isSPZ = false;
-        isKSplat = false;
+        isSplat = false;
         selected_local_file = null;
         mouse_down = false;
         mouse_wheel = true;
@@ -541,7 +535,7 @@
           renderer = new THREE.WebGLRenderer( { antialias: false, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
           renderer.toneMapping = THREE.NeutralToneMapping;
-          renderer.toneMappingExposure = 1.0;
+          renderer.toneMappingExposure = 1.5;
           renderer.info.autoReset = false;
           renderer.setSize( ww, wh );
           renderer.autoClear = true;
@@ -549,29 +543,21 @@
           document.body.appendChild( renderer.domElement );
         }
 
-        if (splat_loader === undefined) {
-          const { Splat, SplatLoader } = await import( 'https://cdn.jsdelivr.net/npm/@pmndrs/vanilla@1.25.0/core/Splat.min.js' );
-
-          splat_loader = new SplatLoader( renderer );
-          splat = Splat;
-        }
-
         if (!url_loading) {
           // Loaded splat file
           let fi = document.getElementById('file_input');
-          let fn_uc = fi.files[ 0 ].name.toUpperCase();
+          let fn_lc = fi.files[ 0 ].name.toLowerCase();
 
-          if (fn_uc.endsWith('.KSPLAT')) {
+          if (fmts.some( fmt => fn_lc.endsWith( fmt ) === true ) ) {
             selected_local_file = fi.files[ 0 ];
-            loader = three_ksplat_loader;
-            isKSplat = true;
-          } else if (fn_uc.endsWith('.SPLAT')) {
-            selected_local_file = fi.files[ 0 ];
-            loader = three_splat_loader;
-          } else if (fn_uc.endsWith('.SPZ')) {
-            selected_local_file = fi.files[ 0 ];
-            loader = three_spz_loader;
-            isSPZ = true;
+            const ext = fn_lc.substring( fn_lc.lastIndexOf( '.' ) + 1 );
+
+            if (ext === 'ksplat') { ftype = 'ksplat'; isSplat = true; }
+            else if (ext === 'splat') { ftype = 'splat'; isSplat = true; }
+            else if (ext === 'spz') { ftype = 'splat'; isSPZ = true; }
+            else if (ext === 'ply') ftype = 'ply';
+            else if (ext === 'rad') { isRAD = true; }
+            else if (ext === 'sog' || ext === 'zip') ftype = 'pcsogszip';
           }
 
           if (selected_local_file === null) {
@@ -590,6 +576,28 @@
           scene = new THREE.Scene();
           scene.backgroundRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
           scene.environmentRotation = new THREE.Euler( 0, Math.PI / 2.0, 0, 'XYZ' );
+
+          spark_renderer = new SPARK.SparkRenderer({ 
+            renderer: renderer,
+            enableLod: true,
+            lodSplatCount: 500000, // VRAM splat memory pool cap
+
+            // CONTROL THE DISTANCE TRIGGER:
+            // Higher numbers (e.g., 1.5 or 2.0) make Spark fetch close-up chunks 
+            // from much further away. Lower numbers (e.g., 0.3) force it to wait 
+            // until the camera is practically touching the object to fetch them.
+            lodSplatScale: 1.0,
+
+            // Drop processing threshold for small background splats
+            lodRenderScale: 1.0,  // Higher values discard distant/tiny leaf chunks entirely
+
+            // CONTROL THE EVICTION SPEED:
+            // How often Spark calculates what chunks to drop or load based on camera movement.
+            // 1 means every frame (very aggressive), 2-5 means every few frames (smoother performance).
+            lodUpdateInterval: 5
+          });
+
+          scene.add( spark_renderer );
         }
 
         scene.backgroundBlurriness = 0;
@@ -598,8 +606,8 @@
         if (!events_initialized) { initialize_event_listeners(); events_initialized = true; }
 
         if (camera === undefined) {
-          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.25, 1e4 );
-          camera.position.set( 0, 0, 10 );
+          camera = new THREE.PerspectiveCamera( 60, ww / wh, 0.05, 1e8 );
+          camera.position.set( 0, 0, 5 );
           scene.add( camera );
         }
 
@@ -628,7 +636,7 @@
         (selected_local_file !== null) ? loadFile() : loadURLFile();
 
         // Load equirectangular texture
-        if (tex === undefined) {
+        if (!tex) {
           // Regardless of its name, this is actually 2048 x 1024 image
           let url = 'https://raw.githubusercontent.com/GitHubDragonFly/three.js/dev/examples/textures/planets/earth_atmos_4096.avif';
 
@@ -645,64 +653,71 @@
       }
 
       async function loadFile() {
-        await loader.loadAsync( URL.createObjectURL( selected_local_file ),
-        function( xhr ) { },
-        function( error ) {
-          URL.revokeObjectURL( selected_local_file );
-          handle_error( error );
-        }).then( async loaded_splat => {
-          URL.revokeObjectURL( selected_local_file );
+        await yieldToMainThread();
 
+        if (isSPZ) {
           if (transcode === undefined) {
             const { transcodeToSplatBuffer } = await import( '../static/jsm/utils/splatTranscoder.min.js' );
             transcode = transcodeToSplatBuffer;
           }
 
-          await yieldToMainThread();
+          await spz_loader.loadAsync( URL.createObjectURL( selected_local_file ),
+          function( xhr ) { },
+          function( error ) {
+            URL.revokeObjectURL( selected_local_file );
+            handle_error( error );
+          }).then( async loaded_splat => {
+            URL.revokeObjectURL( selected_local_file );
 
-          const isMassive = loaded_splat.count > 1000000;
+            await yieldToMainThread();
 
-          // Unified option mapping for ALL types (SPLAT, KSPLAT, SPZ)
-          const options = {
-            backgroundFilterEnabled: isMassive || isKSplat, // Active filtering (trimming)
-            brightness: isSPZ && isMassive ? 1.25 : 1.15,
-            maxRadius: 5,                                   // Trim outer boundaries
-            sampleStep: isSPZ && isMassive ? 2 : 1,
-            sh1Scale: 2.0,
-            sh2Scale: 1.5,
-            sh3Scale: 1.0,
-            focusFactor: isKSplat ? 0.9 : 1.0
-          };
+            // Trimming background and/or number of splats could be enabled
 
-          const rawSplatArrayBuffer = await transcode( loaded_splat, options );
+            const highSPZCount = loaded_splat.count > 1000000;
 
-          await yieldToMainThread();
+            const options = {
+              backgroundFilterEnabled: false,
+              brightness: highSPZCount ? 1.3 : 1.15,
+              maxRadius: 14,
+              sampleStep: highSPZCount ? 2 : 1,
+              sh1Scale: 2.0,
+              sh2Scale: 1.5,
+              sh3Scale: 1.0,
+              focusFactor: 1.0
+            };
 
-          // Break references to large inner typed arrays immediately
-          loaded_splat.positions = null;
-          loaded_splat.scales = null;
-          loaded_splat.rotations = null;
-          loaded_splat.colors = null;
-          loaded_splat.sphericalHarmonics = null;
-          loaded_splat = null; 
+            const rawSplatArrayBuffer = await transcode( loaded_splat, options );
 
-          // Convert raw ArrayBuffer into an absolute Blob URL object
-          const blob = new Blob( [ rawSplatArrayBuffer ], { type: 'application/octet-stream' } );
-          const blobURL = URL.createObjectURL( blob );
+            await yieldToMainThread();
 
-          try {
-            const splatData = await splat_loader.loadAsync( blobURL ); 
-            splats = new splat( splatData, camera );
-            splats.toneMapped = true;
-            scene.add( splats );
-          } catch( err ) {
-            console.error( 'Error setting up pmndrs splat: ', err );
-          } finally {
-            URL.revokeObjectURL( blobURL );
-          }
+            // Break references to large inner typed arrays immediately
+            loaded_splat.positions = null;
+            loaded_splat.scales = null;
+            loaded_splat.rotations = null;
+            loaded_splat.colors = null;
+            loaded_splat.sphericalHarmonics = null;
+            loaded_splat = null; 
+
+            try {
+              const blob = new Blob( [ rawSplatArrayBuffer ], { type: 'application/octet-stream' } ); 
+              splats = new SPARK.SplatMesh( { url: URL.createObjectURL( blob ), fileType: ftype } );
+              URL.revokeObjectURL( blob );
+
+              scene.add( splats );
+
+              finish_loading();
+            } catch( err ) {
+              console.error( 'Error setting up SPZ splat: ', err );
+            }
+          });
+        } else {
+          splats = new SPARK.SplatMesh( { url: URL.createObjectURL( selected_local_file ), fileType: ftype } );
+          URL.revokeObjectURL( selected_local_file );
+
+          scene.add( splats );
 
           finish_loading();
-        });
+        }
       }
 
       async function loadURLFile() {
@@ -713,103 +728,100 @@
             selected_url_file = ( selected_url_file.replace('github.com', 'raw.githubusercontent.com') ).replace('blob/', '');
           }
 
-          let fn_uc = selected_url_file.toUpperCase();
+          let fn_lc = selected_url_file.toLowerCase();
 
-          if (fn_uc.endsWith('.KSPLAT')) {
-            loader = three_ksplat_loader;
-            isKSplat = true;
-          } else if (fn_uc.endsWith('.SPLAT')) {
-            loader = three_splat_loader;
-          } else if (fn_uc.endsWith('.SPZ')) {
-            loader = three_spz_loader;
-            isSPZ = true;
+          if (fmts.some( fmt => fn_lc.endsWith( fmt ) === true ) ) {
+            const ext = fn_lc.substring( fn_lc.lastIndexOf( '.' ) + 1 );
+
+            if (ext === 'ksplat') { ftype = 'ksplat'; isSplat = true; }
+            else if (ext === 'splat') { ftype = 'splat'; isSplat = true; }
+            else if (ext === 'spz') { ftype = 'splat'; isSPZ = true; }
+            else if (ext === 'ply') ftype = 'ply';
+            else if (ext === 'rad') { ftype = 'rad'; isRAD = true; }
+            else if (ext === 'sog' || ext === 'zip') ftype = 'pcsogszip';
           }
 
-          if (loader) {
-            await loader.loadAsync( selected_url_file,
-            function( xhr ) { },
-            function( error ) {
-              handle_error( error );
-            }).then( async loaded_splat => {
+          if (ftype === 'rad') {
+            splats = new SPARK.SplatMesh( { url: selected_url_file, fileType: ftype, paged: true, enableLod: true } );
+
+            scene.add( splats );
+            finish_loading();
+          } else {
+            const response = await fetch( selected_url_file );
+
+            if ( !response.ok ) {
+              handle_error( 'Failed to fetch url: ' + selected_url_file );
+              return;
+            }
+
+            await yieldToMainThread();
+
+            const ab = await response.arrayBuffer();
+            const blob = new Blob( [ ab ], { type: 'application/octet-stream' } );
+            const blobURL = URL.createObjectURL( blob );
+
+            await yieldToMainThread();
+
+            if (isSPZ) {
               if (transcode === undefined) {
                 const { transcodeToSplatBuffer } = await import( '../static/jsm/utils/splatTranscoder.min.js' );
                 transcode = transcodeToSplatBuffer;
               }
 
-              await yieldToMainThread();
+              await spz_loader.loadAsync( blobURL,
+              function( xhr ) { },
+              function( error ) {
+                URL.revokeObjectURL( blob );
+                handle_error( error );
+              }).then( async loaded_splat => {
+                URL.revokeObjectURL( blob );
 
-              const isMassive = loaded_splat.count > 1000000;
+                await yieldToMainThread();
 
-              // Unified option mapping for ALL types (SPLAT, KSPLAT, SPZ)
-              const options = {
-                backgroundFilterEnabled: isMassive || isKSplat, // Active filtering (trimming)
-                brightness: isSPZ && isMassive ? 1.25 : 1.15,
-                maxRadius: 5,                                   // Trim outer boundaries
-                sampleStep: isSPZ && isMassive ? 2 : 1,
-                sh1Scale: 2.0,
-                sh2Scale: 1.5,
-                sh3Scale: 1.0,
-                focusFactor: isKSplat ? 0.9 : 1.0
-              };
+                // Trimming background and/or number of splats could be enabled
 
-              const rawSplatArrayBuffer = await transcode( loaded_splat, options );
+                const highSPZCount = loaded_splat.count > 1000000;
 
-              await yieldToMainThread();
+                const options = {
+                  backgroundFilterEnabled: false,
+                  brightness: highSPZCount ? 1.3 : 1.15,
+                  maxRadius: 14,
+                  sampleStep: highSPZCount ? 2 : 1,
+                  sh1Scale: 2.0,
+                  sh2Scale: 1.5,
+                  sh3Scale: 1.0,
+                  focusFactor: 1.0
+                };
 
-              // Break references to large inner typed arrays immediately
-              loaded_splat.positions = null;
-              loaded_splat.scales = null;
-              loaded_splat.rotations = null;
-              loaded_splat.colors = null;
-              loaded_splat.sphericalHarmonics = null;
-              loaded_splat = null; 
+                const rawSplatArrayBuffer = await transcode( loaded_splat, options );
 
-              // Convert raw ArrayBuffer into an absolute Blob URL object
-              const blob = new Blob( [ rawSplatArrayBuffer ], { type: 'application/octet-stream' } );
-              const blobURL = URL.createObjectURL( blob );
+                await yieldToMainThread();
 
-              try {
-                const splatData = await splat_loader.loadAsync( blobURL ); 
-                splats = new splat( splatData, camera );
-                splats.toneMapped = true;
-                scene.add( splats );
-              } catch( err ) {
-                console.error( 'Error setting up pmndrs splat: ', err );
-              } finally {
-                URL.revokeObjectURL( blobURL );
-              }
+                // Break references to large inner typed arrays immediately
+                loaded_splat.positions = null;
+                loaded_splat.scales = null;
+                loaded_splat.rotations = null;
+                loaded_splat.colors = null;
+                loaded_splat.sphericalHarmonics = null;
+                loaded_splat = null; 
 
-              finish_loading();
-            });
-          } else {
-            const { LumaSplatsThree, LumaSplatsSemantics } = await import( '@lumaai/luma-web' );
+                try {
+                  const blob = new Blob( [ rawSplatArrayBuffer ], { type: 'application/octet-stream' } ); 
+                  splats = new SPARK.SplatMesh( { url: URL.createObjectURL( blob ), fileType: ftype, enableLod: true } );
+                  URL.revokeObjectURL( blob );
 
-            splats = new LumaSplatsThree({
-              needsSort: true,
-              source: selected_url_file,
-              particleRevealEnabled: true,
-              enableThreeShaderIntegration: false,
-              loadingAnimationEnabled: false
-            });
-
-            splats.material.transparent = false;
-
-            splats.onLoad = () => {
-              // filter splats to only show foreground layers
-              // options: FOREGROUND. BACKGROUND, ALL
-              splats.semanticsMask = LumaSplatsSemantics.FOREGROUND;
+                  scene.add( splats );
+                  finish_loading();
+                } catch( err ) {
+                  console.error( 'Error setting up SPZ splat: ', err );
+                }
+              });
+            } else {
+              splats = new SPARK.SplatMesh( { url: blobURL, fileType: ftype } );
+              URL.revokeObjectURL( blob );
 
               scene.add( splats );
-
-              splats.scale.multiplyScalar( 5 );
-
-              resize();
-
               finish_loading();
-            }
-
-            splats.onError = () => {
-              handle_error( 'Check URL!' );
             }
           }
         }
@@ -834,6 +846,10 @@
         first_run = true;
         fr_count = 0;
         render();
+
+        splats.rotateX( Math.PI );
+
+        await yieldToMainThread();
 
         if (!isMobile) await new Promise( resolve => setTimeout( log_info, 3000 ) );
       }
@@ -864,7 +880,7 @@
         document.getElementById('div_error').style.display = 'block';
       }
 
-      function render() {
+      async function render() {
         if (splats) {
           if (first_run || mouse_down || mouse_wheel || reset_rotation) {
             // Reset splats rotational values
@@ -877,7 +893,7 @@
             if (first_run) {
               fr_count ++;
 
-              if (fr_count > 60) {
+              if (fr_count > 100) {
                 count = 0;
                 fr_count = 0;
                 first_run = false;
@@ -909,6 +925,8 @@
       }
 
       function reset_only() {
+        if (gui) gui_reset();
+
         reset_all( true );
 
         console.time( 'Loading Time' );
@@ -984,12 +1002,17 @@
       async function scene_cleanup() {
         scene.remove( splats );
 
+        render_requested = false;
         renderer.clear();
 
-        splats.traverse( ( child ) => {
+        await yieldToMainThread();
+
+        spark_renderer.quaternion.set( 0, 0, 0, 1 );
+
+        splats.traverse( async ( child ) => {
           if (child.isMesh || child.isPoints || child.isObject3D) {
             if (child.dispose) {
-              child.dispose();
+              await child.dispose();
             } else {
               if (child.material) {
                 if (child.material.uniforms) {
@@ -1018,10 +1041,7 @@
           }
         });
 
-        if (splats.geometry) {
-          splats.geometry.dispose();
-          splats.geometry = null;
-        }
+        THREE.Cache.clear();
 
         if (!isMobile) {
           renderer.info.reset();
@@ -1063,6 +1083,7 @@
 
         if (!isMobile) {
           $('#reset')[ 0 ].style.display = '';
+          $('#btn_equi')[ 0 ].style.display = '';
           $('#btn_full_screen')[ 0 ].style.display = '';
           $('#btn_menu_location')[ 0 ].style.display = '';
         }
