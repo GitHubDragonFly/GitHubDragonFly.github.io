@@ -275,7 +275,6 @@ Number Type Converter
     - Only some background is currently visible due to this side effect
   - There is an untested VR button available
   - Supported import formats: KSPLAT, SPLAT and SPZ
-  - Supported export formats: APNG
   - Customized three.js KSPLAT and SPZ loaders are used:
     - Transcoding is done via custom splatTranscoder
   - For converting your PLY files to splat you could use:
@@ -289,13 +288,23 @@ Number Type Converter
     - More info on [Luma WebGL Library](https://github.com/lumalabs/luma-web-examples)
     - [Luma AI](https://lumalabs.ai/) website appears to have an iOS App available for capturing luma splats
 
+- Special notes about `Spark SPLAT Viewer`:
+  - It is using [spark](https://github.com/sparkjsdev/spark) library:
+    - Check its documentation to see how to create RAD, RAD + chunks, SPZ and SPZ + chunks 
+  - Supports both local blob and remote URL loading
+  - It requires a good and fast graphics hardware
+  - Supported import formats: PLY, KSPLAT, SPLAT, SPZ, SOG, RAD and RAD + RADC (chunks)
+  - Customized three.js SPZ loader is also used:
+    - Transcoding is done via custom splatTranscoder
+  - No `pins & needles` side effect
+
 - Special notes about `GSPLAT Viewer`:
   - It is using [gsplat](https://github.com/huggingface/gsplat.js) library
   - Supports both local blob and remote URL loading
   - It requires a good and fast graphics hardware
   - Supported import formats: PLY, KSPLAT, SPLAT and SPZ
   - Supported export formats: PLY and SPLAT
-  - Customized three.js KSPLAT and SPZ loaders are used:
+  - Customized three.js KSPLAT and SPZ loaders are also used:
     - Transcoding is done via custom splatTranscoder
   - No `pins & needles` side effect
 
