@@ -96,7 +96,7 @@
       const pw = "<span style='color:red'>" + "Please Wait" + "</span>";
     </script>
 
-    <script type="module">
+    <script type="module" onerror="document.getElementById('div_loading').innerHTML = '!!! Import Error !!!';">
       import * as threejs from 'three';
       //import { ZSTDDecoder } from 'zstddec/stream';
       //import { ZstdInit, ZstdStream } from '@oneidentity/zstd-js';
@@ -323,7 +323,12 @@
 
       function load_url_file() {
         let url = document.getElementById('url_entry').value.trim();
-        if (url !== '') { selected_url_file = url; url_loading = true; init(); }
+        if (url !== '') {
+          selected_ept_file = null;
+          selected_url_file = url;
+          url_loading = true;
+          init();
+        }
       }
 
       function clear_url() { document.getElementById('url_entry').value = ''; }
@@ -862,7 +867,7 @@
       function increase_points_size() {
         ept_obj.traverse( ( child ) => {
           if (child.isPoints) {
-            let newSize = child.material.uniforms.uSize.value * 1.1;
+            let newSize = child.material.uniforms.uSize.value * 1.05;
             child.material.uniforms.uSize.value = Math.min( newSize, max_allowed_point_size );
           }
         });
@@ -873,7 +878,7 @@
       function decrease_points_size() {
         ept_obj.traverse( ( child ) => {
           if (child.isPoints) {
-            let newSize = child.material.uniforms.uSize.value / 1.1;
+            let newSize = child.material.uniforms.uSize.value / 1.05;
             child.material.uniforms.uSize.value = Math.max( newSize, min_allowed_point_size );
           }
         });
@@ -885,9 +890,7 @@
         if (!url_loading && document.getElementById('file_input').files.length === 0) return;
 
         document.getElementById('btn_load').disabled = true;
-        document.getElementById('file_input').disabled = true;
-
-        init_running = true;
+        document.getElementById('btn_file_input').disabled = true;
 
         if (scene) {
           mouse_wheel = true;
@@ -896,6 +899,8 @@
 
           await reset_all( true );
         }
+
+        init_running = true;
 
         if (!stats) {
           stats = new Stats();
@@ -948,6 +953,9 @@
           return url;
         });
 
+        console.log('url_loading ', url_loading);
+        console.log('selected_ept_file ', selected_ept_file);
+
         if (!url_loading) {
           // Loaded file
           local_files = document.getElementById('file_input').files;
@@ -977,6 +985,8 @@
           // Reset the file input
           document.getElementById('file_input').value = '';
           url_loading = false;
+
+          ept_loader.setLocalBlobMap( null );
         }
 
         if (renderer === undefined) {
@@ -988,7 +998,7 @@
           renderer.shadowMap.enabled = true;
           renderer.shadowMap.type = THREE.PCFShadowMap;
           renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
-          renderer.autoClear = false;
+          renderer.autoClear = true;
 
           // Consider removing this for a production build
           renderer.debug.onShaderError = ( gl, program, glVertexShader, glFragmentShader ) => {
@@ -1137,10 +1147,10 @@
 
           if (!pts_size) {
             const avgSpacing = estimate_spacing( points );
-            pts_size = ( avgSpacing / ( 3 + Math.pow( 2, selectedDepth ) ) ) * ( window.devicePixelRatio || 1.0 );
+            pts_size = ( avgSpacing / ( 3 + Math.pow( 2, selectedDepth ) ) ) * ( window.devicePixelRatio || 1.0 ) * 0.1;
 
-            min_allowed_point_size = pts_size / 2.0;
-            max_allowed_point_size = pts_size * 2.0;
+            min_allowed_point_size = pts_size / 5.0;
+            max_allowed_point_size = pts_size * 5.0;
           }
 
           if (!globalElevationRange) globalElevationRange = get_robust_range( points );
@@ -1367,7 +1377,7 @@
         init_running = false;
 
         document.getElementById('btn_load').disabled = false;
-        document.getElementById('file_input').disabled = false;
+        document.getElementById('btn_file_input').disabled = false;
         disabled_changed();
 
         if (!isMobile) {
@@ -1401,7 +1411,7 @@
         init_running = false;
 
         document.getElementById('btn_load').disabled = false;
-        document.getElementById('file_input').disabled = false;
+        document.getElementById('btn_file_input').disabled = false;
         disabled_changed();
 
         document.getElementById('div_loading').style.display = 'none';
@@ -1462,15 +1472,6 @@
       function render() {
         if (ept_obj) {
           if (mouse_down || mouse_wheel || needsRender || extended_render) {
-            if (stats_enabled) stats.begin();
-
-            controls.update();
-
-            renderer.clear();
-            renderer.render( scene, camera );
-
-            if (stats_enabled) stats.end();
-
             // Reset animation flag AFTER rendering
             needsRender = false;
 
@@ -1492,6 +1493,14 @@
                 count ++;
               }
             }
+
+            if (stats_enabled) stats.begin();
+
+            controls.update();
+
+            renderer.render( scene, camera );
+
+            if (stats_enabled) stats.end();
           }
         }
 
@@ -1593,32 +1602,25 @@
           }
 
           if (tile.material) {
-            if (Array.isArray( tile.material )) {
-              tile.material.forEach( m => {
-                if (m.uniforms) {
-                  Object.keys( m.uniforms ).forEach( key => {
-                    const uniform = m.uniforms[ key ].value;
-                    if (uniform && uniform.isTexture) uniform.dispose();
-                  });
-                }
+            const mtls = Array.isArray( tile.material ) ? tile.material : [ tile.material ];
 
-                m.dispose();
-              });
-
-              tile.material = null;
-            } else {
-              if (tile.material.uniforms) {
-                Object.keys( tile.material.uniforms ).forEach( key => {
-                  const uniform = tile.material.uniforms[ key ].value;
-                  if (uniform && uniform.isTexture) uniform.dispose();
+            mtls.forEach( m => {
+              if (m.uniforms) {
+                Object.keys( m.uniforms ).forEach( key => {
+                  const uniform = m.uniforms[ key ].value;
+                  if (uniform?.isTexture) uniform.dispose();
+                  else if (uniform?.isNode && uniform.value?.isTexture) uniform.value.dispose();
                 });
               }
 
-              tile.material.dispose();
-              tile.material = null;
-            }
+              m.dispose();
+            });
+
+            tile.material = null;
           }
         }
+
+        THREE.Cache.clear();
 
         if (!isMobile) {
           renderer.info.reset();
