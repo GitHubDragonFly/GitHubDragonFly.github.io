@@ -7,6 +7,59 @@
     <link rel="stylesheet" href="../../static/css/mobile-viewers.css">
     <link rel="shortcut icon" href="../../../images/favicon.ico" type="image/x-icon"/>
 
+    <script>
+      // Resource Loading Failures (404 or similar)
+      window.addEventListener( 'error', function ( event ) {
+        // We check if the target has a 'src' or 'href' to identify it as a resource
+        if (event.target.src || event.target.href) {
+          console.error( 'RESOURCE ERROR: ', {
+            element: event.target.tagName,
+            url: event.target.src || event.target.href,
+            html: event.target.outerHTML
+          });
+
+          // If the failed resource is jQuery, show the alert immediately
+          if ((event.target.src || '').includes('jquery')) {
+            alert('jQuery failed to load. Limited functionality. Check your internet connection!');
+          }
+
+          if (init_running || render_requested) {
+            handle_error( 'RESOURCE ERROR' );
+          } else {
+            document.getElementById('div_loading').innerHTML = '!!! Resource Error !!!';
+          }
+        }
+      }, true); // The 'true' here is vital; it enables the "capturing" phase
+
+      // Standard JavaScript Runtime Errors
+      window.onerror = function ( message, source, lineno, colno, error ) {
+        console.log( 'RUNTIME ERROR CAUGHT' );
+
+        console.log({
+          message: message, // Error message
+          file: source,     // The script file where it happened
+          line: lineno,     // Line number
+          column: colno,    // Column number
+          errorObj: error   // The actual Error object (includes stack trace)
+        });
+
+        if (init_running || render_requested) handle_error( 'RUNTIME ERROR' );
+
+        // Returning 'true' prevents the error from showing up in the browser console
+        return false; 
+      };
+
+      // Unhandled Promise Rejections (Async Errors)
+      window.addEventListener( 'unhandledrejection', function ( event ) {
+        console.warn( 'UNHANDLED PROMISE: ', event.reason );
+
+        // event.promise is the promise that failed
+        // event.reason is usually the error object or message
+
+        if (init_running || render_requested) handle_error( 'UNHANDLED PROMISE' );
+      });
+    </script>
+
     <script async src="https://cdn.jsdelivr.net/npm/es-module-shims@2.8.0/dist/es-module-shims.min.js"></script>
 
     <script type="importmap">
@@ -21,14 +74,14 @@
     <script src="https://cdn.jsdelivr.net/npm/jquery@3.7.1/dist/jquery.min.js" defer></script>
 
     <script>
-      var THREE, renderer, scene, camera, vtk_loader, manager, mesh, render_requested;
+      var THREE, renderer, scene, camera, vtk_loader, manager, mesh, render_requested, init_running = false;
       var fflate, controls, mouse_down, mouse_wheel, events_initialized, isMobile;
       var ambientLight, directionalLight, bounding_box, wireframe_enabled, material;
       var ww = window.innerWidth, wh = window.innerHeight, flat_shading_enabled, count = 0;
       var selected_vtk_file, selected_url_file = '', url_displayed = false, url_loading = false;
     </script>
 
-    <script type="module">
+    <script type="module" onerror="document.getElementById('div_loading').innerHTML = '!!! Import Error !!!';">
       import * as threejs from 'three';
       import * as fflatejs from 'three/addons/libs/fflate.module.min.js';
       import { VTKLoader } from 'three/addons/loaders/VTKLoader.min.js';
@@ -39,7 +92,7 @@
       manager = new THREE.LoadingManager();
 
       manager.onProgress = async function ( item, loaded, total ) {
-        if ( loaded === total ) {
+        if (loaded === total) {
           document.getElementById('div_loading').style.display = 'none';
           console.timeEnd( 'Loading Time' );
           enable_disable( false );
@@ -47,12 +100,15 @@
           mouse_wheel = true;
           render();
 
+          // Stop flashing indicator
+          document.getElementById('status_indicator').style.display = 'none';
+
           document.getElementById('btn_load').disabled = false;
           document.getElementById('btn_desktop').disabled = false;
           document.getElementById('btn_file_input').disabled = false;
           disabled_changed();
 
-          if (!isMobile) await new Promise( resolve => setTimeout( log_info, 1000 ) );
+          if (!isMobile) await new Promise( resolve => setTimeout( log_info, 3000 ) );
         }
       }
 
@@ -92,6 +148,7 @@
         <label for="btn_wireframe" title="Wireframe"></label>
         <button title="Quick -90 degree X-Axis Rotation" id="btn_quick_x" onclick="quick_x_rotation();" style="min-width: 15px;" disabled>&#x2191</button>
         <label for="btn_quick_x" title="Quick -90 degree X-Axis Rotation"></label>
+        <div id="status_indicator" class="indicator"></div>
       </div>
       <div class="fm" id="url" style="display: none;">
         <label for="url_entry" title="Remote URL"></label>
@@ -277,6 +334,8 @@
           await reset_all( true );
         }
 
+        init_running = true;
+
         enable_disable( true );
 
         selected_vtk_file = null;
@@ -316,16 +375,16 @@
         }
 
         if (renderer === undefined) {
-          renderer = new THREE.WebGLRenderer( { antialias: true, alpha: true } );
+          renderer = new THREE.WebGLRenderer( { antialias: false, alpha: true } );
           renderer.setPixelRatio( window.devicePixelRatio );
           renderer.toneMapping = THREE.NeutralToneMapping;
           renderer.toneMappingExposure = 1.5;
           renderer.setSize( ww, wh );
           renderer.info.autoReset = false;
           renderer.shadowMap.enabled = true;
-          renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+          renderer.shadowMap.type = THREE.PCFShadowMap;
           renderer.setClearColor( 0xFFFFFF, 0 ); // Allow setting the background color
-          renderer.autoClear = false;
+          renderer.autoClear = true;
 
           document.body.appendChild( renderer.domElement );
         }
@@ -382,6 +441,9 @@
           });
         }
 
+        // Start flashing indicator
+        document.getElementById('status_indicator').style.display = 'inline-block';
+
         // Load the vtk file
         selected_vtk_file !== null ? loadFile() : loadURLFile();
       }
@@ -415,6 +477,8 @@
         scene.add( mesh );
         camera.lookAt( mesh.position );
 
+        init_running = false;
+
         set_initial_scale();
         resize();
       }
@@ -447,6 +511,11 @@
         mouse_wheel = true;
         render_requested = false;
         enable_disable( true );
+
+        init_running = false;
+
+        // Stop flashing indicator
+        document.getElementById('status_indicator').style.display = 'none';
 
         document.getElementById('btn_load').disabled = false;
         document.getElementById('btn_desktop').disabled = false;
@@ -506,14 +575,9 @@
         }
       }
 
-      async function render() {
+      function render() {
         if (mesh) {
           if (mouse_down || mouse_wheel) {
-            controls.update();
-
-            renderer.clear();
-            renderer.render( scene, camera );
-
             if (mouse_wheel) {
               if (count > 30) {
                 mouse_wheel = false;
@@ -522,6 +586,10 @@
                 count ++;
               }
             }
+
+            controls.update();
+
+            renderer.render( scene, camera );
           }
         }
 
