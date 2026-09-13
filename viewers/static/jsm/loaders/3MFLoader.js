@@ -3,7 +3,7 @@ import {
 	BufferGeometry,
 	ClampToEdgeWrapping,
 	Color,
-        CylinderGeometry,
+	CylinderGeometry,
 	FileLoader,
 	Float32BufferAttribute,
 	Group,
@@ -16,12 +16,12 @@ import {
 	MeshStandardMaterial,
 	MirroredRepeatWrapping,
 	NearestFilter,
-        Quaternion,
+	Quaternion,
 	RepeatWrapping,
-        SphereGeometry,
+	SphereGeometry,
 	SRGBColorSpace,
 	TextureLoader,
-        Vector3
+	Vector3
 } from 'three';
 
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.min.js';
@@ -460,13 +460,13 @@ class ThreeMFLoader extends Loader {
 
 		}
 
-		function parseMetallicDisplaypropertiesNode( metallicDisplaypropertiesNode ) {
+		function parseMetallicDisplaypropertiesNode( metallicDisplaypropetiesNode ) {
 
 			const metallicDisplaypropertiesData = {
-				id: metallicDisplaypropertiesNode.getAttribute( 'id' ) // required
+				id: metallicDisplaypropetiesNode.getAttribute( 'id' ) // required
 			};
 
-			const metallicNodes = metallicDisplaypropertiesNode.querySelectorAll( 'pbmetallic' );
+			const metallicNodes = metallicDisplaypropetiesNode.querySelectorAll( 'pbmetallic' );
 
 			const metallicData = [];
 
